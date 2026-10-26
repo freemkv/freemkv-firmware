@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "producer_sha256": "4511bde8f567fa25870908303366146dc8b5e2410c6dfed00a86fc6876132ed0",
-  "flasher_sha256": "1e0d63bcc4c227863453e03d176d593fa84cc560720cb9adf7688462b6b9beab",
+  "producer_sha256": "97422de2fa7999ad9b9fbdc46d02b8ef15d74e5be89cf8cb85313557c47e8683",
+  "flasher_sha256": "f25b55919f10822ef4dc8a7f5b22c04c4eac45d6fc12a542c25676990f7b191b",
   "bucket": "all",
   "scope": "exact-image Modify preview plus structural audit; optional actual builds and flasher gates; no physical validation",
   "images": [
@@ -221,7 +221,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -241,12 +241,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 694254,
+                "speed_stub_va": 1744392,
+                "speed_selector": 694186,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678900
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -255,7 +258,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401368,
-                "region_stub_va": 1744392
+                "region_stub_va": 1744432
               },
               "hooks": []
             },
@@ -265,15 +268,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570026,
-                "gatea_stub_va": 1744500,
+                "gatea_stub_va": 1744540,
                 "gatea_authed": 1570030,
                 "ake_site": 1569682,
-                "ake_stub_va": 1744560,
+                "ake_stub_va": 1744600,
                 "ake_gate": 1569676,
                 "deny": 1570084,
                 "scratch": 2165760,
                 "vid_producer": 1569934,
-                "hrl_stub_va": 1744588,
+                "hrl_stub_va": 1744628,
                 "hrl_site": 1569380
               },
               "hooks": []
@@ -321,8 +324,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -337,10 +343,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "2817181bd1c0e9a40d70894c07ab5daaeca25c4b4be672c34fa7856fe8a39f59"
+        "output_sha256": "1484a3b98eb4d58c2c5a25e2ce7c41ee9cf49e2d5369c29c292f51cfe20bf461"
       },
       "build_validation": {
-        "output_sha256": "2817181bd1c0e9a40d70894c07ab5daaeca25c4b4be672c34fa7856fe8a39f59",
+        "output_sha256": "1484a3b98eb4d58c2c5a25e2ce7c41ee9cf49e2d5369c29c292f51cfe20bf461",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -563,7 +569,7 @@
           "media": "BD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -583,12 +589,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 690774,
+                "speed_stub_va": 1741416,
+                "speed_selector": 690738,
+                "speed_maximum_cell": 33529302,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 675660
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -597,7 +606,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1397542,
-                "region_stub_va": 1741416
+                "region_stub_va": 1741456
               },
               "hooks": []
             },
@@ -607,15 +616,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1566024,
-                "gatea_stub_va": 1741524,
+                "gatea_stub_va": 1741564,
                 "gatea_authed": 1566028,
                 "ake_site": 1565680,
-                "ake_stub_va": 1741584,
+                "ake_stub_va": 1741624,
                 "ake_gate": 1565674,
                 "deny": 1566082,
                 "scratch": 2165760,
                 "vid_producer": 1565932,
-                "hrl_stub_va": 1741612,
+                "hrl_stub_va": 1741652,
                 "hrl_site": 1565436
               },
               "hooks": []
@@ -663,8 +672,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -679,10 +691,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "d6cd2dec80f3a0cd35bb6cb341fbded6740763565af05808028df28d55de0097"
+        "output_sha256": "05f09036b311155bc7ebf2655d0d91e95c9ec174265b928c6fb005b1bbe7843d"
       },
       "build_validation": {
-        "output_sha256": "d6cd2dec80f3a0cd35bb6cb341fbded6740763565af05808028df28d55de0097",
+        "output_sha256": "05f09036b311155bc7ebf2655d0d91e95c9ec174265b928c6fb005b1bbe7843d",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -2895,7 +2907,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -2915,12 +2927,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 691770,
+                "speed_stub_va": 1736328,
+                "speed_selector": 691716,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 676680
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -2929,7 +2944,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1394592,
-                "region_stub_va": 1736328
+                "region_stub_va": 1736368
               },
               "hooks": []
             },
@@ -2939,15 +2954,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1561282,
-                "gatea_stub_va": 1736436,
+                "gatea_stub_va": 1736476,
                 "gatea_authed": 1561286,
                 "ake_site": 1560938,
-                "ake_stub_va": 1736496,
+                "ake_stub_va": 1736536,
                 "ake_gate": 1560932,
                 "deny": 1561340,
                 "scratch": 2165760,
                 "vid_producer": 1561190,
-                "hrl_stub_va": 1736524,
+                "hrl_stub_va": 1736564,
                 "hrl_site": 1560636
               },
               "hooks": []
@@ -2995,8 +3010,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -3011,10 +3029,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "5bef119888a046004a6397b7be5b8a3d4d74026dcc6e776ddec5e19045053a33"
+        "output_sha256": "2d74266ea216727865d6447930e9e00e5c62f9bd44ec2f68874a422e38f3f1f6"
       },
       "build_validation": {
-        "output_sha256": "5bef119888a046004a6397b7be5b8a3d4d74026dcc6e776ddec5e19045053a33",
+        "output_sha256": "2d74266ea216727865d6447930e9e00e5c62f9bd44ec2f68874a422e38f3f1f6",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -5952,7 +5970,7 @@
           "media": "BD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -5972,12 +5990,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693826,
+                "speed_stub_va": 1744696,
+                "speed_selector": 693758,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678472
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -5986,7 +6007,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401508,
-                "region_stub_va": 1744696
+                "region_stub_va": 1744736
               },
               "hooks": []
             },
@@ -5996,15 +6017,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570238,
-                "gatea_stub_va": 1744804,
+                "gatea_stub_va": 1744844,
                 "gatea_authed": 1570242,
                 "ake_site": 1569894,
-                "ake_stub_va": 1744864,
+                "ake_stub_va": 1744904,
                 "ake_gate": 1569888,
                 "deny": 1570296,
                 "scratch": 2165760,
                 "vid_producer": 1570146,
-                "hrl_stub_va": 1744892,
+                "hrl_stub_va": 1744932,
                 "hrl_site": 1569592
               },
               "hooks": []
@@ -6052,8 +6073,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -6068,10 +6092,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00"
+        "output_sha256": "27c1f8ccea55bbdb4d45420df49a9e08c25f01abf828a9c0e061907579e49629"
       },
       "build_validation": {
-        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00",
+        "output_sha256": "27c1f8ccea55bbdb4d45420df49a9e08c25f01abf828a9c0e061907579e49629",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -7002,7 +7026,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -7022,12 +7046,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693862,
+                "speed_stub_va": 1747536,
+                "speed_selector": 693794,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678494
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -7036,7 +7063,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1403312,
-                "region_stub_va": 1747536
+                "region_stub_va": 1747576
               },
               "hooks": []
             },
@@ -7046,15 +7073,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1572162,
-                "gatea_stub_va": 1747644,
+                "gatea_stub_va": 1747684,
                 "gatea_authed": 1572166,
                 "ake_site": 1571818,
-                "ake_stub_va": 1747704,
+                "ake_stub_va": 1747744,
                 "ake_gate": 1571812,
                 "deny": 1572220,
                 "scratch": 2165760,
                 "vid_producer": 1572070,
-                "hrl_stub_va": 1747732,
+                "hrl_stub_va": 1747772,
                 "hrl_site": 1571516
               },
               "hooks": []
@@ -7102,8 +7129,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -7118,10 +7148,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "7073036180c39d1021576c19edfbfb90e2c084fdec9013b17870a1be2d728b81"
+        "output_sha256": "3dc6e6db405b79e4b920d8ec4f7fad61153e2af2ea790ff452f2d9c7f17665a6"
       },
       "build_validation": {
-        "output_sha256": "7073036180c39d1021576c19edfbfb90e2c084fdec9013b17870a1be2d728b81",
+        "output_sha256": "3dc6e6db405b79e4b920d8ec4f7fad61153e2af2ea790ff452f2d9c7f17665a6",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -9855,7 +9885,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -9875,12 +9905,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693826,
+                "speed_stub_va": 1744296,
+                "speed_selector": 693758,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678472
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -9889,7 +9922,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401184,
-                "region_stub_va": 1744296
+                "region_stub_va": 1744336
               },
               "hooks": []
             },
@@ -9899,15 +9932,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1569842,
-                "gatea_stub_va": 1744404,
+                "gatea_stub_va": 1744444,
                 "gatea_authed": 1569846,
                 "ake_site": 1569498,
-                "ake_stub_va": 1744464,
+                "ake_stub_va": 1744504,
                 "ake_gate": 1569492,
                 "deny": 1569900,
                 "scratch": 2165760,
                 "vid_producer": 1569750,
-                "hrl_stub_va": 1744492,
+                "hrl_stub_va": 1744532,
                 "hrl_site": 1569196
               },
               "hooks": []
@@ -9955,8 +9988,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -9971,10 +10007,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "b4726d86e21d003951bfd28886c526c49b3aac85cc1b01aec98bb4e8c63844d5"
+        "output_sha256": "f7c20d7489bd5df8fa7893113a6f1509fe5cc443ca499b211ee2faba378c7353"
       },
       "build_validation": {
-        "output_sha256": "b4726d86e21d003951bfd28886c526c49b3aac85cc1b01aec98bb4e8c63844d5",
+        "output_sha256": "f7c20d7489bd5df8fa7893113a6f1509fe5cc443ca499b211ee2faba378c7353",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -15285,7 +15321,7 @@
               "label": "Speed",
               "outcome": {
                 "SignatureNotFound": {
-                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                  "detail": "Read-speed control requires the classic CDB base and boot hook; this image did not establish that complete contract"
                 }
               },
               "facts": {},
@@ -18707,7 +18743,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -18727,12 +18763,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 694356,
+                "speed_stub_va": 1747812,
+                "speed_selector": 694288,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678958
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -18741,7 +18780,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1403572,
-                "region_stub_va": 1747812
+                "region_stub_va": 1747852
               },
               "hooks": []
             },
@@ -18751,15 +18790,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1572470,
-                "gatea_stub_va": 1747920,
+                "gatea_stub_va": 1747960,
                 "gatea_authed": 1572474,
                 "ake_site": 1572126,
-                "ake_stub_va": 1747980,
+                "ake_stub_va": 1748020,
                 "ake_gate": 1572120,
                 "deny": 1572528,
                 "scratch": 2165760,
                 "vid_producer": 1572378,
-                "hrl_stub_va": 1748008,
+                "hrl_stub_va": 1748048,
                 "hrl_site": 1571824
               },
               "hooks": []
@@ -18807,8 +18846,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -18823,10 +18865,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "f1275e556b82fdba4cec8ff4588bed90957a102d6eb7d3af3c2b2243fca91437"
+        "output_sha256": "7358151d613643fb45db200e9aeccc6cdb31a6732d3310432f3dbe4236cfd370"
       },
       "build_validation": {
-        "output_sha256": "f1275e556b82fdba4cec8ff4588bed90957a102d6eb7d3af3c2b2243fca91437",
+        "output_sha256": "7358151d613643fb45db200e9aeccc6cdb31a6732d3310432f3dbe4236cfd370",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -20260,7 +20302,7 @@
               "label": "Speed",
               "outcome": {
                 "SignatureNotFound": {
-                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                  "detail": "Read-speed control requires the classic CDB base and boot hook; this image did not establish that complete contract"
                 }
               },
               "facts": {},
@@ -21137,7 +21179,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -21157,12 +21199,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 694254,
+                "speed_stub_va": 1744464,
+                "speed_selector": 694186,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678900
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -21171,7 +21216,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401368,
-                "region_stub_va": 1744464
+                "region_stub_va": 1744504
               },
               "hooks": []
             },
@@ -21181,15 +21226,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570098,
-                "gatea_stub_va": 1744572,
+                "gatea_stub_va": 1744612,
                 "gatea_authed": 1570102,
                 "ake_site": 1569754,
-                "ake_stub_va": 1744632,
+                "ake_stub_va": 1744672,
                 "ake_gate": 1569748,
                 "deny": 1570156,
                 "scratch": 2165760,
                 "vid_producer": 1570006,
-                "hrl_stub_va": 1744660,
+                "hrl_stub_va": 1744700,
                 "hrl_site": 1569452
               },
               "hooks": []
@@ -21237,8 +21282,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -21253,10 +21301,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "4e9b2de51f0e1fbd4e30853c27d7402f8c3a17bdd0b4b2e97dd187e3f758b225"
+        "output_sha256": "639a09ca42268484010e4b65bd637028e5872f6b7730c64417928a6608ec3fef"
       },
       "build_validation": {
-        "output_sha256": "4e9b2de51f0e1fbd4e30853c27d7402f8c3a17bdd0b4b2e97dd187e3f758b225",
+        "output_sha256": "639a09ca42268484010e4b65bd637028e5872f6b7730c64417928a6608ec3fef",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -21602,7 +21650,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -21622,12 +21670,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693862,
+                "speed_stub_va": 1747584,
+                "speed_selector": 693794,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678494
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -21636,7 +21687,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1403312,
-                "region_stub_va": 1747584
+                "region_stub_va": 1747624
               },
               "hooks": []
             },
@@ -21646,15 +21697,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1572210,
-                "gatea_stub_va": 1747692,
+                "gatea_stub_va": 1747732,
                 "gatea_authed": 1572214,
                 "ake_site": 1571866,
-                "ake_stub_va": 1747752,
+                "ake_stub_va": 1747792,
                 "ake_gate": 1571860,
                 "deny": 1572268,
                 "scratch": 2165760,
                 "vid_producer": 1572118,
-                "hrl_stub_va": 1747780,
+                "hrl_stub_va": 1747820,
                 "hrl_site": 1571564
               },
               "hooks": []
@@ -21702,8 +21753,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -21718,10 +21772,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "ec9bb5e16a71f7cd072f776d505f76a4092d35ac71a19db20b57c3dfbda86ead"
+        "output_sha256": "6658287316dbbf54c5d71b88913dcc898e16f18ca3177051c59d2dcc1c0f3249"
       },
       "build_validation": {
-        "output_sha256": "ec9bb5e16a71f7cd072f776d505f76a4092d35ac71a19db20b57c3dfbda86ead",
+        "output_sha256": "6658287316dbbf54c5d71b88913dcc898e16f18ca3177051c59d2dcc1c0f3249",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -22415,7 +22469,7 @@
               "label": "Speed",
               "outcome": {
                 "SignatureNotFound": {
-                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                  "detail": "Read-speed control requires the classic CDB base and boot hook; this image did not establish that complete contract"
                 }
               },
               "facts": {},
@@ -30621,7 +30675,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -30641,12 +30695,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693826,
+                "speed_stub_va": 1744744,
+                "speed_selector": 693758,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678472
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -30655,7 +30712,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401552,
-                "region_stub_va": 1744744
+                "region_stub_va": 1744784
               },
               "hooks": []
             },
@@ -30665,15 +30722,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570290,
-                "gatea_stub_va": 1744852,
+                "gatea_stub_va": 1744892,
                 "gatea_authed": 1570294,
                 "ake_site": 1569946,
-                "ake_stub_va": 1744912,
+                "ake_stub_va": 1744952,
                 "ake_gate": 1569940,
                 "deny": 1570348,
                 "scratch": 2165760,
                 "vid_producer": 1570198,
-                "hrl_stub_va": 1744940,
+                "hrl_stub_va": 1744980,
                 "hrl_site": 1569644
               },
               "hooks": []
@@ -30721,8 +30778,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -30737,10 +30797,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "732d5f8421c48c2f935539f0b46c292748e3463571c34f9445f5e9406d67245e"
+        "output_sha256": "d0ed775aa7cfed60af06798b96f23589c1c7711a7dd267d85a41e3e2220ffeb6"
       },
       "build_validation": {
-        "output_sha256": "732d5f8421c48c2f935539f0b46c292748e3463571c34f9445f5e9406d67245e",
+        "output_sha256": "d0ed775aa7cfed60af06798b96f23589c1c7711a7dd267d85a41e3e2220ffeb6",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -33333,7 +33393,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -33353,12 +33413,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 694254,
+                "speed_stub_va": 1744464,
+                "speed_selector": 694186,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678900
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -33367,7 +33430,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401368,
-                "region_stub_va": 1744464
+                "region_stub_va": 1744504
               },
               "hooks": []
             },
@@ -33377,15 +33440,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570098,
-                "gatea_stub_va": 1744572,
+                "gatea_stub_va": 1744612,
                 "gatea_authed": 1570102,
                 "ake_site": 1569754,
-                "ake_stub_va": 1744632,
+                "ake_stub_va": 1744672,
                 "ake_gate": 1569748,
                 "deny": 1570156,
                 "scratch": 2165760,
                 "vid_producer": 1570006,
-                "hrl_stub_va": 1744660,
+                "hrl_stub_va": 1744700,
                 "hrl_site": 1569452
               },
               "hooks": []
@@ -33433,8 +33496,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -33449,10 +33515,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "10ad0290b82afed087db3fd5fb2c1e306400b10f180fe617d52abad8768fa273"
+        "output_sha256": "2d8c6096cd01176aeeba46a52840f2956a35de8305bd5c1c39bb0451866b6f5c"
       },
       "build_validation": {
-        "output_sha256": "10ad0290b82afed087db3fd5fb2c1e306400b10f180fe617d52abad8768fa273",
+        "output_sha256": "2d8c6096cd01176aeeba46a52840f2956a35de8305bd5c1c39bb0451866b6f5c",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -37783,7 +37849,7 @@
           "media": "BD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -37803,12 +37869,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693826,
+                "speed_stub_va": 1744368,
+                "speed_selector": 693758,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678472
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -37817,7 +37886,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401184,
-                "region_stub_va": 1744368
+                "region_stub_va": 1744408
               },
               "hooks": []
             },
@@ -37827,15 +37896,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1569914,
-                "gatea_stub_va": 1744476,
+                "gatea_stub_va": 1744516,
                 "gatea_authed": 1569918,
                 "ake_site": 1569570,
-                "ake_stub_va": 1744536,
+                "ake_stub_va": 1744576,
                 "ake_gate": 1569564,
                 "deny": 1569972,
                 "scratch": 2165760,
                 "vid_producer": 1569822,
-                "hrl_stub_va": 1744564,
+                "hrl_stub_va": 1744604,
                 "hrl_site": 1569268
               },
               "hooks": []
@@ -37883,8 +37952,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -37899,10 +37971,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72"
+        "output_sha256": "d261cc0ed29053fc1e73f64e2e156a8a79771b95b0df17e6d93389412dbbe029"
       },
       "build_validation": {
-        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72",
+        "output_sha256": "d261cc0ed29053fc1e73f64e2e156a8a79771b95b0df17e6d93389412dbbe029",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -38909,7 +38981,7 @@
           "media": "BD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Speed skipped",
+          "summary": "MT1939 BD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
@@ -38929,12 +39001,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693826,
+                "speed_stub_va": 1744696,
+                "speed_selector": 693758,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678472
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -38943,7 +39018,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401508,
-                "region_stub_va": 1744696
+                "region_stub_va": 1744736
               },
               "hooks": []
             },
@@ -38953,15 +39028,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570238,
-                "gatea_stub_va": 1744804,
+                "gatea_stub_va": 1744844,
                 "gatea_authed": 1570242,
                 "ake_site": 1569894,
-                "ake_stub_va": 1744864,
+                "ake_stub_va": 1744904,
                 "ake_gate": 1569888,
                 "deny": 1570296,
                 "scratch": 2165760,
                 "vid_producer": 1570146,
-                "hrl_stub_va": 1744892,
+                "hrl_stub_va": 1744932,
                 "hrl_site": 1569592
               },
               "hooks": []
@@ -39009,8 +39084,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -39025,10 +39103,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00"
+        "output_sha256": "27c1f8ccea55bbdb4d45420df49a9e08c25f01abf828a9c0e061907579e49629"
       },
       "build_validation": {
-        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00",
+        "output_sha256": "27c1f8ccea55bbdb4d45420df49a9e08c25f01abf828a9c0e061907579e49629",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -39415,7 +39493,7 @@
           "media": "BD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -39435,12 +39513,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 694974,
+                "speed_stub_va": 1750584,
+                "speed_selector": 694906,
+                "speed_maximum_cell": 33529302,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 679598
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -39449,7 +39530,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1405896,
-                "region_stub_va": 1750584
+                "region_stub_va": 1750624
               },
               "hooks": []
             },
@@ -39459,15 +39540,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1574814,
-                "gatea_stub_va": 1750692,
+                "gatea_stub_va": 1750732,
                 "gatea_authed": 1574818,
                 "ake_site": 1574470,
-                "ake_stub_va": 1750752,
+                "ake_stub_va": 1750792,
                 "ake_gate": 1574464,
                 "deny": 1574872,
                 "scratch": 2165760,
                 "vid_producer": 1574722,
-                "hrl_stub_va": 1750780,
+                "hrl_stub_va": 1750820,
                 "hrl_site": 1574168
               },
               "hooks": []
@@ -39515,8 +39596,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -39531,10 +39615,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "6d4bd81a1be94782f62508b8f3a9044594cdd23f3cf4fcf8700e9a7ba04edaf7"
+        "output_sha256": "352a28ae0f64cf1210ae5a8d18f2d9cf7e10194800814fc02bcf7bb14b20bc16"
       },
       "build_validation": {
-        "output_sha256": "6d4bd81a1be94782f62508b8f3a9044594cdd23f3cf4fcf8700e9a7ba04edaf7",
+        "output_sha256": "352a28ae0f64cf1210ae5a8d18f2d9cf7e10194800814fc02bcf7bb14b20bc16",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -40705,7 +40789,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -40725,12 +40809,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 690838,
+                "speed_stub_va": 1737584,
+                "speed_selector": 690802,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 675712
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -40739,7 +40826,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1395376,
-                "region_stub_va": 1737584
+                "region_stub_va": 1737624
               },
               "hooks": []
             },
@@ -40749,15 +40836,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1563432,
-                "gatea_stub_va": 1737692,
+                "gatea_stub_va": 1737732,
                 "gatea_authed": 1563436,
                 "ake_site": 1563088,
-                "ake_stub_va": 1737752,
+                "ake_stub_va": 1737792,
                 "ake_gate": 1563082,
                 "deny": 1563490,
                 "scratch": 2165760,
                 "vid_producer": 1563340,
-                "hrl_stub_va": 1737780,
+                "hrl_stub_va": 1737820,
                 "hrl_site": 1562844
               },
               "hooks": []
@@ -40805,8 +40892,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -40821,10 +40911,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "f1f0e3f70626b59c5fe45f3ab3194d09482ed0e4f0ff42bd93cce14b63d2a481"
+        "output_sha256": "1755d7c567286a7e31f67710b4491cd55ab1c6ea3378ec3b9ba25b66af17eba6"
       },
       "build_validation": {
-        "output_sha256": "f1f0e3f70626b59c5fe45f3ab3194d09482ed0e4f0ff42bd93cce14b63d2a481",
+        "output_sha256": "1755d7c567286a7e31f67710b4491cd55ab1c6ea3378ec3b9ba25b66af17eba6",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -41085,7 +41175,7 @@
               "label": "Speed",
               "outcome": {
                 "SignatureNotFound": {
-                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                  "detail": "Read-speed control requires the classic CDB base and boot hook; this image did not establish that complete contract"
                 }
               },
               "facts": {},
@@ -43696,7 +43786,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -43716,12 +43806,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693826,
+                "speed_stub_va": 1744368,
+                "speed_selector": 693758,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678472
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -43730,7 +43823,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401184,
-                "region_stub_va": 1744368
+                "region_stub_va": 1744408
               },
               "hooks": []
             },
@@ -43740,15 +43833,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1569914,
-                "gatea_stub_va": 1744476,
+                "gatea_stub_va": 1744516,
                 "gatea_authed": 1569918,
                 "ake_site": 1569570,
-                "ake_stub_va": 1744536,
+                "ake_stub_va": 1744576,
                 "ake_gate": 1569564,
                 "deny": 1569972,
                 "scratch": 2165760,
                 "vid_producer": 1569822,
-                "hrl_stub_va": 1744564,
+                "hrl_stub_va": 1744604,
                 "hrl_site": 1569268
               },
               "hooks": []
@@ -43796,8 +43889,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -43812,10 +43908,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "95b35c2c6c79eb2fbf9ab006b41a41306401de595eeeac55e9b0b9b5dc521c28"
+        "output_sha256": "398ceb34fc0a21fc8a4a21d7773ac22616561588295295420bcf4382148ef70e"
       },
       "build_validation": {
-        "output_sha256": "95b35c2c6c79eb2fbf9ab006b41a41306401de595eeeac55e9b0b9b5dc521c28",
+        "output_sha256": "398ceb34fc0a21fc8a4a21d7773ac22616561588295295420bcf4382148ef70e",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -51113,7 +51209,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -51133,12 +51229,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693054,
+                "speed_stub_va": 1741828,
+                "speed_selector": 693006,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 677728
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -51147,7 +51246,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1398904,
-                "region_stub_va": 1741828
+                "region_stub_va": 1741868
               },
               "hooks": []
             },
@@ -51157,15 +51256,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1567466,
-                "gatea_stub_va": 1741936,
+                "gatea_stub_va": 1741976,
                 "gatea_authed": 1567470,
                 "ake_site": 1567122,
-                "ake_stub_va": 1741996,
+                "ake_stub_va": 1742036,
                 "ake_gate": 1567116,
                 "deny": 1567524,
                 "scratch": 2165760,
                 "vid_producer": 1567374,
-                "hrl_stub_va": 1742024,
+                "hrl_stub_va": 1742064,
                 "hrl_site": 1566820
               },
               "hooks": []
@@ -51213,8 +51312,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -51229,10 +51331,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "1c3e17b45a600199cbb690a72766e8d149fdbe54f4da85ee551c0134631f06b7"
+        "output_sha256": "5c0127b0b07b11a2346680fa5af9f04742ea1a13a4fc599451daa1b76ce80371"
       },
       "build_validation": {
-        "output_sha256": "1c3e17b45a600199cbb690a72766e8d149fdbe54f4da85ee551c0134631f06b7",
+        "output_sha256": "5c0127b0b07b11a2346680fa5af9f04742ea1a13a4fc599451daa1b76ce80371",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -52093,7 +52195,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -52113,12 +52215,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693272,
+                "speed_stub_va": 1744880,
+                "speed_selector": 693224,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 677902
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -52127,7 +52232,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1400844,
-                "region_stub_va": 1744880
+                "region_stub_va": 1744920
               },
               "hooks": []
             },
@@ -52137,15 +52242,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1569640,
-                "gatea_stub_va": 1744988,
+                "gatea_stub_va": 1745028,
                 "gatea_authed": 1569644,
                 "ake_site": 1569296,
-                "ake_stub_va": 1745048,
+                "ake_stub_va": 1745088,
                 "ake_gate": 1569290,
                 "deny": 1569698,
                 "scratch": 2165760,
                 "vid_producer": 1569548,
-                "hrl_stub_va": 1745076,
+                "hrl_stub_va": 1745116,
                 "hrl_site": 1569052
               },
               "hooks": []
@@ -52193,8 +52298,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -52209,10 +52317,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "4cba7a32df5d61ceb77562fabde78a6b677077514f72b76683b6ebb4f7501719"
+        "output_sha256": "3302aa14b24648890a07287f6cc6a10d1c580d97c058d3530b15ced6d7aff8ab"
       },
       "build_validation": {
-        "output_sha256": "4cba7a32df5d61ceb77562fabde78a6b677077514f72b76683b6ebb4f7501719",
+        "output_sha256": "3302aa14b24648890a07287f6cc6a10d1c580d97c058d3530b15ced6d7aff8ab",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -53453,7 +53561,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -53473,12 +53581,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 695642,
+                "speed_stub_va": 1745444,
+                "speed_selector": 695574,
+                "speed_maximum_cell": 33529302,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 680288
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -53487,7 +53598,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1402036,
-                "region_stub_va": 1745444
+                "region_stub_va": 1745484
               },
               "hooks": []
             },
@@ -53497,15 +53608,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570790,
-                "gatea_stub_va": 1745552,
+                "gatea_stub_va": 1745592,
                 "gatea_authed": 1570794,
                 "ake_site": 1570446,
-                "ake_stub_va": 1745612,
+                "ake_stub_va": 1745652,
                 "ake_gate": 1570440,
                 "deny": 1570848,
                 "scratch": 2165760,
                 "vid_producer": 1570698,
-                "hrl_stub_va": 1745640,
+                "hrl_stub_va": 1745680,
                 "hrl_site": 1570144
               },
               "hooks": []
@@ -53553,8 +53664,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -53569,10 +53683,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "11e676930fa3aebd8bf5116c719a0f8b550f9af221518a116b61f4f8131b3691"
+        "output_sha256": "1843feddda7c181ceb45ff677e42b419460830ecc36292ebfa06b05d3421cd95"
       },
       "build_validation": {
-        "output_sha256": "11e676930fa3aebd8bf5116c719a0f8b550f9af221518a116b61f4f8131b3691",
+        "output_sha256": "1843feddda7c181ceb45ff677e42b419460830ecc36292ebfa06b05d3421cd95",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -65933,7 +66047,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -65953,12 +66067,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 690838,
+                "speed_stub_va": 1737584,
+                "speed_selector": 690802,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 675712
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -65967,7 +66084,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1395376,
-                "region_stub_va": 1737584
+                "region_stub_va": 1737624
               },
               "hooks": []
             },
@@ -65977,15 +66094,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1563432,
-                "gatea_stub_va": 1737692,
+                "gatea_stub_va": 1737732,
                 "gatea_authed": 1563436,
                 "ake_site": 1563088,
-                "ake_stub_va": 1737752,
+                "ake_stub_va": 1737792,
                 "ake_gate": 1563082,
                 "deny": 1563490,
                 "scratch": 2165760,
                 "vid_producer": 1563340,
-                "hrl_stub_va": 1737780,
+                "hrl_stub_va": 1737820,
                 "hrl_site": 1562844
               },
               "hooks": []
@@ -66033,8 +66150,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -66049,10 +66169,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "1c06005179fc6de028c2b9f9046ab2521b7bdc58cb372eac6e0475955d9fd232"
+        "output_sha256": "eace80db7628cd10b9f4afe79b88013a069bcd4b879b99edbc591391ec9896e6"
       },
       "build_validation": {
-        "output_sha256": "1c06005179fc6de028c2b9f9046ab2521b7bdc58cb372eac6e0475955d9fd232",
+        "output_sha256": "eace80db7628cd10b9f4afe79b88013a069bcd4b879b99edbc591391ec9896e6",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -66190,7 +66310,7 @@
               "label": "Speed",
               "outcome": {
                 "SignatureNotFound": {
-                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                  "detail": "Read-speed control requires the classic CDB base and boot hook; this image did not establish that complete contract"
                 }
               },
               "facts": {},
@@ -73578,7 +73698,7 @@
           "media": "BD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Speed skipped",
+          "summary": "MT1939 BD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
@@ -73598,12 +73718,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 693826,
+                "speed_stub_va": 1744368,
+                "speed_selector": 693758,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678472
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -73612,7 +73735,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401184,
-                "region_stub_va": 1744368
+                "region_stub_va": 1744408
               },
               "hooks": []
             },
@@ -73622,15 +73745,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1569914,
-                "gatea_stub_va": 1744476,
+                "gatea_stub_va": 1744516,
                 "gatea_authed": 1569918,
                 "ake_site": 1569570,
-                "ake_stub_va": 1744536,
+                "ake_stub_va": 1744576,
                 "ake_gate": 1569564,
                 "deny": 1569972,
                 "scratch": 2165760,
                 "vid_producer": 1569822,
-                "hrl_stub_va": 1744564,
+                "hrl_stub_va": 1744604,
                 "hrl_site": 1569268
               },
               "hooks": []
@@ -73678,8 +73801,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -73694,10 +73820,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72"
+        "output_sha256": "d261cc0ed29053fc1e73f64e2e156a8a79771b95b0df17e6d93389412dbbe029"
       },
       "build_validation": {
-        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72",
+        "output_sha256": "d261cc0ed29053fc1e73f64e2e156a8a79771b95b0df17e6d93389412dbbe029",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -73879,7 +74005,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -73899,12 +74025,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 690956,
+                "speed_stub_va": 1740900,
+                "speed_selector": 690920,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 675796
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -73913,7 +74042,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1397570,
-                "region_stub_va": 1740900
+                "region_stub_va": 1740940
               },
               "hooks": []
             },
@@ -73923,15 +74052,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1565756,
-                "gatea_stub_va": 1741008,
+                "gatea_stub_va": 1741048,
                 "gatea_authed": 1565760,
                 "ake_site": 1565412,
-                "ake_stub_va": 1741068,
+                "ake_stub_va": 1741108,
                 "ake_gate": 1565406,
                 "deny": 1565814,
                 "scratch": 2165760,
                 "vid_producer": 1565664,
-                "hrl_stub_va": 1741096,
+                "hrl_stub_va": 1741136,
                 "hrl_site": 1565168
               },
               "hooks": []
@@ -73979,8 +74108,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -73995,10 +74127,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "e3bdced8f0dfb7b51d2e9b7561e67e0c2919fb50c50eb4f73325108c9b75ad0c"
+        "output_sha256": "6f976fc7f97301625416a82043943ce9636663cb1ee5fecd735d35511656cf85"
       },
       "build_validation": {
-        "output_sha256": "e3bdced8f0dfb7b51d2e9b7561e67e0c2919fb50c50eb4f73325108c9b75ad0c",
+        "output_sha256": "6f976fc7f97301625416a82043943ce9636663cb1ee5fecd735d35511656cf85",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -75860,7 +75992,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -75880,12 +76012,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 694254,
+                "speed_stub_va": 1744792,
+                "speed_selector": 694186,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678900
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -75894,7 +76029,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401692,
-                "region_stub_va": 1744792
+                "region_stub_va": 1744832
               },
               "hooks": []
             },
@@ -75904,15 +76039,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570422,
-                "gatea_stub_va": 1744900,
+                "gatea_stub_va": 1744940,
                 "gatea_authed": 1570426,
                 "ake_site": 1570078,
-                "ake_stub_va": 1744960,
+                "ake_stub_va": 1745000,
                 "ake_gate": 1570072,
                 "deny": 1570480,
                 "scratch": 2165760,
                 "vid_producer": 1570330,
-                "hrl_stub_va": 1744988,
+                "hrl_stub_va": 1745028,
                 "hrl_site": 1569776
               },
               "hooks": []
@@ -75960,8 +76095,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -75976,10 +76114,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "1cfeaeac57b452ed7e1e73f75b2af13e208fec5aa515d3fe49646012b13add5e"
+        "output_sha256": "afbc1fe28861f93b0a7434912191381c340901159f526fb7c685392f64fdc13e"
       },
       "build_validation": {
-        "output_sha256": "1cfeaeac57b452ed7e1e73f75b2af13e208fec5aa515d3fe49646012b13add5e",
+        "output_sha256": "afbc1fe28861f93b0a7434912191381c340901159f526fb7c685392f64fdc13e",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",
@@ -77788,7 +77926,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "summary": "MT1939 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Downgrade (DE) + Boot settings applied",
           "levers": [
             {
               "id": "Identity",
@@ -77808,12 +77946,15 @@
             {
               "id": "Speed",
               "label": "Speed",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "speed_tail_site": 694254,
+                "speed_stub_va": 1744392,
+                "speed_selector": 694186,
+                "speed_maximum_cell": 33529301,
+                "speed_optimum_cell": 33557260,
+                "speed_consumer": 678900
               },
-              "facts": {},
               "hooks": []
             },
             {
@@ -77822,7 +77963,7 @@
               "outcome": "Applied",
               "facts": {
                 "region_emitter": 1401368,
-                "region_stub_va": 1744392
+                "region_stub_va": 1744432
               },
               "hooks": []
             },
@@ -77832,15 +77973,15 @@
               "outcome": "Applied",
               "facts": {
                 "gatea_gate": 1570026,
-                "gatea_stub_va": 1744500,
+                "gatea_stub_va": 1744540,
                 "gatea_authed": 1570030,
                 "ake_site": 1569682,
-                "ake_stub_va": 1744560,
+                "ake_stub_va": 1744600,
                 "ake_gate": 1569676,
                 "deny": 1570084,
                 "scratch": 2165760,
                 "vid_producer": 1569934,
-                "hrl_stub_va": 1744588,
+                "hrl_stub_va": 1744628,
                 "hrl_site": 1569380
               },
               "hooks": []
@@ -77888,8 +78029,11 @@
             },
             "speed": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
             },
             "region": {
               "value": "oem",
@@ -77904,10 +78048,10 @@
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "2f2903d52c60c4788f756a8a3bcb6cb5f3ee184145a7955506d604020eb33edd"
+        "output_sha256": "c39343aa8ee348217782ce637ffd0cf4f08f10dd1be7ba820b4da612412f51af"
       },
       "build_validation": {
-        "output_sha256": "2f2903d52c60c4788f756a8a3bcb6cb5f3ee184145a7955506d604020eb33edd",
+        "output_sha256": "c39343aa8ee348217782ce637ffd0cf4f08f10dd1be7ba820b4da612412f51af",
         "preview_matches_build": true,
         "structural_audit": "passed",
         "flasher_gate": "admitted",

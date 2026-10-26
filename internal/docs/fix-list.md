@@ -31,3 +31,18 @@ Reported example:
 Release constraints: work and validation stay on dev. Website claims must match
 the deployed Modify app; no website capability changes before the corresponding
 correct firmware release.
+
+Confirmed rule defect: `capability_for` reads the model-token unlock-scope map,
+and unknown models default to `UhdBd`. This is patch applicability, not measured
+native media support. Engine reports serialize that scope as `media`, which the
+catalog uses as the top badge. WH14NS40 is an explicit `UhdBd` map entry across
+both MT1939 and MT1959 hardware. Neither that entry nor the fallback is valid
+proof of stock UHD reading. Do not fix this by changing the WH14NS40 token:
+the consumer needs a separate evidence-backed native-media result, including
+unknown, while patch scope remains available to the hook planner.
+
+The exact MT1939 stock UHD result remains unknown. The existing code tests prove
+state and layer routing, not physical UHD reads. The classic Unrestricted
+control therefore stays unavailable. Release gating now requires website
+capability manifests to identify the exact officially released Modify binary;
+no new dev results have been copied to the website.

@@ -7,6 +7,11 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Add classic MediaTek read-speed control using the native default selector and
+  native read maximum. Preserve OEM behavior and hardware/media limits; refuse
+  disconnected, ambiguous or impure selector paths. Validate four native forms
+  with independent CPU execution and require a caller-preserving tail branch.
+
 - Make native BD hooks read the shared Unrestricted runtime flag, matching UHD
   and auth hooks. The retired BD storage slot no longer changes new hook behavior.
 

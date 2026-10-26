@@ -7,6 +7,19 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "classic-speed-candidate" {
+            let role = mediatek_optical::image::analysis::ClassicSpeed::detect(&image)?;
+            let stub = freemkv_fw::engine::mt1959::Mt1959Engine
+                .build_speed_stub_classic(0x0200f000, role.maximum_cell)?;
+            println!(
+                "{}",
+                serde_json::json!({"entry":role.entry,"site":role.site,
+                "maximum_cell":role.maximum_cell,"optimum_cell":role.optimum_cell,
+                "media_cell":role.media_cell,"consumer":role.consumer,"flag_base":0x0200f000u32,
+                "stub":stub,"branch":thumb_asm::encode_b_wide(role.site, 0x1ff000)})
+            );
+            return Ok(());
+        }
         if offset == "application-evidence" {
             let base = std::env::args()
                 .nth(3)

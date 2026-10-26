@@ -313,7 +313,23 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
             }
             LeverId::Speed => {
-                if let (Some(gate), Some(stub)) = (fact(l, "speed_gate"), fact(l, "speed_stub_va"))
+                if let (Some(site), Some(stub)) =
+                    (fact(l, "speed_tail_site"), fact(l, "speed_stub_va"))
+                {
+                    check_branch_impl(
+                        &mut checks,
+                        name,
+                        "classic speed tail",
+                        img,
+                        BranchInstall {
+                            site,
+                            stub,
+                            expected: thumb::encode_b_wide(site as usize, stub),
+                            kind: "b.w",
+                        },
+                    );
+                } else if let (Some(gate), Some(stub)) =
+                    (fact(l, "speed_gate"), fact(l, "speed_stub_va"))
                 {
                     check_bl(&mut checks, name, "speed detour bl", img, gate + 4, stub);
                 } else {

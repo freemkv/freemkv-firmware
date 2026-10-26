@@ -303,6 +303,7 @@ impl Mt1959Engine {
             vid_gate_setter,
             setdiscmode,
             speed_gate,
+            speed_tail_site: 0,
             speed_stub_va,
             region_emitter,
             region_stub_va,

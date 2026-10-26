@@ -893,6 +893,7 @@ fn base_report_json(outcome: &api::CreateOutcome) -> String {
     s.push_str(&format!("\"boot_init_site\":{},", r.boot_init_site));
     s.push_str(&format!("\"de_off\":{},", r.de_off));
     s.push_str(&format!("\"speed_gate\":{},", r.speed_gate));
+    s.push_str(&format!("\"speed_tail_site\":{},", r.speed_tail_site));
     s.push_str(&format!("\"region_emitter\":{},", r.region_emitter));
     s.push_str(&format!("\"ake_gate\":{},", r.ake_gate));
     s.push_str(&format!("\"uhd_stub_va\":{},", r.uhd_stub_va));

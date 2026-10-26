@@ -27,7 +27,7 @@ one is unchanged. No published hash was silently omitted.
 | Actual controls | Published hashes |
 | --- | ---: |
 | All five controls, including Unrestricted OEM/On/Off | 84 |
-| HRL, Encryption, Region | 24 |
+| Speed, HRL, Encryption, Region | 24 |
 | Speed only | 1 |
 | None | 5 |
 
@@ -35,7 +35,8 @@ Five controls map to the seven existing website feature labels. A successful
 build is not a claim that every control exists. The raw per-image report retains
 missing-hook reasons. Missing native UHD/BD discriminators are not silently
 counted as hooks: the supported combined control can instead use the positively
-validated auth decision. Classic UHD remains unproven and unavailable.
+validated auth decision. Classic UHD remains unproven and unavailable. The 24 classic images now also
+emit Speed through the evidence-bound native selector/RMAX tail.
 
 ## Measured selected sub-hook contracts
 
@@ -73,10 +74,32 @@ independent CPU test failed for Unrestricted Off / retired slot On / BD class 2
 before this correction; 272 auth/BD combinations now pass. Existing partial
 boot records still retain their original restricted choices.
 
-Producer binary SHA-256: `4511bde8f567fa25870908303366146dc8b5e2410c6dfed00a86fc6876132ed0`.
-Flasher binary SHA-256: `1e0d63bcc4c227863453e03d176d593fa84cc560720cb9adf7688462b6b9beab`.
+Producer binary SHA-256: `97422de2fa7999ad9b9fbdc46d02b8ef15d74e5be89cf8cb85313557c47e8683`.
+Flasher binary SHA-256: `f25b55919f10822ef4dc8a7f5b22c04c4eac45d6fc12a542c25676990f7b191b`.
 
 The adjacent JSON is the authoritative current complete result. Earlier
 allocation/five-feature/base-only JSON files are investigation checkpoints.
 Remaining work includes the unproven layouts, final publication/QA integration,
 and user review; no new support has been released to production.
+
+## Six-feature scorecard
+
+BD/UHD is counted as one combined control; Encryption supplies separate AKE and
+Bus labels. This avoids conflating five settings, six grouped features and seven
+individual website pills.
+
+| Available / 6 | Published hashes | Buildable held hashes |
+| --- | ---: | ---: |
+| 6/6 | 84 | 157 |
+| 5/6 | 24 | 24 |
+| 4/6 | 0 | 0 |
+| 3/6 | 0 | 0 |
+| 2/6 | 0 | 0 |
+| 1/6 | 1 | 11 |
+| 0/6 | 5 | 5 |
+
+The other 888 held inputs remain 887 unsupported plus one malformed artifact;
+they are reported separately from successful outputs with zero configurable
+features. All 24 classic selectors passed 17,280 independent CPU comparisons
+including the actual wide branch. Four fixture forms run 2,880 comparisons in CI.
+No website data or production deployment was changed for this development result.

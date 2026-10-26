@@ -293,10 +293,7 @@ impl Engine for Mt1939Engine {
         });
         levers.push(LeverReport::missed(
             LeverId::Speed,
-            "MT1939 classic generation — no MT1959-style ramp-ceiling gate exists (classic \
-             uses a disc-type halfword read-speed clamp through a shared limiter primitive, \
-             no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of \
-             the other levers",
+            "Read-speed control requires the classic CDB base and boot hook; this image did not establish that complete contract",
         ));
 
         if !levers.iter().any(|l| l.outcome.is_effective()) {

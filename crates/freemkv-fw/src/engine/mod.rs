@@ -83,6 +83,8 @@ pub struct CreateReport {
     /// Speed (0x02) ramp-ceiling gate anchor (the `ldr r1,[pc]` of the ramp
     /// self-ceiling test); the detour replaces the `cmp/bhi` at `gate+4`.
     pub speed_gate: u32,
+    /// Classic pure read-speed selector normalization tail (wide branch).
+    pub speed_tail_site: u32,
     /// Injection address of the Speed (0x02) flag-gated ceiling trampoline.
     pub speed_stub_va: u32,
     /// OEM RPC-state emitter anchor for Region-free (0x03); the detour replaces

@@ -20,7 +20,7 @@ pub enum LeverId {
     RegionFree,
     /// Raw read / clear VID (VID producer gate + AKE accept + deny reset).
     RawRead,
-    /// Read-ramp ceiling unlock.
+    /// Native read-speed ceiling/default selector control.
     Speed,
     /// Downgrade-enable byte (family-agnostic; any image with an identity page).
     DowngradeEnable,

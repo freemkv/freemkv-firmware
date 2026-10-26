@@ -1220,3 +1220,25 @@ fn structural_audit_passes_over_corpus() {
     );
     eprintln!("structural audit OK over {checked} modifiable corpus images");
 }
+
+#[test]
+fn classic_speed_tail_requires_wide_branch_and_preserves_caller_lr() {
+    let original = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let engine = engine::detect(original).unwrap();
+    let mut report = engine.modify(original).unwrap();
+    let facts = &report
+        .levers
+        .iter()
+        .find(|l| l.id == crate::engine::lever::LeverId::Speed)
+        .unwrap()
+        .facts;
+    let value = |key| facts.iter().find(|(k, _)| *k == key).unwrap().1;
+    let (site, stub) = (value("speed_tail_site"), value("speed_stub_va"));
+    assert!(audit_image(original, &report).ok());
+    let branch = thumb_asm::encode_bl(site as usize, stub).unwrap();
+    report.image[site as usize..site as usize + 4].copy_from_slice(&branch);
+    report.image = cmac::resign(&report.image).unwrap();
+    assert!(audit_image(original, &report)
+        .failures()
+        .any(|c| c.what == "classic speed tail"));
+}
