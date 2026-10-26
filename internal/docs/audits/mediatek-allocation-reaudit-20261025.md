@@ -58,3 +58,30 @@ does not establish complete validity. This is not authorization to modify
 integrity metadata: the receiver's programmed ranges remain unproven for this
 input, and unchanged boot/runtime behavior still needs independent evidence.
 No production allocation policy or input image is changed by this experiment.
+
+### Programming-loop evidence
+
+Following the same OEM application's selected range cells reaches the mode-three
+programming wrapper at `0x17c44e`, which stores source offset, destination and
+remaining length, then calls `0x17000`. The original loop uses 64 KiB and 4 KiB
+program calls and skips `0x1d0000..0x1ec000` and `0x1f0000..0x200000`.
+
+`scripts/test-mtk-program-routing.py` executes that original loop with ready
+hardware status, stubbing the page helper and setup/logging completion. Starting
+at zero yields 33 page-helper calls; starting at `0x10000` yields 32. Every
+source offset, destination and length is asserted, including the preserved
+skips and final zero remaining length. The proposed `0x18074..0x18400` gap is
+inside a programmed span in this replay.
+
+Four further cases execute the native page helper through its staging-to-buffer
+copy for offsets `0x18000`, `0x18100`, `0x18200`, `0x18300`. All 256 bytes of each
+nonconstant test page reach the hardware buffer unchanged. These stop before
+the actual hardware program/verify sequence; they do not establish physical
+acceptance or write completion.
+
+The loop is the existing library's compact programming form with relocated RAM
+literal operands: 11 bytes differ across eight literal words in its 2016-byte
+signature. This suggests a shared operand-bound contract, not another
+model-selected implementation. Binding it to this application's selection and
+wrapper, validating each relocation's role, and exposing the resulting ranges
+through the receiver API remain work to do before any allocation policy change.
