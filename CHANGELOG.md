@@ -7,6 +7,10 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Add component-based MediaTek UHD conversion planning and offline hook tests.
+  Preserve native hardware defaults and refuse incomplete conversions; this
+  development work does not enable classic UHD support yet.
+
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse
   disconnected, ambiguous or impure selector paths. Validate four native forms

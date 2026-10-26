@@ -618,6 +618,22 @@ impl Mt1959Engine {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
         });
 
+        // Conversion planning uses independent library contracts. Matched
+        // regions do not authorize a partial conversion or a capability flag.
+        if let Some(raw) = levers.iter_mut().find(|lever| lever.id == LeverId::RawRead) {
+            let reason = match super::mtk_uhd::UhdConversionPlan::inspect(image) {
+                Ok(plan) => match plan.require_complete_conversion() {
+                    Ok(()) => "native component handling found; no conversion installed".to_owned(),
+                    Err(error) => format!("{error:#}"),
+                },
+                Err(error) => format!("conversion evidence incomplete: {error:#}"),
+            };
+            raw.hooks.push(super::lever::HookReport::unavailable(
+                "uhd-conversion",
+                reason,
+            ));
+        }
+
         // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));
 

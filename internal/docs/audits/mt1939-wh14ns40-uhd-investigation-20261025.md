@@ -404,3 +404,42 @@ additional conditions must not be inferred from this narrow policy comparison.
 The five non-speed combinations contain 94, 41, 12, 23, and 1 images respectively
 (OEM/dump subset: 55, 22, 7, 12, and 1). They are combinations of the selected
 area shapes, not five proven complete firmware families or five ready patches.
+
+## Component implementation and first hardware target
+
+`mediatek-optical::image::analysis::UhdAreas` now selects the seven areas
+independently and exposes typed native handling and selector contracts. The
+library owns replay opcodes, hook spans and both native continuations. Modify's
+`engine::mtk_uhd::UhdConversionPlan` consumes those contracts, preserves hardware
+policy, binds the source hash, and emits research components through the
+read-only `mtk_receiver_evidence IMAGE uhd-conversion` mode. Ordinary classic
+Modify records the outstanding conversion contracts and installs none of these
+partial components.
+
+Implemented research emission: four selection extensions (forward calculation,
+hardware bit, hardware field, parameter selection), a DI identifier helper and
+a layer-state helper. Selection stubs replay OEM operations for Off/OEM/unknown
+settings, preserve registers/SP and native comparison flags, and extend C7 only
+for On. BICS stubs preserve incoming C/V using Thumb-1 branches/arithmetic;
+no Thumb-2 MRS dependency is introduced. These are component bytes, not a
+complete signed conversion firmware.
+
+Independent CPU execution passes 16,384 native-versus-emitted routing cases and
+6,624 DI helper cases on the committed classic fixture. The 24-input sweep adds
+18,432 routing comparisons (12 state values, four setting values, four C/V
+combinations, four candidate selectors). This explicitly does not settle caller
+LR lifetimes, DI format prevalidation, selecting-flag producers or the remaining
+indirect/layer consumers. Full conversion remains refused until those contracts
+are implemented and checked.
+
+First user hardware target: **BD-RE BH16NS48 1.02**, native MT1939, variant
+`N0002A0`. The selected OEM source is:
+
+- SHA-256: `43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3`
+- MD5: `7ac1e89afc1a4033db5288f63f9bbca5`
+- Hoard: `oem/mediatek/MT1939/HL-DT-ST_BH16NS48_MT1939_Code_JB7/GENERAL/1.02/main/43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3.bin`
+
+The user will send the eventual signed candidate to the tester. No candidate has
+been declared ready or sent. Build/check/hash the completed candidate before
+handoff, retain the original and normal Flash compatibility checks, and keep the
+website tied to released Modify capabilities.

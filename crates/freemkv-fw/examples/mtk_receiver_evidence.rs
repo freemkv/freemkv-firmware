@@ -7,6 +7,36 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "uhd-conversion" {
+            use freemkv_fw::engine::mtk_uhd::{
+                emit_di_layers, emit_di_recognition, UhdConversionPlan,
+            };
+            use mediatek_optical::image::analysis::UhdArea;
+            let plan = UhdConversionPlan::inspect(&image)?;
+            let flags = 0x0200f000;
+            let candidates = plan.routing_candidates(&image, flags)?;
+            println!(
+                "{}",
+                serde_json::json!({
+                    "policy":"research component emission only; no image is written or UHD capability enabled",
+                    "state":plan.state_address(), "flag_base":flags,
+                    "pending":plan.remaining_contracts(),
+                    "di_recognition":emit_di_recognition(flags)?, "di_layers":emit_di_layers(flags)?,
+                    "areas":UhdArea::ALL.iter().map(|&area| {
+                        let contract = plan.areas().area(area).unwrap();
+                        serde_json::json!({"area":format!("{area:?}"),"variant":contract.variant(),
+                            "site":contract.site(),"action":format!("{:?}",plan.action(area).unwrap())})
+                    }).collect::<Vec<_>>(),
+                    "candidates":candidates.iter().map(|c| serde_json::json!({
+                        "area":format!("{:?}",c.area),"site":c.site,"original":c.original,
+                        "accept":c.accept,"reject":c.reject,"stub":c.bytes,
+                        "region_start":plan.areas().area(c.area).unwrap().site(),
+                    "bypass":if c.area == UhdArea::ParameterNibble { Some(plan.areas().area(c.area).unwrap().edges()[0].target) } else { None },
+                    })).collect::<Vec<_>>()
+                })
+            );
+            return Ok(());
+        }
         if offset == "classic-speed-candidate" {
             let role = mediatek_optical::image::analysis::ClassicSpeed::detect(&image)?;
             let stub = freemkv_fw::engine::mt1959::Mt1959Engine
