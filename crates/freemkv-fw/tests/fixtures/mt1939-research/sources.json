@@ -96,5 +96,47 @@
     "source_offset": 1293316,
     "padding": 0,
     "excerpt_sha256": "0c5dc176978dab2405038d99d3ecca79fba4ae057fe0f296be21ff50309efc0c"
+  },
+  {
+    "file": "wh14-classic-control-bit.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 222322,
+    "padding": 0,
+    "excerpt_sha256": "1caaf645df2eb88ccd2d66d5d25a90c7c7ed4b7d1758588c2ba18880be842c21"
+  },
+  {
+    "file": "wh14-modern-control-bit.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 157446,
+    "padding": 0,
+    "excerpt_sha256": "18158120e9363ac400109e86f5d577f2b91a56c56e9706a00a6db0206b0e092f"
+  },
+  {
+    "file": "wh14-classic-control-field.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 205120,
+    "padding": 0,
+    "excerpt_sha256": "310b6f47c0442f2129e9bc202062b0992fac29046001f9a6e5b004d7f7418442"
+  },
+  {
+    "file": "wh14-modern-control-field.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 208490,
+    "padding": 0,
+    "excerpt_sha256": "791b024aeedc419981f877728e3a197ce1a908fe215d349c4e30e12c13a35394"
+  },
+  {
+    "file": "wh14-classic-speed-state.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 424132,
+    "padding": 0,
+    "excerpt_sha256": "50734aa3c03acb348d869ed35c9770671a3409513e297b2b89705a160bd6922c"
+  },
+  {
+    "file": "wh14-modern-speed-state.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 427866,
+    "padding": 0,
+    "excerpt_sha256": "9d13894117d60a5e6ad17f1ca32702de5aa10a5b63768496106527db6c1d3edb"
   }
 ]

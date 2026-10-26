@@ -46,6 +46,62 @@ def route(cpu, start, stops):
     return reached[0]
 
 
+def downstream_control_cases():
+    """Execute native state consumers against all state bytes and dirty registers.
+
+    The MMIO effects are established here; their physical meaning is not.
+    Field tests cover the shared BD band only, with the caller's live R1
+    supplied as a controlled MMIO pointer. No firmware patch executes.
+    """
+    count = 0
+    for value in range(256):
+        for initial in (0, 0x12345678, 0xffffffff):
+            for modern in (False, True):
+                prefix = 'wh14-modern-' if modern else 'wh14-classic-'
+                cell = 0x01ff9e00 if modern else 0x01ff9dd3
+                cpu = machine(prefix + 'control-bit')
+                cpu.mem_map(0x04200000, 0x10000)
+                cpu.mem_write(cell, bytes([value]))
+                cpu.mem_write(0x0420903c, struct.pack('<I', initial))
+                route(cpu, 0x26706 if modern else 0x36472,
+                      {0x2672e if modern else 0x3648e: 'written'})
+                enabled = value & 0xc8 == 0xc8 or (modern and value == 0xc7)
+                expected = (initial & 0x7fffffff) | (int(enabled) << 31)
+                actual = struct.unpack('<I', cpu.mem_read(0x0420903c, 4))[0]
+                assert actual == expected, (modern, value, hex(actual), hex(expected))
+                count += 1
+                if value >> 6 != 3:
+                    continue
+                cpu = machine(prefix + 'control-field')
+                cpu.mem_map(0x04200000, 0x10000)
+                cpu.mem_write(cell, bytes([value]))
+                cpu.reg_write(reg.UC_ARM_REG_R1, 0x0420b180)
+                cpu.mem_write(0x0420b1b0, struct.pack('<I', initial))
+                route(cpu, 0x32e6a if modern else 0x32140,
+                      {0x32f5a if modern else 0x321d0: 'written'})
+                expected = (initial & ~0xf0) | (0 if enabled else 0x30)
+                actual = struct.unpack('<I', cpu.mem_read(0x0420b1b0, 4))[0]
+                assert actual == expected, (modern, value, hex(actual), hex(expected))
+                count += 1
+    # C-band default selection. Flag bit 0 imposes the native value 4.
+    for value in range(0xc0, 0xd0):
+        for flag in (0, 1):
+            for modern in (False, True):
+                cpu = machine('wh14-' + ('modern-' if modern else 'classic-') + 'speed-state')
+                cell = 0x01ff9e00 if modern else 0x01ff9dd3
+                flag_cell = 0x01ff9e04 if modern else 0x02000b04
+                outputs = (0x01ff9e02, 0x02000b0b) if modern else (0x01ff9dd5, 0x02000b0c)
+                cpu.mem_write(cell, bytes([value]))
+                cpu.mem_write(flag_cell, bytes([flag]))
+                route(cpu, 0x6875a if modern else 0x678c4,
+                      ({0x68810: 'stored', 0x688c4: 'stored'} if modern else {0x67900: 'stored'}))
+                expected = (4 if flag else 6 if modern and (value == 0xc7 or value >> 2 == 0x32)
+                            else 8 if value >> 2 == 0x31 else 12)
+                assert [cpu.mem_read(address, 1)[0] for address in outputs] == [expected] * 2
+                count += 1
+    return count
+
+
 def disc_information_cases():
     """Execute native DI consumers; no replacement parser or auth patch involved.
 
@@ -330,12 +386,13 @@ def main():
                     expected = 'media' if fmt < 0x80 and media != 1 else 'accept' if layer == 0 or (layer == 1 and available) else 'layer'
                     assert actual == expected, (media, fmt, layer, available, actual, expected)
                     layer_cases += 1
+    control_cases = downstream_control_cases()
     di_cases = disc_information_cases()
     metric_cases = class_metric_cases()
     read_cases = read_entry_cases()
     type_cases = type_classification_cases()
     candidates = candidate_cases(args.candidate_builder) if args.candidate_builder else 0
-    print(f'PASS: {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {di_cases} paired native DI-parser cases, {type_cases} paired type-classification cases, {read_cases} paired native read-entry cases, {metric_cases} paired native class-metric cases, {candidates} candidate trampoline cases')
+    print(f'PASS: {control_cases} native downstream-control executions, {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {di_cases} paired native DI-parser cases, {type_cases} paired type-classification cases, {read_cases} paired native read-entry cases, {metric_cases} paired native class-metric cases, {candidates} candidate trampoline cases')
 
 
 if __name__ == '__main__':

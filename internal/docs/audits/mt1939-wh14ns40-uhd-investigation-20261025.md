@@ -266,3 +266,40 @@ and C8 consumers in both generations, and identify which additional parser,
 layer or read-path behavior is required. A generic adaptation must retain the
 OEM O/R/W branches and use proven source/continuation contracts. No production
 capability has been enabled by this comparison.
+
+## Native C7/C8 downstream comparison (2026-10-26)
+
+Compared the two exact WH14NS40 source hashes above. These are native input
+states, not guessed C/D/E/F authentication classes. C7 and C8 both remain in
+high-nibble C, but are not interchangeable downstream.
+
+| Consumer | MT1939 address | MT1959 address | Observed difference |
+|---|---|---|---|
+| Hardware control bit | 36472 | 26706 | Bit 31 of MMIO 0420903C is set for `(state & C8)==C8` in classic; modern also sets it for C7. Other bits survive. |
+| Hardware control field | 32140 | 32E6A | In the BD band, classic clears bits 4..7 for the C8 mask, otherwise selects 30; modern also clears them for C7. Caller supplies the live register base. |
+| Default speed values | 678C4 | 6875A | With native restriction flag clear, classic C7 selects 8 and C8 selects 12; modern selects 6 for both. With flag bit 0 set both select 4. These are native stored values, not a claim about achieved physical speed. |
+| Forward calculation | FD15A | D8E64 | Modern extends the C8-mask calculation branch to C7; classic C7 takes the fallback. The shared branch has additional CC-mask coefficient selection. |
+| Reverse calculation | FD1D2 | D8EE0 | Modern includes C7, with a further flag-dependent branch. This is not an unconditional C7-to-C8 alias. |
+| Parameter nibble | FD4CC | D9424 | Modern extends a C8-mask plus flag-bit-5 condition to C7, selecting low nibble 2 at 0420B1B8; classic C7 follows the lookup path. |
+| Profile dispatch | A44A2 | 9FF06 | Both route C7 and C8 to the ROM profile branch; no new profile split at this point. |
+
+The first three rows now execute original hashed instruction excerpts in
+`scripts/test-mtk-classic-dispatch.py`. Hardware bit tests cover every state
+byte and three initial register values; hardware-field tests cover every
+BD-band state and those initial values; speed tests cover every C-band state
+and both restriction flag values. The calculation/nibble rows are disassembly
+comparisons, not yet equivalent CPU or physical tests. Existing READ-entry and
+VID tests remain separate; their passing does not prove these other paths.
+
+A literal-reference scan found 35 distinct modern C7 comparisons near direct
+state loads. This is a work list, not an exhaustive count of state consumers
+or a claim that 35 patches are required: indirect/aliased state access and
+runtime ROM code need separate tracing. Some modern veneers enter runtime
+01F9xxxx code whose mapping is not established from the file; do not invent a
+file-offset alias to fill that gap.
+
+Consequence: adding BDU recognition is necessary for this reviewed parser,
+but not sufficient. C7 needs selected downstream branches and parameters;
+C8 already has classic handling, yet modern defaults also differ for C8.
+A global state substitution or broad authentication bypass cannot stand in
+for this comparison. No production capability is enabled by these tests.
