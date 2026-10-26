@@ -223,9 +223,17 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
             part.bytes,
         ));
     }
+    for part in plan.auxiliary_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
     ensure!(
-        parts.len() == 6,
-        "research probe requires all six reviewed components"
+        parts.len() == 12,
+        "research probe requires all twelve reviewed components"
     );
     let mut installed = Vec::new();
     for (role, site, original, bytes) in parts {
@@ -308,7 +316,7 @@ fn classic_di_probe_places_signs_and_admits_without_promoting_standard_support()
     let (probe, record) = di_routing_probe(image).unwrap();
     assert_ne!(probe.as_slice(), image);
     assert_eq!(record["ready_for_hardware_test"], false);
-    assert_eq!(record["installed"].as_array().unwrap().len(), 6);
+    assert_eq!(record["installed"].as_array().unwrap().len(), 12);
     assert_eq!(image.as_slice(), before.as_slice());
     let (_, support) = crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
     assert!(!support.supports(BootFeature::Unrestricted));

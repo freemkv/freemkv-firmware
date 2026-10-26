@@ -433,18 +433,18 @@ OEM operations for Off/OEM/unknown settings and extend C7 only for On. BICS stub
 preserve incoming C/V using Thumb-1 branches/arithmetic, without Thumb-2 MRS.
 These are component bytes, not a complete signed conversion firmware.
 
-Independent CPU execution passes 20,480 native-versus-emitted routing cases,
+Independent CPU execution passes 45,056 native-versus-emitted routing cases,
 6,624 pure DI helper cases and 14,402 actual DI entry/native-format cases on the
-committed classic fixture. The 24-input sweep adds 23,040 routing comparisons
+committed classic fixture. The 24-input sweep adds 50,688 routing comparisons
 and 345,648 DI entry/native-format cases, including the exact BH16NS48 source.
 The library's optional 195-image inventory test also binds the complete new DI
 contract on all 24 classic layouts. Corrupt layer arithmetic or format-call
 instructions are refused. `SavedLink` now walks each native caller's local graph, checks stack depth and
 balanced pop-PC exits, and refuses live uses of a detour-clobbered LR. It handles
 the shared compiler byte-table switch explicitly and rejects unknown stack or
-control flow. The 24-image sweep adds 864 CPU checks of the saved parent frame
+control flow. The 24-image sweep adds 1,248 CPU checks of the saved parent frame
 and native return instructions; DI cases also execute the native add-SP/pop-PC
-return. An internal probe places all six components in covered erased space,
+return. An internal probe places all twelve components in covered erased space,
 signs the image, rechecks every branch/stub after signing, runs the base audit
 and passes Flash's offline admission. This has succeeded on the exact BH16NS48
 source. It is marked NOT ready for hardware testing and is not the user BIN.
@@ -457,7 +457,15 @@ path. Its flag producer changes calibration/position state that has no proven
 legacy counterpart, so the experimental policy preserves the legacy hardware
 behavior instead of borrowing an unrelated RAM byte or transplanting that mode.
 This is arithmetic/control-flow evidence, not proof of physical UHD reading.
-The remaining semantic work is the additional indirect and structure consumers.
+Six additional consumers are now bound and emitted independently: the native
+controller word at offset 0x18, mode-byte 2/3 selection, parameter programming,
+request argument eight/0x80000008, read-position transformation and read-status
+updates. All six match uniquely on all 24 classic inputs. The read-status
+fallback is bound through its flag cell and native joins, accepting a pool guard
+that moves it two bytes without a model-specific displacement exception. Long
+read callers use the same bounded saved-frame proof; CPU tests execute their
+actual local-stack release before the native pop-PC.
+The remaining semantic work is the other indirect and structure consumers.
 Full conversion is still refused.
 
 First user hardware target: **BD-RE BH16NS48 1.02**, native MT1939, variant

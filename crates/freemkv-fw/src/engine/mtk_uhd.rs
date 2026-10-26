@@ -108,6 +108,8 @@ impl UhdConversionPlan {
             let bytes = emit_c7_selection(self.state, flags, replay, accept, reject)?;
             candidates.push(UhdRoutingCandidate {
                 area,
+                region_start: contract.site(),
+                calculation_end: contract.coefficient_continuation().map(|pc| pc + 2),
                 site,
                 original: image[site..site + width].to_vec(),
                 accept,
@@ -118,13 +120,54 @@ impl UhdConversionPlan {
         }
         Ok(candidates)
     }
+    /// Emit separately proven native auxiliary selectors. Recognition alone
+    /// does not close the remaining downstream-consumer audit or enable UHD.
+    pub fn auxiliary_candidates(
+        &self,
+        image: &[u8],
+        flags: u32,
+    ) -> Result<Vec<UhdRoutingCandidate<mediatek_optical::image::analysis::ClassicConsumerKind>>>
+    {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        mediatek_optical::image::analysis::ClassicConsumer::inspect(image, self.state)?
+            .into_iter()
+            .map(|contract| {
+                let selection = contract.selection;
+                let site = selection.site();
+                Ok(UhdRoutingCandidate {
+                    area: contract.kind,
+                    region_start: contract.region,
+                    calculation_end: None,
+                    site,
+                    original: image[site..site + selection.span()].to_vec(),
+                    accept: selection.accept(),
+                    reject: selection.reject(),
+                    bytes: emit_c7_selection(
+                        self.state,
+                        flags,
+                        selection.replay(),
+                        selection.accept(),
+                        selection.reject(),
+                    )?,
+                    caller: contract.caller,
+                })
+            })
+            .collect()
+    }
 }
 /// A candidate detour with exact replay bytes and both native continuations.
 /// Includes the native saved-link contract needed before installing a branch.
 #[derive(Debug, Clone)]
-pub struct UhdRoutingCandidate {
+pub struct UhdRoutingCandidate<R = UhdArea> {
     /// Independent area that requested this extension.
-    pub area: UhdArea,
+    pub area: R,
+    /// First native instruction used to execute the selector's inputs.
+    pub region_start: usize,
+    /// Native arithmetic result join, when this is a calculation selector.
+    pub calculation_end: Option<usize>,
     /// Original operation and branch pair.
     pub site: usize,
     /// Original source bytes, retained for stale-source/overlap checks.
@@ -359,6 +402,16 @@ mod tests {
                 candidate.original
             );
         }
+        let auxiliary = plan.auxiliary_candidates(CLASSIC, 0x0200f000).unwrap();
+        assert_eq!(auxiliary.len(), 6);
+        for candidate in auxiliary {
+            assert_eq!(
+                &CLASSIC[candidate.site..candidate.site + candidate.original.len()],
+                candidate.original
+            );
+            assert!(candidate.caller.entry < candidate.site);
+            assert!(candidate.calculation_end.is_none());
+        }
         let mut changed = CLASSIC.to_vec();
         changed[0x1000] ^= 1;
         assert!(plan.routing_candidates(&changed, 0x0200f000).is_err());
@@ -404,6 +457,10 @@ mod tests {
             if row["identity"]["chip"] == "MT1939" {
                 assert!(plan.require_complete_conversion().is_err());
                 assert_eq!(plan.routing_candidates(&data, 0x0200f000).unwrap().len(), 5);
+                assert_eq!(
+                    plan.auxiliary_candidates(&data, 0x0200f000).unwrap().len(),
+                    6
+                );
             }
         }
     }

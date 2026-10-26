@@ -16,6 +16,8 @@ Versions are independent of the freemkv ripping applications.
   parent returns. Keep the internal signed placement probe gated from user tests.
   Bind the reverse gate to its native rejection graph and CPU-test both native
   calculations while preserving legacy calibration policy.
+  Bind and test six additional classic controller/read selectors, including
+  native local-stack release and moved read-status blocks.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse

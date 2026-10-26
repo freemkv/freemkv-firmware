@@ -1,6 +1,19 @@
 //! Read-only receiver evidence for allocation research; never authorizes changes.
 use mediatek_optical::receiver::analysis::ApplicationAnalysis;
 
+fn routing_evidence<R: std::fmt::Debug>(
+    c: &freemkv_fw::engine::mtk_uhd::UhdRoutingCandidate<R>,
+    bypass: Option<usize>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "area":format!("{:?}",c.area),"site":c.site,"original":c.original,
+        "accept":c.accept,"reject":c.reject,"stub":c.bytes,
+        "region_start":c.region_start,"calculation_end":c.calculation_end,
+        "caller":{"entry":c.caller.entry,"stack_bytes":c.caller.stack_bytes,"returns":c.caller.returns},
+        "bypass":bypass,
+    })
+}
+
 fn main() -> anyhow::Result<()> {
     let path = std::env::args()
         .nth(1)
@@ -15,6 +28,24 @@ fn main() -> anyhow::Result<()> {
             let plan = UhdConversionPlan::inspect(&image)?;
             let flags = 0x0200f000;
             let candidates = plan.routing_candidates(&image, flags)?;
+            let mut records: Vec<_> = candidates
+                .iter()
+                .map(|c| {
+                    routing_evidence(
+                        c,
+                        if c.area == UhdArea::ParameterNibble {
+                            Some(plan.areas().area(c.area).unwrap().edges()[0].target)
+                        } else {
+                            None
+                        },
+                    )
+                })
+                .collect();
+            records.extend(
+                plan.auxiliary_candidates(&image, flags)?
+                    .iter()
+                    .map(|c| routing_evidence(c, None)),
+            );
             let di = freemkv_fw::engine::mtk_uhd::di_prevalidation_candidate(&image, flags).ok();
             println!(
                 "{}",
@@ -36,14 +67,7 @@ fn main() -> anyhow::Result<()> {
                         serde_json::json!({"area":format!("{area:?}"),"variant":contract.variant(),
                             "site":contract.site(),"action":format!("{:?}",plan.action(area).unwrap())})
                     }).collect::<Vec<_>>(),
-                    "candidates":candidates.iter().map(|c| serde_json::json!({
-                        "area":format!("{:?}",c.area),"site":c.site,"original":c.original,
-                        "accept":c.accept,"reject":c.reject,"stub":c.bytes,
-                        "region_start":plan.areas().area(c.area).unwrap().site(),
-                        "calculation_end":plan.areas().area(c.area).unwrap().coefficient_continuation().map(|pc|pc+2),
-                        "caller":{"entry":c.caller.entry,"stack_bytes":c.caller.stack_bytes,"returns":c.caller.returns},
-                    "bypass":if c.area == UhdArea::ParameterNibble { Some(plan.areas().area(c.area).unwrap().edges()[0].target) } else { None },
-                    })).collect::<Vec<_>>()
+                    "candidates":records,
                 })
             );
             return Ok(());

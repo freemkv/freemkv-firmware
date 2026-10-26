@@ -225,7 +225,13 @@ def parent_returns(data, evidence):
             pop = struct.unpack_from('<H', data, finish)[0]
             assert pop & 0xff00 == 0xbd00
             registers = [i for i in range(8) if pop & (1 << i)]
-            assert (len(registers) + 1) * 4 == caller['stack_bytes']
+            locals_size = caller['stack_bytes'] - (len(registers) + 1) * 4
+            assert locals_size >= 0
+            epilogue = finish
+            if locals_size:
+                adjustment = struct.unpack_from('<H', data, finish - 2)[0]
+                assert adjustment & 0xff80 == 0xb000 and (adjustment & 127) * 4 == locals_size, (candidate['area'], hex(finish), locals_size)
+                epilogue -= 2
             for flag in (1, 255):
                 cpu = machine(data)
                 cpu.mem_write(STUB, bytes(candidate['stub']))
@@ -237,16 +243,17 @@ def parent_returns(data, evidence):
                     cpu.mem_write(site + 4, b'\xc0\x46')
                 setup(cpu, evidence['state'], evidence['flag_base'], 0xc7, flag, 0)
                 saved = [0x60000000 + register * 0x101 for register in registers]
-                cpu.mem_write(0x03008000, struct.pack('<' + 'I' * (len(saved) + 1), *saved, done | 1))
+                frame = b'\xa5' * locals_size + struct.pack('<' + 'I' * (len(saved) + 1), *saved, done | 1)
+                cpu.mem_write(0x03008000, frame)
                 stops = (candidate['accept'], candidate['reject'])
                 handle = cpu.hook_add(UC_HOOK_CODE, lambda c, at, _s, _u: c.emu_stop() if at in stops else None)
                 cpu.emu_start(candidate['region_start'] | 1, 0x200000, count=250)
                 assert cpu.reg_read(reg.UC_ARM_REG_PC) in stops
                 assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
-                assert cpu.mem_read(0x03008000, caller['stack_bytes']) == struct.pack('<' + 'I' * (len(saved) + 1), *saved, done | 1)
+                assert cpu.mem_read(0x03008000, caller['stack_bytes']) == frame
                 cpu.hook_del(handle)
                 cpu.hook_add(UC_HOOK_CODE, lambda c, at, _s, _u: c.emu_stop() if at == done else None)
-                cpu.emu_start(finish | 1, 0x200000, count=4)
+                cpu.emu_start(epilogue | 1, 0x200000, count=4)
                 assert cpu.reg_read(reg.UC_ARM_REG_PC) == done
                 assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000 + caller['stack_bytes']
                 assert [cpu.reg_read(REGISTERS[i]) for i in registers] == saved
@@ -303,7 +310,7 @@ def main():
             data = source.read_bytes()
             assert hashlib.sha256(data).hexdigest() == row['sha256']
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
-            assert evidence['pending'] and len(evidence['candidates']) == 5
+            assert evidence['pending'] and len(evidence['candidates']) == 11
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
             arithmetic_cases = calculations(data, evidence)
             di_cases = di_entry(data, evidence)
@@ -317,7 +324,7 @@ def main():
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
     assert evidence['pending'], 'research components must not enable standard conversion'
-    assert len(evidence['candidates']) == 5
+    assert len(evidence['candidates']) == 11
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
     arithmetic_cases = calculations(data, evidence)

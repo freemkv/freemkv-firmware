@@ -44,7 +44,7 @@ pioneer-optical = { version = "=1.3.0", git = "https://github.com/MattJackson/pi
 # freemkv-fw uses, so the flash tool and the modify tool never disagree on a
 # firmware image's family. Detection-only crate (std + anyhow); no cycle.
 freemkv-chipset = { path = "../freemkv-chipset" }
-mediatek-optical = { version = "=1.2.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "c04e806723263d866ca5a225d4767b4678603f82", features = ["drive", "image", "enc", "oem"] }
+mediatek-optical = { version = "=1.2.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "34d383e52b022919a6df5d827dc7caa988be17c3", features = ["drive", "image", "enc", "oem"] }
 # The SCSI pass-through transport (SG_IO / IOKit / SPTI + the macOS shim) is the
 # `scsi` feature of libfreemkv — the single source of truth for that layer.
 # freemkv-flash used to carry a trimmed copy of those backends; now it adapts
