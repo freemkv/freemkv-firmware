@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "producer_sha256": "eddd790888ec2e5dc131b2f5ace92f7244898189476193e37b913b9a944efd01",
+  "producer_sha256": "1fbb06ee81d64d61b00141759e749a274f1f779a3f1ab45325f751ba6b099f87",
   "scope": "component evidence; no executable receiver authorization",
   "query": "application-evidence",
   "images": [
@@ -27,7 +27,8 @@
           "offset_cell": 33557668,
           "plain_signature": false,
           "selection": 641070,
-          "start_cell": 33557676
+          "start_cell": 33557676,
+          "state_slot": null
         }
       ]
     },
@@ -54,7 +55,8 @@
           "offset_cell": 33557668,
           "plain_signature": false,
           "selection": 643082,
-          "start_cell": 33557676
+          "start_cell": 33557676,
+          "state_slot": null
         }
       ]
     },
@@ -81,7 +83,8 @@
           "offset_cell": 33557592,
           "plain_signature": false,
           "selection": 685884,
-          "start_cell": 33557600
+          "start_cell": 33557600,
+          "state_slot": null
         }
       ]
     },
@@ -129,7 +132,20 @@
           "offset_cell": 33557668,
           "plain_signature": false,
           "selection": 641070,
-          "start_cell": 33557676
+          "start_cell": 33557676,
+          "state_slot": {
+            "epilogue": 639176,
+            "prologue": 639084,
+            "restore_call": 641474,
+            "return_path": [
+              641478,
+              639870
+            ],
+            "save_call": 641064,
+            "slot": 60,
+            "stack_bytes": 68,
+            "store": 641068
+          }
         }
       ]
     },
@@ -177,7 +193,20 @@
           "offset_cell": 33557600,
           "plain_signature": false,
           "selection": 644594,
-          "start_cell": 33557608
+          "start_cell": 33557608,
+          "state_slot": {
+            "epilogue": 642740,
+            "prologue": 642620,
+            "restore_call": 644998,
+            "return_path": [
+              645002,
+              643434
+            ],
+            "save_call": 644588,
+            "slot": 52,
+            "stack_bytes": 60,
+            "store": 644592
+          }
         }
       ]
     },
@@ -225,7 +254,20 @@
           "offset_cell": 33557668,
           "plain_signature": false,
           "selection": 641070,
-          "start_cell": 33557676
+          "start_cell": 33557676,
+          "state_slot": {
+            "epilogue": 639176,
+            "prologue": 639084,
+            "restore_call": 641474,
+            "return_path": [
+              641478,
+              639870
+            ],
+            "save_call": 641064,
+            "slot": 60,
+            "stack_bytes": 68,
+            "store": 641068
+          }
         }
       ]
     },
@@ -252,7 +294,8 @@
           "offset_cell": 33557668,
           "plain_signature": false,
           "selection": 641070,
-          "start_cell": 33557676
+          "start_cell": 33557676,
+          "state_slot": null
         }
       ]
     },
@@ -279,7 +322,8 @@
           "offset_cell": 33557600,
           "plain_signature": false,
           "selection": 644594,
-          "start_cell": 33557608
+          "start_cell": 33557608,
+          "state_slot": null
         }
       ]
     },
@@ -344,7 +388,20 @@
           "offset_cell": 33557672,
           "plain_signature": false,
           "selection": 645770,
-          "start_cell": 33557680
+          "start_cell": 33557680,
+          "state_slot": {
+            "epilogue": 643700,
+            "prologue": 643578,
+            "restore_call": 646302,
+            "return_path": [
+              646306,
+              644582
+            ],
+            "save_call": 645764,
+            "slot": 60,
+            "stack_bytes": 68,
+            "store": 645768
+          }
         }
       ]
     },
@@ -392,7 +449,20 @@
           "offset_cell": 33557600,
           "plain_signature": false,
           "selection": 644898,
-          "start_cell": 33557608
+          "start_cell": 33557608,
+          "state_slot": {
+            "epilogue": 643028,
+            "prologue": 642908,
+            "restore_call": 645438,
+            "return_path": [
+              645442,
+              643722
+            ],
+            "save_call": 644892,
+            "slot": 52,
+            "stack_bytes": 60,
+            "store": 644896
+          }
         }
       ]
     },
@@ -419,7 +489,8 @@
           "offset_cell": 33557592,
           "plain_signature": false,
           "selection": 685884,
-          "start_cell": 33557600
+          "start_cell": 33557600,
+          "state_slot": null
         }
       ]
     },
@@ -446,7 +517,8 @@
           "offset_cell": 33557668,
           "plain_signature": false,
           "selection": 643082,
-          "start_cell": 33557676
+          "start_cell": 33557676,
+          "state_slot": null
         }
       ]
     },
@@ -473,7 +545,8 @@
           "offset_cell": 33557600,
           "plain_signature": false,
           "selection": 644898,
-          "start_cell": 33557608
+          "start_cell": 33557608,
+          "state_slot": null
         }
       ]
     },
@@ -500,7 +573,8 @@
           "offset_cell": 33557668,
           "plain_signature": false,
           "selection": 641070,
-          "start_cell": 33557676
+          "start_cell": 33557676,
+          "state_slot": null
         }
       ]
     },
@@ -548,7 +622,20 @@
           "offset_cell": 33557592,
           "plain_signature": false,
           "selection": 685884,
-          "start_cell": 33557600
+          "start_cell": 33557600,
+          "state_slot": {
+            "epilogue": 684130,
+            "prologue": 684010,
+            "restore_call": 686408,
+            "return_path": [
+              686412,
+              684672
+            ],
+            "save_call": 685878,
+            "slot": 52,
+            "stack_bytes": 60,
+            "store": 685882
+          }
         }
       ]
     },
@@ -575,7 +662,8 @@
           "offset_cell": 33557600,
           "plain_signature": false,
           "selection": 644458,
-          "start_cell": 33557608
+          "start_cell": 33557608,
+          "state_slot": null
         }
       ]
     },
@@ -623,7 +711,20 @@
           "offset_cell": 33557600,
           "plain_signature": false,
           "selection": 644458,
-          "start_cell": 33557608
+          "start_cell": 33557608,
+          "state_slot": {
+            "epilogue": 642604,
+            "prologue": 642484,
+            "restore_call": 644862,
+            "return_path": [
+              644866,
+              643298
+            ],
+            "save_call": 644452,
+            "slot": 52,
+            "stack_bytes": 60,
+            "store": 644456
+          }
         }
       ]
     }

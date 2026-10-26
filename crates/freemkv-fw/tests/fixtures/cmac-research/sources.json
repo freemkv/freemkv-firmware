@@ -46,5 +46,29 @@
     "source_sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
     "source_offset": 645200,
     "excerpt_sha256": "8627ef7ac09a82d5c617a0edb4a2dc06764349450914ca56d8ed6e7ca3468da3"
+  },
+  {
+    "file": "uh12-application.bin",
+    "source_sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+    "source_offset": 676488,
+    "excerpt_sha256": "010daf5a7294b821b141a0b6d770bec79d0e237f0fe6a2aa4ff6ad655470cbae"
+  },
+  {
+    "file": "wp50-application.bin",
+    "source_sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+    "source_offset": 631520,
+    "excerpt_sha256": "27122c7d72d1410947ed8d859b879e3b235c93eb090e7a79ca6d801e2c4ebc30"
+  },
+  {
+    "file": "bu40-a103-application.bin",
+    "source_sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+    "source_offset": 636192,
+    "excerpt_sha256": "60a44c0b0fb5f22c29bbb28e4c84f46373b01be9b15033cc7806a05676c855c6"
+  },
+  {
+    "file": "be16-application.bin",
+    "source_sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+    "source_offset": 635344,
+    "excerpt_sha256": "d6bb11e71c3c608ff4dcbeac71138302706ea7e6a6bec7595717c6fe77fce856"
   }
 ]

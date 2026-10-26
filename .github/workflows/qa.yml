@@ -132,6 +132,7 @@ jobs:
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-integrity-routing.py
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-program-routing.py
           cargo build --release -p freemkv-fw --example mtk_receiver_evidence
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-frame-execution.py --candidate-builder target/release/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-dispatch.py --candidate-builder target/release/examples/mtk_receiver_evidence
 
   # clippy's output is target-dependent: cfg-gated code only gets linted on the

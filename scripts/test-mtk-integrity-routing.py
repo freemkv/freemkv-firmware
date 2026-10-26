@@ -18,6 +18,8 @@ def replay(entry=0x17C298, mask=1, endpoint=None, crypto_ok=True):
                             (0x03000000, 0x10000), (STAGING, 0x200000)):
         cpu.mem_map(address, length)
     for record in json.loads((ROOT / 'sources.json').read_text()):
+        if record['file'] not in ('uh12-native-checks.bin', 'uh12-integrity-table.bin'):
+            continue
         data = (ROOT / record['file']).read_bytes()
         assert hashlib.sha256(data).hexdigest() == record['excerpt_sha256']
         cpu.mem_write(record['source_offset'], data)

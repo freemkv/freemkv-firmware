@@ -8,7 +8,12 @@ fn main() -> anyhow::Result<()> {
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
         if offset == "application-evidence" {
-            let analysis = ApplicationAnalysis::inspect(&image, 0)
+            let base = std::env::args()
+                .nth(3)
+                .map(|value| u32::from_str_radix(value.trim_start_matches("0x"), 16))
+                .transpose()?
+                .unwrap_or(0);
+            let analysis = ApplicationAnalysis::inspect(&image, base)
                 .ok_or_else(|| anyhow::anyhow!("invalid analysis range"))?;
             println!(
                 "{}",
@@ -23,6 +28,11 @@ fn main() -> anyhow::Result<()> {
                         "selection":r.selection.address,"end":r.selection.end,
                         "offset_cell":r.selection.offset_cell,"start_cell":r.selection.start_cell,
                         "length_cell":r.selection.length_cell,"plain_signature":r.signature.is_some(),
+                    "state_slot":r.state_slot.as_ref().map(|p| serde_json::json!({
+                        "prologue":p.prologue,"stack_bytes":p.stack_bytes,"slot":p.slot,
+                        "save_call":p.save_call,"store":p.store,"restore_call":p.restore_call,
+                        "epilogue":p.epilogue,"return_path":p.return_path,
+                    })),
                         "acceptance":r.acceptance.map(|p| serde_json::json!({
                             "address":p.address,"program_call":p.program_call,"program_target":p.program_target,
                             "tag_check":p.tag_check,"marker_check":p.marker_check,"before_program":p.before_program,

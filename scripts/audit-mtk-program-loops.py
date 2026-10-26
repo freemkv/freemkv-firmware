@@ -44,5 +44,9 @@ result = {'schema': 1, 'producer_sha256': producer_sha,
 args.output.write_text(json.dumps(result, indent=2) + '\n')
 counts = [len(r['candidates']) if args.query == 'program-candidates'
           else sum(p['acceptance'] is not None for p in r['ranges']) for r in records]
-print(json.dumps({'images': len(records), 'query': args.query,
-                  'match_counts': {str(n): counts.count(n) for n in sorted(set(counts))}}))
+summary = {'images': len(records), 'query': args.query,
+           'match_counts': {str(n): counts.count(n) for n in sorted(set(counts))}}
+if args.query == 'application-evidence':
+    frames = [sum(p['state_slot'] is not None for p in r['ranges']) for r in records]
+    summary['frame_counts'] = {str(n): frames.count(n) for n in sorted(set(frames))}
+print(json.dumps(summary))

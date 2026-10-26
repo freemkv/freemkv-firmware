@@ -178,6 +178,7 @@ jobs:
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-integrity-routing.py
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-program-routing.py
           cargo build -p freemkv-fw --example mtk_receiver_evidence
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-frame-execution.py --candidate-builder target/debug/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-dispatch.py --candidate-builder target/debug/examples/mtk_receiver_evidence
 
   # cargo-deny — audits the RESOLVED graph (RUSTSEC advisories, licence

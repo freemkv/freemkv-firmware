@@ -15,7 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1"
-mediatek-optical = { version = "=1.2.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "0874ebced976c54c4c573afee2134b553efd9bf2", features = ["image"] }
+mediatek-optical = { version = "=1.2.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "34b2f6df4f110a5a9a9bc52db2ff49970c1fa26d", features = ["image"] }
 
 [lints]
 workspace = true
