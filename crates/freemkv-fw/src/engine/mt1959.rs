@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use freemkv_flash::cmac;
 
 use super::core::*;
-use super::lever::{LeverId, LeverReport, Validation};
+use super::lever::{HookReport, LeverId, LeverReport, Validation};
 use super::{CreateReport, Engine, ModifyReport};
 use crate::abi;
 use crate::boot::BootSettings;
@@ -74,7 +74,7 @@ struct RawReadFacts {
     /// Injection address of the shared HRL-skip trampoline. `0` when not wired.
     hrl_stub_va: u32,
     /// `Feature::Bd` REPORT KEY refuse detour site — the mode-0 class check
-    /// (`ldrb r0,[r2,#7]; cmp r0,#2`, [`BD_GATE_SIG`] `anchor+16`), replaced by a `bl`
+    /// (`ldrb r0,[r2,#7]; cmp r0,#2`, `MediaGateVariant::Explicit` `anchor+16`), replaced by a `bl`
     /// to the BD-refuse stub. `0` when not wired (image whose REPORT KEY gate is not
     /// the known MT1959 shape).
     bd_site: u32,
@@ -89,6 +89,7 @@ struct RawReadFacts {
     /// `0` when not wired.
     auth_cell_stub_va: u32,
     vid_producer: u32,
+    hooks: Vec<HookReport>,
 }
 
 impl Mt1959Engine {
@@ -196,10 +197,13 @@ impl Mt1959Engine {
 
         let mut out = image.to_vec();
 
+        // All builders have finalized their bytes and literal pools before
+        // allocation. Reserve exactly that size; alignment and each subsequent
+        // allocation are checked independently by the geometry-aware allocator.
         // Place the injected code blobs into CMAC-covered free space, in order.
         // Each `free_space` call runs on the progressively-written image, so the
         // large erased run shrinks past each blob and the next lands after it.
-        let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
+        let handler_va = self.free_space(&out, handler_bytes.len())?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
         // Absence guard: the AACS session-rearm wrapper VA (if resolvable)
         // MUST NOT appear as a callable literal in the handler bytes. Strategy A
@@ -390,7 +394,7 @@ impl Mt1959Engine {
             .context("assembling the 3C-0E handler")?;
 
         let mut out = image.to_vec();
-        let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
+        let handler_va = self.free_space(&out, handler_bytes.len())?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
         if let Ok(rearm) = self.find_aacs_session_rearm(image) {
             crate::install_guard::assert_literal_absent(
@@ -503,7 +507,7 @@ impl Mt1959Engine {
                         facts.push(("auth_cell_site", f.auth_cell_site));
                         facts.push(("auth_cell_stub_va", f.auth_cell_stub_va));
                     }
-                    LeverReport::applied(LeverId::RawRead, facts)
+                    LeverReport::applied(LeverId::RawRead, facts).with_hooks(f.hooks)
                 }
                 Err(e) => LeverReport::missed(LeverId::RawRead, format!("{e:#}")),
             }
@@ -568,7 +572,7 @@ impl Mt1959Engine {
         let fallthrough = speed_gate + 8;
         let speed_bytes =
             self.build_speed_stub(flag_base, fallthrough, ramp_exit, speed_idx_reg)?;
-        let speed_stub_va = self.free_space(out, speed_bytes.len() + 16)?;
+        let speed_stub_va = self.free_space(out, speed_bytes.len())?;
         let bl = thumb::encode_bl(cmp_at, speed_stub_va)
             .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
         thumb::write(out, speed_stub_va as usize, &speed_bytes);
@@ -589,7 +593,7 @@ impl Mt1959Engine {
         let region_emitter = self.find_region_emitter(image)?;
         let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
-        let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
+        let region_stub_va = self.free_space(out, region_bytes.len())?;
         let bl = thumb::encode_bl(region_site, region_stub_va)
             .ok_or_else(|| anyhow!("Region detour `bl` out of range"))?;
         thumb::write(out, region_stub_va as usize, &region_bytes);
@@ -676,7 +680,7 @@ impl Mt1959Engine {
 
         // ---- commit on a working copy (atomic) ----
         let mut w = out.clone();
-        let ake_stub_va = self.free_space(&w, ake_bytes.len() + 16)?;
+        let ake_stub_va = self.free_space(&w, ake_bytes.len())?;
         thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);
         // The AKE install site is load-bearing: a wrong encoding (a `BL` where
         // the OEM tail-call needs `B.W`, or a mis-computed displacement) ships
@@ -693,7 +697,7 @@ impl Mt1959Engine {
             "AKE",
         )?;
 
-        let gatea_stub_va = self.free_space(&w, gatea_bytes.len() + 16)?;
+        let gatea_stub_va = self.free_space(&w, gatea_bytes.len())?;
         let gatea_bl = thumb::encode_bl(gatea_cmp, gatea_stub_va)
             .ok_or_else(|| anyhow!("Gate-A detour `bl` out of range"))?;
         thumb::write(&mut w, gatea_stub_va as usize, &gatea_bytes);
@@ -706,7 +710,7 @@ impl Mt1959Engine {
             "Gate-A",
         )?;
 
-        let deny_stub_va = self.free_space(&w, deny_bytes.len() + 16)?;
+        let deny_stub_va = self.free_space(&w, deny_bytes.len())?;
         let deny_bl = thumb::encode_bl(deny_site, deny_stub_va)
             .ok_or_else(|| anyhow!("deny-reset detour `bl` out of range"))?;
         thumb::write(&mut w, deny_stub_va as usize, &deny_bytes);
@@ -719,6 +723,25 @@ impl Mt1959Engine {
             "Deny-reset",
         )?;
 
+        let mut hooks = vec![
+            HookReport::applied(
+                "ake",
+                if ake_install_shape == thumb::BranchKind::BWide {
+                    "reject-tail-call"
+                } else {
+                    "shared-call"
+                },
+            ),
+            HookReport::applied(
+                "vid",
+                format!(
+                    "{:?}",
+                    mediatek_optical::image::analysis::VidGate::inspect(image)?.variant()
+                ),
+            ),
+            HookReport::applied("deny-reset", "light-reset"),
+        ];
+
         // `Feature::Unrestricted` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
         // accept gate's UHD class-3 check (via uhd_gate_detour → find_bd_gate) — the
         // UHD sibling of the BD arm on the SAME gate. When `flag[Uhd]==STATE_OFF` the
@@ -727,7 +750,7 @@ impl Mt1959Engine {
         // unwired (0). Committed so the free_space order matches build_report (…→ deny → uhd).
         let (uhd_site, uhd_stub_va) = match self.uhd_gate_detour(image, flag_base) {
             Ok((site, bytes)) => {
-                let stub_va = self.free_space(&w, bytes.len() + 16)?;
+                let stub_va = self.free_space(&w, bytes.len())?;
                 let bl = thumb::encode_bl(site, stub_va)
                     .ok_or_else(|| anyhow!("UHD media-gate detour `bl` out of range"))?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
@@ -739,9 +762,16 @@ impl Mt1959Engine {
                     stub_va,
                     "UHD",
                 )?;
+                hooks.push(HookReport::applied(
+                    "uhd-native",
+                    "explicit-class".to_string(),
+                ));
                 (site as u32, stub_va)
             }
-            Err(_) => (0, 0),
+            Err(e) => {
+                hooks.push(HookReport::unavailable("uhd-native", format!("{e:#}")));
+                (0, 0)
+            }
         };
 
         // HRL skip (`flag[Feature::Hrl]==STATE_OFF`): one shared stub, a `bl` to it at
@@ -750,7 +780,7 @@ impl Mt1959Engine {
         // Committed last so the free_space order matches build_report (…→ uhd → hrl).
         let (hrl_sites, hrl_stub_va) = match self.hrl_skip_detour(image, flag_base) {
             Ok((sites, _revoke, bytes)) => {
-                let stub_va = self.free_space(&w, bytes.len() + 16)?;
+                let stub_va = self.free_space(&w, bytes.len())?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
                 for &site in &sites {
                     let bl = thumb::encode_bl(site, stub_va)
@@ -764,9 +794,13 @@ impl Mt1959Engine {
                         "HRL-skip",
                     )?;
                 }
+                hooks.push(HookReport::applied("hrl", "shared-revoke".to_string()));
                 (sites.iter().map(|&s| s as u32).collect(), stub_va)
             }
-            Err(_) => (Vec::new(), 0),
+            Err(e) => {
+                hooks.push(HookReport::unavailable("hrl", format!("{e:#}")));
+                (Vec::new(), 0)
+            }
         };
 
         // `Feature::Bd` BD (AACS 1.0) capability-refuse: detour the REPORT KEY gate's
@@ -777,7 +811,7 @@ impl Mt1959Engine {
         // order matches build_report (…→ hrl → bd).
         let (bd_site, bd_stub_va) = match self.bd_detour(image, flag_base) {
             Ok((site, bytes)) => {
-                let stub_va = self.free_space(&w, bytes.len() + 16)?;
+                let stub_va = self.free_space(&w, bytes.len())?;
                 let bl = thumb::encode_bl(site, stub_va)
                     .ok_or_else(|| anyhow!("BD-refuse detour `bl` out of range"))?;
                 thumb::write(&mut w, stub_va as usize, &bytes);
@@ -789,9 +823,19 @@ impl Mt1959Engine {
                     stub_va,
                     "BD-refuse",
                 )?;
+                hooks.push(HookReport::applied(
+                    "bd-native",
+                    format!(
+                        "{:?}",
+                        mediatek_optical::image::analysis::MediaGate::inspect(image)?.variant()
+                    ),
+                ));
                 (site as u32, stub_va)
             }
-            Err(_) => (0, 0),
+            Err(e) => {
+                hooks.push(HookReport::unavailable("bd-native", format!("{e:#}")));
+                (0, 0)
+            }
         };
 
         // `Feature::Unrestricted` auth-cell state-band widen: detour the OEM
@@ -806,7 +850,7 @@ impl Mt1959Engine {
         let (auth_cell_site, auth_cell_stub_va) =
             match self.auth_cell_widen_detour(image, flag_base) {
                 Ok((site, bytes)) => {
-                    let stub_va = self.free_space(&w, bytes.len() + 16)?;
+                    let stub_va = self.free_space(&w, bytes.len())?;
                     let bl = thumb::encode_bl(site, stub_va)
                         .ok_or_else(|| anyhow!("auth-cell widen detour `bl` out of range"))?;
                     thumb::write(&mut w, stub_va as usize, &bytes);
@@ -818,9 +862,19 @@ impl Mt1959Engine {
                         stub_va,
                         "auth-cell widen",
                     )?;
+                    hooks.push(HookReport::applied(
+                        "auth-cell",
+                        format!(
+                            "{:?}",
+                            mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()
+                        ),
+                    ));
                     (site as u32, stub_va)
                 }
-                Err(_) => (0, 0),
+                Err(e) => {
+                    hooks.push(HookReport::unavailable("auth-cell", format!("{e:#}")));
+                    (0, 0)
+                }
             };
 
         *out = w;
@@ -841,6 +895,7 @@ impl Mt1959Engine {
             auth_cell_site,
             auth_cell_stub_va,
             vid_producer,
+            hooks,
         })
     }
 }

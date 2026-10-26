@@ -410,77 +410,6 @@ pub(crate) const REGION_EMIT_SIG: &[(u16, u16)] = &[
 /// Verified across the owned MT1959 image set.
 pub(crate) const DE_BYTE_OFF: usize = 0x56;
 
-/// Signature of the VID gate's address-compute tail inside the OEM Volume-ID
-/// producer, ending in the per-AGID auth-state probe `ldrb r0,[r0]; cmp r0,#6;
-/// bne <skip>`. Proven byte-identical in shape across OEM 1.00 and MK 1.03 (only
-/// the pc-relative `ldr` imm8s and the `bne` displacement differ, so those are
-/// masked). Unique per image — the anchor for the producer and its scratch
-/// buffer. The gate `ldrb` is at `match + 16`.
-pub(crate) const VID_GATE_SIG: &[(u16, u16)] = &[
-    (0x0400, 0xFFFF), // lsls r0,r0,#16
-    (0x0C00, 0xFFFF), // lsrs r0,r0,#16
-    (0x1808, 0xFFFF), // adds r0,r1,r0
-    (0x4900, 0xFF00), // ldr r1,[pc,#imm]  (SRAM base-ptr cell)
-    (0x0200, 0xFFFF), // lsls r0,r0,#8
-    (0x6809, 0xFFFF), // ldr r1,[r1]
-    (0x0A00, 0xFFFF), // lsrs r0,r0,#8
-    (0x1840, 0xFFFF), // adds r0,r0,r1
-    (0x7800, 0xFFFF), // ldrb r0,[r0]      (auth-state byte) — the gate
-    (0x2806, 0xFFFF), // cmp r0,#6
-    (0xD100, 0xFF00), // bne <skip>
-];
-
-/// NB-class (LG BP/WP slim/portable: BP50NB40/BP55EB40/BP60NB10/WP50NB40) variant
-/// of [`VID_GATE_SIG`]. The producer's address-compute tail differs only in its
-/// FIRST TWO halfwords (`adds r0,r0,r1; ldr r1,[r5]` instead of the `lsls #16;
-/// lsrs #16` pair) — the gate `ldrb r0,[r0]; cmp r0,#6; bne` and everything from
-/// the `adds r0,r1,r0` onward are byte-identical, so the gate is still at
-/// `match + 16` and its `cmp` at `match + 18` (no downstream offset change).
-///
-/// PROVEN (research/hoard-campaign-2026-09-03): RE'd from
-/// `LG_BP60NB10_1.00_Official_Flasher.bin` (gate `ldrb` at `0x1369c8`) and
-/// cross-checked on BP50NB40 / BP55EB40 / WP50NB40 (gate at `0x1341c8`). The NB
-/// line has one address-compute shape with a single build-varying register: the
-/// base of the `ldr r1,[rN]` deref is `r5` on BP60NB10 and `r6` on the others, so
-/// that one field is masked (`0x6801, 0xFFC7` = `ldr r1,[rN,#0]`), everything
-/// else exact. Verified **unique per image on 18 MT1959 images**, never ambiguous,
-/// never overlapping [`VID_GATE_SIG`], and **zero matches** in the BU40N 1.00 KAT
-/// base (which matches the original) — so trying the original first keeps the KAT
-/// byte-identical while this recovers the VID/Raw-Read lever on the whole NB line.
-pub(crate) const VID_GATE_SIG_NB: &[(u16, u16)] = &[
-    (0x1840, 0xFFFF), // adds r0,r0,r1
-    (0x6801, 0xFFC7), // ldr  r1,[rN]      (SRAM base-ptr deref; rN = r5/r6 per build)
-    (0x1808, 0xFFFF), // adds r0,r1,r0
-    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]  (SRAM base-ptr cell)
-    (0x0200, 0xFFFF), // lsls r0,r0,#8
-    (0x6809, 0xFFFF), // ldr  r1,[r1]
-    (0x0A00, 0xFFFF), // lsrs r0,r0,#8
-    (0x1840, 0xFFFF), // adds r0,r0,r1
-    (0x7800, 0xFFFF), // ldrb r0,[r0]      (auth-state byte) — the gate
-    (0x2806, 0xFFFF), // cmp  r0,#6
-    (0xD100, 0xFF00), // bne  <skip>
-];
-
-/// JB8 MT1939-generation VID-producer gate. The JB8 address-compute tail does the
-/// SRAM byte-assembly in **two masking rounds** (a `#0x10` round then a `#8` round),
-/// unlike the single round of [`VID_GATE_SIG`]/[`VID_GATE_SIG_NB`]. Cut so the gate
-/// `ldrb r0,[r0]` still sits at `match + 16` (index 8), same as the other variants.
-/// Reversed from `DE_LG_BH14NS50_1.01 @ 0x139774` (gate at `0x139784`). Proven
-/// UNIQUE on every JB8-generation image and **zero matches** on BU40N + classic.
-pub(crate) const VID_GATE_SIG_JB8: &[(u16, u16)] = &[
-    (0x6809, 0xFFFF), // ldr  r1,[r1]      (round-1 SRAM base-ptr deref)
-    (0x0C00, 0xFFFF), // lsrs r0,r0,#0x10
-    (0x1808, 0xFFFF), // adds r0,r1,r0
-    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]  (round-2 SRAM base-ptr cell)
-    (0x0200, 0xFFFF), // lsls r0,r0,#8
-    (0x6809, 0xFFFF), // ldr  r1,[r1]
-    (0x0A00, 0xFFFF), // lsrs r0,r0,#8
-    (0x1840, 0xFFFF), // adds r0,r0,r1
-    (0x7800, 0xFFFF), // ldrb r0,[r0]      (auth-state byte) — the gate (match+16)
-    (0x2806, 0xFFFF), // cmp  r0,#6
-    (0xD100, 0xFF00), // bne  <skip>
-];
-
 /// Signature of `SetDiscMode`'s prologue — the read-datapath disc-mode dispatcher
 /// (`0x43cb0` on 1.00). Its `subs r3,r4,#3` feeds a jump-table dispatch that
 /// programs the scramble/sector MMIO. Unique per image. (`bl` displacement masked.)
@@ -493,170 +422,8 @@ pub(crate) const SETDISCMODE_SIG: &[(u16, u16)] = &[
     (0x1EE3, 0xFFFF), // subs r3,r4,#3     (mode-3 jump-table index)
 ];
 
-/// Signature of the AACS **REPORT KEY disc-mode/class accept gate** — the code
-/// that decides whether the drive engages a disc for AACS key exchange, keyed on
-/// the disc *mode* (`0`=BD/AACS-1.0, `1`=UHD/AACS-2.0 mode-1) and the classifier's
-/// *class* byte (`class_struct[7]`). Anchor is the `cmp r0,#1` (mode==1 test); the
-/// `Feature::Bd` detour replaces the **mode-0 class check** `ldrb r0,[r2,#7]; cmp
-/// r0,#2` at `anchor+16` (`0x1365ce` on BU40N 1.00):
-///   ```text
-///   cmp  r0,#1              (anchor)     mode == 1 (UHD)?
-///   bne  <mode-not-1>       (anchor+2)
-///   ldrb r0,[r2,#7]                      class
-///   cmp  r0,#3                           UHD accepts iff class==3
-///   bne  <deny>
-///   ldrb r0,[r1,#0]                      reload mode
-///   cmp  r0,#0                           mode == 0 (BD)?
-///   bne  <accept>
-///   ldrb r0,[r2,#7]        (anchor+16)   ← DETOUR SITE: BD class
-///   cmp  r0,#2             (anchor+18)   BD accepts iff class==2
-///   beq  <accept>          (anchor+20)   ← stub returns here (uses its Z flag)
-///   ...deny: movs r2,#1; movs r1,#0x6f; movs r0,#5; bl <set_sense>  (OEM 6F refusal)
-///   ```
-/// The `Feature::Bd` stub replays `ldrb r0,[r2,#7]` and then, only when
-/// `flag[Bd]==STATE_OFF` (`0x00`), forces a non-equal compare so the caller's `beq`
-/// falls through to the OEM deny block (which raises the drive's own `6F` refusal
-/// sense) — i.e. the drive REFUSES a BD disc it would otherwise engage. At any
-/// non-`STATE_OFF` value (`0xFF` passthrough / `0x01` on) it replays the OEM
-/// `cmp r0,#2` verbatim. The boot hook writes `0xFF` into every flag at power-on, so
-/// an unarmed/boot image never sees `0x00` here and is byte-behaviour-identical to
-/// OEM (stealth) — which is what lets BD use the uniform `0x00` OFF instead of the
-/// old distinct `0x02` sentinel. This is the real enforcement point
-/// (not the classifier, which only *sets* the class), it reuses OEM's own deny
-/// path (no fabricated sense), and it is **unique** in the REPORT KEY window on
-/// every MT1959 image that carries this shape; images with a different REPORT KEY
-/// codegen leave `Feature::Bd` gracefully unwired (like busenc/uhd/hrl).
-///
-/// # Corpus measurement
-/// Measured over the 118-image OEM corpus (`/tmp/corpus_dw.tsv`): this **explicit
-/// mode/class** codegen resolves UNIQUELY on 36 images (n==1), 0 on the rest,
-/// never n>1 — so the sig is not over-matching. The remaining AACS images carry
-/// the SAME media accept gate in a newer codegen ([`BD_GATE_SIG_VER`]) where the
-/// mode==0/BD arm and the class check are folded into a single descriptor
-/// classifier; [`Mt1959Engine::find_bd_gate`] consults this exact sig first
-/// (original-first — so the BU40N KAT base and the 36 stay byte-identical) and
-/// falls back to `BD_GATE_SIG_VER` only when this matches zero.
-pub(crate) const BD_GATE_SIG: &[(u16, u16)] = &[
-    (0x2801, 0xFFFF), // cmp  r0,#1          ← anchor (mode==1 test)
-    (0xD100, 0xFF00), // bne  <mode-not-1>
-    (0x79D0, 0xFFFF), // ldrb r0,[r2,#7]
-    (0x2803, 0xFFFF), // cmp  r0,#3
-    (0xD100, 0xFF00), // bne  <deny>
-    (0x7808, 0xFFFF), // ldrb r0,[r1,#0]
-    (0x2800, 0xFFFF), // cmp  r0,#0          mode==0 (BD)?
-    (0xD100, 0xFF00), // bne  <accept>
-    (0x79D0, 0xFFFF), // ldrb r0,[r2,#7]     ← detour site (anchor+16)
-    (0x2802, 0xFFFF), // cmp  r0,#2          BD accepts iff class==2
-    (0xD000, 0xFF00), // beq  <accept>       ← stub returns here (anchor+20)
-];
-
-/// Signature of the **newer-codegen** AACS media accept gate — the same disc
-/// mode/class accept/refuse decision as [`BD_GATE_SIG`], but emitted as one
-/// descriptor-classifier function instead of the explicit REPORT KEY mode/class
-/// ladder. On the ~62 AACS images that carry it (and it is present, byte-identical
-/// in its core, on the 36 explicit-shape images too — those keep the original
-/// detour via original-first ordering), this is the ONLY `6F/05` media deny in the
-/// image, so BD (mode-0) acceptance necessarily flows through it.
-///
-/// The anchor is the disc-**mode** read + BD arm; the gate body is fixed-shape
-/// across every image (only pc-relative literals and branch displacements vary):
-///   ```text
-///   ldrb r2,[r1]           (anchor)      disc mode byte  (r1 = computed descriptor ptr)
-///   movs r5,#1
-///   ldr  r1,[pc,#imm]                    r1 = &session struct
-///   cmp  r2,#0             (anchor+6)    mode == 0 (BD/AACS-1.0)?   ← DETOUR SITE
-///   sub  sp,#imm                         (frame reserve, no flags)
-///   bne  <mode-not-0>      (anchor+10)   mode != 0 → other-mode path ← stub returns here
-///   ldrb r2,[r1,#6]                      BD path: descriptor gate byte
-///   cmp  r2,#0
-///   beq  <class-check>                   → shared `ldrb; lsrs #5; cmp #3` accept/deny
-///   ...
-///   <deny>: movs r2,#1; movs r1,#0x6f; movs r0,#5; bl <set_sense>  (OEM 6F refusal)
-///           add sp,#imm; pop {r4,r5,pc}          ← at `anchor+0x40`
-///   ```
-/// The final `ldrb; lsrs #5; cmp #3` class check is SHARED by every disc mode, so
-/// it is NOT a mode-specific detour target; the mode discriminator is the
-/// `cmp r2,#0` at `anchor+6` (mode==0 == BD, exactly as the old gate's
-/// `ldrb r0,[r1,#0]; cmp r0,#0` BD arm). The `Feature::Bd` detour replaces
-/// `cmp r2,#0; sub sp,#imm` (4 bytes at `anchor+6`) with a `bl` to
-/// [`Mt1959Engine::build_bd_stub_ver`]; when `flag[Bd]==STATE_OFF` **and** the disc
-/// is mode-0 (BD) the stub jumps to the OEM deny at `anchor+0x40` (drive refuses
-/// BD); otherwise it replays `sub sp` + `cmp r2,#0` verbatim so the caller's `bne`
-/// sees the exact OEM `Z` flag — byte-behaviour-identical to OEM (stealth), and the
-/// mode!=0 (UHD/other) arm is never touched. Proven UNIQUE (n==1) full-image on all
-/// 98 carriers, absent on the 20 non-AACS/classic parts, `deny == anchor+0x40` and
-/// the detour geometry verified on every carrier.
-pub(crate) const BD_GATE_SIG_VER: &[(u16, u16)] = &[
-    (0x780A, 0xFFFF), // ldrb r2,[r1]        ← anchor (disc mode read)
-    (0x2501, 0xFFFF), // movs r5,#1
-    (0x4900, 0xFF00), // ldr  r1,[pc,#imm]
-    (0x2A00, 0xFFFF), // cmp  r2,#0          mode==0 (BD)?  ← detour site (anchor+6)
-    (0xB080, 0xFF80), // sub  sp,#imm        (frame reserve; imm masked)
-    (0xD102, 0xFFFF), // bne  <mode-not-0>   ← stub returns here (anchor+10)
-    (0x798A, 0xFFFF), // ldrb r2,[r1,#6]     BD-path descriptor gate byte
-    (0x2A00, 0xFFFF), // cmp  r2,#0
-    (0xD000, 0xFF00), // beq  <class-check>
-];
-
-/// Byte offset from the [`BD_GATE_SIG_VER`] anchor to the OEM `6F/05` media deny
-/// block (`movs r2,#1; movs r1,#0x6f; movs r0,#5; …`). Fixed across every carrier
-/// (the intervening instruction count is invariant); verified `== 0x40` on all 98.
+/// Validated descriptor grammar's offset to its native media-refusal block.
 pub(crate) const BD_GATE_VER_DENY_OFF: u32 = 0x40;
-
-/// Signature of the **auth-cell state-band gate** — the post-classification check
-/// that reads the RAM state byte at `0x01FF9E04`, isolates its top nibble
-/// (`byte >> 4`), and requires the nibble to equal `0xC` before the auth cell will
-/// engage. On BU40N 1.00 the check sits at `0x00136826` inside the SCSI command
-/// dispatcher; the OEM `bne` at `anchor+12` jumps to a `6F/02 Incompatible medium`
-/// emitter at `anchor + 16 + (disp8 * 2)` (0x001368F4 on BU40N 1.00) whenever the
-/// top nibble is not `0xC`.
-///
-/// The [`abi::Feature::Unrestricted`] lever hooks this gate to widen the accepted nibble
-/// set. For 99% of media the phase-counter cascade lands the state byte at
-/// `0xCx` (nibble `0xC` — passes). A small fraction of triple-layer UHDs
-/// (specifically those whose disc descriptor drives the mode-0 arm of
-/// `f_84996` at file offset `0x00084996`) land the state byte at `0xEx`, which
-/// the OEM `cmp #0xC` rejects. Widening the gate under a runtime flag lets those
-/// discs through without touching the descriptor-parse path itself.
-///
-/// # Anchor identity
-/// The sig anchors on the pc-relative `ldr r4, [pc, #imm]` that loads the state
-/// byte's RAM address literal `0x01FF9E04`. This is the unique identifier for
-/// this gate (multiple `ldrb r0,[Rn]; lsrs #4; cmp #0xC; bne` shapes exist
-/// image-wide — the one we want is preceded specifically by the `0x01FF9E04`
-/// literal load). Anchored on the `ldr` and extended through the branch, the
-/// pattern resolves UNIQUELY on BU40N 1.00 (measured).
-///
-/// # Detour geometry
-/// - anchor+0:  `ldr r4, [pc, #imm]`  → literal pool holds `0x01FF9E04`
-/// - anchor+2:  `movs r0, #0`
-/// - anchor+4:  `strb r0, [r3, #9]`
-/// - anchor+6:  `ldrb r0, [r4]`         (r0 = state byte)
-/// - anchor+8:  `lsrs r0, r0, #4`
-/// - anchor+10: `cmp  r0, #0xC`         ← **detour site** (4 bytes replaced)
-/// - anchor+12: `bne  <deny>`
-///
-/// The 4 bytes at anchor+10 (`cmp` + `bne`) are replaced with a `bl` to
-/// [`Mt1959Engine::build_authcell_widen_stub`]. Return address is anchor+14
-/// (the OEM accept-arm, `movs r2,#1` on BU40N 1.00).
-pub(crate) const AUTH_CELL_SIG: &[(u16, u16)] = &[
-    (0x4C00, 0xFF00), // ldr r4, [pc, #imm]  Rt=r4 fixed; imm masked
-    (0x2000, 0xFFFF), // movs r0, #0
-    (0x7258, 0xFFFF), // strb r0, [r3, #9]
-    (0x7820, 0xFFFF), // ldrb r0, [r4]
-    (0x0900, 0xFFFF), // lsrs r0, r0, #4
-    (0x280C, 0xFFFF), // cmp  r0, #0xC       ← detour site (anchor+10)
-    (0xD100, 0xFF00), // bne  <deny>         disp8 masked (deny_va computed)
-];
-
-/// Byte offset from the [`AUTH_CELL_SIG`] anchor to the 4-byte detour site
-/// (`cmp r0, #0xC; bne <deny>`). Fixed across carriers.
-pub(crate) const AUTH_CELL_DETOUR_OFF: u32 = 10;
-
-/// Byte offset from the [`AUTH_CELL_SIG`] anchor to the OEM `bne` whose disp8
-/// resolves the deny target VA (the `6F/02` emitter). Reader:
-/// `deny_va = anchor + AUTH_CELL_BNE_OFF + 4 + ((halfword & 0xFF) as i8 as i32) * 2`.
-pub(crate) const AUTH_CELL_BNE_OFF: u32 = 12;
 
 /// Signature of the flash-resident **Host Revocation List (HRL) lookup** routine
 /// (`0x13550e` on BU40N 1.00; relocated per version — e.g. `0x13569a` on BU40N
@@ -1585,32 +1352,14 @@ impl Mt1959Engine {
     /// The unique offset of the VID gate's address-compute tail. The gate
     /// `ldrb r0,[r0]` is at `result + 16` for BOTH variants.
     ///
-    /// Tries the original [`VID_GATE_SIG`] first (so the BU40N KAT base always
+    /// Tries the original `VidGateVariant::Direct` first (so the BU40N KAT base always
     /// matches the same signature → byte-identical output), then the NB-class
-    /// [`VID_GATE_SIG_NB`] variant. Each is required unique in its own right; an
+    /// `VidGateVariant::Notebook` variant. Each is required unique in its own right; an
     /// ambiguous original still refuses rather than silently trying the variant.
     pub(crate) fn find_vid_gate(&self, image: &[u8]) -> Result<usize> {
-        let lo = 0x0012_0000usize.min(image.len());
-        let hi = 0x0018_0000usize.min(image.len());
-        match find_masked_all(image, VID_GATE_SIG, lo, hi).as_slice() {
-            [one] => Ok(*one),
-            // No BU40N-shape match → try the NB-class variant, then the JB8 variant.
-            // Each is original-first and required unique in its own right.
-            [] => match find_masked_all(image, VID_GATE_SIG_NB, lo, hi).as_slice() {
-                [one] => Ok(*one),
-                [] => find_unique(image, VID_GATE_SIG_JB8, lo, hi, "VID gate (JB8)"),
-                hits => bail!(
-                    "VID gate (NB-class) signature matched {} time(s) in [0x{lo:x},0x{hi:x}) \
-                     (want exactly 1) — refusing to patch",
-                    hits.len()
-                ),
-            },
-            hits => bail!(
-                "VID gate signature matched {} time(s) in [0x{lo:x},0x{hi:x}) (want exactly 1) — \
-                 refusing to patch",
-                hits.len()
-            ),
-        }
+        mediatek_optical::image::analysis::VidGate::inspect(image)
+            .map(|gate| gate.anchor())
+            .map_err(|e| anyhow!("VID gate: {e}"))
     }
 
     /// The OEM Volume-ID producer and its clear-VID scratch buffer. Returns
@@ -2188,6 +1937,7 @@ impl Mt1959Engine {
         let not_set = a.label();
         let not_reset = a.label();
         let reset_defaults = a.label();
+        let apply_defaults = a.label();
         let reset_flash = a.label();
         let reset_flash_saved = a.label();
         let not_save = a.label();
@@ -2426,6 +2176,7 @@ impl Mt1959Engine {
         a.bind(reset_defaults);
         a.cmp_imm(0, abi::RESET_TO_DEFAULTS);
         a.bne(reset_flash);
+        a.bind(apply_defaults);
         a.ldr_lit(0, flag_base);
         for (off, &val) in defaults.flags().iter().enumerate() {
             a.movs_imm(1, val);
@@ -2441,12 +2192,9 @@ impl Mt1959Engine {
         a.ldrb_imm(1, 2, 0); // r1 = NV slot-0 saved marker
         a.cmp_imm(1, abi::STATE_PASSTHROUGH); // 0xFF == never saved
         a.bne(reset_flash_saved);
-        // No saved config: restore DEFAULTS (r6 = flag base).
-        for (off, &val) in defaults.flags().iter().enumerate() {
-            a.movs_imm(1, val);
-            a.strb_imm(1, 6, off as u16);
-        }
-        a.b(clr);
+        // Both paths have identical default-restoration semantics. Share the
+        // existing body rather than injecting a second copy into scarce flash.
+        a.b(apply_defaults);
         a.bind(reset_flash_saved);
         for off in 1..SAVE_LEN {
             a.ldrb_imm(1, 2, off as u16); // r1 = saved flag[off]
@@ -2955,7 +2703,7 @@ impl Mt1959Engine {
 
     /// The `Feature::Bd` **BD (AACS 1.0) capability-refuse** trampoline. Entered by a
     /// `bl` that replaces the REPORT KEY gate's mode-0 class check `ldrb r0,[r2,#7];
-    /// cmp r0,#2` (4 bytes at [`BD_GATE_SIG`]'s `anchor+16`). On entry `r2 = the
+    /// cmp r0,#2` (4 bytes at `MediaGateVariant::Explicit`'s `anchor+16`). On entry `r2 = the
     /// per-disc class struct` (loaded by the gate's own `ldr r2,[pc]`, undisturbed by
     /// a `bl`) and `lr = anchor+20` (the OEM `beq <accept>`, which the gate reaches
     /// only for a mode-0 = BD disc). The stub replays the class load and returns to
@@ -3000,7 +2748,7 @@ impl Mt1959Engine {
     /// The `Feature::Unrestricted` **UHD (AACS 2.0) media accept/refuse** trampoline — the UHD
     /// sibling of [`Self::build_bd_stub`] on the SAME REPORT KEY accept gate. Entered
     /// by a `bl` that replaces the gate's UHD class check `ldrb r0,[r2,#7]; cmp r0,#3`
-    /// (4 bytes at [`BD_GATE_SIG`]'s `anchor+4`). On entry `r2 = the per-disc class
+    /// (4 bytes at `MediaGateVariant::Explicit`'s `anchor+4`). On entry `r2 = the per-disc class
     /// struct` (loaded by the gate's own `ldr r2,[pc]`, undisturbed by a `bl`); the
     /// stub replays the class load and returns to `anchor+8` — the OEM `bne <deny>`
     /// that the gate reaches for a class-3 (UHD/AACS-2.0) disc.
@@ -3040,7 +2788,7 @@ impl Mt1959Engine {
     }
 
     /// Newer-codegen sibling of [`Self::build_bd_stub`] — the `Feature::Bd` BD-refuse
-    /// trampoline for the descriptor-classifier media gate ([`BD_GATE_SIG_VER`]).
+    /// trampoline for the descriptor-classifier media gate (`MediaGateVariant::Descriptor`).
     /// Entered by a `bl` that replaces `cmp r2,#0; sub sp,#imm` (the 4 bytes at the
     /// gate's `anchor+6`). On entry `r2 = disc mode` (from the gate's own `ldrb
     /// r2,[r1]`, undisturbed by a `bl`), `sp` is the caller's frame *before* its own
@@ -3100,10 +2848,10 @@ impl Mt1959Engine {
     /// verify their exact OEM bytes before returning, so a mis-anchored match refuses
     /// rather than patches.
     ///
-    /// * explicit REPORT KEY gate ([`BD_GATE_SIG`], anchor head `cmp r0,#1`): the
+    /// * explicit REPORT KEY gate (`MediaGateVariant::Explicit`, anchor head `cmp r0,#1`): the
     ///   mode-0 class check `ldrb r0,[r2,#7]; cmp r0,#2` at `anchor+16` ->
     ///   [`Self::build_bd_stub`].
-    /// * descriptor-classifier gate ([`BD_GATE_SIG_VER`], anchor head `ldrb r2,[r1]`):
+    /// * descriptor-classifier gate (`MediaGateVariant::Descriptor`, anchor head `ldrb r2,[r1]`):
     ///   the mode==0 test `cmp r2,#0; sub sp,#imm` at `anchor+6` ->
     ///   [`Self::build_bd_stub_ver`], jumping to the deny at `anchor+0x40` on refuse.
     pub(crate) fn bd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
@@ -3190,7 +2938,7 @@ impl Mt1959Engine {
 
     /// The [`abi::Feature::Unrestricted`] **auth-cell state-band widen** trampoline. Entered
     /// by a `bl` that replaces `cmp r0,#0xC; bne <deny>` (4 bytes at
-    /// [`AUTH_CELL_SIG`]'s `anchor+10`). On entry `r0 = state_byte >> 4` (the top
+    /// `AuthCell`'s `anchor+10`). On entry `r0 = state_byte >> 4` (the top
     /// nibble the OEM `cmp` was about to compare against `0xC`); `deny_va` is the
     /// OEM `6F/02 Incompatible medium` emitter reached by the OEM `bne`.
     ///
@@ -3255,101 +3003,71 @@ impl Mt1959Engine {
             .map_err(|e| anyhow!("build_authcell_widen_stub: {e}"))
     }
 
-    /// Resolve the [`abi::Feature::Unrestricted`] auth-cell widen detour. Returns
-    /// `(detour_site, stub_bytes)` — the caller writes a `bl` at `detour_site`
-    /// (the 4 bytes at `anchor + AUTH_CELL_DETOUR_OFF` that were the OEM
-    /// `cmp r0,#0xC; bne <deny>`) and places `stub_bytes` at a free-space VA it
-    /// allocates.
-    ///
-    /// Graceful: images that don't carry this specific gate shape (the
-    /// `ldr r4, [pc, ...] = 0x01FF9E04` + `cmp r0,#0xC; bne` extended sig) leave
-    /// the lever unwired.
+    /// r1 state-band variant. Preserve every GPR and replay the original flags;
+    /// the failure path transfers through the stack without stealing a live scratch.
+    pub(crate) fn build_authcell_widen_value_stub(
+        &self,
+        flag_base: u32,
+        deny_va: u32,
+        value_register: u8,
+    ) -> Result<Vec<u8>> {
+        ensure!(value_register <= 1, "unsupported auth-cell register");
+        let mut a = Asm::new();
+        let widen = a.label();
+        let deny = a.label();
+        a.push(0x0008);
+        a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32);
+        a.ldrb_imm(3, 3, 0);
+        a.cmp_imm(3, abi::STATE_ON);
+        a.beq(widen);
+        a.pop(0x0008);
+        a.cmp_imm(value_register.into(), 0xC);
+        a.bne(deny);
+        a.bx(14);
+        a.bind(widen);
+        a.pop(0x0008);
+        a.cmp_imm(value_register.into(), 0xC);
+        a.bx(14);
+        a.bind(deny);
+        a.push(0x0108);
+        a.ldr_lit(3, deny_va | 1);
+        a.raw16(0x9301); // str r3,[sp,#4]: replace stacked return with OEM failure continuation
+        a.pop(0x0108);
+        a.finish().map_err(anyhow::Error::from)
+    }
+
+    /// Select the state-band implementation from the shared OEM VID-success
+    /// contract. Its role and continuations are established before any emission.
     pub(crate) fn auth_cell_widen_detour(
         &self,
         image: &[u8],
         flag_base: u32,
     ) -> Result<(usize, Vec<u8>)> {
-        let anchor = find_unique(image, AUTH_CELL_SIG, 0, image.len(), "auth-cell state-band")?;
-        let detour_site = anchor + AUTH_CELL_DETOUR_OFF as usize;
-        let bne_off = anchor + AUTH_CELL_BNE_OFF as usize;
-        // The OEM `bne <deny>` disp8 gives us the deny_va — signed 8-bit,
-        // halfword-scaled, relative to (bne_addr + 4). Use checked arithmetic
-        // so a crafted disp8 that would wrap can't produce a nonsense VA baked
-        // into the stub.
-        let bne_hw = u16::from_le_bytes([image[bne_off], image[bne_off + 1]]);
-        let disp8 = (bne_hw & 0xFF) as u8 as i8 as isize;
-        let deny_va_signed = (bne_off as isize)
-            .checked_add(4)
-            .and_then(|v| v.checked_add(disp8.checked_mul(2)?))
-            .ok_or_else(|| anyhow!("auth-cell deny_va disp8 arithmetic overflow"))?;
-        if deny_va_signed < 0 {
-            bail!("auth-cell deny_va resolves negative from disp8 (0x{bne_hw:04x})");
-        }
-        let deny_va = deny_va_signed as u32;
-        // Deny landmark: the resolved VA must (a) live inside the image and
-        // (b) point at a non-null halfword — a crafted image whose sig matches
-        // but whose `bne` disp8 lands in erased/zero flash would otherwise be
-        // signed and emitted with a stub that jumps to garbage on hardware.
-        // Peer detours (`bd_detour`) perform an equivalent landmark check.
-        if (deny_va as usize)
-            .checked_add(2)
-            .map(|end| end > image.len())
-            .unwrap_or(true)
-        {
-            bail!(
-                "auth-cell deny_va 0x{deny_va:x} outside image (len 0x{:x})",
-                image.len()
-            );
-        }
-        let deny_head = u16::from_le_bytes([image[deny_va as usize], image[deny_va as usize + 1]]);
-        if deny_head == 0x0000 || deny_head == 0xFFFF {
-            bail!(
-                "auth-cell deny_va 0x{deny_va:x} lands on filler halfword 0x{deny_head:04x} — not a code target"
-            );
-        }
-        Ok((
-            detour_site,
-            self.build_authcell_widen_stub(flag_base, deny_va)?,
-        ))
+        use mediatek_optical::image::analysis::{AuthCell, AuthCellVariant};
+        let contract = AuthCell::detect(image).map_err(|e| anyhow!("auth-cell layout: {e}"))?;
+        let bytes = match contract.variant() {
+            AuthCellVariant::R0StateR4 => {
+                self.build_authcell_widen_stub(flag_base, contract.deny() as u32)?
+            }
+            AuthCellVariant::R1StateR1 | AuthCellVariant::R1StateR4 => {
+                self.build_authcell_widen_value_stub(flag_base, contract.deny() as u32, 1)?
+            }
+            AuthCellVariant::R0StateR0 | AuthCellVariant::R0StateR5 => {
+                self.build_authcell_widen_value_stub(flag_base, contract.deny() as u32, 0)?
+            }
+        };
+        Ok((contract.site(), bytes))
     }
 
     // (Retired 0.8.9: `find_aacs45_arm` — only used to wire the deleted
     // `Feature::Bus` bus-encryption trampoline.)
 
-    /// The AACS media accept-gate anchor. Two codegen shapes carry the same disc
-    /// mode/class accept/refuse decision, tried **original-first** (full-image; both
-    /// signatures are unique image-wide, maxn==1 measured):
-    ///
-    /// * explicit REPORT KEY gate (`BD_GATE_SIG`, `0x1365be` on BU40N 1.00, anchor
-    ///   head `cmp r0,#1`) — resolves on 36 images. The mode-0 class check the
-    ///   `Feature::Bd` detour replaces is at `anchor+16`.
-    /// * descriptor-classifier gate (`BD_GATE_SIG_VER`, anchor head `ldrb r2,[r1]`)
-    ///   — the newer codegen the other AACS carriers use; consulted only when the
-    ///   explicit sig matches ZERO, so the BU40N KAT base and the 36 stay
-    ///   byte-identical. The mode==0 test the detour replaces is at `anchor+6`.
-    ///
-    /// `Self::bd_detour` disambiguates on the anchor head and applies the matching
-    /// site + stub. Either shape must resolve UNIQUELY.
+    /// Resolve the shared OEM media-control grammar. Ambiguous evidence fails;
+    /// a model name or silicon label never grants a code-layout match.
     pub fn find_bd_gate(&self, image: &[u8]) -> Result<u32> {
-        // Original-first (same pattern as `find_aacs45_arm`): the explicit
-        // REPORT KEY shape wins wherever it resolves, so the BU40N KAT base and the
-        // 36 explicit-shape images keep the original detour byte-for-byte. Only when
-        // it matches ZERO do we fall back to the descriptor-classifier variant.
-        match find_masked_all(image, BD_GATE_SIG, 0, image.len()).as_slice() {
-            [one] => Ok(*one as u32),
-            [] => Ok(find_unique(
-                image,
-                BD_GATE_SIG_VER,
-                0,
-                image.len(),
-                "AACS media accept gate (descriptor-classifier)",
-            )? as u32),
-            hits => bail!(
-                "AACS REPORT KEY BD accept gate matched {} time(s) full-image \
-                 (want exactly 1) — refusing to patch",
-                hits.len()
-            ),
-        }
+        mediatek_optical::image::analysis::MediaGate::inspect(image)
+            .map(|gate| gate.anchor() as u32)
+            .map_err(|e| anyhow!("AACS media gate: {e}"))
     }
 
     /// The flash-resident HRL lookup routine, located by `HRL_LOOKUP_SIG` and
@@ -3618,7 +3336,7 @@ impl Mt1959Engine {
 
     /// The Raw Read (0x04) flag-gated producer Gate-A trampoline. Entered by a `bl`
     /// that replaces the VID producer's OWN gate `cmp r0,#6; bne <deny>` (4 bytes at
-    /// [`VID_GATE_SIG`]'s `match+18`). On entry `r0 = the per-AGID auth byte` (from the
+    /// `VidGateVariant::Direct`'s `match+18`). On entry `r0 = the per-AGID auth byte` (from the
     /// preceding `ldrb r0,[r0]`), preserved. This gate is reached by a bare
     /// `READ DISC STRUCTURE` (`0xAD` fmt `0x80`) — NO AKE.
     ///
@@ -3868,7 +3586,7 @@ impl Mt1959Engine {
         // * Classic — the helper's unique caller `bl` (only when blessed).
         let (conv, orig_init) = boot_init_pair;
         let bytes = self.build_boot_init_with_defaults(flag_base, orig_init, defaults)?;
-        let stub_va = self.free_space(out, bytes.len() + 16)?;
+        let stub_va = self.free_space(out, bytes.len())?;
         thumb::write(out, stub_va as usize, &bytes);
         // Decode-back guarded like every other install site. This one was the
         // lone exception, which is backwards: it is the always-on power-on

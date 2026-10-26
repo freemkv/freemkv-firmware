@@ -16,3 +16,7 @@ firmware hoard, SHA-256
 `7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567`. It
 regresses classic MT1939 CREATE/MODIFY parity when the independent HRL detour
 resolves but the RawRead helper does not.
+
+BU40N 1.05 is a 2 MiB OEM image from the read-only hoard, SHA-256
+`fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d`.
+It regresses exact-size boot-record allocation after all newly resolved hooks.

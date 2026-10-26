@@ -1,4 +1,64 @@
 use super::*;
+
+#[test]
+fn classic_emitted_boot_and_region_hrl_controls_are_reported() {
+    let image = include_bytes!("../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let (_, support) = api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
+    assert!(
+        support.has_boot(),
+        "classic emission must report the boot hook it installed"
+    );
+    assert!(support.supports(BootFeature::Region));
+    assert!(support.supports(BootFeature::Hrl));
+    assert!(!support.supports(BootFeature::Speed));
+    assert!(!support.supports(BootFeature::Unrestricted));
+}
+
+#[test]
+fn wh_auth_widening_exposes_on_and_oem_without_claiming_refusal_support() {
+    let image = include_bytes!("../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let (report, support) =
+        crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
+    assert!(
+        support.supports(BootFeature::Unrestricted),
+        "the emitted widening hook is a usable On setting"
+    );
+    assert!(support.supports_value(BootFeature::Unrestricted, 1));
+    assert!(support.supports_value(BootFeature::Unrestricted, 255));
+    assert!(!support.supports_value(BootFeature::Unrestricted, 0));
+    assert!(!support.supports_value(BootFeature::Unrestricted, 17));
+    let (_, restored) = inspect(&report.image).unwrap().unwrap();
+    assert!(!restored.supports_value(BootFeature::Unrestricted, 0));
+    let off = settings(&["unrestricted=off"]);
+    assert!(off.validate(&restored).is_err());
+    let oem = settings(&["unrestricted=oem"]);
+    let (changed, _) = update(&report.image, &oem).unwrap().unwrap();
+    assert_eq!(
+        inspect(&changed)
+            .unwrap()
+            .unwrap()
+            .0
+            .value(BootFeature::Unrestricted),
+        "oem"
+    );
+    assert!(BootSettings::standard()
+        .report_json(&support, "{}")
+        .contains("\"choices\":[\"oem\",\"on\"]"));
+}
+
+#[test]
+fn tight_bu40n_v105_has_room_for_exact_boot_metadata_after_all_hooks() {
+    let image = include_bytes!("../tests/fixtures/BU40N_OEM_1.05.bin");
+    let (report, support) = crate::api::modify_with_defaults(image, &BootSettings::standard())
+        .expect("the fixed boot record must not request unused assembler headroom");
+    assert!(support.has_boot());
+    assert!(report.levers.iter().any(|l| l
+        .facts
+        .iter()
+        .any(|(k, v)| *k == "auth_cell_stub_va" && *v != 0)));
+    assert!(crate::engine::validate_metadata(image, &report.image).is_ok());
+    assert!(freemkv_flash::cmac::verify(&report.image));
+}
 use crate::{
     api,
     engine::{self, mt1959::Mt1959Engine},
@@ -126,6 +186,10 @@ fn saved_settings_cannot_override_boot_but_runtime_reset_uses_same_defaults() {
     assert!(BootFeature::ALL.into_iter().all(|f| support.supports(f)));
     let record = read_record(&report.image).unwrap().unwrap();
     for (i, site) in record.sites.iter().enumerate() {
+        if record.shared_reset && i == 2 {
+            assert_eq!(*site, 0);
+            continue;
+        }
         assert_eq!(
             &report.image[*site..*site + 28],
             stores(&defaults.flags(), if i == 2 { 6 } else { 0 })
@@ -141,6 +205,9 @@ fn new_images_can_be_reconfigured_and_reset_without_reinjecting_hooks() {
     assert!(support.has_boot());
     let custom = settings(&["hrl=off", "encryption=off"]);
     let (second, _) = api::modify_with_defaults(&first.image, &custom).unwrap();
+    let record = read_record(&second.image).unwrap().unwrap();
+    assert!(record.shared_reset);
+    assert_eq!(record.sites[2], 0);
     let (loaded, _) = inspect(&second.image).unwrap().unwrap();
     assert_eq!(loaded.flags(), custom.flags());
     let (reset, _) = api::modify_with_defaults(&second.image, &BootSettings::standard()).unwrap();
@@ -243,4 +310,19 @@ fn paired_tar_modification_preserves_intermediate_and_source_evidence() {
         inspect(edited.firmware()).unwrap().unwrap().0.flags(),
         defaults.flags()
     );
+}
+
+#[test]
+fn shared_reset_records_refuse_a_forged_third_instruction_site() {
+    let (report, _) = api::modify_with_defaults(&fixture(), &BootSettings::standard()).unwrap();
+    let record = read_record(&report.image).unwrap().unwrap();
+    assert!(record.shared_reset);
+    let mut corrupt = report.image;
+    corrupt[record.offset + 32..record.offset + 36]
+        .copy_from_slice(&(record.sites[1] as u32).to_le_bytes());
+    let corrupt = freemkv_flash::cmac::resign(&corrupt).unwrap();
+    assert!(inspect(&corrupt)
+        .unwrap_err()
+        .to_string()
+        .contains("empty third site"));
 }

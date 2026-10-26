@@ -97,6 +97,36 @@ pub struct PatchSite {
     pub what: &'static str,
 }
 
+/// One independently selected hook inside a compound modification.
+#[derive(Debug, Clone)]
+pub struct HookReport {
+    /// Stable semantic role, independent of model and engine name.
+    pub id: &'static str,
+    /// Implementation selected from OEM code, only when actually emitted.
+    pub variant: Option<String>,
+    /// A retained failure explanation, rather than an erased zero address.
+    pub reason: Option<String>,
+}
+
+impl HookReport {
+    /// The selected implementation passed emission checks.
+    pub fn applied(id: &'static str, variant: impl Into<String>) -> Self {
+        Self {
+            id,
+            variant: Some(variant.into()),
+            reason: None,
+        }
+    }
+    /// A missing/ambiguous contract is visible even when peer hooks succeed.
+    pub fn unavailable(id: &'static str, reason: impl Into<String>) -> Self {
+        Self {
+            id,
+            variant: None,
+            reason: Some(reason.into()),
+        }
+    }
+}
+
 /// The outcome of one lever, with its grounded facts.
 #[derive(Debug, Clone)]
 pub struct LeverReport {
@@ -106,6 +136,8 @@ pub struct LeverReport {
     pub outcome: LeverOutcome,
     /// Grounded addresses (name → value) for the `details:` block and audit.
     pub facts: Vec<(&'static str, u32)>,
+    /// Independent sub-hook selections and retained unavailability reasons.
+    pub hooks: Vec<HookReport>,
 }
 
 impl LeverReport {
@@ -115,6 +147,7 @@ impl LeverReport {
             id,
             outcome: LeverOutcome::Applied,
             facts,
+            hooks: vec![],
         }
     }
     /// Already present (idempotent).
@@ -123,6 +156,7 @@ impl LeverReport {
             id,
             outcome: LeverOutcome::AlreadyPresent,
             facts,
+            hooks: vec![],
         }
     }
     /// Out of scope for this capability.
@@ -133,6 +167,7 @@ impl LeverReport {
                 reason: reason.into(),
             },
             facts: vec![],
+            hooks: vec![],
         }
     }
     /// In scope but the signature missed on this image.
@@ -143,7 +178,13 @@ impl LeverReport {
                 detail: detail.into(),
             },
             facts: vec![],
+            hooks: vec![],
         }
+    }
+    /// Attach the actual sub-hook outcomes from this emission.
+    pub fn with_hooks(mut self, hooks: Vec<HookReport>) -> Self {
+        self.hooks = hooks;
+        self
     }
 }
 
@@ -316,7 +357,30 @@ impl ModifyReport {
                 }
                 s.push_str(&format!("{}:{}", jstr(k), v));
             }
-            s.push_str("}}");
+            s.push_str("},\"hooks\":[");
+            for (index, hook) in l.hooks.iter().enumerate() {
+                if index > 0 {
+                    s.push(',');
+                }
+                s.push_str(&format!(
+                    "{{\"id\":{},\"status\":{},\"variant\":{},\"reason\":{}}}",
+                    jstr(hook.id),
+                    jstr(if hook.reason.is_none() {
+                        "applied"
+                    } else {
+                        "unavailable"
+                    }),
+                    hook.variant
+                        .as_deref()
+                        .map(jstr)
+                        .unwrap_or_else(|| "null".into()),
+                    hook.reason
+                        .as_deref()
+                        .map(jstr)
+                        .unwrap_or_else(|| "null".into())
+                ));
+            }
+            s.push_str("]}");
         }
         s.push_str("]}");
         s
@@ -324,7 +388,7 @@ impl ModifyReport {
 }
 
 /// Minimal JSON string escaping.
-fn jstr(s: &str) -> String {
+pub(crate) fn jstr(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 2);
     o.push('"');
     for c in s.chars() {

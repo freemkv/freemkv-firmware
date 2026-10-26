@@ -168,6 +168,13 @@ jobs:
       # Includes the CMAC-verify T0 proof against a committed stock image.
       - run: cargo test --tests
         working-directory: freemkv-firmware
+      - name: Execute MediaTek hook contracts on an independent ARM CPU
+        working-directory: freemkv-firmware
+        run: |
+          python3 -m venv "$RUNNER_TEMP/hook-cpu"
+          "$RUNNER_TEMP/hook-cpu/bin/python" -m pip install --only-binary=:all: unicorn==2.1.4
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hook-execution.py --fw target/debug/freemkv-fw
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-runtime-execution.py --fw target/debug/freemkv-fw
 
   # cargo-deny — audits the RESOLVED graph (RUSTSEC advisories, licence
   # allow-list, source/ban hygiene) against the committed Cargo.lock + deny.toml.

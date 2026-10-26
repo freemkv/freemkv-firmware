@@ -456,16 +456,10 @@ impl Mt1959Engine {
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
 
-        // Fail-closed: the classic (MT1939) prologue now RESOLVES via
-        // BOOT_INIT_SIG_CLASSIC, but find_boot_init tags it ClassicUnconfirmed and
-        // emit_boot_init BAILS on that (hardware-unconfirmed leaf-helper call-order) —
-        // tri-state OFF (`0x00`) is unsafe without a boot hook to write `0xFF` at
-        // power-on, and the shared feature stubs (Region-lock etc.) would otherwise boot
-        // every classic drive into their OFF state. The caller (mt1939::modify) degrades
-        // to the DE-only path. Lifting this is a one-line flip in emit_boot_init once the
-        // classic site is blessed on silicon (see TODO(hw-confirm) there).
+        // Use the existing classic caller-order contract. Report the installed
+        // boot hook so capability consumers can expose only its actual controls.
         let boot_init_pair = self.resolve_boot_init_pair(image)?;
-        let (_boot_init_site, _boot_stub_va) =
+        let (boot_init_site, boot_stub_va) =
             self.emit_boot_init(image, &mut out, flag_base, boot_init_pair, defaults)?;
 
         let mut levers: Vec<LeverReport> = Vec::new();
@@ -479,6 +473,9 @@ impl Mt1959Engine {
             LeverId::Identity,
             vec![
                 ("handler_va", handler_va),
+                ("handler_len", handler_bytes.len() as u32),
+                ("boot_init_site", boot_init_site),
+                ("boot_stub_va", boot_stub_va),
                 ("record_off", record.off as u32),
                 ("flag_base", flag_base),
                 ("boot_function_entry", boot_function_entry),

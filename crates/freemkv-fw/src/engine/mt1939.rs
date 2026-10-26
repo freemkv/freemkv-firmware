@@ -280,6 +280,7 @@ impl Engine for Mt1939Engine {
                              raw-read detour pending the classic Identity base"
                         .to_string(),
                 },
+                hooks: vec![],
                 facts: vec![
                     ("vid_gate_classic", vid_gate),
                     ("ake_gate_classic", ake_gate),

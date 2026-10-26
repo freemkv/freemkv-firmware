@@ -20,6 +20,16 @@ fn fixture() -> Vec<u8> {
     std::fs::read(p).expect("committed BU40N OEM fixture")
 }
 
+#[test]
+fn wh_descriptor_auth_cell_is_selected_from_vid_success_not_the_later_state_check() {
+    let image = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let (site, _) = Mt1959Engine
+        .auth_cell_widen_detour(image, FLAG_TABLE_BASE)
+        .expect("WH VID preparation has a supported state-band contract");
+    assert_eq!(site, 0x13aa96);
+    assert_ne!(site, 0x13ac68, "the later check has a different role");
+}
+
 /// The fixture's own detected chip identity (so `build_modify` sees the real
 /// vendor/model strings and only the capability under test is synthetic).
 fn bu40n_chip() -> ChipInfo {
@@ -166,7 +176,7 @@ fn rawread_reports_the_uhd_hrl_bd_and_auth_cell_facts_whenever_those_detours_are
 }
 
 // ---------------------------------------------------------------------------
-// Injection-space allocation: every blob is placed with 16 bytes of headroom.
+// Finalized byte arrays allocate their exact size within protected geometry.
 // ---------------------------------------------------------------------------
 
 /// The erased (`0xFF`) runs `free_space` will consider: 4-aligned, and
@@ -268,43 +278,47 @@ fn gatea_stub_bytes(image: &[u8]) -> Vec<u8> {
     .expect("gate-A stub")
 }
 
-/// Every blob the Speed lever injects must be allocated with 16 bytes of
-/// headroom past its own length: the run is re-scanned for the *next* blob, and
-/// an allocation that fits with nothing to spare leaves the following blob (and
-/// its 4-byte alignment) nowhere to go. One byte short of that must refuse
-/// rather than place the stub — the alternative is an image that flashes with a
-/// trampoline butted against live flash.
+/// A finalized stub fits exactly. The next allocation independently checks its
+/// own capacity and alignment; no unchecked writes depend on spare tail bytes.
 #[test]
-fn speed_stub_is_allocated_with_sixteen_bytes_of_headroom() {
+fn speed_stub_is_allocated_with_exact_capacity() {
     let e = Mt1959Engine;
     let img = fixture();
     let blob = speed_stub_bytes(&img).len();
 
     let mut cramped = img.clone();
-    only_free_space(&mut cramped, blob + 15);
+    only_free_space(&mut cramped, blob - 1);
+    let before = cramped.clone();
     let msg = refusal(
         e.emit_speed(&img, &mut cramped, FLAG_TABLE_BASE),
-        "a free run one byte short of blob+slack must not be used",
+        "a free run one byte short of the finalized blob must not be used",
     );
     assert!(
-        msg.contains(&out_of_space(blob + 16)),
-        "Speed must ask for its {blob}-byte stub plus 16 bytes of headroom; got: {msg}"
+        msg.contains(&out_of_space(blob)),
+        "Speed must ask for its {blob}-byte stub without unneeded extra headroom; got: {msg}"
     );
 
+    assert_eq!(cramped, before, "failed installation changed output");
     let mut exact = img.clone();
-    let base = only_free_space(&mut exact, blob + 16);
+    let base = only_free_space(&mut exact, blob);
+    let next_byte = exact[base as usize + blob];
     let (_, va) = e
         .emit_speed(&img, &mut exact, FLAG_TABLE_BASE)
-        .expect("blob + 16 bytes of covered free space is enough to place the Speed stub");
+        .expect("blob bytes of covered free space is enough to place the Speed stub");
     assert_eq!(
         va, base,
         "the stub must land in the one window we left free"
+    );
+    assert_eq!(
+        exact[base as usize + blob],
+        next_byte,
+        "stub overran its allocation"
     );
 }
 
 /// Same contract for the Region-free stub.
 #[test]
-fn region_stub_is_allocated_with_sixteen_bytes_of_headroom() {
+fn region_stub_is_allocated_with_exact_capacity() {
     let e = Mt1959Engine;
     let img = fixture();
     let blob = e
@@ -313,35 +327,43 @@ fn region_stub_is_allocated_with_sixteen_bytes_of_headroom() {
         .len();
 
     let mut cramped = img.clone();
-    only_free_space(&mut cramped, blob + 15);
+    only_free_space(&mut cramped, blob - 1);
+    let before = cramped.clone();
     let msg = refusal(
         e.emit_region(&img, &mut cramped, FLAG_TABLE_BASE),
-        "a free run one byte short of blob+slack must not be used",
+        "a free run one byte short of the finalized blob must not be used",
     );
     assert!(
-        msg.contains(&out_of_space(blob + 16)),
-        "Region must ask for its {blob}-byte stub plus 16 bytes of headroom; got: {msg}"
+        msg.contains(&out_of_space(blob)),
+        "Region must ask for its {blob}-byte stub without unneeded extra headroom; got: {msg}"
     );
 
+    assert_eq!(cramped, before, "failed installation changed output");
     let mut exact = img.clone();
-    let base = only_free_space(&mut exact, blob + 16);
+    let base = only_free_space(&mut exact, blob);
+    let next_byte = exact[base as usize + blob];
     let (_, va) = e
         .emit_region(&img, &mut exact, FLAG_TABLE_BASE)
-        .expect("blob + 16 bytes of covered free space is enough to place the Region stub");
+        .expect("blob bytes of covered free space is enough to place the Region stub");
     assert_eq!(
         va, base,
         "the stub must land in the one window we left free"
+    );
+    assert_eq!(
+        exact[base as usize + blob],
+        next_byte,
+        "stub overran its allocation"
     );
 }
 
 /// The Raw-read lever injects six blobs back-to-back out of the same run
 /// (ake → gate-A → deny → uhd → hrl → bd). Each allocation gets its own
-/// headroom check: this walks every one of them, leaves exactly one byte less
+/// capacity check: this walks every one of them, leaves exactly one byte less
 /// free space than that blob needs, and requires the refusal to name that
-/// blob's size plus the 16-byte headroom — i.e. the allocation that ran short is
+/// blob's size without extra headroom — i.e. the allocation that ran short is
 /// the one we aimed at, and it refused instead of squeezing the stub in.
 #[test]
-fn every_rawread_stub_is_allocated_with_sixteen_bytes_of_headroom() {
+fn every_rawread_stub_is_allocated_with_exact_capacity() {
     let e = Mt1959Engine;
     let img = fixture();
     let base = only_free_space(&mut img.clone(), 16); // the allocator's window
@@ -389,25 +411,25 @@ fn every_rawread_stub_is_allocated_with_sixteen_bytes_of_headroom() {
     for (name, va, blob) in sites {
         assert!(va >= base, "{name} stub is not in the allocator's window");
         // Free space for every preceding blob, and one byte short for this one.
-        let window = (va - base) as usize + blob + 15;
+        let window = (va - base) as usize + blob - 1;
         let mut cramped = img.clone();
         assert_eq!(only_free_space(&mut cramped, window), base);
         let msg = refusal(
             e.emit_rawread(&img, &mut cramped, FLAG_TABLE_BASE),
-            "a free run one byte short of blob+slack must not be used",
+            "a free run one byte short of the finalized blob must not be used",
         );
         assert!(
-            msg.contains(&out_of_space(blob + 16)),
-            "the {name} stub ({blob} bytes) must be allocated with 16 bytes of headroom; got: {msg}"
+            msg.contains(&out_of_space(blob)),
+            "the {name} stub ({blob} bytes) must request its finalized size; got: {msg}"
         );
     }
 }
 
 /// The injected handler is the one allocation the base cannot do without, on
-/// both build paths — same headroom contract, and a refusal (never a cramped
+/// both build paths — same exact-capacity contract, and a refusal (never a cramped
 /// placement) when the covered free space is one byte short.
 #[test]
-fn handler_is_allocated_with_sixteen_bytes_of_headroom_on_both_paths() {
+fn handler_is_allocated_with_exact_capacity_on_both_paths() {
     let e = Mt1959Engine;
     let img = fixture();
     let blob = e
@@ -417,7 +439,7 @@ fn handler_is_allocated_with_sixteen_bytes_of_headroom_on_both_paths() {
         .len();
 
     let mut cramped = img.clone();
-    only_free_space(&mut cramped, blob + 15);
+    only_free_space(&mut cramped, blob - 1);
     for msg in [
         refusal(e.build_report(&cramped), "create must refuse"),
         refusal(
@@ -426,8 +448,8 @@ fn handler_is_allocated_with_sixteen_bytes_of_headroom_on_both_paths() {
         ),
     ] {
         assert!(
-            msg.contains(&out_of_space(blob + 16)),
-            "the {blob}-byte handler must be allocated with 16 bytes of headroom; got: {msg}"
+            msg.contains(&out_of_space(blob)),
+            "the {blob}-byte handler must request its finalized size; got: {msg}"
         );
     }
 }
@@ -1002,4 +1024,29 @@ fn wh16ns58_v9_modification_preserves_every_integrity_table_descriptor() {
         }
     }
     assert!(cmac::verify(&report.image));
+}
+
+#[test]
+fn boot_stub_fits_exact_finalized_capacity_and_refuses_short_without_writes() {
+    let engine = Mt1959Engine;
+    let original = fixture();
+    let pair = engine.resolve_boot_init_pair(&original).unwrap();
+    let defaults = crate::boot::BootSettings::standard();
+    let bytes = engine
+        .build_boot_init_with_defaults(FLAG_TABLE_BASE, pair.1, &defaults)
+        .unwrap();
+    let mut short = original.clone();
+    only_free_space(&mut short, bytes.len() - 1);
+    let before = short.clone();
+    assert!(engine
+        .emit_boot_init(&original, &mut short, FLAG_TABLE_BASE, pair, &defaults)
+        .is_err());
+    assert_eq!(short, before);
+    let mut exact = original.clone();
+    let base = only_free_space(&mut exact, bytes.len());
+    let (_, installed) = engine
+        .emit_boot_init(&original, &mut exact, FLAG_TABLE_BASE, pair, &defaults)
+        .unwrap();
+    assert_eq!(installed, base);
+    assert_eq!(&exact[base as usize..base as usize + bytes.len()], bytes);
 }

@@ -122,6 +122,13 @@ jobs:
       # This also owns all-targets/all-features codegen on Windows. Do not
       # compile the same optimized test executables again in a separate job.
       - run: cargo test --release --locked --all-targets --all-features
+      - name: Execute release MediaTek hook contracts on an independent ARM CPU
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/hook-cpu"
+          "$RUNNER_TEMP/hook-cpu/bin/python" -m pip install --only-binary=:all: unicorn==2.1.4
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hook-execution.py --fw target/release/freemkv-fw
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-runtime-execution.py --fw target/release/freemkv-fw
 
   # clippy's output is target-dependent: cfg-gated code only gets linted on the
   # target it compiles for. Linting solely on the dev host is how a lint that CI

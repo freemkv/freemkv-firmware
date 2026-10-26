@@ -163,10 +163,13 @@ impl BootSettings {
     /// Reject explicit choices which cannot be honored by this image.
     pub fn validate(&self, support: &BootSupport) -> Result<()> {
         for feature in BootFeature::ALL {
-            if self.explicit & (1 << feature.index()) != 0 && !support.supports(feature) {
+            if self.explicit & (1 << feature.index()) != 0
+                && !support.supports_value(feature, self.values[feature.index()])
+            {
                 bail!(
-                    "{} boot setting is not supported by this firmware",
-                    feature.key()
+                    "{}={} boot setting is not supported by this firmware",
+                    feature.key(),
+                    self.value(feature)
                 );
             }
         }
@@ -178,10 +181,16 @@ impl BootSettings {
             .into_iter()
             .map(|f| {
                 format!(
-                    "\"{}\":{{\"value\":\"{}\",\"supported\":{}}}",
+                    "\"{}\":{{\"value\":\"{}\",\"supported\":{},\"choices\":[{}]}}",
                     f.key(),
                     self.value(f),
-                    support.supports(f)
+                    support.supports(f),
+                    f.choices()
+                        .iter()
+                        .filter(|(_, _, v)| support.supports_value(f, *v))
+                        .map(|(key, _, _)| format!("\"{key}\""))
+                        .collect::<Vec<_>>()
+                        .join(",")
                 )
             })
             .collect::<Vec<_>>()
@@ -212,10 +221,19 @@ impl BootSupport {
     pub fn supports(&self, feature: BootFeature) -> bool {
         self.boot && self.mask & (1 << feature.index()) != 0
     }
+    /// Whether this exact value is implemented, including partial On/OEM controls.
+    pub fn supports_value(&self, feature: BootFeature, value: u8) -> bool {
+        self.supports(feature)
+            && feature.choices().iter().any(|choice| choice.2 == value)
+            && !(feature == BootFeature::Unrestricted
+                && value == 0
+                && self.mask & LIMITED_UNRESTRICTED != 0)
+    }
     /// Derive support from a strict build's actual emitted stubs.
     pub fn from_create(r: &CreateReport) -> Self {
         Self::from_facts(r.boot_stub_va != 0, |key| match key {
             "uhd_stub_va" => r.uhd_stub_va,
+            "auth_cell_stub_va" => r.auth_cell_stub_va,
             "bd_stub_va" => r.bd_stub_va,
             "hrl_stub_va" => r.hrl_stub_va,
             "ake_stub_va" => r.ake_stub_va,
@@ -237,8 +255,10 @@ impl BootSupport {
         Self::from_facts(fact("boot_stub_va") != 0, fact)
     }
     fn from_facts(boot: bool, fact: impl Fn(&str) -> u32) -> Self {
+        let refusal = fact("uhd_stub_va") != 0 && fact("bd_stub_va") != 0;
+        let widening = fact("auth_cell_stub_va") != 0;
         let supported = [
-            fact("uhd_stub_va") != 0 && fact("bd_stub_va") != 0,
+            refusal || widening,
             fact("hrl_stub_va") != 0,
             fact("ake_stub_va") != 0,
             fact("speed_stub_va") != 0,
@@ -249,7 +269,12 @@ impl BootSupport {
             mask: supported
                 .iter()
                 .enumerate()
-                .fold(0, |mask, (i, yes)| mask | (u8::from(*yes) << i)),
+                .fold(0, |mask, (i, yes)| mask | (u8::from(*yes) << i))
+                | if widening && !refusal {
+                    LIMITED_UNRESTRICTED
+                } else {
+                    0
+                },
         }
     }
 }
@@ -259,15 +284,19 @@ impl BootSupport {
 mod tests;
 
 const RECORD_MAGIC: &[u8; 16] = b"freemkv.boot.v1\0";
+const RECORD_MAGIC_V2: &[u8; 16] = b"freemkv.boot.v2\0";
+const RECORD_MAGIC_V3: &[u8; 16] = b"freemkv.boot.v3\0";
+const LIMITED_UNRESTRICTED: u8 = 1 << 5;
 const RECORD_LEN: usize = 36;
 
-/// A versioned record ties editable defaults to three verified instruction runs:
-/// boot, reset-to-defaults, and reset-to-flash's never-saved fallback.
+/// Versioned defaults: v1/v2 retain three instruction runs. v3 shares the
+/// handler defaults body between explicit reset and the never-saved fallback.
 struct Record {
     offset: usize,
     settings: BootSettings,
     support: BootSupport,
     sites: [usize; 3],
+    shared_reset: bool,
 }
 
 fn stores(flags: &[u8; 7], base_register: u16) -> Vec<u8> {
@@ -286,7 +315,7 @@ fn read_record(image: &[u8]) -> Result<Option<Record>> {
     let locations: Vec<_> = image
         .windows(RECORD_MAGIC.len())
         .enumerate()
-        .filter(|(_, w)| *w == RECORD_MAGIC)
+        .filter(|(_, w)| *w == RECORD_MAGIC || *w == RECORD_MAGIC_V2 || *w == RECORD_MAGIC_V3)
         .map(|(i, _)| i)
         .collect();
     if locations.is_empty() {
@@ -312,10 +341,32 @@ fn read_record(image: &[u8]) -> Result<Option<Record>> {
             f.key()
         );
     }
-    ensure!(bytes[23] & !31 == 0, "invalid boot capability record");
+    let shared_reset = &bytes[..16] == RECORD_MAGIC_V3;
+    let allowed_mask = if &bytes[..16] == RECORD_MAGIC_V2 || shared_reset {
+        63
+    } else {
+        31
+    };
+    ensure!(
+        bytes[23] & !allowed_mask == 0,
+        "invalid boot capability record"
+    );
+    if bytes[23] & LIMITED_UNRESTRICTED != 0 {
+        ensure!(
+            bytes[23] & 1 != 0 && flags[3] != 0,
+            "invalid partial Unrestricted capability"
+        );
+    }
     let mut sites = [0; 3];
     for (i, site) in sites.iter_mut().enumerate() {
         *site = u32::from_le_bytes(bytes[24 + i * 4..28 + i * 4].try_into()?) as usize;
+        if shared_reset && i == 2 {
+            ensure!(
+                *site == 0,
+                "shared reset record must have an empty third site"
+            );
+            continue;
+        }
         let expected = stores(&flags, if i == 2 { 6 } else { 0 });
         ensure!(
             *site % 2 == 0
@@ -328,8 +379,9 @@ fn read_record(image: &[u8]) -> Result<Option<Record>> {
             "boot settings record overlaps instructions"
         );
     }
-    for i in 0..3 {
-        for j in i + 1..3 {
+    let site_count = if shared_reset { 2 } else { 3 };
+    for i in 0..site_count {
+        for j in i + 1..site_count {
             ensure!(
                 sites[i].abs_diff(sites[j]) >= 28,
                 "overlapping boot settings instructions"
@@ -344,6 +396,7 @@ fn read_record(image: &[u8]) -> Result<Option<Record>> {
             mask: bytes[23],
         },
         sites,
+        shared_reset,
     }))
 }
 
@@ -378,6 +431,9 @@ pub(crate) fn update(
     defaults.validate(&record.support)?;
     let mut output = image.to_vec();
     for (i, site) in record.sites.iter().enumerate() {
+        if record.shared_reset && i == 2 {
+            continue;
+        }
         let bytes = stores(&defaults.flags(), if i == 2 { 6 } else { 0 });
         output[*site..*site + bytes.len()].copy_from_slice(&bytes);
     }
@@ -418,13 +474,59 @@ pub(crate) fn attach(
         );
         Ok(hits[0])
     };
+    let boot_site = find(boot, boot + 64, 0)?;
+    let defaults_site = find(handler, handler.saturating_add(handler_len), 0)?;
+    let handler_end = handler
+        .checked_add(handler_len)
+        .filter(|end| *end <= image.len())
+        .ok_or_else(|| anyhow::anyhow!("invalid handler span"))?;
+    let flash_needle = stores(&flags, 6);
+    let fallback_hits: Vec<_> = image[handler..handler_end]
+        .windows(flash_needle.len())
+        .enumerate()
+        .filter(|(_, bytes)| *bytes == flash_needle)
+        .map(|(offset, _)| handler + offset)
+        .collect();
+    ensure!(
+        fallback_hits.len() <= 1,
+        "ambiguous reset-to-flash defaults"
+    );
+    let shared_reset = fallback_hits.is_empty();
+    if shared_reset {
+        // Prove the compact handler actually branches into the shared defaults
+        // body; absence of a second store run alone is not evidence of reuse.
+        let shared_entry = defaults_site
+            .checked_sub(2)
+            .ok_or_else(|| anyhow::anyhow!("invalid shared defaults site"))?;
+        let calls = (handler..handler_end.saturating_sub(1))
+            .step_by(2)
+            .filter(|site| {
+                thumb_asm::isa::decode_at(image, *site).is_some_and(|instruction| {
+                    instruction.branch_target() == Some(shared_entry as u32)
+                        && instruction.is_branch()
+                })
+            })
+            .count();
+        ensure!(
+            calls == 1,
+            "shared reset fallback branch was not uniquely proven"
+        );
+    }
     let sites = [
-        find(boot, boot + 64, 0)?,
-        find(handler, handler.saturating_add(handler_len), 0)?,
-        find(handler, handler.saturating_add(handler_len), 6)?,
+        boot_site,
+        defaults_site,
+        fallback_hits.first().copied().unwrap_or(0),
     ];
-    let offset = crate::engine::mt1959::Mt1959Engine.free_space(image, RECORD_LEN + 16)? as usize;
-    let mut record = RECORD_MAGIC.to_vec();
+    // This serialization has an exact length; it has no assembler literal pool
+    // or expanding branch encodings requiring the code emitters' extra headroom.
+    let offset = crate::engine::mt1959::Mt1959Engine.free_space(image, RECORD_LEN)? as usize;
+    let mut record = if shared_reset {
+        RECORD_MAGIC_V3.to_vec()
+    } else if support.mask & LIMITED_UNRESTRICTED != 0 {
+        RECORD_MAGIC_V2.to_vec()
+    } else {
+        RECORD_MAGIC.to_vec()
+    };
     record.extend_from_slice(&flags);
     record.push(support.mask);
     for site in sites {

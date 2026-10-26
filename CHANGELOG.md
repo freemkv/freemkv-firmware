@@ -3,6 +3,31 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.4] - Unreleased
+
+### freemkv Modify
+
+- Select media, VID and auth-cell implementations from shared OEM code-layout
+  evidence. Add the WH register contract and preserve unavailable-hook reasons.
+- Offer only boot values implemented by the generated hooks. Widening can offer
+  On/OEM without advertising an unimplemented native-media refusal mode.
+- Report classic boot hooks already emitted by the engine, exposing the actual
+  editable controls instead of silently hiding them.
+- Allocate finalized code and settings records at their exact size, retaining
+  alignment, protected-region and integrity-coverage checks. Add exact-fit,
+  one-byte-short and atomic-refusal regressions, including tight BU40N 1.05.
+- Share the CDB handler's reset-defaults body with erased-NV fallback to recover
+  28 bytes without removing commands. Preserve older settings records; new
+  compact records remain editable and are checked by independent CPU tests.
+- Query hash-bound capabilities through the real Modify preview and structural
+  audit, including explicit unsupported results for publication tooling.
+- Execute hook state/register/stack contracts on an independent ARM CPU in CI.
+
+### freemkv Flash
+
+- Update the shared MediaTek dependency to the source-pinned analysis release;
+  firmware hook analysis remains an opt-in image feature.
+
 ## [0.15.3] - 2026-10-25
 
 ### freemkv Flash

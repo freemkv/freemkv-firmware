@@ -34,10 +34,13 @@ freemkv-chipset = { path = "../freemkv-chipset" }
 # `anyhow::Result` error type live in `src/install_guard.rs`; every actual
 # encode/decode/find primitive lives in the upstream crate.
 thumb-asm = "=0.13.0"
-mediatek-optical = { version = "=1.1.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "7a4b1746d265330e95ce76d24151035b511afd01", features = ["image"] }
+mediatek-optical = { version = "=1.2.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "e0dae246a856ff90e9e686e802e4fc9711086a49", features = ["image", "analysis"] }
 
 sha2 = "0.10"
 tempfile = "3"
+
+[dev-dependencies]
+serde_json = "1"
 
 [lints]
 workspace = true

@@ -1,0 +1,76 @@
+"""Execute original/replacement WH auth-cell blocks using an independent ARM CPU.
+
+Run after building freemkv-fw; requires unicorn==2.1.4 in the test environment.
+No drive access. All generated firmware and reports stay in a temporary directory.
+"""
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import tempfile
+
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE
+from unicorn.arm_const import UC_ARM_REG_CPSR, UC_ARM_REG_PC, UC_ARM_REG_SP, UC_ARM_REG_LR
+from unicorn import arm_const
+
+
+def execute(image, site, deny, value, setting):
+    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    cpu.mem_map(0, 0x200000)
+    cpu.mem_write(0, image)
+    cpu.mem_map(0x02000000, 0x2000)
+    cpu.mem_map(0x03000000, 0x10000)
+    cpu.reg_write(UC_ARM_REG_CPSR, 0xA0000030)
+    registers = [getattr(arm_const, f'UC_ARM_REG_R{i}') for i in range(13)]
+    before = [0x76540000 + i * 0x101 for i in range(13)]
+    before[1] = value
+    for register, initial in zip(registers, before):
+        cpu.reg_write(register, initial)
+    cpu.reg_write(UC_ARM_REG_SP, 0x03008000)
+    cpu.reg_write(UC_ARM_REG_LR, 0x12345679)
+    cpu.mem_write(0x02000e43, bytes([setting]))
+    reached = []
+
+    def stop(machine, address, _size, _data):
+        if address in (site + 4, deny):
+            reached.append(address)
+            machine.emu_stop()
+
+    cpu.hook_add(UC_HOOK_CODE, stop)
+    cpu.emu_start(site | 1, 0x200000, count=100)
+    assert len(reached) == 1, 'hook did not reach a validated continuation'
+    after = [cpu.reg_read(register) for register in registers]
+    assert after == before, (value, setting, 'live general register was changed', before, after)
+    assert cpu.reg_read(UC_ARM_REG_SP) == 0x03008000, 'unbalanced stack'
+    return reached[0], cpu.reg_read(UC_ARM_REG_CPSR) & 0xF0000000
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--fw', required=True, type=Path)
+    args = parser.parse_args()
+    original_path = Path(__file__).resolve().parents[1] / 'crates/freemkv-fw/tests/fixtures/WH16NS58_OEM_1.V9.bin'
+    original = original_path.read_bytes()
+    with tempfile.TemporaryDirectory(prefix='freemkv-hook-execution-') as temp:
+        output = Path(temp) / 'modified.bin'
+        result = subprocess.run([str(args.fw.resolve()), 'modify', str(original_path), str(output), '--json'], capture_output=True, text=True, check=True)
+        report = json.loads(result.stdout)
+        facts = next(lever['facts'] for lever in report['levers'] if lever['id'] == 'RawRead')
+        site = facts['auth_cell_site']
+        assert site == 0x13AA96, 'selected the wrong semantic check'
+        deny = 0x13AB16
+        modified = output.read_bytes()
+        cases = 0
+        for setting in (0, 1, 255, 2):
+            for value in range(16):
+                old_target, old_flags = execute(original, site, deny, value, setting)
+                target, flags = execute(modified, site, deny, value, setting)
+                expected = site + 4 if setting == 1 else old_target
+                assert target == expected, (value, setting, hex(target), hex(expected))
+                assert flags == old_flags, (value, setting, 'CMP flags were not preserved')
+                cases += 1
+        print(f'PASS: {cases} WH state/setting combinations; continuations, r0-r12, SP and CMP flags')
+
+
+if __name__ == '__main__':
+    main()
