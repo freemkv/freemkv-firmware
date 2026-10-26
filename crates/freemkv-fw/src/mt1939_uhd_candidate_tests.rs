@@ -160,7 +160,10 @@ fn classic_uhd_research_corpus_builds_without_changing_originals() {
                 "output_sha256":digest(&report.image),"file":filename,"setting":setting,
                 "structural_audit":"passed","physical_uhd_validation":false,
                 "auth_site":fact(&report,"auth_cell_site").unwrap(),
-                "auth_stub":fact(&report,"auth_cell_stub_va").unwrap()});
+                "auth_stub":fact(&report,"auth_cell_stub_va").unwrap(),
+                "flag_base":fact(&report,"flag_base").unwrap(),
+                "state_address":AuthCell::detect(&image).unwrap().state_address(),
+                "source_identity":item["identity"]});
             if let Some(dir) = &output {
                 std::fs::write(dir.join(&filename), &report.image).unwrap();
             }
