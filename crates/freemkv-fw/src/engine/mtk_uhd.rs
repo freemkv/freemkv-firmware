@@ -73,10 +73,8 @@ impl UhdConversionPlan {
             return vec![];
         }
         vec![
-            "DI hook placement and caller integration",
             "reverse calculation selecting-flag producer",
-            "remaining indirect and layer/structure consumers",
-            "hook caller/link-register lifetimes",
+            "remaining indirect and structure consumers",
         ]
     }
     /// Refuse incomplete conversion before an output buffer can be modified.
@@ -118,6 +116,7 @@ impl UhdConversionPlan {
                 accept,
                 reject,
                 bytes,
+                caller: mediatek_optical::image::analysis::SavedLink::detect(image, site)?,
             });
         }
         Ok(candidates)
@@ -139,6 +138,8 @@ pub struct UhdRoutingCandidate {
     pub reject: usize,
     /// Position-independent Thumb bytes for controlled CPU testing.
     pub bytes: Vec<u8>,
+    /// Native stack/LR lifetime proof for installing a Thumb BL at this site.
+    pub caller: mediatek_optical::image::analysis::SavedLink,
 }
 fn tail(a: &mut Asm, target: usize) {
     a.push(0x0108); // r3,lr; preserve r3 while replacing only the stacked return
@@ -430,11 +431,19 @@ pub struct UhdDiCandidate {
     pub original: Vec<u8>,
     /// Position-independent Thumb code.
     pub bytes: Vec<u8>,
+    /// Native frame/lifetime evidence for the entry detour.
+    pub caller: mediatek_optical::image::analysis::SavedLink,
 }
 /// Recognize U/5 with two or three layers, then reuse the native format and
 /// layer handlers. OEM/Off/unknown flags replay native prevalidation exactly.
 pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandidate> {
     let contract = mediatek_optical::image::analysis::ClassicDi::detect(image)?;
+    let caller =
+        mediatek_optical::image::analysis::SavedLink::detect(image, contract.prevalidation)?;
+    ensure!(
+        caller.entry == contract.entry && caller.stack_bytes == 40,
+        "DI caller frame disagrees"
+    );
     let original = image[contract.prevalidation..contract.replay_continuation].to_vec();
     let mut a = Asm::new();
     let v1 = a.label();
@@ -509,5 +518,6 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
         contract,
         original,
         bytes: a.finish()?,
+        caller,
     })
 }

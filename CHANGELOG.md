@@ -12,6 +12,8 @@ Versions are independent of the freemkv ripping applications.
   development work does not enable classic UHD support yet. Bind the classic
   DI detour to its native frame, format switch and layer normalization; validate
   OEM replay and U/5 recognition on all 24 classic inputs with CPU execution.
+  Bind routing callers to balanced native stack/LR contracts and verify saved
+  parent returns. Keep the internal signed placement probe gated from user tests.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse

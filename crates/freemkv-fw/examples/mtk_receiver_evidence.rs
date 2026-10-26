@@ -29,6 +29,7 @@ fn main() -> anyhow::Result<()> {
                         "format":d.contract.format,"format_flag":d.contract.format_flag,"layers":d.contract.layers,
                         "layer_store":d.contract.layer_store,"one_register":d.contract.one_register,
                         "stub":d.bytes,"original":d.original,
+                        "caller":{"entry":d.caller.entry,"stack_bytes":d.caller.stack_bytes,"returns":d.caller.returns},
                     })),
                     "areas":UhdArea::ALL.iter().map(|&area| {
                         let contract = plan.areas().area(area).unwrap();
@@ -39,6 +40,7 @@ fn main() -> anyhow::Result<()> {
                         "area":format!("{:?}",c.area),"site":c.site,"original":c.original,
                         "accept":c.accept,"reject":c.reject,"stub":c.bytes,
                         "region_start":plan.areas().area(c.area).unwrap().site(),
+                        "caller":{"entry":c.caller.entry,"stack_bytes":c.caller.stack_bytes,"returns":c.caller.returns},
                     "bypass":if c.area == UhdArea::ParameterNibble { Some(plan.areas().area(c.area).unwrap().edges()[0].target) } else { None },
                     })).collect::<Vec<_>>()
                 })

@@ -439,8 +439,16 @@ committed classic fixture. The 24-input sweep adds 18,432 routing comparisons
 and 345,648 DI entry/native-format cases, including the exact BH16NS48 source.
 The library's optional 195-image inventory test also binds the complete new DI
 contract on all 24 classic layouts. Corrupt layer arithmetic or format-call
-instructions are refused. The remaining work is final hook placement, the other
-routing callers' LR lifetimes, the reverse-calculation selecting-flag producer,
+instructions are refused. `SavedLink` now walks each native caller's local graph, checks stack depth and
+balanced pop-PC exits, and refuses live uses of a detour-clobbered LR. It handles
+the shared compiler byte-table switch explicitly and rejects unknown stack or
+control flow. The 24-image sweep adds 720 CPU checks of the saved parent frame
+and native return instructions; DI cases also execute the native add-SP/pop-PC
+return. An internal probe places all five components in covered erased space,
+signs the image, rechecks every branch/stub after signing, runs the base audit
+and passes Flash's offline admission. This has succeeded on the exact BH16NS48
+source. It is marked NOT ready for hardware testing and is not the user BIN.
+The remaining semantic work is the reverse-calculation selecting-flag producer
 and remaining indirect consumers. Full conversion is still refused.
 
 First user hardware target: **BD-RE BH16NS48 1.02**, native MT1939, variant

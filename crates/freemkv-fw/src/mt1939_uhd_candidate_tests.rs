@@ -182,3 +182,150 @@ fn classic_uhd_research_corpus_builds_without_changing_originals() {
         })).unwrap()).unwrap();
     }
 }
+
+/// Internal placement/integrity probe, not a complete UHD conversion. Keep the
+/// public completion gate closed while reverse/indirect consumers are unresolved.
+fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
+    use crate::engine::mtk_uhd::{di_prevalidation_candidate, UhdConversionPlan};
+    ensure!(
+        family::detect_chip(image)?.family == family::ChipFamily::Mt1939,
+        "probe requires native MT1939"
+    );
+    let (mut report, support) = crate::api::modify_with_defaults(image, &BootSettings::standard())?;
+    ensure!(
+        !support.supports(BootFeature::Unrestricted),
+        "probe must not promote public UHD support"
+    );
+    let (stored, _) = crate::boot::inspect(&report.image)?
+        .ok_or_else(|| anyhow::anyhow!("missing native boot settings"))?;
+    ensure!(
+        stored.value(BootFeature::Unrestricted) == "on",
+        "research flag default is not On"
+    );
+    let flags = fact(&report, "flag_base")?;
+    let plan = UhdConversionPlan::inspect(image)?;
+    ensure!(
+        plan.require_complete_conversion().is_err(),
+        "use the normal builder for a complete conversion"
+    );
+    let di = di_prevalidation_candidate(image, flags)?;
+    let mut parts = vec![(
+        "DiscInformation".to_string(),
+        di.contract.prevalidation,
+        di.original,
+        di.bytes,
+    )];
+    for part in plan.routing_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    ensure!(
+        parts.len() == 5,
+        "research probe requires all five reviewed components"
+    );
+    let mut installed = Vec::new();
+    for (role, site, original, bytes) in parts {
+        ensure!(
+            report.image.get(site..site + original.len()) == Some(original.as_slice()),
+            "another hook owns {role}"
+        );
+        let stub = Mt1959Engine.free_space(&report.image, bytes.len())?;
+        let start = stub as usize;
+        ensure!(
+            report.image[start..start + bytes.len()]
+                .iter()
+                .all(|b| *b == 255),
+            "allocation is not erased"
+        );
+        let branch = thumb_asm::encode_bl(site, stub)
+            .ok_or_else(|| anyhow::anyhow!("{role} branch out of range"))?;
+        thumb_asm::write(&mut report.image, start, &bytes);
+        thumb_asm::write(&mut report.image, site, &branch);
+        for at in (site + 4..site + original.len()).step_by(2) {
+            thumb_asm::write(&mut report.image, at, &0x46c0u16.to_le_bytes());
+        }
+        crate::install_guard::verify_branch(
+            &report.image,
+            site,
+            thumb_asm::BranchKind::Bl,
+            stub,
+            "research DI/routing probe",
+        )?;
+        ensure!(
+            &report.image[start..start + bytes.len()] == bytes.as_slice(),
+            "placed stub differs"
+        );
+        installed.push(serde_json::json!({"role":role,"site":site,"stub":stub,"length":bytes.len(),"stub_sha256":format!("{:x}",Sha256::digest(&bytes)),"original":original}));
+    }
+    engine::validate_metadata(image, &report.image)?;
+    report.image = crate::api::sign(&report.image, None)?.image;
+    for part in &installed {
+        let site = part["site"].as_u64().unwrap() as usize;
+        let stub = part["stub"].as_u64().unwrap() as u32;
+        let length = part["length"].as_u64().unwrap() as usize;
+        crate::install_guard::verify_branch(
+            &report.image,
+            site,
+            thumb_asm::BranchKind::Bl,
+            stub,
+            "signed research probe",
+        )?;
+        ensure!(
+            format!(
+                "{:x}",
+                Sha256::digest(&report.image[stub as usize..stub as usize + length])
+            ) == part["stub_sha256"].as_str().unwrap(),
+            "signed stub changed"
+        );
+    }
+    ensure!(
+        engine::audit::audit_image(image, &report).ok(),
+        "base structural/integrity audit failed"
+    );
+    freemkv_flash::crossflash::admits(
+        freemkv_flash::crossflash::Platform::Mediatek,
+        image,
+        &report.image,
+    )?;
+    let record = serde_json::json!({"scope":"internal placement/integrity probe, not a complete UHD conversion",
+        "ready_for_hardware_test":false,"physical_uhd_validated":false,
+        "input_sha256":format!("{:x}",Sha256::digest(image)),
+        "output_sha256":format!("{:x}",Sha256::digest(&report.image)),
+        "pending":plan.remaining_contracts(),"flag_base":flags,"installed":installed,
+        "base_structural_audit":"passed","component_branches_and_bytes":"passed",
+        "integrity":"passed","offline_flash_admission":"passed"});
+    Ok((report.image, record))
+}
+
+#[test]
+fn classic_di_probe_places_signs_and_admits_without_promoting_standard_support() {
+    let image = include_bytes!("../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let before = image.to_vec();
+    let (probe, record) = di_routing_probe(image).unwrap();
+    assert_ne!(probe.as_slice(), image);
+    assert_eq!(record["ready_for_hardware_test"], false);
+    assert_eq!(record["installed"].as_array().unwrap().len(), 5);
+    assert_eq!(image.as_slice(), before.as_slice());
+    let (_, support) = crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
+    assert!(!support.supports(BootFeature::Unrestricted));
+}
+
+#[test]
+fn selected_hardware_di_probe_is_saved_only_when_explicitly_requested() {
+    let Ok(source) = std::env::var("FREEMKV_MT1939_DI_PROBE_SOURCE") else {
+        return;
+    };
+    let destination = std::env::var("FREEMKV_MT1939_DI_PROBE_OUTPUT").unwrap();
+    let image = std::fs::read(source).unwrap();
+    let (probe, record) = di_routing_probe(&image).unwrap();
+    std::fs::write(&destination, &probe).unwrap();
+    std::fs::write(
+        format!("{destination}.json"),
+        serde_json::to_vec_pretty(&record).unwrap(),
+    )
+    .unwrap();
+}
