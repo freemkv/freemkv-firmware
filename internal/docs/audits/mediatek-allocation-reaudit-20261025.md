@@ -37,3 +37,24 @@ Implemented allocation corrections:
 - Four exact-capacity/short-capacity Rust tests cover the handler and feature groups, plus a separate boot-stub boundary test. Independent ARM execution covers eight reset/default/saved-state combinations, including updating a generated image's defaults.
 
 This remains an open allocation audit: all fourteen partial outputs still lack Region and RawRead groups. Splitting routines, reducing repeated code further, and investigating other provably unused storage remain candidates; passing the base build does not close those missing groups.
+
+## Native integrity-routing evidence
+
+`scripts/test-mtk-integrity-routing.py` replays hashed excerpts from the OEM
+UH12NS40 source `eeb1c948...`. It executes the original application range walker
+at `0x17c298` and boot-check wrapper at `0x17c27a`. Cryptography, setup and logging
+helpers are stubbed; the test proves argument routing and return behavior only.
+
+Seven cases cover the four stock mask-one ranges, changing the second inclusive
+endpoint from `0x1806f` to `0x183ff`, skipping an out-of-bounds endpoint, stopping
+on a failed cryptographic result, an empty mask, and boot success/failure. The
+boot wrapper passes `0x1000..0xffef` with stored digest at `0xfff0`. This corrects
+the earlier unverified concern that its range might include the application
+integrity table.
+
+The expanded endpoint reaches the helper, but the malformed endpoint also gets
+skipped while the walker returns success. Therefore, a native success result
+does not establish complete validity. This is not authorization to modify
+integrity metadata: the receiver's programmed ranges remain unproven for this
+input, and unchanged boot/runtime behavior still needs independent evidence.
+No production allocation policy or input image is changed by this experiment.

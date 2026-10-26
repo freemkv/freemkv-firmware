@@ -1,0 +1,14 @@
+[
+  {
+    "file": "uh12-native-checks.bin",
+    "source_sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+    "source_offset": 1557114,
+    "excerpt_sha256": "5ce143a99173d0fb8d6a2c35d25fb652a950b05b3712a813451de841f8f0fe6b"
+  },
+  {
+    "file": "uh12-integrity-table.bin",
+    "source_sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+    "source_offset": 66560,
+    "excerpt_sha256": "3a19703d54fd07a9e0eb3f5a5896fa6084c8b878db735d2cafeb0927d2a57e29"
+  }
+]
