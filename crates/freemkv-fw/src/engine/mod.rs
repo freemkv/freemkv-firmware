@@ -20,8 +20,8 @@ use thumb_asm::CommandRecord;
 
 pub mod audit;
 mod code_space;
-pub(crate) use code_space::validate_metadata;
 pub use code_space::NoCodeSpace;
+pub(crate) use code_space::{coverage_retry, validate_metadata};
 pub mod core;
 pub mod lever;
 pub mod mt1939;

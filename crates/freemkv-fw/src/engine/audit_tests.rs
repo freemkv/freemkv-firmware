@@ -573,7 +573,7 @@ fn a_fully_landed_synthetic_image_passes_every_structural_audit_check() {
         ("integrity", "CMAC tables verify"),
         (
             "integrity",
-            "integrity table descriptors and unused slots preserved",
+            "integrity metadata matches original or proven coverage plan",
         ),
     ] {
         assert!(find(&a, lever, what).ok, "[{lever}] {what} must pass");
@@ -604,7 +604,7 @@ fn resigning_cannot_hide_integrity_table_descriptor_corruption() {
         !find(
             &audit,
             "integrity",
-            "integrity table descriptors and unused slots preserved"
+            "integrity metadata matches original or proven coverage plan"
         )
         .ok
     );

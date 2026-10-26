@@ -228,8 +228,62 @@ fn probe_device_inner(device: &str) -> Result<ProbeOutcome> {
 #[path = "api_tests.rs"]
 mod tests;
 
+#[derive(Debug)]
+struct AllocationLimitedSettings(anyhow::Error);
+impl std::fmt::Display for AllocationLimitedSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+impl std::error::Error for AllocationLimitedSettings {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.0.as_ref())
+    }
+}
+
+fn allocation_limited(report: &engine::ModifyReport) -> bool {
+    report.levers.iter().any(|lever| {
+        matches!(&lever.outcome,
+        engine::lever::LeverOutcome::SignatureNotFound { detail }
+            if detail.contains("no CMAC-covered free space of "))
+    })
+}
+
 /// Shared best-effort authoring path, including editable boot settings records.
 pub fn modify_with_defaults(
+    image: &[u8],
+    defaults: &crate::boot::BootSettings,
+) -> Result<(engine::ModifyReport, crate::boot::BootSupport)> {
+    let first = modify_once(image, defaults);
+    let needs_space = match &first {
+        Err(error) => error.chain().any(|e| {
+            e.downcast_ref::<engine::NoCodeSpace>().is_some()
+                || e.downcast_ref::<AllocationLimitedSettings>().is_some()
+        }),
+        Ok((report, _)) => allocation_limited(report),
+    };
+    if needs_space {
+        if let Some(plan) = engine::coverage_retry(image) {
+            let (mut report, support) = modify_once(&plan.image, defaults)?;
+            engine::validate_metadata(image, &report.image)?;
+            if let Some(identity) = report
+                .levers
+                .iter_mut()
+                .find(|p| p.id == engine::lever::LeverId::Identity)
+            {
+                identity.facts.extend([
+                    ("coverage_entry", plan.entry),
+                    ("coverage_original_end", plan.old_end),
+                    ("coverage_new_end", plan.new_end),
+                ]);
+            }
+            return Ok((report, support));
+        }
+    }
+    first
+}
+
+fn modify_once(
     image: &[u8],
     defaults: &crate::boot::BootSettings,
 ) -> Result<(engine::ModifyReport, crate::boot::BootSupport)> {
@@ -252,7 +306,13 @@ pub fn modify_with_defaults(
     }
     let mut report = eng.modify_with_defaults(image, defaults)?;
     let support = crate::boot::BootSupport::from_modify(&report);
-    defaults.validate(&support)?;
+    if let Err(error) = defaults.validate(&support) {
+        return Err(if allocation_limited(&report) {
+            AllocationLimitedSettings(error).into()
+        } else {
+            error
+        });
+    }
     let fact = |key: &str| {
         report
             .levers

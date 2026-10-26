@@ -20,3 +20,13 @@ resolves but the RawRead helper does not.
 BU40N 1.05 is a 2 MiB OEM image from the read-only hoard, SHA-256
 `fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d`.
 It regresses exact-size boot-record allocation after all newly resolved hooks.
+
+UH12NS40 1.03 is the unchanged 2 MiB OEM hoard object, SHA-256
+`eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba`.
+It regresses the 758-byte handler allocation refusal and checks a bounded,
+receiver-derived integrity-coverage retry through the normal Modify API.
+
+WH14NS40 1.05 (MT1959) is the unchanged 2 MiB OEM hoard object, SHA-256
+`38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1`.
+It checks that explicit boot settings still reach the coverage retry when the
+first attempt builds only a partial set of features.

@@ -7,6 +7,11 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Recover allocation-limited OEM builds using erased space only when native
+  receiver, programming and integrity contracts prove a safe coverage extension.
+  Preserve integrity descriptors outside that plan and honor explicit settings
+  after retry; retain refusals for unproven receiver contracts.
+
 - Select media, VID and auth-cell implementations from shared OEM code-layout
   evidence. Add the WH register contract and preserve unavailable-hook reasons.
 - Offer only boot values implemented by the generated hooks. Widening can offer

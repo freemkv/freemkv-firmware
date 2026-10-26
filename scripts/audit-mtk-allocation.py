@@ -2,15 +2,18 @@
 
 This map describes allocator candidates, not a proof that all padding is unused.
 """
-import argparse,csv,json,struct,re,hashlib,subprocess,concurrent.futures
+import argparse,csv,json,struct,re,hashlib,subprocess,concurrent.futures,tempfile
 from pathlib import Path
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--hoard', required=True, type=Path)
 parser.add_argument('--fw', required=True, type=Path)
 parser.add_argument('--baseline', type=Path, default=Path(__file__).resolve().parents[1]/'internal/docs/audits/mediatek-modify-hook-inventory-20261025.csv')
 parser.add_argument('--output', required=True, type=Path)
+parser.add_argument('--flash', type=Path, help='also build/audit and check admission for OEM/dump cases')
 args=parser.parse_args()
 root=args.hoard.resolve();cli=str(args.fw.resolve())
+producer_sha=hashlib.sha256(args.fw.read_bytes()).hexdigest()
+flash_sha=hashlib.sha256(args.flash.read_bytes()).hexdigest() if args.flash else None
 rows=[r for r in csv.DictReader(args.baseline.open()) if r['result']=='insufficient-safe-space']
 identities=json.loads((root/'index/identities.json').read_text())['identities']
 paths={image['sha256']:image['path'] for identity in identities if identity['family']=='mediatek' for image in identity['images']}
@@ -38,7 +41,20 @@ def run(r):
  q=subprocess.run([cli,'capabilities',str(file)],capture_output=True,text=True,check=True,timeout=120)
  assert hashlib.sha256(file.read_bytes()).hexdigest()==r['sha256'], 'source changed'
  result={**r,'path':paths[r['sha256']],'coverage':coverage,'eligible_holes':[{'start':l,'end':h,'bytes':h-l} for l,h in merged], 'total_eligible_bytes':sum(h-l for l,h in merged),'largest_hole':max([h-l for l,h in merged],default=0),'capability':json.loads(q.stdout)}
+ if args.flash and Path(paths[r['sha256']]).parts[0] in ('oem','dump') and result['capability']['status']=='supported':
+  with tempfile.TemporaryDirectory(prefix='freemkv-allocation-validation-') as temp:
+   output=Path(temp)/'modified.bin'
+   built=subprocess.run([cli,'modify',str(file),str(output),'--json','--audit'],capture_output=True,text=True,check=True,timeout=120)
+   report=json.loads(built.stdout)
+   output_sha=hashlib.sha256(output.read_bytes()).hexdigest()
+   assert output_sha==result['capability']['output_sha256'], 'preview/build output mismatch'
+   admission=subprocess.run([str(args.flash.resolve()),'--why',str(file),str(output)],capture_output=True,text=True,check=True,timeout=120)
+   assert 'admitted' in admission.stdout, admission.stdout+admission.stderr
+   result['build_validation']={'output_sha256':output_sha,'preview_matches_build':True,'structural_audit':'passed','flasher_gate':'admitted','levers':{p['id']:p['outcome'] for p in report['levers']}}
+ assert hashlib.sha256(file.read_bytes()).hexdigest()==r['sha256'], 'source changed during build validation'
  print(r['model'],r['revision'],'largest',result['largest_hole'],'total',result['total_eligible_bytes'],result['capability'].get('detail'),flush=True)
  return result
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:results=list(pool.map(run,rows))
-args.output.write_text(json.dumps({'schema':1,'producer_sha256':hashlib.sha256(args.fw.read_bytes()).hexdigest(),'images':results},indent=2)+'\n')
+assert hashlib.sha256(args.fw.read_bytes()).hexdigest()==producer_sha, 'modifier changed during audit'
+assert not args.flash or hashlib.sha256(args.flash.read_bytes()).hexdigest()==flash_sha, 'flasher changed during audit'
+args.output.write_text(json.dumps({'schema':1,'producer_sha256':producer_sha,'flasher_sha256':flash_sha,'images':results},indent=2)+'\n')

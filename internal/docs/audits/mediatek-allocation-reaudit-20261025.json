@@ -1,6 +1,7 @@
 {
   "schema": 1,
-  "producer_sha256": "aba30f94c02a5ba79f84780f79e3fbc040881cee1062e39e84f052eb471c77af",
+  "producer_sha256": "f64bbd245d1f981dc679392ac25bf407d9f26a0137569250ca87075e96d5b8c3",
+  "flasher_sha256": "c3a31b2e5fc1a4a8133dfbe3bf422794e30458c98805b62e7ff74977f1cf7a30",
   "images": [
     {
       "sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
@@ -651,19 +652,22 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
               "label": "Identity",
               "outcome": "Applied",
               "facts": {
-                "handler_va": 110752,
+                "handler_va": 1382156,
                 "handler_len": 758,
                 "record_off": 1366660,
                 "boot_init_site": 1289998,
-                "boot_stub_va": 111512,
-                "boot_function_entry": 1289982
+                "boot_stub_va": 1382916,
+                "boot_function_entry": 1289982,
+                "coverage_entry": 1,
+                "coverage_original_end": 1382079,
+                "coverage_new_end": 1409023
               },
               "hooks": []
             },
@@ -673,31 +677,82 @@
               "outcome": "Applied",
               "facts": {
                 "speed_gate": 113586,
-                "speed_stub_va": 111560
+                "speed_stub_va": 1382964
               },
               "hooks": []
             },
             {
               "id": "RegionFree",
               "label": "Region Free",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1146090,
+                "region_stub_va": 1383012
               },
-              "facts": {},
               "hooks": []
             },
             {
               "id": "RawRead",
               "label": "Raw read",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1262714,
+                "ake_site": 1262726,
+                "ake_stub_va": 1383120,
+                "gatea_gate": 1263082,
+                "gatea_stub_va": 1383160,
+                "deny_site": 1263156,
+                "deny_stub_va": 1383220,
+                "vid_producer": 1263004,
+                "hrl_stub_va": 1383236,
+                "hrl_site": 1262424,
+                "auth_cell_site": 1263196,
+                "auth_cell_stub_va": 1383268
               },
-              "facts": {},
-              "hooks": []
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "Notebook",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR4",
+                  "reason": null
+                }
+              ]
             },
             {
               "id": "DowngradeEnable",
@@ -719,18 +774,29 @@
           "boot_settings": {
             "unrestricted": {
               "value": "on",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on"
+              ]
             },
             "hrl": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "encryption": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "speed": {
               "value": "oem",
@@ -742,15 +808,32 @@
             },
             "region": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
             }
           },
           "boot_settings_applied": true
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "a9627054d730e72866407b3718a9c361f346936fc104cacba225db796423079a"
+        "output_sha256": "4cc41eb2b9c8539717cf57a461d982ab2cc53e65e4478a966dcb1c5f71e3d8f6"
+      },
+      "build_validation": {
+        "output_sha256": "4cc41eb2b9c8539717cf57a461d982ab2cc53e65e4478a966dcb1c5f71e3d8f6",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
       }
     },
     {
@@ -868,19 +951,22 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
               "label": "Identity",
               "outcome": "Applied",
               "facts": {
-                "handler_va": 98420,
+                "handler_va": 1404892,
                 "handler_len": 758,
                 "record_off": 1389208,
                 "boot_init_site": 1312146,
-                "boot_stub_va": 99180,
-                "boot_function_entry": 1312130
+                "boot_stub_va": 1405652,
+                "boot_function_entry": 1312130,
+                "coverage_entry": 1,
+                "coverage_original_end": 1404543,
+                "coverage_new_end": 1425407
               },
               "hooks": []
             },
@@ -890,31 +976,82 @@
               "outcome": "Applied",
               "facts": {
                 "speed_gate": 101122,
-                "speed_stub_va": 99228
+                "speed_stub_va": 1405700
               },
               "hooks": []
             },
             {
               "id": "RegionFree",
               "label": "Region Free",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1167672,
+                "region_stub_va": 1405748
               },
-              "facts": {},
               "hooks": []
             },
             {
               "id": "RawRead",
               "label": "Raw read",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1284530,
+                "ake_site": 1284542,
+                "ake_stub_va": 1405856,
+                "gatea_gate": 1284874,
+                "gatea_stub_va": 1405896,
+                "deny_site": 1284948,
+                "deny_stub_va": 1405956,
+                "vid_producer": 1284790,
+                "hrl_stub_va": 1405972,
+                "hrl_site": 1284236,
+                "auth_cell_site": 1284990,
+                "auth_cell_stub_va": 1406004
               },
-              "facts": {},
-              "hooks": []
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
             },
             {
               "id": "DowngradeEnable",
@@ -936,18 +1073,29 @@
           "boot_settings": {
             "unrestricted": {
               "value": "on",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on"
+              ]
             },
             "hrl": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "encryption": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "speed": {
               "value": "oem",
@@ -959,15 +1107,32 @@
             },
             "region": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
             }
           },
           "boot_settings_applied": true
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "7050086551dffc447e98324dca09e5880dd5141570b8f6eb3012d78ae3fe4114"
+        "output_sha256": "158d15b0c4a1eb68a26d7e6861e80449256c933c57f7731fe4366fc772304752"
+      },
+      "build_validation": {
+        "output_sha256": "158d15b0c4a1eb68a26d7e6861e80449256c933c57f7731fe4366fc772304752",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
       }
     },
     {
@@ -1085,19 +1250,22 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
               "label": "Identity",
               "outcome": "Applied",
               "facts": {
-                "handler_va": 110752,
+                "handler_va": 1382156,
                 "handler_len": 758,
                 "record_off": 1366660,
                 "boot_init_site": 1289998,
-                "boot_stub_va": 111512,
-                "boot_function_entry": 1289982
+                "boot_stub_va": 1382916,
+                "boot_function_entry": 1289982,
+                "coverage_entry": 1,
+                "coverage_original_end": 1382079,
+                "coverage_new_end": 1409023
               },
               "hooks": []
             },
@@ -1107,31 +1275,82 @@
               "outcome": "Applied",
               "facts": {
                 "speed_gate": 113586,
-                "speed_stub_va": 111560
+                "speed_stub_va": 1382964
               },
               "hooks": []
             },
             {
               "id": "RegionFree",
               "label": "Region Free",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1146090,
+                "region_stub_va": 1383012
               },
-              "facts": {},
               "hooks": []
             },
             {
               "id": "RawRead",
               "label": "Raw read",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1262714,
+                "ake_site": 1262726,
+                "ake_stub_va": 1383120,
+                "gatea_gate": 1263082,
+                "gatea_stub_va": 1383160,
+                "deny_site": 1263156,
+                "deny_stub_va": 1383220,
+                "vid_producer": 1263004,
+                "hrl_stub_va": 1383236,
+                "hrl_site": 1262424,
+                "auth_cell_site": 1263196,
+                "auth_cell_stub_va": 1383268
               },
-              "facts": {},
-              "hooks": []
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "Notebook",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR4",
+                  "reason": null
+                }
+              ]
             },
             {
               "id": "DowngradeEnable",
@@ -1153,18 +1372,29 @@
           "boot_settings": {
             "unrestricted": {
               "value": "on",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on"
+              ]
             },
             "hrl": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "encryption": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "speed": {
               "value": "oem",
@@ -1176,15 +1406,32 @@
             },
             "region": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
             }
           },
           "boot_settings_applied": true
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "c882f0e4464f515d160539375a96d3bb43939365ca3fd8b1f0041af700b387d6"
+        "output_sha256": "1ece449ebc357ad07b86c371b3a115705cb40e3d8678357008bbff846ccbc5b0"
+      },
+      "build_validation": {
+        "output_sha256": "1ece449ebc357ad07b86c371b3a115705cb40e3d8678357008bbff846ccbc5b0",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
       }
     },
     {
@@ -1811,7 +2058,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
@@ -1823,7 +2070,10 @@
                 "record_off": 1379288,
                 "boot_init_site": 1303482,
                 "boot_stub_va": 111512,
-                "boot_function_entry": 1303466
+                "boot_function_entry": 1303466,
+                "coverage_entry": 2,
+                "coverage_original_end": 1726927,
+                "coverage_new_end": 1769503
               },
               "hooks": []
             },
@@ -1840,24 +2090,81 @@
             {
               "id": "RegionFree",
               "label": "Region Free",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1155514,
+                "region_stub_va": 1726932
               },
-              "facts": {},
               "hooks": []
             },
             {
               "id": "RawRead",
               "label": "Raw read",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1274032,
+                "ake_site": 1274044,
+                "ake_stub_va": 1378184,
+                "gatea_gate": 1274592,
+                "gatea_stub_va": 1727040,
+                "deny_site": 1274666,
+                "deny_stub_va": 1727100,
+                "vid_producer": 1274510,
+                "uhd_site": 1274146,
+                "uhd_stub_va": 1727116,
+                "hrl_stub_va": 1727140,
+                "hrl_site": 1273394,
+                "hrl_site2": 1273462,
+                "hrl_site3": 1273512,
+                "bd_site": 1274158,
+                "bd_stub_va": 1727172,
+                "auth_cell_site": 1274710,
+                "auth_cell_stub_va": 1727196
               },
-              "facts": {},
-              "hooks": []
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "reject-tail-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "Direct",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "applied",
+                  "variant": "explicit-class",
+                  "reason": null
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "applied",
+                  "variant": "Explicit",
+                  "reason": null
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR4",
+                  "reason": null
+                }
+              ]
             },
             {
               "id": "DowngradeEnable",
@@ -1879,18 +2186,30 @@
           "boot_settings": {
             "unrestricted": {
               "value": "on",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "hrl": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "encryption": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "speed": {
               "value": "oem",
@@ -1902,15 +2221,32 @@
             },
             "region": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
             }
           },
           "boot_settings_applied": true
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "6f81d082a845436d509d46dd8ef5c6282e2208910041f1b80d0e2175343c7348"
+        "output_sha256": "59376ae200e0ec4927ff002f0a70e890d2297512eabcaa79b36cf6027424b8ce"
+      },
+      "build_validation": {
+        "output_sha256": "59376ae200e0ec4927ff002f0a70e890d2297512eabcaa79b36cf6027424b8ce",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
       }
     },
     {
@@ -2028,7 +2364,7 @@
           "media": "BD/UHD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
@@ -2040,7 +2376,10 @@
                 "record_off": 1389792,
                 "boot_init_site": 1312730,
                 "boot_stub_va": 99180,
-                "boot_function_entry": 1312714
+                "boot_function_entry": 1312714,
+                "coverage_entry": 2,
+                "coverage_original_end": 1782079,
+                "coverage_new_end": 1802271
               },
               "hooks": []
             },
@@ -2057,24 +2396,75 @@
             {
               "id": "RegionFree",
               "label": "Region Free",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1168256,
+                "region_stub_va": 1782220
               },
-              "facts": {},
               "hooks": []
             },
             {
               "id": "RawRead",
               "label": "Raw read",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1285114,
+                "ake_site": 1285126,
+                "ake_stub_va": 99276,
+                "gatea_gate": 1285458,
+                "gatea_stub_va": 1782328,
+                "deny_site": 1285532,
+                "deny_stub_va": 1388728,
+                "vid_producer": 1285374,
+                "hrl_stub_va": 1782388,
+                "hrl_site": 1284820,
+                "auth_cell_site": 1285574,
+                "auth_cell_stub_va": 1782420
               },
-              "facts": {},
-              "hooks": []
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
             },
             {
               "id": "DowngradeEnable",
@@ -2096,18 +2486,29 @@
           "boot_settings": {
             "unrestricted": {
               "value": "on",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on"
+              ]
             },
             "hrl": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "encryption": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "speed": {
               "value": "oem",
@@ -2119,15 +2520,32 @@
             },
             "region": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
             }
           },
           "boot_settings_applied": true
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "314c44c73ae1402a91e9d4f4934239ca26f2df13e80be5e537a35055b650a376"
+        "output_sha256": "539b5f687280e00703a23296a13ff62242f8957134606ad7657c9967e9484b55"
+      },
+      "build_validation": {
+        "output_sha256": "539b5f687280e00703a23296a13ff62242f8957134606ad7657c9967e9484b55",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
       }
     },
     {
@@ -2967,7 +3385,7 @@
         "schema": 1,
         "input_sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
         "producer_version": "0.15.4",
-        "status": "unsupported",
+        "status": "supported",
         "identity": {
           "chip": "MT1959",
           "vendor": "HL-DT-ST",
@@ -2975,10 +3393,199 @@
           "revision": "1.03",
           "variant": "N001800"
         },
-        "report": null,
-        "reason": "errors.firmware_no_code_space",
-        "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 758 bytes outside reserved firmware regions",
-        "output_sha256": null
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS40",
+          "rev": "1.03",
+          "vendor_specific": "N001800",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1636068,
+                "handler_len": 758,
+                "record_off": 1618912,
+                "boot_init_site": 1556052,
+                "boot_stub_va": 1636828,
+                "boot_function_entry": 1556036,
+                "coverage_entry": 2,
+                "coverage_original_end": 1635535,
+                "coverage_new_end": 1802271
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101090,
+                "speed_stub_va": 1636876
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1335996,
+                "region_stub_va": 1636924
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1491606,
+                "ake_site": 1491618,
+                "ake_stub_va": 1617848,
+                "gatea_gate": 1491996,
+                "gatea_stub_va": 1637032,
+                "deny_site": 1492070,
+                "deny_stub_va": 1637092,
+                "vid_producer": 1491912,
+                "hrl_stub_va": 1637108,
+                "hrl_site": 1491374,
+                "auth_cell_site": 1492112,
+                "auth_cell_stub_va": 1637140
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "185bd7de15a6b5cc3ee967fd60e0424ca4ee6d68d1219c528c39a5d3184822ee"
+      },
+      "build_validation": {
+        "output_sha256": "185bd7de15a6b5cc3ee967fd60e0424ca4ee6d68d1219c528c39a5d3184822ee",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
       }
     },
     {
@@ -3313,19 +3920,22 @@
           "media": "BD",
           "validation": "static-only",
           "modified": true,
-          "summary": "MT1959 BD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "summary": "MT1959 BD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
           "levers": [
             {
               "id": "Identity",
               "label": "Identity",
               "outcome": "Applied",
               "facts": {
-                "handler_va": 98420,
+                "handler_va": 1404756,
                 "handler_len": 758,
                 "record_off": 1389072,
                 "boot_init_site": 1312010,
-                "boot_stub_va": 99180,
-                "boot_function_entry": 1311994
+                "boot_stub_va": 1405516,
+                "boot_function_entry": 1311994,
+                "coverage_entry": 1,
+                "coverage_original_end": 1404543,
+                "coverage_new_end": 1425407
               },
               "hooks": []
             },
@@ -3335,31 +3945,82 @@
               "outcome": "Applied",
               "facts": {
                 "speed_gate": 101122,
-                "speed_stub_va": 99228
+                "speed_stub_va": 1405564
               },
               "hooks": []
             },
             {
               "id": "RegionFree",
               "label": "Region Free",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1167536,
+                "region_stub_va": 1405612
               },
-              "facts": {},
               "hooks": []
             },
             {
               "id": "RawRead",
               "label": "Raw read",
-              "outcome": {
-                "SignatureNotFound": {
-                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
-                }
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1284394,
+                "ake_site": 1284406,
+                "ake_stub_va": 1405720,
+                "gatea_gate": 1284738,
+                "gatea_stub_va": 1405760,
+                "deny_site": 1284812,
+                "deny_stub_va": 1405820,
+                "vid_producer": 1284654,
+                "hrl_stub_va": 1405836,
+                "hrl_site": 1284100,
+                "auth_cell_site": 1284854,
+                "auth_cell_stub_va": 1405868
               },
-              "facts": {},
-              "hooks": []
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
             },
             {
               "id": "DowngradeEnable",
@@ -3381,18 +4042,29 @@
           "boot_settings": {
             "unrestricted": {
               "value": "on",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on"
+              ]
             },
             "hrl": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "encryption": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
             },
             "speed": {
               "value": "oem",
@@ -3404,15 +4076,32 @@
             },
             "region": {
               "value": "oem",
-              "supported": false,
-              "choices": []
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
             }
           },
           "boot_settings_applied": true
         },
         "reason": null,
         "detail": null,
-        "output_sha256": "401ea383ed8ae49207e1c58f12035e38839768eeae60cc7f5f780798020172ac"
+        "output_sha256": "4d5078298f092e96c7ea5f61396cc948e5803d8e5da3760a2b16122f91d13488"
+      },
+      "build_validation": {
+        "output_sha256": "4d5078298f092e96c7ea5f61396cc948e5803d8e5da3760a2b16122f91d13488",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
       }
     }
   ]

@@ -215,14 +215,14 @@ fn check_branch_impl(
 pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
     let img = &report.image;
     let mut checks = Vec::new();
-    // Re-signing may change digests, never the table's geometry or erased
-    // sentinel records. A self-consistent MAC alone cannot prove this.
+    // Re-signing may change digests. Geometry may change only according to the
+    // independently re-derived coverage plan; erased records remain untouched.
     let descriptors_preserved = super::code_space::metadata_preserved(original, img);
     checks.push(AuditCheck {
         lever: "integrity",
-        what: "integrity table descriptors and unused slots preserved".into(),
+        what: "integrity metadata matches original or proven coverage plan".into(),
         ok: descriptors_preserved,
-        detail: "Only active stored digests may change during signing".into(),
+        detail: "Unused records and unplanned descriptor changes are forbidden".into(),
     });
 
     for l in &report.levers {

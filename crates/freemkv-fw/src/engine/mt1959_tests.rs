@@ -12,6 +12,108 @@ use super::*;
 use crate::engine::lever::{LeverOutcome, LeverReport};
 use crate::family::MediaClass;
 
+#[test]
+fn uh12_oem_allocation_failure_builds_through_the_normal_modify_api() {
+    use sha2::{Digest, Sha256};
+    let original = include_bytes!("../../tests/fixtures/UH12NS40_OEM_1.03.bin");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(original)),
+        "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba"
+    );
+    assert!(
+        Mt1959Engine.modify(original).is_err(),
+        "original covered holes cannot fit the handler"
+    );
+    let (report, support) =
+        crate::api::modify_with_defaults(original, &crate::boot::BootSettings::standard()).unwrap();
+    for id in [
+        LeverId::Identity,
+        LeverId::Speed,
+        LeverId::RegionFree,
+        LeverId::RawRead,
+        LeverId::BootSettings,
+    ] {
+        assert!(
+            report
+                .levers
+                .iter()
+                .any(|p| p.id == id && p.outcome == LeverOutcome::Applied),
+            "{id:?}"
+        );
+    }
+    assert!(crate::boot::BootFeature::ALL
+        .iter()
+        .all(|f| support.supports(*f)));
+    assert!(
+        !support.supports_value(crate::boot::BootFeature::Unrestricted, 0),
+        "an unproven native refusal hook must not be advertised as available"
+    );
+    assert!(freemkv_flash::cmac::verify(&report.image));
+    assert!(crate::engine::code_space::metadata_preserved(
+        original,
+        &report.image
+    ));
+    let audit = crate::engine::audit::audit_image(original, &report);
+    assert!(audit.ok(), "{audit:#?}");
+    let old = freemkv_flash::cmac::parse_table(original).unwrap();
+    let new = freemkv_flash::cmac::parse_table(&report.image).unwrap();
+    for (before, after) in old.iter().zip(&new) {
+        assert_eq!(before.enabled, after.enabled);
+        assert_eq!(before.start, after.start);
+        assert_eq!(
+            after.end,
+            if before.index == 2 {
+                0x1b801f
+            } else {
+                before.end
+            }
+        );
+    }
+    let mut unplanned = report.image.clone();
+    unplanned[freemkv_flash::cmac::TABLE_OFFSET + 4] ^= 0x10;
+    let unplanned = freemkv_flash::cmac::resign(&unplanned).unwrap();
+    assert!(freemkv_flash::cmac::verify(&unplanned));
+    assert!(!crate::engine::code_space::metadata_preserved(
+        original, &unplanned
+    ));
+}
+
+#[test]
+fn uh12_coverage_retry_refuses_changed_receiver_contracts_even_when_resigned() {
+    let original = include_bytes!("../../tests/fixtures/UH12NS40_OEM_1.03.bin");
+    for address in [
+        0xa7942, 0x17c576, 0x1746e, 0x17c0f0, 0x17c308, 0x17fa8, 0x18070,
+    ] {
+        let mut changed = original.to_vec();
+        changed[address] ^= 1;
+        let changed = freemkv_flash::cmac::resign(&changed).unwrap();
+        assert!(freemkv_flash::cmac::verify(&changed));
+        assert!(
+            crate::engine::code_space::coverage_retry(&changed).is_none(),
+            "{address:#x}"
+        );
+    }
+}
+
+#[test]
+fn allocation_retry_honors_explicit_settings_after_partial_first_pass() {
+    let original = include_bytes!("../../tests/fixtures/WH14NS40_OEM_1.05.bin");
+    let defaults = crate::boot::BootSettings::parse(&[
+        "region=free".into(),
+        "speed=uncapped".into(),
+        "hrl=off".into(),
+        "encryption=off".into(),
+    ])
+    .unwrap();
+    let (report, _) = crate::api::modify_with_defaults(original, &defaults).unwrap();
+    let (saved, _) = crate::boot::inspect(&report.image).unwrap().unwrap();
+    for feature in crate::boot::BootFeature::ALL {
+        assert_eq!(saved.value(feature), defaults.value(feature));
+    }
+    assert!(crate::engine::audit::audit_image(original, &report).ok());
+    assert!(freemkv_flash::cmac::verify(&report.image));
+}
+
 fn fixture() -> Vec<u8> {
     let p = concat!(
         env!("CARGO_MANIFEST_DIR"),

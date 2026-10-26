@@ -1,5 +1,47 @@
 # MediaTek allocation re-audit — 2026-10-25
 
+## Current allocation result
+
+Seven original OEM inputs now build through the normal Modify API with Identity,
+Speed, RegionFree, RawRead and BootSettings applied. Their source hashes remain
+unchanged, preview and build hashes agree, structural audits pass, and the
+flasher gate admits the generated output. These are software checks, not
+physical flash or disc-read validation.
+
+The remaining eleven inputs are ten MK images and one Omni image: eight produce
+partial Speed outputs and three refuse the handler allocation. Their stock
+decoder/tail chain is not positively bound, so the new coverage plan is not
+authorized for them. They remain unresolved rather than being counted as fixed.
+
+The retry extends one active integrity endpoint only when the native receiver,
+programming spans, integrity walker, CMAC helper roles and erased destination
+are jointly proven. It preserves all starts, flags and unused table records,
+re-signs the result and checks the exact independently derived metadata plan.
+Explicit settings are validated again after retry; genuine unsupported choices
+remain unavailable. Exact per-image build evidence is in the adjacent JSON.
+
+## Modified comparison inputs
+
+All eleven remaining inputs pass the CLI CMAC verifier. Integrity failure is
+therefore not their rejection cause. Classification as MK/Omni is not consulted
+by the allocation matcher; it operates on bytes and decoded evidence.
+
+The paired UH12NS40 1.03 OEM `eeb1c948f1ed...` and MK `243a7b0bb237...`
+images differ at 371 bytes in 21 contiguous runs out of 2 MiB. This is a small
+whole-image difference, but includes receiver-entry code at `0xa5288..0xa5310`
+and replaces the four-byte call at `0xa7910` (`fff7fdfa`) with `01200120`
+(two `movs r0,#1` instructions). The current component report finds the same
+integrity selection but loses the traced decoder, acceptance tail and saved
+frame slot on the MK image. This identifies a behavioral path difference rather
+than proving an inherently unsupported image. Its replacement path still needs
+analysis; no generic matcher has been relaxed to accept an untraced path.
+
+## Earlier investigation checkpoints
+
+The following records the investigation before the validated coverage retry.
+Its intermediate refusal counts and pending obligations are historical, not
+the current result above.
+
 The original 18 allocation refusals were re-queried against the current modifier. Four still fail the initial handler allocation. Fourteen produce partial outputs with Speed. The handler now shares its identical default-restoration body, saving 28 bytes; before that change eight had no configurable features and six had Speed only. These fourteen are **not fully resolved allocation cases**; Region and RawRead still report allocation failures.
 
 The machine-readable adjacent JSON records every source hash, eligible original-image hole, active integrity coverage and current modifier result. Hole measurements independently intersect erased bytes with active CMAC coverage and exclude current reserved regions; they do not certify code reachability or unused data.
