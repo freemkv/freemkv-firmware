@@ -129,7 +129,8 @@ fn main() -> anyhow::Result<()> {
                 serde_json::json!({
                     "policy":"research-only; not enabled by classic Modify or website capabilities",
                     "source_sha256":hex(&Sha256::digest(&image)),
-                    "site":site,"fallback":contract.deny(),"variant":format!("{:?}",contract.variant()),
+                    "site":site,"fallback":contract.deny(),"refusal":contract.refusal(),
+                    "state_address":contract.state_address(),"variant":format!("{:?}",contract.variant()),
                     "flag_base":flag_base,"stub_hex":hex(&bytes),
                 })
             );

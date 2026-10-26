@@ -40,5 +40,33 @@
     "source_offset": 714556,
     "padding": 0,
     "excerpt_sha256": "8e570c309a9ff6872884a636798a28e3d7759ceb6433c366dc2c0e2bb738d645"
+  },
+  {
+    "file": "wh14-classic-class-metric.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1264662,
+    "padding": 0,
+    "excerpt_sha256": "1c987518b4bb941141f0b1a454e93c8ee9494426ce9281212d19534363861e36"
+  },
+  {
+    "file": "wh14-classic-class-math.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1707616,
+    "padding": 0,
+    "excerpt_sha256": "982839d496833541bb19509677523ec6cb74a2fdc869a3e3f1b916f577bb3e96"
+  },
+  {
+    "file": "wh14-modern-class-metric.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1034014,
+    "padding": 0,
+    "excerpt_sha256": "e21b4e01e6e515469b91fbf5c0226dd6bd5ef9139cc29fce18ef82330f2313cc"
+  },
+  {
+    "file": "wh14-modern-class-math.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1370028,
+    "padding": 0,
+    "excerpt_sha256": "489682dd17f443eda1c53c8dde9d07bbf19faf28a73a6a7c2075ad13f42a34b2"
   }
 ]

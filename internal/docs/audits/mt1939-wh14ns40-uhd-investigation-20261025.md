@@ -60,10 +60,13 @@ reach their expected native continuations.
 The shared emitter generates a research state-gate detour from the positively
 selected contract. A red test caught the overly broad original On override:
 it would replace the existing nibble-4 implementation with the C path. The
-classic candidate now bounds its override to nibble values C..F and keeps
-other original paths. All 64 nibble/setting cases pass, including unchanged
-r0-r12, the live r1 fallback pointer, SP and original CMP flags. This checks
-emission behavior; it does not establish that D/E/F are valid UHD types.
+classic candidate bounds On to nibble values C..F and keeps other original
+paths. The revised Off branch uses the separately validated native failure
+block for that same band; nibble 4 and every lower band retain OEM behavior.
+All 1,024 packed-byte/setting cases pass for the excerpt, including unchanged
+r0-r12, the live r1 fallback pointer, SP and original CMP flags. The same test
+passes 24,576 comparisons over all 24 full originals. This checks emission
+behavior; it does not establish that D/E/F are UHD types.
 
 The code-layout library adds one register/continuation form,
 `R0StateR1Alternate`, while reusing the existing TwoRound VID form and the
@@ -155,3 +158,59 @@ The added small original excerpts and checks run in the existing independent
 CPU script. The next target remains the disc-information/density recognition
 path leading to those state/availability values, followed by the physical data
 read path. Authentication widening alone does not establish UHD reading.
+
+## Native classification metric
+
+A later source trace reaches a native packed-input classifier at `0x134c16`,
+called from `0x1094d6` when the packed state is F0 or F4. The corresponding
+MT1959 function is `0xfc71e`. Both read a signed mantissa byte and unsigned
+exponent byte, calculate `abs(mantissa) * 2^exponent / 128` using native ARM
+soft-float helpers, and compare the ROM/R classes against the same single-
+precision constants `0x3f2147ae` and `0x3f428f5c` (approximately 0.63 and 0.76).
+Below threshold, the original state is normalized to C0/C4; otherwise it is
+retained. The code also handles other state bands, but their physical meaning
+is not established by these comparisons.
+
+The independent CPU test executes the actual Thumb functions and their actual
+ARM float helpers. It checks 216 paired cases covering the thresholds, signed
+mantissas and exponents, including callee-saved registers and stack balance.
+Only diagnostic logging is skipped. Both generations produce identical state,
+metric and threshold results for these ROM/R cases. No threshold is patched.
+The two functions and math helpers are retained as small hashed original
+excerpts for CI. A decompiler's inferred condition flags across soft-float calls
+are not used as proof; native execution supplies that check.
+
+## Isolated, signed research candidates
+
+`mt1939_uhd_candidate_tests` creates experimental outputs only under the Rust
+test configuration. Ordinary CLI, GUI, capability queries and website builds
+have no entry into this path. The builder uses the existing engine, SRAM role,
+auth emitter, covered free-space allocator, boot-record serializer, signer,
+metadata checks and structural audit. It requires the complete classic base and
+boot contracts, an original MT1939 input, the selected alternate auth contract,
+and an unclaimed original hook site. Another chipset or already-modified input
+is rejected. No guessed raw-ROM offsets or per-model/hash selectors are used.
+
+All 24 original hashes build with each of OEM/On/Off, giving 72 signed outputs.
+All 72 pass structural/integrity audits and offline Flash admission against
+their respective original. Source hashes remain unchanged. The adjacent
+`mt1939-uhd-candidate-builds-20261026.json` records every output checksum and
+admission result. Research output files are held separately under
+`/Users/matthew/Developer/tmp/mt1939-uhd-research-20261026`, never in approved
+hoard inputs or the website catalog.
+
+To reproduce from the workspace root, use absolute source/output paths:
+
+```sh
+FREEMKV_MT1939_UHD_SOURCES="$PWD/internal/docs/audits/mt1939-24-auth-candidates-20261026.json" \
+FREEMKV_MT1939_UHD_HOARD=/path/to/hoard \
+FREEMKV_MT1939_UHD_OUTPUT=/path/to/research-output \
+cargo test -p freemkv-fw --lib \
+  mt1939_uhd_candidate_tests::classic_uhd_research_corpus_builds_without_changing_originals -- --exact
+```
+
+The regular Modify path still reports the 24 images at 5/6, and a regression
+checks that the research builder does not promote ordinary support. A signed,
+admitted candidate is not a physical UHD conversion result. No optical drives
+were found on this Mac during read-only enumeration; a suitable MT1939 drive
+and UHD disc are needed for the physical check. No live flash has been attempted.

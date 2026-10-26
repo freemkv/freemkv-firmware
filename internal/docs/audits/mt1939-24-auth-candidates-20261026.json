@@ -3,6 +3,18 @@
   "images": [
     {
       "sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+      "candidate": {
+        "fallback": 1570270,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570326,
+        "site": 1570148,
+        "source_sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000217f61700dff51700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.01/main/007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d.bin",
       "identity": {
         "chip": "MT1939",
@@ -10,20 +22,22 @@
         "model": "BD-RE  BH14NS40",
         "revision": "1.01",
         "variant": "N1722A1"
-      },
-      "candidate": {
-        "fallback": 1570270,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570148,
-        "source_sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002dff51700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+      "candidate": {
+        "fallback": 1566268,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1566324,
+        "site": 1566146,
+        "source_sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+        "state_address": 33529300,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000275e617003de61700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.00/main/01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c.bin",
       "identity": {
         "chip": "MT1939",
@@ -31,20 +45,22 @@
         "model": "BD-RE  BE14NU40",
         "revision": "1.00",
         "variant": "N0023G4"
-      },
-      "candidate": {
-        "fallback": 1566268,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1566146,
-        "source_sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000023de61700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+      "candidate": {
+        "fallback": 1561526,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1561582,
+        "site": 1561404,
+        "source_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002efd31700b7d31700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/hp_BH40N_MT1939_Code_JB7/HP/B7C6/main/0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f.bin",
       "identity": {
         "chip": "MT1939",
@@ -52,20 +68,22 @@
         "model": "BD-RE  BH40N",
         "revision": "B7C6",
         "variant": "P166800"
-      },
-      "candidate": {
-        "fallback": 1561526,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1561404,
-        "source_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002b7d31700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+      "candidate": {
+        "fallback": 1570482,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570538,
+        "site": 1570360,
+        "source_sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002ebf61700b3f61700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3.bin",
       "identity": {
         "chip": "MT1939",
@@ -73,20 +91,22 @@
         "model": "BD-RE  WH16NS40",
         "revision": "1.02",
         "variant": "N0010A0"
-      },
-      "candidate": {
-        "fallback": 1570482,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570360,
-        "source_sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002b3f61700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+      "candidate": {
+        "fallback": 1572406,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1572462,
+        "site": 1572284,
+        "source_sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e00026ffe170037fe1700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS48_MT1939_Code_JB7/GENERAL/1.01/main/163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146.bin",
       "identity": {
         "chip": "MT1939",
@@ -94,20 +114,22 @@
         "model": "BD-RE  BH16NS48",
         "revision": "1.01",
         "variant": "N1722A1"
-      },
-      "candidate": {
-        "fallback": 1572406,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1572284,
-        "source_sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f0000237fe1700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+      "candidate": {
+        "fallback": 1570086,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570142,
+        "site": 1569964,
+        "source_sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e00025ff5170027f51700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6.bin",
       "identity": {
         "chip": "MT1939",
@@ -115,20 +137,22 @@
         "model": "BD-RE  BH16NS40",
         "revision": "1.01",
         "variant": "N1722A1"
-      },
-      "candidate": {
-        "fallback": 1570086,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1569964,
-        "source_sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f0000227f51700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+      "candidate": {
+        "fallback": 1572714,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1572770,
+        "site": 1572592,
+        "source_sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002a3ff17006bff1700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.03/main/3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3.bin",
       "identity": {
         "chip": "MT1939",
@@ -136,20 +160,22 @@
         "model": "BD-RE  BH14NS48",
         "revision": "1.03",
         "variant": "N0002A0"
-      },
-      "candidate": {
-        "fallback": 1572714,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1572592,
-        "source_sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000026bff1700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+      "candidate": {
+        "fallback": 1570342,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570398,
+        "site": 1570220,
+        "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e00025ff6170027f61700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.02/main/40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a.bin",
       "identity": {
         "chip": "MT1939",
@@ -157,20 +183,22 @@
         "model": "BD-RE  WH14NS40",
         "revision": "1.02",
         "variant": "N0002A0"
-      },
-      "candidate": {
-        "fallback": 1570342,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570220,
-        "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f0000227f61700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+      "candidate": {
+        "fallback": 1572454,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1572510,
+        "site": 1572332,
+        "source_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e00029ffe170067fe1700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS48_MT1939_Code_JB7/GENERAL/1.02/main/43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3.bin",
       "identity": {
         "chip": "MT1939",
@@ -178,20 +206,22 @@
         "model": "BD-RE  BH16NS48",
         "revision": "1.02",
         "variant": "N0002A0"
-      },
-      "candidate": {
-        "fallback": 1572454,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1572332,
-        "source_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f0000267fe1700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+      "candidate": {
+        "fallback": 1570534,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570590,
+        "site": 1570412,
+        "source_sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e00021ff71700e7f61700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.03/main/614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e.bin",
       "identity": {
         "chip": "MT1939",
@@ -199,20 +229,22 @@
         "model": "BD-RE  BH16NS40",
         "revision": "1.03",
         "variant": "N0013A0"
-      },
-      "candidate": {
-        "fallback": 1570534,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570412,
-        "source_sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002e7f61700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+      "candidate": {
+        "fallback": 1570342,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570398,
+        "site": 1570220,
+        "source_sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e00025ff6170027f61700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.02/main/6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e.bin",
       "identity": {
         "chip": "MT1939",
@@ -220,20 +252,22 @@
         "model": "BD-RE  BH14NS40",
         "revision": "1.02",
         "variant": "N0002A0"
-      },
-      "candidate": {
-        "fallback": 1570342,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570220,
-        "source_sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f0000227f61700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+      "candidate": {
+        "fallback": 1570158,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570214,
+        "site": 1570036,
+        "source_sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002a7f517006ff51700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7.bin",
       "identity": {
         "chip": "MT1939",
@@ -241,20 +275,22 @@
         "model": "BD-RE  WH16NS40",
         "revision": "1.01",
         "variant": "N0002A0"
-      },
-      "candidate": {
-        "fallback": 1570158,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570036,
-        "source_sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000026ff51700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+      "candidate": {
+        "fallback": 1570482,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570538,
+        "site": 1570360,
+        "source_sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002ebf61700b3f61700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "dump/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a.bin",
       "identity": {
         "chip": "MT1939",
@@ -262,20 +298,22 @@
         "model": "BD-RE  WH16NS40",
         "revision": "1.02",
         "variant": "N0010A0"
-      },
-      "candidate": {
-        "fallback": 1570482,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570360,
-        "source_sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002b3f61700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+      "candidate": {
+        "fallback": 1575058,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1575114,
+        "site": 1574936,
+        "source_sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+        "state_address": 33529300,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002cb08180093081800",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.01/main/7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567.bin",
       "identity": {
         "chip": "MT1939",
@@ -283,20 +321,22 @@
         "model": "BD-RE  BE14NU40",
         "revision": "1.01",
         "variant": "N002905"
-      },
-      "candidate": {
-        "fallback": 1575058,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1574936,
-        "source_sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f0000293081800",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+      "candidate": {
+        "fallback": 1563676,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1563732,
+        "site": 1563554,
+        "source_sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000255dc17001ddc1700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.00/main/8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb.bin",
       "identity": {
         "chip": "MT1939",
@@ -304,20 +344,22 @@
         "model": "BD-RE  WH14NS40",
         "revision": "1.00",
         "variant": "N1524A4"
-      },
-      "candidate": {
-        "fallback": 1563676,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1563554,
-        "source_sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000021ddc1700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+      "candidate": {
+        "fallback": 1570158,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570214,
+        "site": 1570036,
+        "source_sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002a7f517006ff51700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea.bin",
       "identity": {
         "chip": "MT1939",
@@ -325,20 +367,22 @@
         "model": "BD-RE  BH16NS40",
         "revision": "1.02",
         "variant": "N0002A0"
-      },
-      "candidate": {
-        "fallback": 1570158,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570036,
-        "source_sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000026ff51700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+      "candidate": {
+        "fallback": 1567710,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1567766,
+        "site": 1567588,
+        "source_sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000217ec1700dfeb1700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.00/main/ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e.bin",
       "identity": {
         "chip": "MT1939",
@@ -346,20 +390,22 @@
         "model": "BD-RE  BH16NS40",
         "revision": "1.00",
         "variant": "N1669A2"
-      },
-      "candidate": {
-        "fallback": 1567710,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1567588,
-        "source_sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002dfeb1700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+      "candidate": {
+        "fallback": 1569884,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1569940,
+        "site": 1569762,
+        "source_sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000295f417005df41700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.01/main/adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c.bin",
       "identity": {
         "chip": "MT1939",
@@ -367,20 +413,22 @@
         "model": "BD-RE  BH14NS48",
         "revision": "1.01",
         "variant": "N1663A0"
-      },
-      "candidate": {
-        "fallback": 1569884,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1569762,
-        "source_sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000025df41700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+      "candidate": {
+        "fallback": 1571034,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1571090,
+        "site": 1570912,
+        "source_sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+        "state_address": 33529300,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000213f91700dbf81700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.03/main/b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4.bin",
       "identity": {
         "chip": "MT1939",
@@ -388,20 +436,22 @@
         "model": "BD-RE  BH16NS40",
         "revision": "1.03",
         "variant": "N0026C0"
-      },
-      "candidate": {
-        "fallback": 1571034,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570912,
-        "source_sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002dbf81700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+      "candidate": {
+        "fallback": 1563676,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1563732,
+        "site": 1563554,
+        "source_sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000255dc17001ddc1700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.00/main/d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87.bin",
       "identity": {
         "chip": "MT1939",
@@ -409,20 +459,22 @@
         "model": "BD-RE  BH14NS40",
         "revision": "1.00",
         "variant": "N1524A4"
-      },
-      "candidate": {
-        "fallback": 1563676,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1563554,
-        "source_sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000021ddc1700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+      "candidate": {
+        "fallback": 1570158,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570214,
+        "site": 1570036,
+        "source_sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002a7f517006ff51700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "dump/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56.bin",
       "identity": {
         "chip": "MT1939",
@@ -430,20 +482,22 @@
         "model": "BD-RE  WH16NS40",
         "revision": "1.01",
         "variant": "N0002A0"
-      },
-      "candidate": {
-        "fallback": 1570158,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570036,
-        "source_sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000026ff51700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+      "candidate": {
+        "fallback": 1566000,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1566056,
+        "site": 1565878,
+        "source_sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000269e5170031e51700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.00/main/f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8.bin",
       "identity": {
         "chip": "MT1939",
@@ -451,20 +505,22 @@
         "model": "BD-RE  BH14NS48",
         "revision": "1.00",
         "variant": "N1524A4"
-      },
-      "candidate": {
-        "fallback": 1566000,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1565878,
-        "source_sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f0000231e51700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+      "candidate": {
+        "fallback": 1570666,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570722,
+        "site": 1570544,
+        "source_sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e0002a3f717006bf71700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.03/main/f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9.bin",
       "identity": {
         "chip": "MT1939",
@@ -472,20 +528,22 @@
         "model": "BD-RE  WH14NS40",
         "revision": "1.03",
         "variant": "N0009A0"
-      },
-      "candidate": {
-        "fallback": 1570666,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570544,
-        "source_sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f000026bf71700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     },
     {
       "sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+      "candidate": {
+        "fallback": 1570270,
+        "flag_base": 33558080,
+        "policy": "research-only; not enabled by classic Modify or website capabilities",
+        "refusal": 1570326,
+        "site": 1570148,
+        "source_sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+        "state_address": 33529299,
+        "stub_hex": "08b40d4b1b78012b05d0002b08d008bc0c280dd1704708bc0c28f9d30c28704708bc0c28f4d30c2808b5044b019308bd08b5034b019308bd430e000217f61700dff51700",
+        "variant": "R0StateR1Alternate"
+      },
+      "cpu_comparisons": 1024,
       "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.01/main/fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442.bin",
       "identity": {
         "chip": "MT1939",
@@ -493,17 +551,7 @@
         "model": "BD-RE  WH14NS40",
         "revision": "1.01",
         "variant": "N1722A1"
-      },
-      "candidate": {
-        "fallback": 1570270,
-        "flag_base": 33615872,
-        "policy": "research-only; not enabled by classic Modify or website capabilities",
-        "site": 1570148,
-        "source_sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
-        "stub_hex": "08b4084b1b78012b03d008bc0c2805d1704708bc0c28f9d30c28704708b5024b019308bd03f00002dff51700",
-        "variant": "R0StateR1Alternate"
-      },
-      "error": null
+      }
     }
   ]
 }

@@ -2844,7 +2844,7 @@ impl Mt1959Engine {
         deny_va: u32,
         value_register: u8,
     ) -> Result<Vec<u8>> {
-        self.build_authcell_widen_scoped_stub(flag_base, deny_va, value_register, None)
+        self.build_authcell_widen_scoped_stub(flag_base, deny_va, value_register, None, None)
     }
 
     fn build_authcell_widen_scoped_stub(
@@ -2853,8 +2853,13 @@ impl Mt1959Engine {
         deny_va: u32,
         value_register: u8,
         minimum_class: Option<u8>,
+        scoped_refusal: Option<u32>,
     ) -> Result<Vec<u8>> {
         ensure!(value_register <= 1, "unsupported auth-cell register");
+        ensure!(
+            minimum_class.is_some() == scoped_refusal.is_some(),
+            "incomplete scoped auth refusal contract"
+        );
         let mut a = Asm::new();
         let widen = a.label();
         let original_comparison = a.label();
@@ -2865,12 +2870,8 @@ impl Mt1959Engine {
         a.ldrb_imm(3, 3, 0);
         a.cmp_imm(3, abi::STATE_ON);
         a.beq(widen);
-        if minimum_class.is_none() {
-            // A normal contract's non-C continuation is a native refusal.
-            // The research alternate path is not a refusal and stays OEM.
-            a.cmp_imm(3, abi::STATE_OFF);
-            a.beq(force_refusal);
-        }
+        a.cmp_imm(3, abi::STATE_OFF);
+        a.beq(force_refusal);
         a.pop(0x0008);
         a.bind(original_comparison);
         a.cmp_imm(value_register.into(), 0xC);
@@ -2885,10 +2886,20 @@ impl Mt1959Engine {
         a.cmp_imm(value_register.into(), 0xC);
         a.bx(14);
         a.bind(force_refusal);
-        if minimum_class.is_none() {
-            a.pop(0x0008);
-            // Keep the exact displaced CMP flags even on a forced refusal.
-            a.cmp_imm(value_register.into(), 0xC);
+        a.pop(0x0008);
+        if let Some(minimum) = minimum_class {
+            // Only the selected BD band is controlled here. Keep the distinct
+            // DVD/nibble-4 implementation and every other OEM path untouched.
+            a.cmp_imm(value_register.into(), minimum);
+            a.blo(original_comparison);
+        }
+        // Keep the exact displaced CMP flags even on a forced refusal.
+        a.cmp_imm(value_register.into(), 0xC);
+        if let Some(refusal) = scoped_refusal {
+            a.push(0x0108);
+            a.ldr_lit(3, refusal | 1);
+            a.raw16(0x9301);
+            a.pop(0x0108);
         }
         a.bind(deny);
         a.push(0x0108);
@@ -2922,6 +2933,7 @@ impl Mt1959Engine {
                     contract.deny() as u32,
                     0,
                     Some(12),
+                    Some(contract.refusal() as u32),
                 )?
             }
         };
