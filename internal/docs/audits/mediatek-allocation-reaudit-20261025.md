@@ -82,6 +82,43 @@ acceptance or write completion.
 The loop is the existing library's compact programming form with relocated RAM
 literal operands: 11 bytes differ across eight literal words in its 2016-byte
 signature. This suggests a shared operand-bound contract, not another
-model-selected implementation. Binding it to this application's selection and
-wrapper, validating each relocation's role, and exposing the resulting ranges
-through the receiver API remain work to do before any allocation policy change.
+model-selected implementation. Literal roles are now checked by the shared
+analysis below. Binding it to this application's selection and wrapper, and
+exposing the resulting ranges through the receiver API remain work to do
+before any allocation policy change.
+
+### Shared-loop recognition across the held hash set
+
+The library now exposes read-only `programming::inspect_program_loop` evidence
+for the two existing complete instruction forms. Five aligned, distinct RAM
+pointer cells and three distinct status addresses may relocate within their
+validated memory regions. Instructions, branches, hardware literals, skip
+constants and the raw page-copy body remain exact matches. Mutating every
+non-relocatable halfword, truncating either form, aliasing cells or substituting
+the wrong memory region is rejected by library tests.
+
+All 18 original allocation cases contain one matched loop: **10 compact and
+8 wide**. The native wide-loop replay additionally verifies its `0x1c8000`
+first skip boundary and 4 KiB writes approaching that boundary. Its full-image
+and boot-preserving routes make 40 and 39 page-helper calls respectively,
+compared with 33 and 32 for the compact form. Both forms' raw staging copy is
+executed on four nonconstant pages. Hardware completion remains simulated.
+
+Scanning every aligned address of all **1085 held input hashes** finds one
+complete candidate in **116**: **72 compact and 44 wide**. The other **969**
+do not match either complete form; that is a loop-evidence result, not a new
+Modify unsupported classification. Sources and the producer binary are hashed
+before and after querying. Exact per-input results are saved in
+`mediatek-hoard-program-loops-20261025.json`; the 18-case subset is in
+`mediatek-allocation-program-loops-20261025.json`.
+
+Reproduce with `scripts/audit-mtk-program-loops.py --hoard HOARD --example
+target/release/examples/mtk_receiver_evidence --inputs INPUTS.json --output
+OUTPUT.json`. Inputs have an `images` array of unique `sha256`/`path` records.
+Candidate discovery scans the image and does not assume a fixed boot offset.
+
+This API deliberately returns **loop evidence**, not executable receiver
+authorization. Application selection, wrapper argument binding and integrity
+semantics must still be connected before exposing programmed ranges in a
+transfer plan or extending allocation coverage. These results do not resolve
+the 18 allocation cases by themselves.

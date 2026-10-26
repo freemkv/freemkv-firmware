@@ -16,5 +16,11 @@
     "source_sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
     "source_offset": 94208,
     "excerpt_sha256": "3c3f9685afb255872bc168fe45e54b42fe6e34df556305578d732f162aa25fda"
+  },
+  {
+    "file": "bp55-program.bin",
+    "source_sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
+    "source_offset": 106496,
+    "excerpt_sha256": "642844ae861edec362cbd8de585af7deb30fa7b4ef30a0628ff1230d77696406"
   }
 ]

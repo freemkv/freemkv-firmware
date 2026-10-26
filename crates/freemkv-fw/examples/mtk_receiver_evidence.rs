@@ -7,6 +7,31 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "program-candidates" {
+            use mediatek_optical::receiver::programming::inspect_program_loop;
+            let candidates: Vec<_> = (0..image.len())
+                .step_by(2)
+                .filter_map(|at| {
+                    let proof = inspect_program_loop(&image[at..])?;
+                    Some(serde_json::json!({
+                        "address":at,"variant":format!("{:?}",proof.variant),"destination_cell":proof.destination_cell,
+                        "source_offset_cell":proof.source_offset_cell,
+                        "remaining_cell":proof.remaining_cell,"staging_cell":proof.staging_cell,
+                        "copy_pointer_cell":proof.copy_pointer_cell,
+                        "preserving_boot_spans":proof.preserving_boot_spans.iter()
+                            .map(|r| [r.start,r.end]).collect::<Vec<_>>(),
+                    }))
+                })
+                .collect();
+            println!(
+                "{}",
+                serde_json::json!({
+                    "policy":"loop evidence only; caller, integrity and wrapper binding required",
+                    "candidates":candidates,
+                })
+            );
+            return Ok(());
+        }
         if offset == "receiver-plan" {
             use mediatek_optical::{
                 envelope::Envelope, layout, receiver::Receiver, update::InstalledFirmware,
