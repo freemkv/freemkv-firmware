@@ -73,7 +73,7 @@ impl UhdConversionPlan {
             return vec![];
         }
         vec![
-            "DI format validation and copied-byte producer",
+            "DI hook placement and caller integration",
             "reverse calculation selecting-flag producer",
             "remaining indirect and layer/structure consumers",
             "hook caller/link-register lifetimes",
@@ -327,6 +327,19 @@ mod tests {
     use super::*;
     const CLASSIC: &[u8] = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
     #[test]
+    fn di_entry_candidate_binds_native_continuations_without_mutating_source() {
+        let before = CLASSIC.to_vec();
+        let candidate = di_prevalidation_candidate(CLASSIC, 0x0200f000).unwrap();
+        assert_eq!(candidate.original.len(), 8);
+        assert_eq!(
+            candidate.contract.replay_continuation,
+            candidate.contract.prevalidation + 8
+        );
+        assert!(!candidate.bytes.is_empty());
+        assert!(di_prevalidation_candidate(CLASSIC, u32::MAX).is_err());
+        assert_eq!(CLASSIC, before);
+    }
+    #[test]
     fn component_plan_preserves_hardware_and_refuses_incomplete_conversion() {
         let plan = UhdConversionPlan::inspect(CLASSIC).unwrap();
         assert_eq!(
@@ -406,4 +419,95 @@ mod tests {
             assert!(emit_di_layers(value).is_err());
         }
     }
+}
+
+/// Candidate DI entry detour; kept separate from ordinary Modify installation.
+#[derive(Debug, Clone)]
+pub struct UhdDiCandidate {
+    /// Source-derived parser/frame/continuation evidence.
+    pub contract: mediatek_optical::image::analysis::ClassicDi,
+    /// Exact eight bytes displaced by the entry detour.
+    pub original: Vec<u8>,
+    /// Position-independent Thumb code.
+    pub bytes: Vec<u8>,
+}
+/// Recognize U/5 with two or three layers, then reuse the native format and
+/// layer handlers. OEM/Off/unknown flags replay native prevalidation exactly.
+pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandidate> {
+    let contract = mediatek_optical::image::analysis::ClassicDi::detect(image)?;
+    let original = image[contract.prevalidation..contract.replay_continuation].to_vec();
+    let mut a = Asm::new();
+    let v1 = a.label();
+    let inspect = a.label();
+    let oem = a.label();
+    let v0 = a.label();
+    let replay = a.label();
+    let attribute_ok = a.label();
+    let two = a.label();
+    let assign = a.label();
+    a.raw16(0x466b); // r3 = native caller SP, before any local push.
+    a.push(0x12f); // r0-r3,r5,lr; save every scratch and the incoming V flag.
+    a.bvs(v1);
+    a.movs_imm(5, 0);
+    a.b(inspect);
+    a.bind(v1);
+    a.movs_imm(5, 1);
+    a.bind(inspect);
+    a.ldr_lit(0, flag_address(flags)?);
+    a.ldrb_imm(0, 0, 0);
+    a.cmp_imm(0, crate::abi::STATE_ON);
+    a.bne(oem);
+    a.ldr_lit(0, contract.state);
+    a.cmp_reg(4, 0);
+    a.bne(oem);
+    for (offset, expected) in [(12, b'B'), (13, b'D'), (16, b'U'), (19, 5)] {
+        a.ldrb_imm(0, 3, offset);
+        a.cmp_imm(0, expected);
+        a.bne(oem);
+    }
+    a.ldrb_imm(0, 3, 17);
+    a.lsls_imm(0, 0, 26);
+    a.lsrs_imm(0, 0, 30);
+    a.cmp_imm(0, 0);
+    a.beq(attribute_ok);
+    a.cmp_imm(0, 3);
+    a.bne(oem);
+    a.bind(attribute_ok);
+    a.ldrb_imm(0, 3, 18);
+    a.lsrs_imm(0, 0, 4);
+    a.cmp_imm(0, 2);
+    a.beq(two);
+    a.cmp_imm(0, 3);
+    a.bne(oem);
+    a.movs_imm(0, 0xc8);
+    a.b(assign);
+    a.bind(two);
+    a.movs_imm(0, 0xc7);
+    a.bind(assign);
+    a.strb_imm(0, 4, 0);
+    a.pop(0x2f);
+    a.raw16(0xb001); // Drop saved local LR; native parent restores its own LR.
+    a.ldrb_imm(2, 4, 0);
+    a.movs_imm(contract.one_register as u16, 1);
+    tail(&mut a, contract.format);
+    a.bind(oem);
+    a.cmp_imm(5, 0);
+    a.beq(v0);
+    a.ldr_lit(0, 0x4000_0000);
+    a.raw16(0x1800); // ADDS r0,r0,r0: restore V=1.
+    a.b(replay);
+    a.bind(v0);
+    a.cmp_reg(5, 5); // Restore V=0.
+    a.bind(replay);
+    a.pop(0x2f);
+    a.raw16(0xb001);
+    for word in original.as_chunks::<2>().0 {
+        a.raw16(u16::from_le_bytes(*word));
+    }
+    tail(&mut a, contract.replay_continuation);
+    Ok(UhdDiCandidate {
+        contract,
+        original,
+        bytes: a.finish()?,
+    })
 }

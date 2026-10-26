@@ -417,20 +417,31 @@ Modify records the outstanding conversion contracts and installs none of these
 partial components.
 
 Implemented research emission: four selection extensions (forward calculation,
-hardware bit, hardware field, parameter selection), a DI identifier helper and
-a layer-state helper. Selection stubs replay OEM operations for Off/OEM/unknown
-settings, preserve registers/SP and native comparison flags, and extend C7 only
-for On. BICS stubs preserve incoming C/V using Thumb-1 branches/arithmetic;
-no Thumb-2 MRS dependency is introduced. These are component bytes, not a
-complete signed conversion firmware.
+hardware bit, hardware field, parameter selection) and a DI entry detour. The
+DI contract binds the native r4-r7/LR save, 0x14-byte frame and balanced return;
+BD prefix, attribute prevalidation, identifier register, common format edge,
+actual ARM byte-table switch, format-five assignment and all layer branches.
+The existing generic layer arithmetic already preserves C7 for two layers and
+C8 for three; no layer patch is needed. The new entry detour reuses that native
+code and writes the native format classification value 0x20 through its handler.
 
-Independent CPU execution passes 16,384 native-versus-emitted routing cases and
-6,624 DI helper cases on the committed classic fixture. The 24-input sweep adds
-18,432 routing comparisons (12 state values, four setting values, four C/V
-combinations, four candidate selectors). This explicitly does not settle caller
-LR lifetimes, DI format prevalidation, selecting-flag producers or the remaining
-indirect/layer consumers. Full conversion remains refused until those contracts
-are implemented and checked.
+The DI detour accepts only On + BDU/format5 + layer count2/3 + native modern
+attribute classes0/3. Every other input replays the original eight instructions,
+including the original overflow flag. Scratch registers, native SP and the local
+stack are preserved; the parent restores its own saved LR. Selection stubs replay
+OEM operations for Off/OEM/unknown settings and extend C7 only for On. BICS stubs
+preserve incoming C/V using Thumb-1 branches/arithmetic, without Thumb-2 MRS.
+These are component bytes, not a complete signed conversion firmware.
+
+Independent CPU execution passes 16,384 native-versus-emitted routing cases,
+6,624 pure DI helper cases and 14,402 actual DI entry/native-format cases on the
+committed classic fixture. The 24-input sweep adds 18,432 routing comparisons
+and 345,648 DI entry/native-format cases, including the exact BH16NS48 source.
+The library's optional 195-image inventory test also binds the complete new DI
+contract on all 24 classic layouts. Corrupt layer arithmetic or format-call
+instructions are refused. The remaining work is final hook placement, the other
+routing callers' LR lifetimes, the reverse-calculation selecting-flag producer,
+and remaining indirect consumers. Full conversion is still refused.
 
 First user hardware target: **BD-RE BH16NS48 1.02**, native MT1939, variant
 `N0002A0`. The selected OEM source is:

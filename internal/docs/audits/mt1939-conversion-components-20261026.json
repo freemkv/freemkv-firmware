@@ -1,13 +1,14 @@
 {
   "policy": "research stubs only; no conversion enabled",
-  "builder_sha256": "fb85ef414f229df2b83911bdaeae86e42abd5f27621077ab89697639834d5b21",
+  "builder_sha256": "f0ac376d3e48cf3fcd8f7c907ac769633a9301f4aaa6ffcd720c6ee71ef7d39f",
   "images": [
     {
       "sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -17,8 +18,9 @@
       "sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
       "state_address": 33529300,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -28,8 +30,9 @@
       "sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -39,8 +42,9 @@
       "sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -50,8 +54,9 @@
       "sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -61,8 +66,9 @@
       "sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -72,8 +78,9 @@
       "sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -83,8 +90,9 @@
       "sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -94,8 +102,9 @@
       "sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -105,8 +114,9 @@
       "sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -116,8 +126,9 @@
       "sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -127,8 +138,9 @@
       "sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -138,8 +150,9 @@
       "sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -149,8 +162,9 @@
       "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
       "state_address": 33529300,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -160,8 +174,9 @@
       "sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -171,8 +186,9 @@
       "sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -182,8 +198,9 @@
       "sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -193,8 +210,9 @@
       "sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -204,8 +222,9 @@
       "sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
       "state_address": 33529300,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -215,8 +234,9 @@
       "sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -226,8 +246,9 @@
       "sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -237,8 +258,9 @@
       "sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -248,8 +270,9 @@
       "sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"
@@ -259,8 +282,9 @@
       "sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
       "state_address": 33529299,
       "routing_cases": 768,
+      "di_cases": 14402,
       "pending": [
-        "DI format validation and copied-byte producer",
+        "DI hook placement and caller integration",
         "reverse calculation selecting-flag producer",
         "remaining indirect and layer/structure consumers",
         "hook caller/link-register lifetimes"

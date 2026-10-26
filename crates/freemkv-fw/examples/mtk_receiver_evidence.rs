@@ -15,6 +15,7 @@ fn main() -> anyhow::Result<()> {
             let plan = UhdConversionPlan::inspect(&image)?;
             let flags = 0x0200f000;
             let candidates = plan.routing_candidates(&image, flags)?;
+            let di = freemkv_fw::engine::mtk_uhd::di_prevalidation_candidate(&image, flags).ok();
             println!(
                 "{}",
                 serde_json::json!({
@@ -22,6 +23,13 @@ fn main() -> anyhow::Result<()> {
                     "state":plan.state_address(), "flag_base":flags,
                     "pending":plan.remaining_contracts(),
                     "di_recognition":emit_di_recognition(flags)?, "di_layers":emit_di_layers(flags)?,
+                    "di_entry":di.as_ref().map(|d| serde_json::json!({
+                        "entry":d.contract.entry,"epilogue":d.contract.epilogue,
+                        "site":d.contract.prevalidation,"resume":d.contract.replay_continuation,
+                        "format":d.contract.format,"format_flag":d.contract.format_flag,"layers":d.contract.layers,
+                        "layer_store":d.contract.layer_store,"one_register":d.contract.one_register,
+                        "stub":d.bytes,"original":d.original,
+                    })),
                     "areas":UhdArea::ALL.iter().map(|&area| {
                         let contract = plan.areas().area(area).unwrap();
                         serde_json::json!({"area":format!("{area:?}"),"variant":contract.variant(),

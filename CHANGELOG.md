@@ -9,7 +9,9 @@ Versions are independent of the freemkv ripping applications.
 
 - Add component-based MediaTek UHD conversion planning and offline hook tests.
   Preserve native hardware defaults and refuse incomplete conversions; this
-  development work does not enable classic UHD support yet.
+  development work does not enable classic UHD support yet. Bind the classic
+  DI detour to its native frame, format switch and layer normalization; validate
+  OEM replay and U/5 recognition on all 24 classic inputs with CPU execution.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse

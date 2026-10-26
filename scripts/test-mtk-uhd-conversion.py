@@ -90,6 +90,75 @@ def routing(data, evidence, states):
     return count
 
 
+def di_entry(data, evidence):
+    """Execute the actual eight-byte entry detour and native format/layer code."""
+    candidate = evidence.get('di_entry')
+    assert candidate is not None, 'classic DI contract missing'
+    native, patched = machine(data), machine(data)
+    site = candidate['site']
+    delta = STUB - site - 4
+    patched.mem_write(STUB, bytes(candidate['stub']))
+    patched.mem_write(site, struct.pack('<HH', 0xf000 | ((delta >> 12) & 0x7ff),
+                                       0xf800 | ((delta >> 1) & 0x7ff)) + b'\xc0\x46' * 2)
+    reached = [None, None]
+    for index, cpu in enumerate((native, patched)):
+        def stop(c, address, _size, _user, index=index):
+            if address in (candidate['resume'], candidate['format']):
+                reached[index] = address
+                c.emu_stop()
+        cpu.hook_add(UC_HOOK_CODE, stop)
+    count = 0
+    for flag in (0, 1, 2, 255):
+        for identifier in b'ORWU?':
+            for fmt in (0, 1, 2, 5, 255):
+                for layers in (0, 1, 2, 3, 4, 5):
+                    for attributes in (0, 0x10, 0x20, 0x30, 0xc0, 0xf0):
+                        for cv in (0, 1, 2, 3):
+                            reached[:] = [None, None]
+                            for cpu in (native, patched):
+                                setup(cpu, evidence['state'], evidence['flag_base'], 0xf4, flag, cv)
+                                cpu.reg_write(reg.UC_ARM_REG_R4, evidence['state'])
+                                cpu.reg_write(reg.UC_ARM_REG_R5, 0)
+                                cpu.mem_write(0x0300800c, bytes([ord('B'), ord('D'), 0, 0,
+                                                               identifier, attributes, layers << 4, fmt]))
+                                cpu.emu_start(site | 1, 0x200000, count=150)
+                            yes = (flag == 1 and identifier == ord('U') and fmt == 5
+                                   and layers in (2, 3) and attributes & 0x30 in (0, 0x30))
+                            assert reached[0] == candidate['resume']
+                            assert reached[1] == (candidate['format'] if yes else candidate['resume'])
+                            if yes:
+                                expected = 0xc7 if layers == 2 else 0xc8
+                                assert patched.mem_read(evidence['state'], 1)[0] == expected
+                                assert patched.reg_read(REGISTERS[candidate['one_register']]) == 1
+                                assert patched.reg_read(REGISTERS[2]) == expected
+                                assert [patched.reg_read(r) for r in REGISTERS[4:]] == [native.reg_read(r) for r in REGISTERS[4:]]
+                            else:
+                                assert [native.reg_read(r) for r in REGISTERS] == [patched.reg_read(r) for r in REGISTERS], (flag, identifier, fmt, layers, attributes, cv, 'registers')
+                                assert native.reg_read(reg.UC_ARM_REG_CPSR) & 0xf0000000 == patched.reg_read(reg.UC_ARM_REG_CPSR) & 0xf0000000, (flag, identifier, fmt, layers, attributes, cv, 'flags')
+                                assert patched.mem_read(evidence['state'], 1)[0] == 0xf4
+                            assert patched.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
+                            count += 1
+    # Run the native ARM format switch and native layer normalization after
+    # the emitted recognition path; no replacement layer helper is installed.
+    for layers, expected in ((2, 0xc7), (3, 0xc8)):
+        cpu = machine(data)
+        cpu.mem_write(STUB, bytes(candidate['stub']))
+        cpu.mem_write(site, struct.pack('<HH', 0xf000 | ((delta >> 12) & 0x7ff),
+                                       0xf800 | ((delta >> 1) & 0x7ff)) + b'\xc0\x46' * 2)
+        cpu.hook_add(UC_HOOK_CODE, lambda c, at, _s, _u: c.emu_stop() if at == candidate['layer_store'] + 2 else None)
+        setup(cpu, evidence['state'], evidence['flag_base'], 0xf4, 1, 0)
+        cpu.reg_write(reg.UC_ARM_REG_R4, evidence['state'])
+        cpu.reg_write(reg.UC_ARM_REG_R5, 0)
+        cpu.mem_write(0x0300800c, bytes([ord('B'), ord('D'), 0, 0, ord('U'), 0, layers << 4, 5]))
+        cpu.emu_start(site | 1, 0x200000, count=300)
+        assert cpu.reg_read(reg.UC_ARM_REG_PC) == candidate['layer_store'] + 2
+        assert cpu.mem_read(evidence['state'], 1)[0] == expected
+        assert cpu.mem_read(candidate['format_flag'], 1)[0] == 0x20
+        assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
+        count += 1
+    return count
+
+
 def helpers(data, evidence):
     count = 0
     done = 0x1fe000
@@ -141,20 +210,22 @@ def main():
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
             assert evidence['pending'] and len(evidence['candidates']) == 4
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
-            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'pending':evidence['pending']})
+            di_cases = di_entry(data, evidence)
+            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'di_cases':di_cases, 'pending':evidence['pending']})
             print(f"{row['sha256'][:12]}: {cases} native-versus-emitted cases passed", flush=True)
         if args.output:
             args.output.write_text(json.dumps({'policy':'research stubs only; no conversion enabled',
                 'builder_sha256':hashlib.sha256(args.builder.read_bytes()).hexdigest(), 'images':records}, indent=2) + '\n')
-        print(f"PASS: {len(records)} classic inputs; {sum(r['routing_cases'] for r in records)} routing comparisons")
+        print(f"PASS: {len(records)} classic inputs; {sum(r['routing_cases'] for r in records)} routing comparisons; {sum(r['di_cases'] for r in records)} DI entry cases")
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
     assert evidence['pending'], 'research components must not enable standard conversion'
     assert len(evidence['candidates']) == 4
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
+    di_cases = di_entry(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {helper_cases} DI helper cases; conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; conversion remains gated')
 
 
 if __name__ == '__main__':
