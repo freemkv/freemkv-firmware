@@ -14,6 +14,8 @@ Versions are independent of the freemkv ripping applications.
   OEM replay and U/5 recognition on all 24 classic inputs with CPU execution.
   Bind routing callers to balanced native stack/LR contracts and verify saved
   parent returns. Keep the internal signed placement probe gated from user tests.
+  Bind the reverse gate to its native rejection graph and CPU-test both native
+  calculations while preserving legacy calibration policy.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse

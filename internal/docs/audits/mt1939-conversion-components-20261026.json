@@ -1,13 +1,14 @@
 {
   "policy": "research stubs only; no conversion enabled",
-  "builder_sha256": "f0a7060efe47d590133d1a77ac44419ad5d8b604acdf6ec93eb4a1ae5cb68cf4",
+  "builder_sha256": "476479c784d296378483d7ad1d3b0a78f63bc4c2c6582d13c57ac3f7e0ab662a",
   "images": [
     {
       "sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -41,6 +42,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037514,
           "returns": [
@@ -50,16 +60,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
       "state_address": 33529300,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 221378,
@@ -93,6 +103,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1033210,
+          "returns": [
+            1034152,
+            1034156,
+            1034198
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1034250,
           "returns": [
@@ -102,16 +121,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 221766,
@@ -145,6 +164,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1031014,
+          "returns": [
+            1031956,
+            1031960,
+            1032002
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1032054,
           "returns": [
@@ -154,16 +182,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -197,6 +225,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037138,
           "returns": [
@@ -206,16 +243,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -249,6 +286,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1037206,
+          "returns": [
+            1038148,
+            1038152,
+            1038194
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1038246,
           "returns": [
@@ -258,16 +304,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -301,6 +347,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037138,
           "returns": [
@@ -310,16 +365,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -353,6 +408,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1038526,
+          "returns": [
+            1039468,
+            1039472,
+            1039514
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1039566,
           "returns": [
@@ -362,16 +426,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -405,6 +469,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037514,
           "returns": [
@@ -414,16 +487,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -457,6 +530,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1037206,
+          "returns": [
+            1038148,
+            1038152,
+            1038194
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1038246,
           "returns": [
@@ -466,16 +548,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -509,6 +591,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036102,
+          "returns": [
+            1037044,
+            1037048,
+            1037090
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037142,
           "returns": [
@@ -518,16 +609,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -561,6 +652,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037514,
           "returns": [
@@ -570,16 +670,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -613,6 +713,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037138,
           "returns": [
@@ -622,16 +731,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -665,6 +774,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037138,
           "returns": [
@@ -674,16 +792,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
       "state_address": 33529300,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -717,6 +835,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1039138,
+          "returns": [
+            1040080,
+            1040084,
+            1040126
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1040178,
           "returns": [
@@ -726,16 +853,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 221402,
@@ -769,6 +896,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1032046,
+          "returns": [
+            1032988,
+            1032992,
+            1033034
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1033086,
           "returns": [
@@ -778,16 +914,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -821,6 +957,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037138,
           "returns": [
@@ -830,16 +975,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222046,
@@ -873,6 +1018,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1034630,
+          "returns": [
+            1035572,
+            1035576,
+            1035618
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1035670,
           "returns": [
@@ -882,16 +1036,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 221990,
@@ -925,6 +1079,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036686,
+          "returns": [
+            1037628,
+            1037632,
+            1037674
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037726,
           "returns": [
@@ -934,16 +1097,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
       "state_address": 33529300,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -977,6 +1140,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1037910,
+          "returns": [
+            1038852,
+            1038856,
+            1038898
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1038950,
           "returns": [
@@ -986,16 +1158,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 221402,
@@ -1029,6 +1201,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1032046,
+          "returns": [
+            1032988,
+            1032992,
+            1033034
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1033086,
           "returns": [
@@ -1038,16 +1219,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -1081,6 +1262,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037138,
           "returns": [
@@ -1090,16 +1280,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 221402,
@@ -1133,6 +1323,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1034090,
+          "returns": [
+            1035032,
+            1035036,
+            1035078
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1035130,
           "returns": [
@@ -1142,16 +1341,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -1185,6 +1384,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037514,
           "returns": [
@@ -1194,16 +1402,16 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     },
     {
       "sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
       "state_address": 33529299,
-      "routing_cases": 768,
+      "routing_cases": 960,
+      "calculation_cases": 320,
       "di_cases": 14402,
-      "parent_return_cases": 30,
+      "parent_return_cases": 36,
       "callers": {
         "ControlBit": {
           "entry": 222002,
@@ -1237,6 +1445,15 @@
           ],
           "stack_bytes": 32
         },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
         "ParameterNibble": {
           "entry": 1037514,
           "returns": [
@@ -1246,7 +1463,6 @@
         }
       },
       "pending": [
-        "reverse calculation selecting-flag producer",
         "remaining indirect and structure consumers"
       ]
     }

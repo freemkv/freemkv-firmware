@@ -40,6 +40,7 @@ fn main() -> anyhow::Result<()> {
                         "area":format!("{:?}",c.area),"site":c.site,"original":c.original,
                         "accept":c.accept,"reject":c.reject,"stub":c.bytes,
                         "region_start":plan.areas().area(c.area).unwrap().site(),
+                        "calculation_end":plan.areas().area(c.area).unwrap().coefficient_continuation().map(|pc|pc+2),
                         "caller":{"entry":c.caller.entry,"stack_bytes":c.caller.stack_bytes,"returns":c.caller.returns},
                     "bypass":if c.area == UhdArea::ParameterNibble { Some(plan.areas().area(c.area).unwrap().edges()[0].target) } else { None },
                     })).collect::<Vec<_>>()

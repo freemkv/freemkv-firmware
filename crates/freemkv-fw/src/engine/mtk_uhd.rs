@@ -72,10 +72,7 @@ impl UhdConversionPlan {
         }) {
             return vec![];
         }
-        vec![
-            "reverse calculation selecting-flag producer",
-            "remaining indirect and structure consumers",
-        ]
+        vec!["remaining indirect and structure consumers"]
     }
     /// Refuse incomplete conversion before an output buffer can be modified.
     pub fn require_complete_conversion(&self) -> Result<()> {
@@ -123,7 +120,7 @@ impl UhdConversionPlan {
     }
 }
 /// A candidate detour with exact replay bytes and both native continuations.
-/// Link-register/caller validation is still required before installing a branch.
+/// Includes the native saved-link contract needed before installing a branch.
 #[derive(Debug, Clone)]
 pub struct UhdRoutingCandidate {
     /// Independent area that requested this extension.
@@ -354,12 +351,9 @@ mod tests {
         assert!(!plan.remaining_contracts().is_empty());
         assert!(plan.require_complete_conversion().is_err());
         let candidates = plan.routing_candidates(CLASSIC, 0x0200f000).unwrap();
-        assert_eq!(candidates.len(), 4);
+        assert_eq!(candidates.len(), 5);
         for candidate in candidates {
-            assert!(!matches!(
-                candidate.area,
-                UhdArea::HardwareDefaults | UhdArea::ReverseCalculation
-            ));
+            assert_ne!(candidate.area, UhdArea::HardwareDefaults);
             assert_eq!(
                 &CLASSIC[candidate.site..candidate.site + candidate.original.len()],
                 candidate.original
@@ -409,7 +403,7 @@ mod tests {
             }
             if row["identity"]["chip"] == "MT1939" {
                 assert!(plan.require_complete_conversion().is_err());
-                assert_eq!(plan.routing_candidates(&data, 0x0200f000).unwrap().len(), 4);
+                assert_eq!(plan.routing_candidates(&data, 0x0200f000).unwrap().len(), 5);
             }
         }
     }

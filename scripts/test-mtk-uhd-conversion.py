@@ -1,7 +1,8 @@
 """Execute emitted conversion components; never writes a firmware output.
 
-The research routing stubs are tested at native instruction regions. A passing
-result does not validate caller LR lifetimes, other consumers, or physical UHD.
+The research routing stubs are tested at native instruction regions, through
+native arithmetic and saved parent returns. This does not establish correctness
+of other consumers or prove physical UHD reading.
 """
 import argparse
 import hashlib
@@ -44,8 +45,8 @@ def routing(data, evidence, states):
     for candidate in evidence['candidates']:
         native, patched = machine(data), machine(data)
         patched.mem_write(STUB, bytes(candidate['stub']))
-        # Actual Thumb BL. Caller LR liveness remains an explicit plan blocker;
-        # this test establishes the component's scratch/flag/branch contract.
+        # Actual Thumb BL; this loop checks scratch/flag/branch behavior.
+        # Separate library CFG and parent-return tests cover local LR lifetime.
         site = candidate['site']
         delta = (STUB - site - 4) & 0xffffffff
         signed = delta if delta < 0x80000000 else delta - 0x100000000
@@ -86,6 +87,51 @@ def routing(data, evidence, states):
                     assert patched.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
                     assert patched.mem_read(0x0420903c, 4) == native.mem_read(0x0420903c, 4)
                     assert patched.mem_read(0x0420b1b0, 4) == native.mem_read(0x0420b1b0, 4)
+                    count += 1
+    return count
+
+
+def calculations(data, evidence):
+    """Run the emitted gates through the real native arithmetic and division.
+
+    Experimental C7 selects the existing C8 baseline policy. This deliberately
+    does not transplant the newer hardware/calibration flag producer.
+    """
+    count = 0
+    for candidate in evidence['candidates']:
+        if candidate['calculation_end'] is None:
+            continue
+        cpu = machine(data)
+        cpu.mem_write(STUB, bytes(candidate['stub']))
+        site = candidate['site']
+        delta = STUB - site - 4
+        cpu.mem_write(site, struct.pack('<HH', 0xf000 | ((delta >> 12) & 0x7ff),
+                                       0xf800 | ((delta >> 1) & 0x7ff)))
+        reached = [None]
+
+        def stop(c, address, _size, _user):
+            if address in (candidate['calculation_end'], candidate['reject']):
+                reached[0] = address
+                c.emu_stop()
+
+        cpu.hook_add(UC_HOOK_CODE, stop)
+        for value in (0, 1, 9, 10, 19, 20, 255, 1000, 32767, 65535):
+            for state in (0xc0, 0xc7, 0xc8, 0xcc):
+                for flag in (0, 1, 2, 255):
+                    reached[0] = None
+                    setup(cpu, evidence['state'], evidence['flag_base'], state, flag, 3)
+                    cpu.reg_write(reg.UC_ARM_REG_R4, 0x02000100)
+                    cpu.mem_write(0x02000100, struct.pack('<H', value))
+                    cpu.reg_write(reg.UC_ARM_REG_R5, 0x3fd2)
+                    cpu.reg_write(reg.UC_ARM_REG_R7, 0x5534)
+                    cpu.emu_start(candidate['region_start'] | 1, 0x200000, count=2000)
+                    accepted = state & 0xc8 == 0xc8 or (state == 0xc7 and flag == 1)
+                    assert reached[0] == (candidate['calculation_end'] if accepted else candidate['reject']), (candidate['area'], state, flag, value, reached)
+                    if accepted:
+                        delta, base = ((value // 20) * 23, 0x51b1) if state & 0xcc == 0xcc else ((value // 10) * 12, 0x5534)
+                        expected = base - delta if candidate['area'] == 'ReverseCalculation' else base + delta
+                        assert cpu.reg_read(reg.UC_ARM_REG_R0) == expected & 0xffffffff, (candidate['area'], state, flag, value)
+                    assert cpu.reg_read(reg.UC_ARM_REG_SP) == 0x03008000
                     count += 1
     return count
 
@@ -257,11 +303,12 @@ def main():
             data = source.read_bytes()
             assert hashlib.sha256(data).hexdigest() == row['sha256']
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
-            assert evidence['pending'] and len(evidence['candidates']) == 4
+            assert evidence['pending'] and len(evidence['candidates']) == 5
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
+            arithmetic_cases = calculations(data, evidence)
             di_cases = di_entry(data, evidence)
             parent_cases = parent_returns(data, evidence)
-            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
+            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
             print(f"{row['sha256'][:12]}: {cases} native-versus-emitted cases passed", flush=True)
         if args.output:
             args.output.write_text(json.dumps({'policy':'research stubs only; no conversion enabled',
@@ -270,13 +317,14 @@ def main():
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
     assert evidence['pending'], 'research components must not enable standard conversion'
-    assert len(evidence['candidates']) == 4
+    assert len(evidence['candidates']) == 5
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
+    arithmetic_cases = calculations(data, evidence)
     di_cases = di_entry(data, evidence)
     parent_cases = parent_returns(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
 
 
 if __name__ == '__main__':

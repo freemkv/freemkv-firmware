@@ -416,7 +416,7 @@ read-only `mtk_receiver_evidence IMAGE uhd-conversion` mode. Ordinary classic
 Modify records the outstanding conversion contracts and installs none of these
 partial components.
 
-Implemented research emission: four selection extensions (forward calculation,
+Implemented research emission: five selection extensions (forward/reverse calculation,
 hardware bit, hardware field, parameter selection) and a DI entry detour. The
 DI contract binds the native r4-r7/LR save, 0x14-byte frame and balanced return;
 BD prefix, attribute prevalidation, identifier register, common format edge,
@@ -433,23 +433,32 @@ OEM operations for Off/OEM/unknown settings and extend C7 only for On. BICS stub
 preserve incoming C/V using Thumb-1 branches/arithmetic, without Thumb-2 MRS.
 These are component bytes, not a complete signed conversion firmware.
 
-Independent CPU execution passes 16,384 native-versus-emitted routing cases,
+Independent CPU execution passes 20,480 native-versus-emitted routing cases,
 6,624 pure DI helper cases and 14,402 actual DI entry/native-format cases on the
-committed classic fixture. The 24-input sweep adds 18,432 routing comparisons
+committed classic fixture. The 24-input sweep adds 23,040 routing comparisons
 and 345,648 DI entry/native-format cases, including the exact BH16NS48 source.
 The library's optional 195-image inventory test also binds the complete new DI
 contract on all 24 classic layouts. Corrupt layer arithmetic or format-call
 instructions are refused. `SavedLink` now walks each native caller's local graph, checks stack depth and
 balanced pop-PC exits, and refuses live uses of a detour-clobbered LR. It handles
 the shared compiler byte-table switch explicitly and rejects unknown stack or
-control flow. The 24-image sweep adds 720 CPU checks of the saved parent frame
+control flow. The 24-image sweep adds 864 CPU checks of the saved parent frame
 and native return instructions; DI cases also execute the native add-SP/pop-PC
-return. An internal probe places all five components in covered erased space,
+return. An internal probe places all six components in covered erased space,
 signs the image, rechecks every branch/stub after signing, runs the base audit
 and passes Flash's offline admission. This has succeeded on the exact BH16NS48
 source. It is marked NOT ready for hardware testing and is not the user BIN.
-The remaining semantic work is the reverse-calculation selecting-flag producer
-and remaining indirect consumers. Full conversion is still refused.
+The reverse gate binds its rejection to the independently bound forward gate
+and restoring epilogue. Another 7,680 CPU cases execute the actual native division
+and forward/reverse arithmetic across all 24 images. C7/On uses the existing C8
+baseline (12 times the integer quotient over ten); the CC-class path retains
+23/20 and its native base. MT1959 also has a flag-controlled nine-times reverse
+path. Its flag producer changes calibration/position state that has no proven
+legacy counterpart, so the experimental policy preserves the legacy hardware
+behavior instead of borrowing an unrelated RAM byte or transplanting that mode.
+This is arithmetic/control-flow evidence, not proof of physical UHD reading.
+The remaining semantic work is the additional indirect and structure consumers.
+Full conversion is still refused.
 
 First user hardware target: **BD-RE BH16NS48 1.02**, native MT1939, variant
 `N0002A0`. The selected OEM source is:
