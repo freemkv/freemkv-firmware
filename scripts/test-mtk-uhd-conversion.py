@@ -10,7 +10,7 @@ import json
 import struct
 import subprocess
 from pathlib import Path
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE, UC_HOOK_MEM_READ
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
 from unicorn import arm_const as reg
 
 REGISTERS = [getattr(reg, f'UC_ARM_REG_R{i}') for i in range(13)]
@@ -76,6 +76,11 @@ def routing(data, evidence, states):
                     reached[:] = [None, None]
                     for cpu in (native, patched):
                         setup(cpu, evidence['state'], evidence['flag_base'], state, flag, cv)
+                        if candidate['area'] in ('PositionSetupInput','PositionSetupCommand'):
+                            cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
+                            cpu.reg_write(reg.UC_ARM_REG_R7,0xc8)
+                        if candidate['area'] == 'ReadControl':
+                            cpu.reg_write(reg.UC_ARM_REG_R0,0x042080c0)
                         if candidate['area'] in ('ReadUpperRange','ReadLowerRange'):
                             cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
                             cpu.reg_write(reg.UC_ARM_REG_R2,0xc8)
@@ -296,6 +301,11 @@ def parent_returns(data, evidence):
                 if len(candidate['original']) == 6:
                     cpu.mem_write(site + 4, b'\xc0\x46')
                 setup(cpu, evidence['state'], evidence['flag_base'], 0xc7, flag, 0)
+                if candidate['area'] in ('PositionSetupInput','PositionSetupCommand'):
+                    cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
+                    cpu.reg_write(reg.UC_ARM_REG_R7,0xc8)
+                if candidate['area'] == 'ReadControl':
+                    cpu.reg_write(reg.UC_ARM_REG_R0,0x042080c0)
                 if candidate['area'] in ('ReadUpperRange','ReadLowerRange'):
                     cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
                     cpu.reg_write(reg.UC_ARM_REG_R2,0xc8)
@@ -551,6 +561,108 @@ def read_position(data, evidence):
     return count
 
 
+def read_control(data,evidence):
+    candidate=next(c for c in evidence['candidates'] if c['area']=='ReadControl')
+    native,patched=machine(data),machine(data)
+    patched.mem_write(STUB,bytes(candidate['stub']))
+    site=candidate['site'];delta=STUB-site-4
+    patched.mem_write(site,struct.pack('<HHH',0xf000|((delta>>12)&0x7ff),0xf800|((delta>>1)&0x7ff),0x46c0))
+    end=candidate['region_start']+64
+    for cpu in (native,patched):
+        cpu.hook_add(UC_HOOK_CODE,lambda c,at,_s,_u:c.emu_stop() if at==end else None)
+    count=0
+    for state in (0,0xc0,0xc4,0xc7,0xc8,0xcc,0xe8,255):
+        for flag in (0,1,2,255):
+            for seed in (0,0xffffffff,0x89abcdef,0x12345678):
+                outputs=[]
+                for index,cpu in enumerate((native,patched)):
+                    compare_state=0xc8 if index==0 and state==0xc7 and flag==1 else state
+                    setup(cpu,evidence['state'],evidence['flag_base'],compare_state,flag,0)
+                    cpu.reg_write(reg.UC_ARM_REG_R0,0x042080c0)
+                    for offset in (0x18,0x1c,0x28,0x2c):cpu.mem_write(0x042080c0+offset,struct.pack('<I',seed))
+                    cpu.emu_start(candidate['region_start']|1,0x200000,count=250)
+                    assert cpu.reg_read(reg.UC_ARM_REG_PC)==end
+                    assert cpu.reg_read(reg.UC_ARM_REG_SP)==0x03008000
+                    outputs.append([bytes(cpu.mem_read(0x042080c0+offset,4)) for offset in (0x18,0x1c,0x28,0x2c)])
+                assert outputs[0]==outputs[1],(state,flag,seed)
+                count+=1
+    return count
+
+
+def position_setup(data,evidence):
+    parts=[c for c in evidence['candidates'] if c['area'] in ('PositionSetupInput','PositionSetupCommand')]
+    assert len(parts)==2
+    entry=parts[0]['caller']['entry']
+    def literal(offset):
+        at=entry+offset;op=struct.unpack_from('<H',data,at)[0]
+        return struct.unpack_from('<I',data,((at+4)&~3)+(op&255)*4)[0]
+    working,mode=literal(16),literal(18)
+    layer,status=literal(0xa4),literal(0xa8)
+    native,patched=machine(data),machine(data)
+    for n,candidate in enumerate(parts):
+        target=STUB+n*0x400;patched.mem_write(target,bytes(candidate['stub']))
+        site=candidate['site'];delta=target-site-4
+        patched.mem_write(site,struct.pack('<HH',0xf000|((delta>>12)&0x7ff),0xf800|((delta>>1)&0x7ff)))
+    done=0x1fe000;traces=[[],[]]
+    for index,cpu in enumerate((native,patched)):
+        cpu.hook_add(UC_HOOK_CODE,lambda c,at,_s,_u:c.emu_stop() if at==done else None)
+        cpu.hook_add(UC_HOOK_MEM_READ,lambda c,_a,address,_s,_v,_u:c.mem_write(address,b'\0'*4) if address==0x04042018 else None)
+        cpu.hook_add(UC_HOOK_MEM_WRITE,lambda _c,_a,address,_s,value,_u,index=index:traces[index].append((address,value)) if address in (0x04042010,0x04042014,0x04042018) else None)
+    count=0
+    for state in (0xc0,0xc4,0xc7,0xc8,0xcc,0xe8):
+        for flag in (0,1,2,255):
+            for value in (0,1,100,10000,0x100000):
+                for media_mode in (7,0x15,0x1c):
+                    results=[]
+                    for index,cpu in enumerate((native,patched)):
+                        compare_state=0xc8 if index==0 and state==0xc7 and flag==1 else state
+                        setup(cpu,evidence['state'],evidence['flag_base'],compare_state,flag,0)
+                        cpu.mem_write(working,struct.pack('<I',value));cpu.mem_write(mode,bytes([media_mode]))
+                        cpu.mem_write(layer,b'\0');cpu.mem_write(status,b'\0')
+                        cpu.reg_write(reg.UC_ARM_REG_R0,value+0x100)
+                        cpu.reg_write(reg.UC_ARM_REG_LR,done|1)
+                        preserved=[cpu.reg_read(r) for r in REGISTERS[4:8]]
+                        traces[index].clear()
+                        cpu.emu_start(entry|1,0x200000,count=600)
+                        assert cpu.reg_read(reg.UC_ARM_REG_PC)==done
+                        assert cpu.reg_read(reg.UC_ARM_REG_SP)==0x03008000
+                        assert [cpu.reg_read(r) for r in REGISTERS[4:8]]==preserved
+                        results.append(cpu.reg_read(reg.UC_ARM_REG_R0))
+                    assert results[0]==results[1],(state,flag,value,media_mode,results)
+                    assert traces[0]==traces[1],(state,flag,value,media_mode,traces)
+                    count+=1
+    return count
+
+
+def media_defaults(data,evidence):
+    candidate=next(c for c in evidence['candidates'] if c['area']=='MediaDefaults')
+    start,site=candidate['region_start'],candidate['site']
+    at=candidate['caller']['entry']+16;op=struct.unpack_from('<H',data,at)[0]
+    mode=struct.unpack_from('<I',data,((at+4)&~3)+(op&255)*4)[0]
+    branch=start+20;op=struct.unpack_from('<H',data,branch)[0];delta=op&0x7ff
+    if delta&0x400:delta-=0x800
+    store=branch+4+delta*2;end=store+2
+    assert struct.unpack_from('<H',data,store)[0]==0x7011
+    cpu=machine(data);cpu.mem_write(STUB,bytes(candidate['stub']))
+    delta=STUB-site-4
+    cpu.mem_write(site,struct.pack('<HH',0xf000|((delta>>12)&0x7ff),0xf800|((delta>>1)&0x7ff)))
+    cpu.hook_add(UC_HOOK_CODE,lambda c,at,_s,_u:c.emu_stop() if at==end else None)
+    count=0
+    for state in range(256):
+        for flag in (0,1,2,255):
+            for initial in (7,0x15,0x1c):
+                setup(cpu,evidence['state'],evidence['flag_base'],state,flag,0)
+                cpu.reg_write(reg.UC_ARM_REG_R2,mode);cpu.mem_write(mode,bytes([initial]))
+                cpu.emu_start(start|1,0x200000,count=250)
+                expected=0x15 if state&0xcc==0xcc else 0x1c if state&0xc8==0xc8 or (state==0xc7 and flag==1) else initial
+                assert cpu.reg_read(reg.UC_ARM_REG_PC)==end
+                assert cpu.mem_read(mode,1)[0]==expected,(state,flag,initial)
+                assert cpu.reg_read(reg.UC_ARM_REG_R2)==mode
+                assert cpu.reg_read(reg.UC_ARM_REG_SP)==0x03008000
+                count+=1
+    return count
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--builder', type=Path, required=True)
@@ -570,7 +682,7 @@ def main():
             data = source.read_bytes()
             assert hashlib.sha256(data).hexdigest() == row['sha256']
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
-            assert evidence['pending'] and len(evidence['candidates']) == 18 + int(evidence['parameter_profile']['patch_required'])
+            assert evidence['pending'] and len(evidence['candidates']) == 22 + int(evidence['parameter_profile']['patch_required'])
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
             arithmetic_cases = calculations(data, evidence)
             parameter_cases = parameters(data, evidence)
@@ -579,9 +691,12 @@ def main():
             position_cases = position(data, evidence)
             calibration_cases = calibration(data, evidence)
             read_position_cases = read_position(data, evidence)
+            read_control_cases = read_control(data, evidence)
+            position_setup_cases = position_setup(data, evidence)
+            media_defaults_cases = media_defaults(data, evidence)
             di_cases = di_entry(data, evidence)
             parent_cases = parent_returns(data, evidence)
-            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'position_cases':position_cases, 'calibration_cases':calibration_cases, 'read_position_cases':read_position_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
+            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'position_cases':position_cases, 'calibration_cases':calibration_cases, 'read_position_cases':read_position_cases, 'read_control_cases':read_control_cases, 'position_setup_cases':position_setup_cases, 'media_defaults_cases':media_defaults_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
             print(f"{row['sha256'][:12]}: {cases} native-versus-emitted cases passed", flush=True)
         if args.output:
             args.output.write_text(json.dumps({'policy':'research stubs only; no conversion enabled',
@@ -590,7 +705,7 @@ def main():
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
     assert evidence['pending'], 'research components must not enable standard conversion'
-    assert len(evidence['candidates']) == 18 + int(evidence['parameter_profile']['patch_required'])
+    assert len(evidence['candidates']) == 22 + int(evidence['parameter_profile']['patch_required'])
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
     arithmetic_cases = calculations(data, evidence)
@@ -600,10 +715,13 @@ def main():
     position_cases = position(data, evidence)
     calibration_cases = calibration(data, evidence)
     read_position_cases = read_position(data, evidence)
+    read_control_cases = read_control(data, evidence)
+    position_setup_cases = position_setup(data, evidence)
+    media_defaults_cases = media_defaults(data, evidence)
     di_cases = di_entry(data, evidence)
     parent_cases = parent_returns(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {read_position_cases} native read-position cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {read_position_cases} native read-position cases; {read_control_cases} controller cases; {position_setup_cases} native setup cases; {media_defaults_cases} media-default cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
 
 
 if __name__ == '__main__':

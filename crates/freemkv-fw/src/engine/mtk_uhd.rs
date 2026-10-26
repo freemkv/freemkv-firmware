@@ -208,6 +208,55 @@ impl UhdConversionPlan {
         })
         .collect()
     }
+    /// Extend both positively bound native position-setup selectors for C7/On.
+    pub fn position_setup_candidates(
+        &self,
+        image: &[u8],
+        flags: u32,
+    ) -> Result<Vec<UhdRoutingCandidate<PositionRole>>> {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        let contract =
+            mediatek_optical::image::analysis::ClassicPositionSetup::detect(image, self.state)?;
+        [
+            (
+                PositionRole::PositionSetupInput,
+                &contract.input,
+                contract.entry + 6,
+                0,
+            ),
+            (
+                PositionRole::PositionSetupCommand,
+                &contract.command,
+                contract.entry + 118,
+                1,
+            ),
+        ]
+        .into_iter()
+        .map(|(area, selection, region_start, index)| {
+            let site = selection.site();
+            Ok(UhdRoutingCandidate {
+                area,
+                region_start,
+                calculation_end: None,
+                site,
+                original: image[site..site + 4].to_vec(),
+                accept: selection.accept(),
+                reject: selection.reject(),
+                bytes: emit_c7_selection(
+                    self.state,
+                    flags,
+                    selection.replay(),
+                    selection.accept(),
+                    selection.reject(),
+                )?,
+                caller: contract.callers[index].clone(),
+            })
+        })
+        .collect()
+    }
     /// Extend read-position decoding and native range checks for C7/On.
     pub fn read_position_candidates(
         &self,
@@ -398,6 +447,10 @@ pub enum PositionRole {
     PositionInput,
     /// Double the native result before its final shift.
     PositionOutput,
+    /// Quarter-scale the native setup position and table term.
+    PositionSetupInput,
+    /// Select the native high-density command parameter.
+    PositionSetupCommand,
     /// Upper read-position threshold selection.
     ReadUpperRange,
     /// Lower read-position threshold selection.
@@ -690,7 +743,7 @@ mod tests {
             );
         }
         let auxiliary = plan.auxiliary_candidates(CLASSIC, 0x0200f000).unwrap();
-        assert_eq!(auxiliary.len(), 9);
+        assert_eq!(auxiliary.len(), 11);
         for candidate in auxiliary {
             assert_eq!(
                 &CLASSIC[candidate.site..candidate.site + candidate.original.len()],

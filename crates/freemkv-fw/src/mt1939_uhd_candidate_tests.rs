@@ -239,6 +239,14 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
             part.bytes,
         ));
     }
+    for part in plan.position_setup_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
     let (read_position, ranges) = plan.read_position_candidates(image, flags)?;
     parts.push((
         "ReadPositionDecode".to_string(),
@@ -275,7 +283,7 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
         ));
     }
     ensure!(
-        parts.len() == 20 + usize::from(parameter_patch) + usize::from(calibration_patch),
+        parts.len() == 24 + usize::from(parameter_patch) + usize::from(calibration_patch),
         "research probe is missing reviewed components"
     );
     let mut installed = Vec::new();
@@ -360,7 +368,7 @@ fn classic_di_probe_places_signs_and_admits_without_promoting_standard_support()
     let (probe, record) = di_routing_probe(image).unwrap();
     assert_ne!(probe.as_slice(), image);
     assert_eq!(record["ready_for_hardware_test"], false);
-    assert_eq!(record["installed"].as_array().unwrap().len(), 22);
+    assert_eq!(record["installed"].as_array().unwrap().len(), 26);
     assert_eq!(image.as_slice(), before.as_slice());
     let (_, support) = crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
     assert!(!support.supports(BootFeature::Unrestricted));

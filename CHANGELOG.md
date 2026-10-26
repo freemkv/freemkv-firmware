@@ -16,7 +16,7 @@ Versions are independent of the freemkv ripping applications.
   parent returns. Keep the internal signed placement probe gated from user tests.
   Bind the reverse gate to its native rejection graph and CPU-test both native
   calculations while preserving legacy calibration policy.
-  Bind and test nine additional classic controller/read selectors, including
+  Bind and test eleven additional classic controller/read selectors, including
   native local-stack release, moved read-status blocks, DI mode selection and
   read-boundary reflection. Relocate displaced literal loads and preserve native
   parameter tables across media-selected and state-independent getter layouts.
@@ -24,6 +24,8 @@ Versions are independent of the freemkv ripping applications.
   native routines; reuse this image’s C8 coefficients rather than modern data.
   Add source-bound classic C7 read-position decoding and range selectors; compare
   native position/layer/status results against the modern C7 implementation.
+  Bind native read-controller and paired position-setup selectors; include C7
+  in the independent media-default mode writer so it retains the native 0x1C mode.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse

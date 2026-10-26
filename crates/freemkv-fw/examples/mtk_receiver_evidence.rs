@@ -57,6 +57,11 @@ fn main() -> anyhow::Result<()> {
                 record["area"] = serde_json::json!("ParameterTable");
                 records.push(record);
             }
+            records.extend(
+                plan.position_setup_candidates(&image, flags)?
+                    .iter()
+                    .map(|c| routing_evidence(c, None)),
+            );
             let (read_position, range_candidates) = plan.read_position_candidates(&image, flags)?;
             records.extend(range_candidates.iter().map(|c| routing_evidence(c, None)));
             let calibration = plan.calibration_candidate(&image, flags)?;
