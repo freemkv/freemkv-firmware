@@ -16,12 +16,12 @@ they did not leave holes in the firmware images used below.
 
 ## Reproduction and fix
 
-The report replay failed with the old identity gate. The corrected capture-only
-backend offers Backup independently of Flash/Recovery. A REC Kernel may use the
-existing envelope codecs only when its own receiver pattern establishes framing.
-REC decoding requires the body hardware at `0x1000` to match the envelope header.
-Normal address and extent still come from the captured Kernel's instructions.
-No model name selects a codec, and no write dialect was enabled.
+The report replay failed with the old identity gate. The corrected shared protocol backend consumes one optical-library CDB response
+contract. Backup, reconstruction and program-content comparison no longer use
+SAT/REC allowlists. Hardware-field framing is validated centrally; exact identity
+comparisons remain consistency and target checks. The captured Kernel's receiver
+instructions establish the encoding and Normal address/extent. No identity label
+authorizes a write; receiver preparation and execution gates remain separate.
 
 The replay reconstructs both components without original OEM seeds and validates
 the package. Decoding its envelopes reproduces the captured images byte for byte:

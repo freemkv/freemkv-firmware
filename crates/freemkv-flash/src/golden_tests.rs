@@ -1635,6 +1635,7 @@ impl ScsiDevice for BackupReplay {
     fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
         if cdb == [0x12, 0, 0, 0, len as u8, 0] && matches!(len, 36 | 96) {
             let mut data = vec![0; len];
+            data[0] = 5;
             data[8..16].copy_from_slice(b"PIONEER ");
             data[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
             data[32..36].copy_from_slice(b"1.14");
@@ -1642,7 +1643,8 @@ impl ScsiDevice for BackupReplay {
         }
         if cdb == [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0] {
             let mut data = vec![0; 48];
-            data[16..24].copy_from_slice(b"SAT 8A10");
+            data[16..24].copy_from_slice(&self.dump[0x401000..0x401008]);
+            data[24..32].copy_from_slice(&self.dump[0x401008..0x401010]);
             return Ok(data);
         }
         if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {

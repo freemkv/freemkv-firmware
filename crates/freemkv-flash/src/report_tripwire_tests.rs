@@ -287,16 +287,9 @@ fn unprobeable_receiver() -> MockScsiDevice {
 fn recovery_offered_for_unsupported_identified_drive() {
     let mut dev = unprobeable_receiver();
     let profile = crate::workflow::profile_on(&mut dev).expect("a profile, not an error");
-    assert_eq!(profile.backend.as_ref().unwrap().0.id.0, "pioneer-dump");
-    assert_eq!(
-        profile.capabilities,
-        crate::backend::Capabilities {
-            backup: true,
-            dump: true,
-            deep_salvage: true,
-            ..crate::backend::Capabilities::NONE
-        }
-    );
+    assert_eq!(profile.backend.as_ref().unwrap().0.id.0, "pioneer-oem");
+    let native = crate::workflow::profile_on(&mut pioneer_with(b"", b"SN1", b"SAT 8A10")).unwrap();
+    assert_eq!(profile.capabilities, native.capabilities);
     assert_eq!(profile.can_read(), Some(true));
     assert_eq!(
         profile.recovery.map(|d| d.id),
@@ -319,9 +312,9 @@ fn recovery_offered_for_unsupported_identified_drive() {
 fn recovery_identify_uses_shared_read_only_discovery() {
     let mut dev = Rec::new(unprobeable_receiver());
     let resolved = registry::resolve(&mut dev).unwrap().unwrap();
-    assert!(resolved.backend.flash().is_none());
+    assert!(resolved.backend.flash().is_some());
     assert!(resolved.backend.backup().is_some());
-    assert!(resolved.backend.recovery().is_none());
+    assert!(resolved.backend.recovery().is_some());
     let mut dev = Rec::new(unprobeable_receiver());
     let receiver = Pioneer::new()
         .recovery()
@@ -567,7 +560,7 @@ fn conformance_probe_rejects_unknown_mmc_drive() {
     let own: &[(&str, fn() -> MockScsiDevice)] = &[
         ("mtk19xx", MockScsiDevice::mtk),
         ("pioneer-oem", MockScsiDevice::pioneer),
-        ("pioneer-dump", unprobeable_receiver),
+        ("pioneer-oem", unprobeable_receiver),
     ];
     for backend in registry::backends() {
         let id = backend.descriptor().id;

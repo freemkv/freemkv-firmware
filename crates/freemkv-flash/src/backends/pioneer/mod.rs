@@ -724,42 +724,6 @@ pub(crate) fn verify_preflash_backup(backup: &[u8], input: &[u8]) -> Result<()> 
 #[derive(Default)]
 pub struct Pioneer;
 
-/// Read capture for Pioneer identities without a validated update dialect.
-pub(crate) struct ReadCapture;
-
-static DUMP_DESCRIPTOR: Descriptor = Descriptor {
-    id: BackendId("pioneer-dump"),
-    display_name: "Pioneer",
-    flash_summary: None,
-    formats: &[],
-};
-
-impl Backend for ReadCapture {
-    fn can_read(&self) -> bool {
-        pioneer_optical::DriveClass::Bd.can_read()
-    }
-
-    fn allowed_data_out(&self) -> &'static [CdbPattern] {
-        READ_UNLOCK
-    }
-
-    fn backup(&self) -> Option<&dyn BackupFacet> {
-        Some(&Pioneer)
-    }
-
-    fn descriptor(&self) -> &'static Descriptor {
-        &DUMP_DESCRIPTOR
-    }
-
-    fn probe(&self, dev: &mut ReadDevice<'_>, _identity: &Identity) -> Result<Option<Match>> {
-        crate::backend::registry::probe_backend(dev, DUMP_DESCRIPTOR.id)
-    }
-
-    fn dump(&self) -> Option<&dyn DumpFacet> {
-        Some(&Pioneer)
-    }
-}
-
 impl Pioneer {
     /// Create a fresh Pioneer family handle with no cached session state.
     pub const fn new() -> Self {

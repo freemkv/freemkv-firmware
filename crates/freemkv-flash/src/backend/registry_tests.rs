@@ -157,17 +157,17 @@ fn pioneer_capture_device(hardware: &[u8]) -> MockScsiDevice {
 }
 
 #[test]
-fn rec_and_new_pioneer_identities_offer_capture_without_write_facets() {
+fn cdb_protocol_selects_one_backend_independent_of_hardware_label() {
     for hardware in [b"REC 8301", b"REC 8800", b"REC 8C00", b"NEW 1234"] {
         let mut dev = pioneer_capture_device(hardware);
         let resolved = resolve(&mut dev).unwrap().expect("Pioneer dump route");
         let caps = crate::backend::Capabilities::of(resolved.backend);
         assert!(caps.dump);
         assert!(caps.backup);
-        assert!(!caps.flash && !caps.recovery && !caps.flash_current);
-        assert!(resolved.backend.files().is_none());
+        assert_eq!(caps, crate::backend::Capabilities::of(&pioneer::Pioneer));
+        assert!(resolved.backend.files().is_some());
         assert!(dev.writes.is_empty());
-        assert!(crate::workflow::classify_gated(&mut dev).is_err());
+        assert!(crate::workflow::classify_gated(&mut dev).is_ok());
         assert!(dev.writes.is_empty());
     }
 }

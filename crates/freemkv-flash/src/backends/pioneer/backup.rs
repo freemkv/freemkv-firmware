@@ -508,20 +508,11 @@ fn read_h8_image_pair(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, Str
 }
 
 /// Read and validate the drive identity, returning the raw INQUIRY, the 8-byte
-/// H8/SAT hardware tag, and the Kernel image length.
+/// hardware tag from the shared CDB response contract, and the Kernel image length.
 fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> {
-    let identity = crate::transport::identify(dev)
+    let identity = crate::transport::identify_protocol(dev)
         .context("Pioneer backup stopped: could not read a complete hardware identity; no firmware image read or backup created")?;
     let inquiry = identity.inquiry_bytes().to_vec();
-    // Vendor+product (8..32) AND the revision (32..36) must be printable ASCII:
-    // the revision flows verbatim into the generated envelope header, so a
-    // drive returning control bytes there must be rejected, not propagated.
-    if !inquiry[8..36].is_ascii()
-        || inquiry[8..36].iter().any(|&b| b < 0x20 || b == 0x7f)
-        || inquiry[8..32].iter().all(|&b| b == b' ')
-    {
-        bail!("drive does not have a usable H8/SAT INQUIRY identity");
-    }
     let f1 = identity.vendor_bytes();
     eprintln!(
         "Pioneer backup identity: drive={:?} revision={:?} hardware={:?}",
@@ -529,10 +520,6 @@ fn read_identity(dev: &mut dyn ScsiDevice) -> Result<(Vec<u8>, Vec<u8>, usize)> 
         String::from_utf8_lossy(&inquiry[32..36]),
         String::from_utf8_lossy(&f1[16..24])
     );
-    if !f1[16..24].starts_with(b"SAT ") && !f1[16..24].starts_with(b"REC ") {
-        let hardware = String::from_utf8_lossy(&f1[16..24]);
-        bail!("Pioneer backup is not implemented for hardware {hardware:?}: H8/SAT hardware identity required; no firmware image read or backup created");
-    }
     let kernel_len = NORMAL_IMAGE_BASE
         .checked_sub(KERNEL_IMAGE_BASE)
         .filter(|len| *len > 0 && *len <= 0x100000)
