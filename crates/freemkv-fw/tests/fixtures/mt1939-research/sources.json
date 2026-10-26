@@ -68,5 +68,33 @@
     "source_offset": 1370028,
     "padding": 0,
     "excerpt_sha256": "489682dd17f443eda1c53c8dde9d07bbf19faf28a73a6a7c2075ad13f42a34b2"
+  },
+  {
+    "file": "wh14-classic-di-parser.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1090730,
+    "padding": 0,
+    "excerpt_sha256": "3764a2e0a7c0d6849fde9c302d5819f80e51a4507c8fe1a21edbe9f56a35d996"
+  },
+  {
+    "file": "wh14-modern-di-parser.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 919792,
+    "padding": 0,
+    "excerpt_sha256": "3a750bc7d21e94c57fc784fa0e8e4fd25d09d9935fd6d1bc21a1c32e5f5b9f5a"
+  },
+  {
+    "file": "wh14-classic-switch.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1646772,
+    "padding": 0,
+    "excerpt_sha256": "0c5dc176978dab2405038d99d3ecca79fba4ae057fe0f296be21ff50309efc0c"
+  },
+  {
+    "file": "wh14-modern-switch.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1293316,
+    "padding": 0,
+    "excerpt_sha256": "0c5dc176978dab2405038d99d3ecca79fba4ae057fe0f296be21ff50309efc0c"
   }
 ]

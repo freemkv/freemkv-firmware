@@ -46,6 +46,76 @@ def route(cpu, start, stops):
     return reached[0]
 
 
+def disc_information_cases():
+    """Execute native DI consumers; no replacement parser or auth patch involved.
+
+    Inputs are the copied DI bytes 8..13 at their original stack offsets.
+    The state entering recognition is provisional. Acceptance here does not
+    establish physical recognition, data reading, or the meaning of identifier U.
+    """
+    def execute(modern, identifier, layers, format_byte, initial=0xf0):
+        prefix = 'wh14-modern-' if modern else 'wh14-classic-'
+        cpu = machine(prefix + 'di-parser')
+        helper = next(r for r in json.loads((ROOT / 'sources.json').read_text())
+                      if r['file'] == prefix + 'switch.bin')
+        data = (ROOT / helper['file']).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == helper['excerpt_sha256']
+        cpu.mem_write(helper['source_offset'], data)
+        sp = cpu.reg_read(reg.UC_ARM_REG_SP)
+        cell = 0x01ff9e00 if modern else 0x01ff9dd3
+        cpu.mem_write(cell, bytes([initial]))
+        cpu.reg_write(reg.UC_ARM_REG_R4, cell)
+        # The preceding OEM copy loops supply these exact six DI bytes.
+        cpu.mem_write(sp + (0x44 if modern else 0xc), b'BD')
+        cpu.mem_write(sp + (0x48 if modern else 0x10),
+                      bytes([ord(identifier), 0, layers << 4, format_byte]))
+        stops = ({0xe0a78: 'continue', 0xe09f6: 'refuse'} if modern else
+                 {0x10a5f4: 'continue', 0x10a57c: 'refuse'})
+        reached = []
+
+        def visit(machine, address, _size, _data):
+            if address in stops:
+                reached.append(stops[address])
+                machine.emu_stop()
+            elif address == (0xcadc4 if modern else 0xf5a38):
+                # Only the diagnostic logger is skipped; the native ARM
+                # inline-switch helper executes its original instructions.
+                machine.reg_write(reg.UC_ARM_REG_PC, machine.reg_read(reg.UC_ARM_REG_LR))
+
+        cpu.hook_add(UC_HOOK_CODE, visit)
+        cpu.emu_start(0xe08f1 if modern else 0x10a4ab, 0x200000, count=2000)
+        assert len(reached) == 1, 'DI parser escaped reviewed continuations'
+        assert cpu.reg_read(reg.UC_ARM_REG_SP) == sp
+        return reached[0], cpu.mem_read(cell, 1)[0]
+
+    count = 0
+    # Native shared O/R/W handling, including the layer bits. These cases use
+    # the common format values for which both parsers assign a base state.
+    for identifier, base in [('O', 0xc0), ('R', 0xe0), ('W', 0xf0)]:
+        for layers in (1, 2, 3, 4):
+            for format_byte in (0, 1, 2):
+                old = execute(False, identifier, layers, format_byte)
+                new = execute(True, identifier, layers, format_byte)
+                # R format 2 takes its native alternate before layer bits are
+                # assigned. Keep the native result, rather than assuming its
+                # format sub-class from the identifier alone.
+                assert old == new, (identifier, layers, format_byte, old, new)
+                if format_byte < 2 or identifier != 'R':
+                    assert old == ('continue', base | ((layers - 1) << 2)), old
+                count += 1
+    # Concrete generation difference: U/5 plus two or three in DI byte 12.
+    # Both new results remain in high-nibble C; C..F auth widening cannot fix
+    # the old parser's earlier explicit identifier refusal.
+    for initial in (0xc0, 0xc4, 0xf0, 0xf4):
+        for layers, expected in [(2, 0xc7), (3, 0xc8)]:
+            old = execute(False, 'U', layers, 5, initial)
+            new = execute(True, 'U', layers, 5, initial)
+            assert old == ('refuse', 0), (initial, layers, old)
+            assert new == ('continue', expected), (initial, layers, new)
+            count += 1
+    return count
+
+
 def class_metric_cases():
     """Execute both native Thumb classifiers and their real ARM float helpers."""
     def execute(modern, state, mantissa, exponent):
@@ -260,11 +330,12 @@ def main():
                     expected = 'media' if fmt < 0x80 and media != 1 else 'accept' if layer == 0 or (layer == 1 and available) else 'layer'
                     assert actual == expected, (media, fmt, layer, available, actual, expected)
                     layer_cases += 1
+    di_cases = disc_information_cases()
     metric_cases = class_metric_cases()
     read_cases = read_entry_cases()
     type_cases = type_classification_cases()
     candidates = candidate_cases(args.candidate_builder) if args.candidate_builder else 0
-    print(f'PASS: {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {type_cases} paired type-classification cases, {read_cases} paired native read-entry cases, {metric_cases} paired native class-metric cases, {candidates} candidate trampoline cases')
+    print(f'PASS: {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {di_cases} paired native DI-parser cases, {type_cases} paired type-classification cases, {read_cases} paired native read-entry cases, {metric_cases} paired native class-metric cases, {candidates} candidate trampoline cases')
 
 
 if __name__ == '__main__':

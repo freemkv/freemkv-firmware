@@ -1,5 +1,13 @@
 # WH14NS40 MT1939 UHD investigation
 
+Latest finding: the native disc-information parser, before VID/authentication,
+has a concrete generation difference. MT1959 explicitly recognizes identifier
+`BDU` in addition to `BDO`/`BDR`/`BDW`; the reviewed MT1939 parser rejects it.
+The new path produces high-nibble-C states, so experimental C..F authentication
+widening does not address that earlier refusal. See the native DI parser section
+below. This supersedes treating authentication widening as the likely complete
+UHD conversion; neither physical conversion nor a complete patch is proven.
+
 This is an open code investigation, not a UHD capability declaration. The
 production classic Modify path still reports Unrestricted unavailable. The
 candidate emitter can be exercised through the read-only example; it does not
@@ -214,3 +222,47 @@ checks that the research builder does not promote ordinary support. A signed,
 admitted candidate is not a physical UHD conversion result. No optical drives
 were found on this Mac during read-only enumeration; a suitable MT1939 drive
 and UHD disc are needed for the physical check. No live flash has been attempted.
+
+## Native DI parser comparison
+
+The source copy loops bind the reviewed inputs to DI bytes 8..13, rather than
+arbitrary internal enum values. MT1939 copies bytes 8/9 at `0x10a14e` onwards
+and bytes 10..13 at `0x10a172` onwards; the corresponding MT1959 loops start
+at `0xe080a` and `0xe082e`. Both then test bytes 8/9 for ASCII `B`/`D`.
+
+| Role | MT1939 | MT1959 |
+| --- | --- | --- |
+| Reviewed parser start | `0x10a4aa` | `0xe08f0` |
+| `BDW` branch | `0x10a502` | `0xe0968` |
+| `BDR` branch | `0x10a524` | `0xe0988` |
+| `BDO` branch | `0x10a546` | `0xe09d0` |
+| Additional `BDU` branch | none in this reviewed dispatch | `0xe09ac` |
+| Layer-field assignment | `0x10a5be` | `0xe0a3c` |
+
+The MT1959 U branch requires DI byte 13 equal to 5 for the assignments below.
+It reads the high nibble of DI byte 12: value 2 assigns `0xc7`, while value 3
+assigns `0xc8`. The subsequent layer assignment deliberately preserves `0xc7`
+for value 2; the generic classic layer assignment has no such exception.
+Other U combinations must not be assumed valid merely because they reach a
+continuation without assigning a new state.
+
+Independent CPU execution supplies exactly those copied bytes to the two
+original parsers. With U/5 and field values 2 or 3, the classic parser explicitly
+clears its state and takes its diagnostic refusal path; the modern parser
+continues with C7 or C8. This holds for provisional input states C0/C4/F0/F4.
+The test also compares the common O/R/W paths and their layer-bit assignments.
+Both original ARM inline-switch helpers execute; only diagnostic logging is
+skipped. The hashed source excerpts and helpers are in `mt1939-research` and
+run through `scripts/test-mtk-classic-dispatch.py`.
+
+This establishes actual native input/output semantics and an earlier parser
+obstacle. It does not by itself identify every physical format field, prove that
+a real disc reaches the parser on MT1939, or prove its optical decoder can read
+the content. Do not label D/E/F as UHD states: the reviewed modern U path stays
+in C, which the original classic authentication comparison already accepts.
+
+Next work is to bind equivalent parser roles across the 24 originals, trace C7
+and C8 consumers in both generations, and identify which additional parser,
+layer or read-path behavior is required. A generic adaptation must retain the
+OEM O/R/W branches and use proven source/continuation contracts. No production
+capability has been enabled by this comparison.
