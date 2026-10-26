@@ -303,3 +303,104 @@ but not sufficient. C7 needs selected downstream branches and parameters;
 C8 already has classic handling, yet modern defaults also differ for C8.
 A global state substitution or broad authentication bypass cannot stand in
 for this comparison. No production capability is enabled by these tests.
+
+## Cross-corpus comparison: distinguish routing from hardware tuning
+
+The follow-up inventory is reproducible with:
+
+```sh
+python scripts/audit-mtk-native-uhd-areas.py \
+  --hoard /path/to/firmware-extractor/hoard \
+  --output internal/docs/audits/mtk-native-uhd-area-inventory-20261026.json
+```
+
+It selects the 24 classic candidate hashes and all 171 native-banner-confirmed
+MT1959 images from the full corpus manifest. The latter includes 97 OEM/dump
+images and 74 MK/Omni images; those counts are kept separate. These are corpus
+images, not deduplicated website download counts.
+
+Each area is located independently. Reference patterns retain register operands,
+non-address immediates, and branch conditions, allowing literal/call/branch
+relocations. Decoded instruction shapes must also match. The report retains
+resolved literal values and local branch layout; forward/reverse calculations
+additionally follow the CC-mask path to bind its actual add/subtract continuation,
+including branches across literal-pool islands. The old R-to-O recognizer shape
+must have a preceding R-failure branch that targets the O block directly.
+
+This is a research locator and inventory, not the production feature matcher or
+an assertion of whole-function equivalence. Matching a partial region does not
+prove all callers, external continuations, tables, or physical behavior. Missing
+or ambiguous matches remain explicit rather than becoming guessed variants.
+
+The 24 classic images share the reviewed control-bit, control-field, forward and
+reverse calculation, and parameter-nibble shapes. Their O recognizer differs
+only in register use in one image. They do not all share identical hardware
+defaults: BH40N uses a different default from the other 23.
+
+MT1959 is not one universal comparison implementation. Across the six non-speed
+areas, five observed combinations occur. In particular, 24 MT1959 images retain
+the old forward/reverse calculation selection and lack the U branch in the
+reviewed DI recognizer. The other 147 have the C7-aware calculation selection;
+their U recognizers include a plain variant and variants that additionally set a
+flag and accept format 1 as C0. The modern generation therefore cannot itself
+serve as a UHD capability test or as an instruction to copy every newer branch.
+
+Native calculation CPU tests now execute the original Thumb routines and real
+ARM divide helpers: 720 executions covering forward/reverse, C7/C8/CC and other
+C-band states, three flag values, and ten u16 inputs including boundaries.
+The shared coefficients are already present in classic code. The modern
+reverse selection sometimes chooses `base5 - 9*(value/10)` where the other
+path uses `base7 - 12*(value/10)`; there is also a shared
+`0x51B1 +/- 23*(value/20)` CC-mask path. These tests establish the calculation,
+not the physical meaning of its input or the origin of the selecting flag.
+
+### Hardware-sensitive defaults: preserve, do not copy
+
+The following C7/C8 cases execute original code in tests:
+
+| Native source | Flag clear | Flag bit 0 set |
+|---|---|---|
+| Classic WH14NS40 reference | C7=8, C8=12 | both 4 |
+| Classic BH40N | both 8 | both 4 |
+| Modern BU40N reference | both 6 | both 6 |
+| Modern WH16NS60 reference | both 8 | both 4 |
+| Modern WH14NS40 reference | both 6 | both 4 |
+
+Thus, even native C7-aware MT1959 implementations have different default values.
+These are stored firmware values, not measured physical speeds. No speed-default
+change is justified merely by the parser/generation comparison. The reviewed
+13-byte parameter lookup prefix likewise differs between generations: all 24
+classic images use `06 06 06 05 05 05 05 05 05 04 04 04 04`, while all 171 modern
+images use `04 04 04 03 03 03 03 03 03 02 02 02 02`. Preserve each image's table;
+a change to the C7 selection condition does not require replacing that table.
+
+The conversion work should isolate DI recognition and C7-dependent routing,
+trace the selecting flags back to their producers, and bind each continuation.
+Hardware tuning is a separate decision that needs evidence of a blocking role.
+No production patch, capability declaration, website update, or physical UHD
+claim is introduced by this inventory.
+
+Final selected-area inventory: 195 inputs × seven areas = 1,365 unique bindings,
+with zero unresolved/ambiguous area matches in this snapshot. This does not mean
+all 35 previously found C7 comparison sites, indirect consumers, or ROM routines
+have been audited; the matrix covers the seven named areas only.
+
+| Selected area | MT1939 (24) | MT1959 (171) | MT1959 OEM/dump subset (97) |
+|---|---|---|---|
+| U-identifier recognizer | 24 without U branch | 147 U-aware; 24 without U branch | 84 U-aware; 13 without U branch |
+| Forward calculation gate | 24 old gate | 147 C7 extension; 24 old gate | 84 extension; 13 old gate |
+| Reverse calculation gate | 24 old gate | 147 C7 extension; 24 old gate | 84 extension; 13 old gate |
+| Hardware-control bit gate | 24 old gate | 147 C7 extension; 24 old gate | 84 extension; 13 old gate |
+| Hardware-control field gate | 24 old gate | 170 C7-aware; 1 old gate | 96 C7-aware; 1 old gate |
+| Parameter-nibble gate | 24 old gate | 147 C7 extension; 24 old gate | 84 extension; 13 old gate |
+| Default selection | 2 code shapes | 6 code shapes | Same 6 shapes represented |
+
+For the specific C7/C8 plus restriction-bit cases reviewed above, the six modern
+default-selection code shapes resolve to three native policies: both values 6
+with restricted value 4 (94 images); both values 6 even with the bit set
+(65 images); both values 8 with restricted value 4 (12 images). Other states and
+additional conditions must not be inferred from this narrow policy comparison.
+
+The five non-speed combinations contain 94, 41, 12, 23, and 1 images respectively
+(OEM/dump subset: 55, 22, 7, 12, and 1). They are combinations of the selected
+area shapes, not five proven complete firmware families or five ready patches.

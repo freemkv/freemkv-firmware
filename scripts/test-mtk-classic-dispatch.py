@@ -32,7 +32,7 @@ def literal(cpu, site):
     return struct.unpack('<I', cpu.mem_read(((site + 4) & ~3) + (op & 255) * 4, 4))[0]
 
 
-def route(cpu, start, stops):
+def route(cpu, start, stops, instruction_limit=100):
     reached = []
 
     def visit(machine, address, _size, _data):
@@ -41,9 +41,82 @@ def route(cpu, start, stops):
             machine.emu_stop()
 
     cpu.hook_add(UC_HOOK_CODE, visit)
-    cpu.emu_start(start | 1, 0x200000, count=100)
+    cpu.emu_start(start | 1, 0x200000, count=instruction_limit)
     assert len(reached) == 1, 'did not reach a reviewed branch continuation'
     return reached[0]
+
+
+def hardware_default_variation_cases():
+    """Native hardware defaults vary even when C7/C8 recognition is shared.
+
+    Preserve these OEM values. Nothing here asserts a physical speed or that
+    matching a desktop generation's defaults is required for conversion.
+    """
+    count = 0
+    layouts = [
+        ('bh40-defaults', 0x67780, 0x677b6, 0x01ff9dd3, 0x02000b06, (0x01ff9dd5, 0x02000b0c), 8, 4),
+        ('bu40-defaults', 0xdab74, 0xdac42, 0x01ff9e04, 0x01ff9e08, (0x01ff9e06, 0x02000b0c), 6, 6),
+        ('ns60-defaults', 0xdb3c8, 0xdb42e, 0x01ff9e00, 0x01ff9e04, (0x01ff9e02, 0x02000b0b), 8, 4),
+    ]
+    for name, start, stop, cell, flag_cell, outputs, normal, restricted in layouts:
+        for state in (0xc7, 0xc8):
+            for flag in (0, 1):
+                cpu = machine(name)
+                cpu.mem_write(cell, bytes([state]))
+                cpu.mem_write(flag_cell, bytes([flag]))
+                route(cpu, start, {stop: 'stored'})
+                expected = restricted if flag else normal
+                assert [cpu.mem_read(address, 1)[0] for address in outputs] == [expected] * 2
+                count += 1
+    return count
+
+
+def native_calculation_cases():
+    """Execute both OEM calculation bodies and their real ARM division helpers.
+
+    This binds coefficients and fallbacks. It does not establish the physical
+    quantity being calculated, nor replace old routing with new routing.
+    """
+    count = 0
+    records = json.loads((ROOT / 'sources.json').read_text())
+    for value in (0, 1, 9, 10, 19, 20, 255, 1000, 32767, 65535):
+        for state in (0xc0, 0xc4, 0xc7, 0xc8, 0xcc, 0xcf):
+            for flag in (0, 1, 2):
+                for reverse in (False, True):
+                    for modern in (False, True):
+                        prefix = 'wh14-' + ('modern-' if modern else 'classic-')
+                        cpu = machine(prefix + 'calculation')
+                        for name in ('division-entry', 'division-body'):
+                            record = next(r for r in records if r['file'] == prefix + name + '.bin')
+                            raw = (ROOT / record['file']).read_bytes()
+                            assert hashlib.sha256(raw).hexdigest() == record['excerpt_sha256']
+                            cpu.mem_write(record['source_offset'], raw)
+                        cpu.mem_write(0x01ff9e00 if modern else 0x01ff9dd3, bytes([state]))
+                        cpu.mem_write(0x02000100, struct.pack('<H', value))
+                        cpu.mem_write(0x02000b17, bytes([flag]))
+                        cpu.reg_write(reg.UC_ARM_REG_R4, 0x02000100)
+                        cpu.reg_write(reg.UC_ARM_REG_R5, 0x3fd2)
+                        cpu.reg_write(reg.UC_ARM_REG_R7, 0x5534)
+                        cpu.reg_write(reg.UC_ARM_REG_R0, 0x1234)
+                        cpu.reg_write(reg.UC_ARM_REG_R6, 0x1234 << 16)
+                        start = (0xd8ede if reverse else 0xd8e62) if modern else (0xfd1d2 if reverse else 0xfd15a)
+                        stops = ({0xd8fc2: 'calculated', 0xd8f88: 'fallback'} if modern else
+                                 {0xfd28a: 'calculated', 0xfd250: 'fallback'})
+                        actual = route(cpu, start, stops, instruction_limit=2000)
+                        accepted = state & 0xc8 == 0xc8 or (modern and state == 0xc7)
+                        assert actual == ('calculated' if accepted else 'fallback'), (modern, reverse, state, flag, actual)
+                        if accepted:
+                            if state & 0xcc == 0xcc:
+                                delta, base = (value // 20) * 23, 0x51b1
+                            elif modern and reverse and ((state == 0xc7 and flag != 0) or (state >> 2 == 0x32 and flag == 1)):
+                                delta, base = (value // 10) * 9, 0x3fd2
+                            else:
+                                delta, base = (value // 10) * 12, 0x5534
+                            expected = (base - delta if reverse else base + delta) & 0xffffffff
+                            observed = cpu.reg_read(reg.UC_ARM_REG_R0)
+                            assert observed == expected, (modern, reverse, state, flag, value, observed, expected)
+                        count += 1
+    return count
 
 
 def downstream_control_cases():
@@ -386,13 +459,15 @@ def main():
                     expected = 'media' if fmt < 0x80 and media != 1 else 'accept' if layer == 0 or (layer == 1 and available) else 'layer'
                     assert actual == expected, (media, fmt, layer, available, actual, expected)
                     layer_cases += 1
+    variation_cases = hardware_default_variation_cases()
+    calculation_cases = native_calculation_cases()
     control_cases = downstream_control_cases()
     di_cases = disc_information_cases()
     metric_cases = class_metric_cases()
     read_cases = read_entry_cases()
     type_cases = type_classification_cases()
     candidates = candidate_cases(args.candidate_builder) if args.candidate_builder else 0
-    print(f'PASS: {control_cases} native downstream-control executions, {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {di_cases} paired native DI-parser cases, {type_cases} paired type-classification cases, {read_cases} paired native read-entry cases, {metric_cases} paired native class-metric cases, {candidates} candidate trampoline cases')
+    print(f'PASS: {variation_cases} native hardware-default variations, {calculation_cases} native calculation executions, {control_cases} native downstream-control executions, {state_cases} OEM state-byte values, {layer_cases} media/format/layer/flag combinations, {di_cases} paired native DI-parser cases, {type_cases} paired type-classification cases, {read_cases} paired native read-entry cases, {metric_cases} paired native class-metric cases, {candidates} candidate trampoline cases')
 
 
 if __name__ == '__main__':
