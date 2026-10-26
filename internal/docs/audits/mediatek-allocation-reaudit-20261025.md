@@ -28,13 +28,30 @@ by the allocation matcher; it operates on bytes and decoded evidence.
 
 The paired UH12NS40 1.03 OEM `eeb1c948f1ed...` and MK `243a7b0bb237...`
 images differ at 371 bytes in 21 contiguous runs out of 2 MiB. This is a small
-whole-image difference, but includes receiver-entry code at `0xa5288..0xa5310`
+whole-image difference, but includes decoder-entry code at `0xa5288..0xa5310`
 and replaces the four-byte call at `0xa7910` (`fff7fdfa`) with `01200120`
 (two `movs r0,#1` instructions). The current component report finds the same
 integrity selection but loses the traced decoder, acceptance tail and saved
 frame slot on the MK image. This identifies a behavioral path difference rather
 than proving an inherently unsupported image. Its replacement path still needs
 analysis; no generic matcher has been relaxed to accept an untraced path.
+
+### Shared matcher correction
+
+Receiver analysis now represents a tested result as a direct helper call or an
+explicit constant-nonzero producer. It decodes both halfwords in the replaced
+call slot, permits only r0 immediate assignments and known no-ops, and rejects
+zero, other register writes, stores and branches. The following comparison,
+error flow, programming arguments and saved-state continuation remain checked.
+The OEM path still yields `Call(target)`; an equivalent success bypass yields
+`ConstantNonzero(value)`, never an invented helper address. This is shared
+semantic evidence, with no filename, model or MK discriminator.
+
+Regression cases cover OEM calls, repeated constants, final-value precedence,
+no-ops, failure constants and unknown side effects. This fixes one reason the
+MK acceptance component was missed. It does not yet recognize the rewritten
+decoder or establish the complete MK receiver contract, so it does not resolve
+those eleven allocation inputs or change their publication approval.
 
 ## Earlier investigation checkpoints
 

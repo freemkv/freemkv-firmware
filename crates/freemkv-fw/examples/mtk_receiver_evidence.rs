@@ -35,7 +35,7 @@ fn main() -> anyhow::Result<()> {
                     })),
                         "acceptance":r.acceptance.map(|p| serde_json::json!({
                             "address":p.address,"program_call":p.program_call,"program_target":p.program_target,
-                            "tag_check":p.tag_check,"marker_check":p.marker_check,"before_program":p.before_program,
+                            "tag_check":p.tag_check,"marker_check":format!("{:?}",p.marker_check),"before_program":p.before_program,
                         "source_pointer_register":p.source_pointer_register,"failure_pointer_register":p.failure_pointer_register,
                         "continuation":p.continuation,"saved_state_offset":p.saved_state_offset,
                         })),

@@ -7,6 +7,9 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Distinguish decoded constant-success checks from helper calls in receiver
+  analysis, preserving explicit bypass evidence and rejecting unknown effects.
+
 - Recover allocation-limited OEM builds using erased space only when native
   receiver, programming and integrity contracts prove a safe coverage extension.
   Preserve integrity descriptors outside that plan and honor explicit settings
