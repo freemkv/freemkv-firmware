@@ -14,7 +14,7 @@ from unicorn.arm_const import UC_ARM_REG_CPSR, UC_ARM_REG_PC, UC_ARM_REG_SP, UC_
 from unicorn import arm_const
 
 
-def execute(image, site, deny, value, setting, value_register):
+def execute(image, site, deny, value, setting, value_register, flag_base=0x02000e40, refusal=None):
     cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0, image)
@@ -28,11 +28,11 @@ def execute(image, site, deny, value, setting, value_register):
         cpu.reg_write(register, initial)
     cpu.reg_write(UC_ARM_REG_SP, 0x03008000)
     cpu.reg_write(UC_ARM_REG_LR, 0x12345679)
-    cpu.mem_write(0x02000e43, bytes([setting]))
+    cpu.mem_write(flag_base+3, bytes([setting]))
     reached = []
 
     def stop(machine, address, _size, _data):
-        if address in (site + 4, deny):
+        if address in (site + 4, deny, refusal):
             reached.append(address)
             machine.emu_stop()
 
@@ -122,7 +122,31 @@ def main():
                     assert target == expected, (name, value, setting, hex(target), hex(expected))
                     assert flags == old_flags, (name, value, setting, 'CMP flags were not preserved')
                     cases += 1
-    print(f'PASS: {cases} WH/BU auth and BD combinations; shared runtime flag, continuations, registers, SP and CMP flags')
+    original_path = fixtures / 'BE14NU40_MT1939_JB7_1.01.bin'
+    original = original_path.read_bytes()
+    with tempfile.TemporaryDirectory(prefix='freemkv-classic-hook-') as temp:
+        output = Path(temp) / 'modified.bin'
+        result = subprocess.run([str(args.fw.resolve()), 'modify', str(original_path), str(output), '--json'], capture_output=True, text=True, check=True)
+        report = json.loads(result.stdout)
+        facts = {key: value for lever in report['levers'] for key, value in lever['facts'].items()}
+        site = facts['auth_cell_site']
+        assert site == 0x180818
+        comparison = int.from_bytes(original[site:site+2], 'little')
+        assert comparison == 0x280c
+        branch = int.from_bytes(original[site+2:site+4], 'little')
+        assert branch & 0xff00 == 0xd100
+        deny = site + 6 + int.from_bytes(bytes([branch & 255]), 'little', signed=True)*2
+        refusal = facts['auth_cell_native_refusal']
+        modified = output.read_bytes()
+        for setting in (0, 1, 255):
+            for value in range(256):
+                old_target, old_flags = execute(original, site, deny, value, setting, 0, facts['flag_base'])
+                target, flags = execute(modified, site, deny, value, setting, 0, facts['flag_base'], refusal)
+                expected = refusal if setting == 0 and value == 12 else old_target
+                assert target == expected, (value, setting, target, expected)
+                assert flags == old_flags, (value, setting, 'classic CMP flags changed')
+                cases += 1
+    print(f'PASS: {cases} modern/classic authentication and BD cases; runtime flag, continuations, registers, SP and CMP flags')
 
 
 if __name__ == '__main__':

@@ -1,8 +1,7 @@
-//! Component-based UHD conversion planning and research hook emission.
+//! Component-based UHD conversion planning and normal Modify hook emission.
 //!
 //! Locators live in mediatek-optical. This module owns policy and Thumb emission.
-//! The complete experimental group requires every named software contract.
-//! Ordinary Modify does not install it; hardware validation remains separate.
+//! Installation requires every named software contract and commits atomically.
 use anyhow::{ensure, Context, Result};
 use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
 use sha2::{Digest, Sha256};
@@ -133,7 +132,7 @@ impl UhdConversionPlan {
             Some(false) => UhdAction::ExtendSelection,
         })
     }
-    /// Remaining software contracts for the complete experimental hook group.
+    /// Remaining software contracts required by the complete hook group.
     /// An empty list does not establish optical/controller behavior on hardware.
     pub fn remaining_contracts(&self) -> Vec<&'static str> {
         self.pending.clone()
@@ -148,7 +147,7 @@ impl UhdConversionPlan {
         );
         Ok(())
     }
-    /// Emit the independently validated classic selection stubs for CPU research.
+    /// Emit independently validated classic selection stubs.
     /// These bytes are not installed by ordinary Modify and grant no capability.
     pub fn routing_candidates(&self, image: &[u8], flags: u32) -> Result<Vec<UhdRoutingCandidate>> {
         ensure!(
@@ -1049,4 +1048,157 @@ pub enum CompletionRole {
     ControllerMode,
     /// Native boundary reflection on read completion.
     ReadCompletionBoundary,
+}
+
+/// Install the complete source-bound conversion as part of normal Modify.
+/// No partial group or capability facts escape a failed allocation or contract.
+pub(super) fn install_conversion(
+    image: &[u8],
+    out: &mut Vec<u8>,
+    flags: u32,
+    plan: &UhdConversionPlan,
+) -> Result<Vec<(&'static str, u32)>> {
+    use super::mt1959::Mt1959Engine;
+    use mediatek_optical::image::analysis::{AuthCell, AuthCellVariant};
+    plan.require_complete_conversion()?;
+    let di = di_prevalidation_candidate(image, flags)?;
+    let mut parts = vec![(
+        "DiscInformation".to_string(),
+        di.contract.prevalidation,
+        di.original,
+        di.bytes,
+    )];
+    for part in plan.routing_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    for part in plan.auxiliary_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    for part in plan.completion_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    for part in plan.position_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    for part in plan.position_setup_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    let (read_position, ranges) = plan.read_position_candidates(image, flags)?;
+    parts.push((
+        "ReadPositionDecode".to_string(),
+        read_position.contract.decode.site(),
+        read_position.original,
+        read_position.bytes,
+    ));
+    for part in ranges {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    let calibration = plan.calibration_candidate(image, flags)?;
+    let calibration_patch = calibration.is_some();
+    if let Some(part) = calibration {
+        parts.push((
+            "StartupCalibration".to_string(),
+            part.contract.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    let parameter = plan.parameter_candidate(image, flags)?;
+    let parameter_patch = parameter.hook.is_some();
+    if let Some(part) = parameter.hook {
+        parts.push((
+            "ParameterTable".to_string(),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    ensure!(
+        parts.len() == 27 + usize::from(parameter_patch) + usize::from(calibration_patch),
+        "conversion is missing required components"
+    );
+
+    let auth = AuthCell::detect(image)?;
+    ensure!(
+        auth.variant() == AuthCellVariant::R0StateR1Alternate,
+        "classic authentication contract mismatch"
+    );
+    let (site, bytes) = Mt1959Engine.auth_cell_refusal_detour(image, flags)?;
+    parts.push((
+        "Authentication".into(),
+        site,
+        image[site..site + 4].to_vec(),
+        bytes,
+    ));
+    let mut working = out.clone();
+    let mut auth_stub = 0;
+    for (role, site, original, bytes) in parts {
+        ensure!(
+            working.get(site..site + original.len()) == Some(original.as_slice()),
+            "another hook owns {role}"
+        );
+        ensure!(
+            original.len() >= 4 && original.len() % 2 == 0,
+            "invalid conversion span"
+        );
+        let stub = Mt1959Engine.free_space(&working, bytes.len())?;
+        let branch = thumb_asm::encode_bl(site, stub).context("conversion branch out of range")?;
+        thumb_asm::write(&mut working, stub as usize, &bytes);
+        thumb_asm::write(&mut working, site, &branch);
+        for at in (site + 4..site + original.len()).step_by(2) {
+            thumb_asm::write(&mut working, at, &0x46c0u16.to_le_bytes());
+        }
+        crate::install_guard::verify_branch(
+            &working,
+            site,
+            thumb_asm::BranchKind::Bl,
+            stub,
+            "UHD conversion",
+        )?;
+        ensure!(
+            working.get(stub as usize..stub as usize + bytes.len()) == Some(bytes.as_slice()),
+            "conversion stub changed"
+        );
+        if site == auth.site() {
+            auth_stub = stub;
+        }
+    }
+    ensure!(auth_stub != 0, "missing authentication control");
+    *out = working;
+    Ok(vec![
+        ("auth_cell_site", auth.site() as u32),
+        ("auth_cell_stub_va", auth_stub),
+        ("auth_cell_refusal", 1),
+        ("auth_cell_native_refusal", auth.refusal() as u32),
+    ])
 }

@@ -7,34 +7,17 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
-- Complete the experimental classic UHD software-contract group with paired
-  controller-field and read-completion boundary hooks. Preserve native ROM
-  recovery dispatch and OEM speed policy. Validate complete signed builds across
-  all 24 classic inputs; public UHD conversion remains gated for hardware testing.
-
-- Lock native speed-policy coverage across 24 classic and 171 modern MediaTek
-  images. Bind defaults to their requested-rate clamp; retain image-specific OEM
-  limits and execute C7/C8 Speed regressions. No new UHD capability is enabled.
-
-- Add component-based MediaTek UHD conversion planning and offline hook tests.
-  Preserve native hardware defaults and refuse incomplete conversions; this
-  development work does not enable classic UHD support yet. Bind the classic
-  DI detour to its native frame, format switch and layer normalization; validate
-  OEM replay and U/5 recognition on all 24 classic inputs with CPU execution.
-  Bind routing callers to balanced native stack/LR contracts and verify saved
-  parent returns. Keep the internal signed placement probe gated from user tests.
-  Bind the reverse gate to its native rejection graph and CPU-test both native
-  calculations while preserving legacy calibration policy.
-  Bind and test eleven additional classic controller/read selectors, including
-  native local-stack release, moved read-status blocks, DI mode selection and
-  read-boundary reflection. Relocate displaced literal loads and preserve native
-  parameter tables across media-selected and state-independent getter layouts.
-  Bind paired position scaling and the startup calibration lookup to complete
-  native routines; reuse this image’s C8 coefficients rather than modern data.
-  Add source-bound classic C7 read-position decoding and range selectors; compare
-  native position/layer/status results against the modern C7 implementation.
-  Bind native read-controller and paired position-setup selectors; include C7
-  in the independent media-default mode writer so it retains the native 0x1C mode.
+- Install complete MT1939 UHD conversion through normal Modify. Require the
+  source-bound recognition, routing, controller, position, completion, calibration
+  and speed contracts together; commit the whole group atomically. Store the
+  installed Unrestricted control in editable boot metadata. OEM/On retain native
+  class-C authentication; Off uses its validated refusal path. Physical UHD
+  reading remains subject to hardware testing.
+- Bind AGID session pointers to the actual native byte read and its live register,
+  correcting WH16NS58 1.V9 pointer selection. Reject clobbered recovery pointers,
+  writeback changes, ambiguous instruction variants and incomplete inputs.
+- Validate normal Modify and every advertised settings update across the eligible
+  published corpus, including integrity and offline flash admission.
 
 - Add classic MediaTek read-speed control using the native default selector and
   native read maximum. Preserve OEM behavior and hardware/media limits; refuse
@@ -74,9 +57,6 @@ Versions are independent of the freemkv ripping applications.
 - Execute hook state/register/stack contracts on an independent ARM CPU in CI.
 - Keep descriptor-pattern candidates separate from proven BD controls, avoiding
   a refusal detour on an unrelated structure-response path.
-- Add a source-hashed MT1939 WH14NS40 investigation with native routing and
-  paired classifier CPU tests. Retain the existing alternate path in the
-  research trampoline; classic UHD remains unavailable pending complete proof.
 
 ### freemkv Flash
 

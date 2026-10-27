@@ -587,8 +587,12 @@ pub(crate) fn matches_sig(image: &[u8], sig: &[(u16, u16)], off: usize) -> bool 
 /// Find the first offset in `[lo, hi)` whose halfwords match `sig` (each entry a
 /// `(value, mask)` pair, matched as `(hw & mask) == value`).
 pub(crate) fn find_masked(image: &[u8], sig: &[(u16, u16)], lo: usize, hi: usize) -> Option<usize> {
-    let hi = hi.min(image.len().saturating_sub(sig.len() * 2));
-    (lo..hi)
+    let hi = hi.min(image.len());
+    let span = sig.len() * 2;
+    if span == 0 || lo > hi || span > hi - lo {
+        return None;
+    }
+    (lo..=hi - span)
         .step_by(2)
         .find(|&off| matches_sig(image, sig, off))
 }
@@ -601,8 +605,12 @@ pub(crate) fn find_masked_all(
     lo: usize,
     hi: usize,
 ) -> Vec<usize> {
-    let hi = hi.min(image.len().saturating_sub(sig.len() * 2));
-    (lo..hi)
+    let hi = hi.min(image.len());
+    let span = sig.len() * 2;
+    if span == 0 || lo > hi || span > hi - lo {
+        return Vec::new();
+    }
+    (lo..=hi - span)
         .step_by(2)
         .filter(|&off| matches_sig(image, sig, off))
         .collect()
@@ -646,6 +654,27 @@ pub(crate) fn find_unique(
         // still a "refuse rather than guess" outcome, so surface it as one.
         Err(e) => bail!("{what} signature: {e}"),
     }
+}
+
+/// Select one role across every supported encoding, never by variant priority.
+fn find_unique_variant(
+    image: &[u8],
+    variants: &[&[(u16, u16)]],
+    lo: usize,
+    hi: usize,
+    what: &str,
+) -> Result<(usize, usize)> {
+    let mut found = None;
+    for (variant, pattern) in variants.iter().enumerate() {
+        for site in find_masked_all(image, pattern, lo, hi) {
+            ensure!(
+                found.is_none(),
+                "{what}: ambiguous instruction variants; refusing to patch"
+            );
+            found = Some((site, variant));
+        }
+    }
+    found.ok_or_else(|| anyhow!("{what}: no supported instruction variant"))
 }
 
 // (`decode_bl_target` removed 0.8.14: use [`thumb::decode_bl`] from the
@@ -1349,10 +1378,8 @@ impl Mt1959Engine {
     /// The unique offset of the VID gate's address-compute tail. The gate
     /// `ldrb r0,[r0]` is at `result + 16` for BOTH variants.
     ///
-    /// Tries the original `VidGateVariant::Direct` first (so the BU40N KAT base always
-    /// matches the same signature → byte-identical output), then the NB-class
-    /// `VidGateVariant::Notebook` variant. Each is required unique in its own right; an
-    /// ambiguous original still refuses rather than silently trying the variant.
+    /// Resolve all supported grammars together. Multiple matches, including
+    /// different variants, refuse the role rather than selecting by priority.
     pub(crate) fn find_vid_gate(&self, image: &[u8]) -> Result<usize> {
         mediatek_optical::image::analysis::VidGate::inspect(image)
             .map(|gate| gate.anchor())
@@ -1434,38 +1461,16 @@ impl Mt1959Engine {
     /// The OEM VID producer's per-AGID **session struct** base (`0x02000d38` on
     /// 1.00). The producer reads the active AGID from `byte[base+0xa] >> 6`
     /// (top two bits) and bails if it is ≥ 2, so a standalone producer call
-    /// depends on that field. Derived from the image: it is the first SRAM-window
-    /// literal (`0x0200_0000..0x0200_2000`) the producer loads via `ldr r7,[pc]`
-    /// near its prologue — never hardcoded. The Gate-A `04 01` bare-read stub uses
+    /// depends on that field. Bind the SRAM literal to the actual checked byte
+    /// read and prove its saved register remains live along every reaching path.
+    /// The Gate-A `04 01` bare-read stub uses
     /// this to reset the AGID selector (`byte[0xa] &= 0x3F`, AGID → 0) before the
     /// producer runs, so a prior read or `04 00` deny can't leave the selector
     /// `>= 2` (which makes the producer bail with ABORTED COMMAND until power-cycle).
     pub fn find_vid_agid_struct(&self, image: &[u8]) -> Result<u32> {
-        let gate = self.find_vid_gate(image)? + 16;
-        // producer entry: nearest preceding `push {r4,r5,r6,r7,lr}` (0xB5F0).
-        let mut producer = gate;
-        loop {
-            if producer < 2 || gate - producer > 0x200 {
-                bail!("VID producer prologue not found before the gate (AGID struct)");
-            }
-            if u16::from_le_bytes([image[producer], image[producer + 1]]) == 0xB5F0 {
-                break;
-            }
-            producer -= 2;
-        }
-        // The first `ldr r7,[pc,#imm]` (0x4F00) whose literal is an SRAM cell.
-        let mut o = producer;
-        while o + 2 <= gate {
-            if (u16::from_le_bytes([image[o], image[o + 1]]) & 0xFF00) == 0x4F00 {
-                if let Some(v) = pc_literal(image, o) {
-                    if (0x0200_0000..0x0200_2000).contains(&v) {
-                        return Ok(v);
-                    }
-                }
-            }
-            o += 2;
-        }
-        bail!("VID AGID session-struct literal (ldr r7,[pc] → SRAM) not found in the producer")
+        mediatek_optical::image::analysis::VidGate::inspect(image)
+            .and_then(|gate| gate.agid_base(image))
+            .map_err(|e| anyhow!("VID AGID operand binding: {e}"))
     }
 
     /// `SetDiscMode`, the read-datapath disc-mode dispatcher (`0x43cb0` on 1.00),
@@ -1486,24 +1491,14 @@ impl Mt1959Engine {
     pub fn find_speed_gate(&self, image: &[u8]) -> Result<(u32, u8)> {
         let lo = 0x0001_0000usize.min(image.len());
         let hi = 0x0002_0000usize.min(image.len());
-        match find_masked_all(image, SPEED_GATE_SIG, lo, hi).as_slice() {
-            [one] => Ok((*one as u32, 2)),
-            [] => Ok((
-                find_unique(
-                    image,
-                    SPEED_GATE_SIG_R0,
-                    lo,
-                    hi,
-                    "Speed ramp-ceiling gate (r0)",
-                )? as u32,
-                0,
-            )),
-            hits => bail!(
-                "Speed ramp-ceiling gate signature matched {} time(s) in [0x{lo:x},0x{hi:x}) \
-                 (want exactly 1) — refusing to patch",
-                hits.len()
-            ),
-        }
+        let (site, variant) = find_unique_variant(
+            image,
+            &[SPEED_GATE_SIG, SPEED_GATE_SIG_R0],
+            lo,
+            hi,
+            "Speed ramp-ceiling gate",
+        )?;
+        Ok((site as u32, if variant == 0 { 2 } else { 0 }))
     }
 
     /// The Region-free (0x03) RPC-state emitter anchor — the unique
@@ -2909,6 +2904,46 @@ impl Mt1959Engine {
         a.finish().map_err(anyhow::Error::from)
     }
 
+    /// Classic C7/C8 already use native authentication class C. Preserve that
+    /// comparison for OEM/On; Off refuses only class C through its proven exit.
+    pub fn auth_cell_refusal_detour(
+        &self,
+        image: &[u8],
+        flag_base: u32,
+    ) -> Result<(usize, Vec<u8>)> {
+        use mediatek_optical::image::analysis::{AuthCell, AuthCellVariant};
+        let contract = AuthCell::detect(image)?;
+        ensure!(
+            contract.variant() == AuthCellVariant::R0StateR1Alternate,
+            "unsupported refusal contract"
+        );
+        let mut a = Asm::new();
+        let original = a.label();
+        let deny = a.label();
+        a.push(0x0008);
+        a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32);
+        a.ldrb_imm(3, 3, 0);
+        a.cmp_imm(3, abi::STATE_OFF);
+        a.pop(0x0008);
+        a.bne(original);
+        a.cmp_imm(0, 0xC);
+        a.bne(original);
+        a.push(0x0108);
+        a.ldr_lit(3, contract.refusal() as u32 | 1);
+        a.raw16(0x9301);
+        a.pop(0x0108);
+        a.bind(original);
+        a.cmp_imm(0, 0xC);
+        a.bne(deny);
+        a.bx(14);
+        a.bind(deny);
+        a.push(0x0108);
+        a.ldr_lit(3, contract.deny() as u32 | 1);
+        a.raw16(0x9301);
+        a.pop(0x0108);
+        Ok((contract.site(), a.finish()?))
+    }
+
     /// Select the state-band implementation from the shared OEM VID-success
     /// contract. Its role and continuations are established before any emission.
     pub fn auth_cell_widen_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
@@ -2925,16 +2960,7 @@ impl Mt1959Engine {
                 self.build_authcell_widen_value_stub(flag_base, contract.deny() as u32, 0)?
             }
             AuthCellVariant::R0StateR1Alternate => {
-                // Research candidate only: retain the separate lower-nibble
-                // implementation, including nibble 4. No classic feature flag
-                // is advertised by this low-level emitter.
-                self.build_authcell_widen_scoped_stub(
-                    flag_base,
-                    contract.deny() as u32,
-                    0,
-                    Some(12),
-                    Some(contract.refusal() as u32),
-                )?
+                self.auth_cell_refusal_detour(image, flag_base)?.1
             }
         };
         Ok((contract.site(), bytes))
@@ -3143,6 +3169,13 @@ impl Mt1959Engine {
         // than shipping a stub that forces auth without clearing the latch —
         // which is precisely the 0.8.14/0.9.0 defect (drive wraps with a key the
         // host never negotiated, no key can decrypt, every rip fails).
+        let (anchor, variant) = find_unique_variant(
+            image,
+            &[AKE_GATE_SIG, AKE_GATE_SIG_NB, AKE_GATE_SIG_NB_V5],
+            0,
+            image.len(),
+            "AACS AKE accept gate",
+        )?;
         let reset = self.find_aacs_session_reset(image)?;
         // Original (BU40N / BP60NB10 / desktop): detour the reject writer
         // `movs r1,#1; b <back>` (4 bytes at anchor+12).
@@ -3156,7 +3189,8 @@ impl Mt1959Engine {
         // (`push {r4,lr}` + MMIO clear at 0x04000000 bit 0x10). Install as a
         // Thumb-2 wide `B` (`B.W` T4) so `lr` flows through unchanged and the
         // tail-call semantics match OEM exactly.
-        if let Ok(ake_gate) = self.find_ake_gate(image) {
+        if variant == 0 {
+            let ake_gate = anchor as u32;
             let reset_site = ake_gate as usize + 12;
             let movs_hw = u16::from_le_bytes([image[reset_site], image[reset_site + 1]]);
             if movs_hw != 0x2101 {
@@ -3182,7 +3216,8 @@ impl Mt1959Engine {
         // like-for-like replacement, `lr = bl_site+4` is exactly what the OEM
         // `bl set_agid_state` would have set, so `set_agid_state`'s `bx lr`
         // returns to the correct in-function continuation.
-        if let Ok(nb_gate) = self.find_ake_gate_nb(image) {
+        if variant == 1 {
+            let nb_gate = anchor as u32;
             let reject = nb_gate as usize + 10;
             let movs_hw = u16::from_le_bytes([image[reject], image[reject + 1]]);
             if movs_hw != 0x2101 {
@@ -3200,7 +3235,7 @@ impl Mt1959Engine {
         // is at anchor+12 and the shared `bl set_agid_state` at anchor+14. Both
         // arms converge on that shared `bl`, so the NB stub (which PRESERVES r1
         // when the flag is off) applies verbatim. Same install shape as NB.
-        let v5_gate = self.find_ake_gate_nb_v5(image)?;
+        let v5_gate = anchor as u32;
         let reject = v5_gate as usize + 12;
         let movs_hw = u16::from_le_bytes([image[reject], image[reject + 1]]);
         if movs_hw != 0x2101 {

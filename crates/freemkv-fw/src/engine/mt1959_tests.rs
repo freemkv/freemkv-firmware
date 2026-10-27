@@ -816,32 +816,23 @@ fn deny_sense_setup_refuses_when_either_halfword_is_not_the_known_pair() {
 fn deny_site_running_past_the_image_end_is_refused_before_it_is_read() {
     let site = deny_site_of(&fixture()) + 0x20;
     let doctored = rawread_image_with_deny_at_the_tail(site);
-    // Two bytes short of the pair: the 4-byte read would run off the end.
-    let msg = refusal(
-        Mt1959Engine.emit_rawread(&doctored[..site + 2], &mut fixture(), FLAG_TABLE_BASE),
-        "a deny site whose 4-byte read runs off the end must be refused",
-    );
-    assert!(
-        msg.contains("past the end of the image"),
-        "expected the past-the-end refusal, got: {msg}"
-    );
+    assert!(Mt1959Engine
+        .emit_rawread(&doctored[..site + 2], &mut fixture(), FLAG_TABLE_BASE)
+        .is_err());
 }
 
-/// ...and that bound is inclusive: an image that ends on the *last byte* of the
-/// deny pair carries the whole pair, so it must still be patched. A `>=` bound
-/// (or an `==` one) turns a complete image into a false refusal and loses the
-/// Raw-read lever on it.
+/// A complete deny pair does not make a truncated producer valid: its native
+/// branches and literal loads must also be present before operand binding passes.
 #[test]
-fn deny_site_ending_exactly_at_the_image_end_is_still_patched() {
+fn complete_deny_pair_cannot_authorize_a_truncated_native_producer() {
     let site = deny_site_of(&fixture()) + 0x20;
     let doctored = rawread_image_with_deny_at_the_tail(site);
-    let facts = Mt1959Engine
-        .emit_rawread(&doctored[..site + 4], &mut fixture(), FLAG_TABLE_BASE)
-        .expect("the deny pair is entirely inside this image — nothing to refuse");
-    assert_eq!(
-        facts.deny_site as usize, site,
-        "the deny-reset detour must land on the pair at the very end of the image"
-    );
+    let mut out = fixture();
+    let before = out.clone();
+    assert!(Mt1959Engine
+        .emit_rawread(&doctored[..site + 4], &mut out, FLAG_TABLE_BASE)
+        .is_err());
+    assert_eq!(out, before);
 }
 
 // ---------------------------------------------------------------------------
@@ -1182,4 +1173,16 @@ fn descriptor_match_does_not_install_a_role_unproven_bd_refusal() {
         result.is_err(),
         "a descriptor signature alone must not authorize a native BD hook"
     );
+}
+
+#[test]
+fn agid_binding_uses_the_pointer_read_by_native_code() {
+    let engine = Mt1959Engine;
+    let bu = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let wh = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    assert_eq!(engine.find_vid_agid_struct(bu).unwrap(), 0x02000d38);
+    assert_eq!(engine.find_vid_agid_struct(wh).unwrap(), 0x02000cf4);
+    let mut clobbered = wh.to_vec();
+    clobbered[0x13a9ec..0x13a9ee].copy_from_slice(&0x2500u16.to_le_bytes());
+    assert!(engine.find_vid_agid_struct(&clobbered).is_err());
 }

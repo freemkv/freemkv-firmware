@@ -59,7 +59,13 @@ fn fixture() -> Vec<u8> {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/BU40N_OEM_1.00.bin"
     );
-    std::fs::read(path).unwrap_or_else(|e| panic!("BU40N fixture must be present at {path}: {e}"))
+    let mut image = std::fs::read(path)
+        .unwrap_or_else(|e| panic!("BU40N fixture must be present at {path}: {e}"));
+    // A grafted classic grammar replaces the modern one; retaining both must
+    // now be refused as ambiguous rather than resolved by search priority.
+    let modern = mediatek_optical::image::analysis::VidGate::inspect(&image).unwrap();
+    image[modern.anchor()..modern.anchor() + 2].fill(0);
+    image
 }
 
 fn put_hw(img: &mut [u8], off: usize, hws: &[u16]) {
@@ -108,6 +114,11 @@ fn plant_vid_gate(img: &mut [u8], at: usize, bne_lo: u8) {
             0xD100 | u16::from(bne_lo), // bne <deny>          (+32)
         ],
     );
+    put_hw(img, at - 0x10, &[0xb5f0, 0x4800]);
+    img[at - 0xc..at - 8].copy_from_slice(&0x00210c00u32.to_le_bytes());
+    put_hw(img, at + 0x30, &[0x2101]);
+    let call = thumb::encode_bl(at + 0x32, 0x000cadf8).unwrap();
+    img[at + 0x32..at + 0x36].copy_from_slice(&call);
 }
 
 /// Graft `AKE_GATE_SIG_CLASSIC` at `at`. The `b` at `+4` deliberately carries a
@@ -432,7 +443,7 @@ fn classic_rawread_emit_grounds_every_gate_address_and_installs_both_detours() {
     );
     assert_eq!(
         f("vid_producer"),
-        0x0013_675c,
+        (VID - 0x10) as u32,
         "the audit-only VID producer anchor still comes from the image"
     );
     assert_eq!(f("scratch"), 0x0021_0c00, "audit-only clear-VID scratch");
@@ -929,7 +940,7 @@ fn classic_create_repoints_the_record_thumb_tagged_and_reports_the_real_facts() 
         (VID + 36 + 18 * 2) as u32,
         "the deny fact"
     );
-    assert_eq!(r.vid_producer, 0x0013_675c, "the VID producer fact");
+    assert_eq!(r.vid_producer, (VID - 0x10) as u32, "the VID producer fact");
     assert_eq!(r.region_emitter, REGION as u32, "the region emitter fact");
     assert_eq!(
         r.hrl_sites,

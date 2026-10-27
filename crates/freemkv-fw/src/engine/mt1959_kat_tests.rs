@@ -959,7 +959,7 @@ fn put_hw(img: &mut [u8], off: usize, hws: &[u16]) {
 }
 
 #[test]
-fn speed_gate_finds_r0_variant_and_prefers_original() {
+fn speed_gate_finds_r0_variant_and_refuses_mixed_variants() {
     // r0 variant: `ldr r1,[pc]; ldrb r0,[r1]; cmp r0,#0x32; bhi` → reg 0.
     let mut img = vec![0u8; 0x2_0010];
     put_hw(&mut img, 0x1_1000, &[0x4900, 0x7808, 0x2832, 0xD800]);
@@ -967,11 +967,12 @@ fn speed_gate_finds_r0_variant_and_prefers_original() {
     assert_eq!(off, 0x1_1000);
     assert_eq!(reg, 0, "variant register");
 
-    // original (r2) present alongside → original wins (reg 2), variant ignored.
+    // Both register variants present: refuse the ambiguous semantic role.
     put_hw(&mut img, 0x1_2000, &[0x4900, 0x780A, 0x2A32, 0xD800]);
-    let (off, reg) = Mt1959Engine.find_speed_gate(&img).unwrap();
-    assert_eq!(off, 0x1_2000);
-    assert_eq!(reg, 2, "original preferred when present");
+    assert!(
+        Mt1959Engine.find_speed_gate(&img).is_err(),
+        "two unique encodings are still an ambiguous role"
+    );
 }
 
 #[test]
@@ -1986,4 +1987,33 @@ fn ake_stub_clears_the_debus_latch_and_preserves_lr() {
             "{name}: clear stays gated on flag[Encryption] == STATE_OFF"
         );
     }
+}
+
+#[test]
+fn ake_selection_refuses_competing_or_duplicate_variants_before_emission() {
+    use crate::engine::core::{AKE_GATE_SIG, AKE_GATE_SIG_NB, AKE_GATE_SIG_NB_V5, FLAG_TABLE_BASE};
+    let materialize = |sig: &[(u16, u16)]| {
+        sig.iter()
+            .flat_map(|(op, _)| op.to_le_bytes())
+            .collect::<Vec<_>>()
+    };
+    for second in [AKE_GATE_SIG, AKE_GATE_SIG_NB, AKE_GATE_SIG_NB_V5] {
+        let mut image = materialize(AKE_GATE_SIG);
+        image.extend([0xff; 32]);
+        image.extend(materialize(second));
+        let error = Mt1959Engine
+            .ake_detour(&image, FLAG_TABLE_BASE)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("ambiguous"), "{error:#}");
+    }
+}
+
+#[test]
+fn variant_scan_includes_the_final_complete_pattern() {
+    let image = [0u8, 0, 0x34, 0x12];
+    assert_eq!(
+        crate::engine::core::find_masked_all(&image, &[(0x1234, 0xffff)], 0, image.len()),
+        vec![2]
+    );
+    assert!(crate::engine::core::find_masked_all(&image, &[(0x1234, 0xffff)], 0, 3).is_empty());
 }

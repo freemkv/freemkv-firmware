@@ -252,7 +252,7 @@ fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 serde_json::json!({
-                    "policy":"research-only; not enabled by classic Modify or website capabilities",
+                    "policy":"source-bound authentication control used by normal Modify",
                     "source_sha256":hex(&Sha256::digest(&image)),
                     "site":site,"fallback":contract.deny(),"refusal":contract.refusal(),
                     "state_address":contract.state_address(),"variant":format!("{:?}",contract.variant()),

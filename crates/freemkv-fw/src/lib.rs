@@ -28,4 +28,4 @@ pub mod artifact;
 pub mod boot;
 
 #[cfg(test)]
-mod mt1939_uhd_candidate_tests;
+mod mt1939_modify_tests;

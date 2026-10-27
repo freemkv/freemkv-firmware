@@ -331,6 +331,27 @@ impl Mt1959Engine {
             }
         }
 
+        let conversion_facts = match super::mtk_uhd::UhdConversionPlan::inspect(image) {
+            Ok(plan)
+                if plan.require_complete_conversion().is_ok()
+                    && plan
+                        .action(mediatek_optical::image::analysis::UhdArea::DiscInformation)?
+                        == super::mtk_uhd::UhdAction::AddRecognition
+                    && gatea_stub_va != 0
+                    && ake_stub_va != 0 =>
+            {
+                super::mtk_uhd::install_conversion(image, &mut out, flag_base, &plan)?
+            }
+            _ => Vec::new(),
+        };
+        let conversion_fact = |key| {
+            conversion_facts
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| *v)
+                .unwrap_or(0)
+        };
+
         // Downgrade-enable (DE) byte: a fixed base identity-page byte, NOT a
         // tri-state feature flag, so it is always safe and does not depend on the
         // boot 0xFF-fill (written regardless of the boot-hook outcome, exactly as
@@ -387,13 +408,10 @@ impl Mt1959Engine {
             uhd_stub_va,
             bd_gate_site,
             bd_stub_va,
-            // Auth-cell state-band widen (MT1959-family only): the classic MT1939
-            // lineage does not carry the extended `ldr r4,[pc,...] = 0x01FF9E04`
-            // shape (its post-classification path is different), so this lever is
-            // never wired on classic. Report 0s.
-            auth_cell_site: 0,
-            auth_cell_stub_va: 0,
-            auth_cell_refusal: false,
+            // Facts reflect the same source-bound group installed by Modify.
+            auth_cell_site: conversion_fact("auth_cell_site"),
+            auth_cell_stub_va: conversion_fact("auth_cell_stub_va"),
+            auth_cell_refusal: conversion_fact("auth_cell_refusal") != 0,
             hrl_sites,
             hrl_stub_va,
             de_off: de_off.unwrap_or(0),
@@ -618,20 +636,42 @@ impl Mt1959Engine {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
         });
 
-        // Conversion planning uses independent library contracts. Matched
-        // regions do not authorize a partial conversion or a capability flag.
+        // A complete group is installed by normal Modify, never a separate builder.
         if let Some(raw) = levers.iter_mut().find(|lever| lever.id == LeverId::RawRead) {
-            let reason = match super::mtk_uhd::UhdConversionPlan::inspect(image) {
-                Ok(plan) => match plan.require_complete_conversion() {
-                    Ok(()) => "software conversion contracts complete; experimental conversion is not installed".to_owned(),
-                    Err(error) => format!("{error:#}"),
-                },
-                Err(error) => format!("conversion evidence incomplete: {error:#}"),
-            };
-            raw.hooks.push(super::lever::HookReport::unavailable(
-                "uhd-conversion",
-                reason,
-            ));
+            let plan = super::mtk_uhd::UhdConversionPlan::inspect(image).and_then(|plan| {
+                plan.require_complete_conversion()?;
+                anyhow::ensure!(
+                    plan.action(mediatek_optical::image::analysis::UhdArea::DiscInformation)?
+                        == super::mtk_uhd::UhdAction::AddRecognition,
+                    "native UHD recognition needs no conversion"
+                );
+                Ok(plan)
+            });
+            match plan {
+                Ok(plan)
+                    if ["gatea_stub_va", "ake_stub_va"].iter().all(|required| {
+                        raw.facts
+                            .iter()
+                            .any(|(name, value)| name == required && *value != 0)
+                    }) =>
+                {
+                    let facts =
+                        super::mtk_uhd::install_conversion(image, &mut out, flag_base, &plan)?;
+                    raw.facts.extend(facts);
+                    raw.hooks.push(super::lever::HookReport::applied(
+                        "uhd-conversion",
+                        "complete-source-bound",
+                    ));
+                }
+                Ok(_) => raw.hooks.push(super::lever::HookReport::unavailable(
+                    "uhd-conversion",
+                    "raw-read control is unavailable",
+                )),
+                Err(error) => raw.hooks.push(super::lever::HookReport::unavailable(
+                    "uhd-conversion",
+                    format!("{error:#}"),
+                )),
+            }
         }
 
         // Downgrade-enable — proven/stable, any identity page.
