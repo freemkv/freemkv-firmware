@@ -1,6 +1,6 @@
 """Execute emitted conversion components; never writes a firmware output.
 
-The research routing stubs are tested at native instruction regions, through
+The normal Modify routing stubs are tested at native instruction regions, through
 native arithmetic and saved parent returns. This does not establish correctness
 of other consumers or prove physical UHD reading.
 """
@@ -834,7 +834,7 @@ def main():
     di_cases = di_entry(data, evidence)
     parent_cases = parent_returns(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {read_position_cases} native read-position cases; {read_control_cases} controller cases; {position_setup_cases} native setup cases; {media_defaults_cases} media-default cases; {recovery_cases} native recovery comparisons; {completion_cases} native completion cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; software contracts complete; public conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {read_position_cases} native read-position cases; {read_control_cases} controller cases; {position_setup_cases} native setup cases; {media_defaults_cases} media-default cases; {recovery_cases} native recovery comparisons; {completion_cases} native completion cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; software contracts complete; normal Modify integration tested separately; physical UHD reading unproven')
 
 
 if __name__ == '__main__':
