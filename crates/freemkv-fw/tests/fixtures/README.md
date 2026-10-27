@@ -30,3 +30,9 @@ WH14NS40 1.05 (MT1959) is the unchanged 2 MiB OEM hoard object, SHA-256
 `38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1`.
 It checks that explicit boot settings still reach the coverage retry when the
 first attempt builds only a partial set of features.
+
+BW-16D1HT 3.03 is the unchanged 2 MiB OEM hoard object, SHA-256
+`1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764`.
+It anchors native response writer/committer selection where the old local
+scanner selected a different writer. `native-response-inputs.json` pins the
+selected role addresses and DMA cells for four distinct native layouts.

@@ -77,6 +77,49 @@ def execute_bd(image, site, unrestricted, retired, media_class):
     return cpu.reg_read(UC_ARM_REG_CPSR) & 0xF0000000
 
 
+def execute_boot_arguments(image):
+    """Run the actual BU40N boot detour up to/through its native init call."""
+    for return_flags in (0, 0xA0000000, 0xF0000000):
+        cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+        cpu.mem_map(0, 0x200000)
+        cpu.mem_write(0, image)
+        cpu.mem_map(0x02000000, 0x2000)
+        cpu.mem_map(0x03000000, 0x10000)
+        stack = 0x03008000
+        cpu.reg_write(UC_ARM_REG_CPSR, 0xA0000030)
+        before = [0x76540000 + i * 0x101 for i in range(12)]
+        for i, value in enumerate(before):
+            cpu.reg_write(getattr(arm_const, f'UC_ARM_REG_R{i}'), value)
+        cpu.reg_write(UC_ARM_REG_SP, stack)
+        cpu.reg_write(UC_ARM_REG_LR, 0x0300F001)
+        cpu.mem_write(stack - 64, bytes([0xA5]) * 80)
+        reached = []
+        result = 0x1234ABCD
+
+        def visit(machine, address, _size, _data):
+            if address == 0xA1DD0:
+                reached.append('native')
+                actual = [machine.reg_read(getattr(arm_const, f'UC_ARM_REG_R{i}')) for i in range(12)]
+                assert actual == before, ('boot detour changed native arguments/registers', before, actual)
+                assert machine.reg_read(UC_ARM_REG_SP) == stack - 8
+                machine.reg_write(arm_const.UC_ARM_REG_R0, result)
+                machine.reg_write(UC_ARM_REG_CPSR, return_flags | 0x30)
+                machine.reg_write(UC_ARM_REG_PC, machine.reg_read(UC_ARM_REG_LR))
+            elif address == 0x13D42C:
+                reached.append('returned')
+                machine.emu_stop()
+
+        cpu.hook_add(UC_HOOK_CODE, visit)
+        cpu.emu_start(0x13D429, 0x200000, count=100)
+        assert reached == ['native', 'returned'], reached
+        assert cpu.reg_read(UC_ARM_REG_SP) == stack
+        assert cpu.reg_read(arm_const.UC_ARM_REG_R0) == result
+        assert cpu.reg_read(UC_ARM_REG_CPSR) & 0xF0000000 == return_flags
+        assert [cpu.reg_read(getattr(arm_const, f'UC_ARM_REG_R{i}')) for i in range(4, 12)] == before[4:]
+        assert cpu.mem_read(stack - 64, 40) == bytes([0xA5]) * 40
+        assert cpu.mem_read(stack, 16) == bytes([0xA5]) * 16
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fw', required=True, type=Path)
@@ -103,6 +146,7 @@ def main():
             deny = site + 6 + displacement * 2
             modified = output.read_bytes()
             if name == 'BU40N_OEM_1.00.bin':
+                execute_boot_arguments(modified)
                 bd_site = facts['bd_site']
                 for setting in (0, 1, 255):
                     for retired in (0, 1, 255):

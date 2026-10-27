@@ -55,28 +55,28 @@ impl Mt1959Engine {
     ) -> Result<Vec<(&'static str, u32)>> {
         let role = mediatek_optical::image::analysis::ClassicSpeed::detect(image)
             .map_err(|e| anyhow!("native read-speed selector: {e}"))?;
-        let bytes = self.build_speed_stub_classic(flag_base, role.maximum_cell)?;
+        let bytes = self.build_speed_stub_classic(flag_base, role.maximum_cell())?;
         let va = self.free_space(out, bytes.len())?;
-        let branch = thumb::encode_b_wide(role.site, va)
+        let branch = thumb::encode_b_wide(role.site(), va)
             .ok_or_else(|| anyhow!("classic Speed tail branch out of range"))?;
         let mut candidate = out.to_vec();
         thumb::write(&mut candidate, va as usize, &bytes);
-        thumb::write(&mut candidate, role.site, &branch);
+        thumb::write(&mut candidate, role.site(), &branch);
         crate::install_guard::verify_branch(
             &candidate,
-            role.site,
+            role.site(),
             thumb::BranchKind::BWide,
             va,
             "classic Speed",
         )?;
         out.copy_from_slice(&candidate);
         Ok(vec![
-            ("speed_tail_site", role.site as u32),
+            ("speed_tail_site", role.site() as u32),
             ("speed_stub_va", va),
-            ("speed_selector", role.entry as u32),
-            ("speed_maximum_cell", role.maximum_cell),
-            ("speed_optimum_cell", role.optimum_cell),
-            ("speed_consumer", role.consumer as u32),
+            ("speed_selector", role.entry() as u32),
+            ("speed_maximum_cell", role.maximum_cell()),
+            ("speed_optimum_cell", role.optimum_cell()),
+            ("speed_consumer", role.consumer() as u32),
         ])
     }
 
@@ -193,6 +193,12 @@ impl Mt1959Engine {
         let flag_base = self
             .find_free_sram_cell(image)
             .context("classic base: free SRAM cell for the flag table")?;
+        self.assert_sram_cell_free(
+            image,
+            flag_base,
+            super::core::FLASHWRITE_SCRATCH_OFF + 1,
+            "classic flag table and flash scratch",
+        )?;
 
         // Classic reboot verb: bake `boot_init_site - 0x10` (the classic caller_bl_site,
         // minus 0x10 — the analogous offset to the modern boot function prologue). If
@@ -451,8 +457,8 @@ impl Mt1959Engine {
     /// stay reported-only: the classic clear-VID scratch/deny path is INFERRED and
     /// the classic ramp ceiling is unreversed, so they are NOT emitted.
     ///
-    /// Every byte written is well-formed, lands in a provably-free SRAM cell /
-    /// CMAC-covered free space, the image re-signs + self-verifies, and it passes
+    /// Storage passes the static SRAM overlap checks and code is placed within
+    /// authenticated erased space. The image re-signs, self-verifies, and passes
     /// the structural detour audit — so, being structurally valid, Identity +
     /// Region-free + DE are produced unconditionally (no flag). What is not yet
     /// proven is runtime behavior on a real classic drive; the whole report carries
@@ -506,12 +512,18 @@ impl Mt1959Engine {
             )
             .context("classic base: live 0x3C dispatch record")?;
 
-        // Provably-free SRAM cell for the freemkv flag table (classic SRAM map
+        // Statically unreferenced candidate for the freemkv flag table (classic SRAM map
         // differs from MT1959, so we do not reuse the MT1959 FLAG_TABLE_BASE
         // placeholder — we derive an unreferenced cell from THIS image).
         let flag_base = self
             .find_free_sram_cell(image)
             .context("classic base: free SRAM cell for the flag table")?;
+        self.assert_sram_cell_free(
+            image,
+            flag_base,
+            super::core::FLASHWRITE_SCRATCH_OFF + 1,
+            "classic flag table and flash scratch",
+        )?;
 
         // Classic reboot verb: same rule as build_report_classic — bake
         // `boot_init_site - 0x10` from the classic caller_bl_site when it

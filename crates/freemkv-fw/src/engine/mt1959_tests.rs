@@ -331,7 +331,11 @@ fn only_free_space(buf: &mut [u8], window: usize) -> u32 {
         "asked for a {window}-byte window but the base's largest covered run is only {len}"
     );
     for (a, l) in runs {
-        buf[a..a + l].fill(0x00);
+        // Short FF fragments include the native 0xffff length sentinel.
+        // They cannot hold any word-aligned finalized allocation and must survive.
+        if l >= 4 {
+            buf[a..a + l].fill(0x00);
+        }
     }
     buf[base..base + window].fill(0xFF);
     base as u32
@@ -1185,4 +1189,321 @@ fn agid_binding_uses_the_pointer_read_by_native_code() {
     let mut clobbered = wh.to_vec();
     clobbered[0x13a9ec..0x13a9ee].copy_from_slice(&0x2500u16.to_le_bytes());
     assert!(engine.find_vid_agid_struct(&clobbered).is_err());
+}
+
+#[test]
+fn response_io_binds_inquiry_before_selecting_a_writer() {
+    use mediatek_optical::image::analysis::ResponseIo;
+    for image in [
+        include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin").as_slice(),
+        include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin").as_slice(),
+        include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin").as_slice(),
+    ] {
+        let scanner = mediatek_optical::image::analysis::CommandScanner::inspect(image).unwrap();
+        assert_eq!(
+            scanner.entry() as u32,
+            Mt1959Engine.find_scanner_entry(image).unwrap()
+        );
+        assert!(!scanner.table_roots(image).unwrap().is_empty());
+        assert_eq!(scanner.cdb(), Mt1959Engine.find_cdb_base(image).unwrap());
+        let io = ResponseIo::inspect(image).unwrap();
+        assert_eq!(
+            Mt1959Engine.find_response_writer(image).unwrap(),
+            (io.writer() as u32, io.buffer_offset())
+        );
+        assert_eq!(
+            Mt1959Engine.find_response_commit(image).unwrap(),
+            (io.commit().entry() as u32, io.commit().length_cell())
+        );
+    }
+}
+
+#[test]
+fn scanner_requires_connected_record_and_command_semantics() {
+    use mediatek_optical::image::analysis::CommandScanner;
+    use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
+    let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let entry = CommandScanner::inspect(original).unwrap().entry();
+    for (offset, replacement) in [
+        (22, Operand::Reg(Reg(1))),
+        (36, Operand::Imm(0x3d)),
+        (70, Operand::Imm(3)),
+    ] {
+        let at = entry + offset;
+        let mut ins = decode_at(original, at).unwrap();
+        let index = if offset == 22 { 0 } else { 1 };
+        ins.operands = ins
+            .operands
+            .as_slice()
+            .enumerate()
+            .map(|(i, op)| if i == index { replacement } else { op })
+            .collect();
+        let bytes = encode_bytes(&ins).unwrap();
+        let mut changed = original.to_vec();
+        changed[at..at + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            CommandScanner::inspect(&changed).is_err(),
+            "accepted disconnected scanner operand at {at:x}"
+        );
+    }
+    let at = entry + 44;
+    let mut ins = decode_at(original, at).unwrap();
+    ins.cond = Some(thumb_asm::Cond::Ne);
+    let bytes = encode_bytes(&ins).unwrap();
+    let mut changed = original.to_vec();
+    changed[at..at + bytes.len()].copy_from_slice(&bytes);
+    assert!(CommandScanner::inspect(&changed).is_err());
+}
+
+#[test]
+fn native_dispatch_ignores_orphans_and_rejects_cycles() {
+    use mediatek_optical::image::analysis::{CommandDispatch, CommandScanner, ResponseIo};
+    let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let commands = CommandDispatch::inspect(original).unwrap();
+    let native = *commands.record(0x3c, 1).unwrap();
+    let mut orphan = original.to_vec();
+    let start = 0x140000;
+    for index in 0..9 {
+        let at = start + index * 8;
+        orphan[at..at + 8].fill(0);
+        orphan[at] = if index == 4 { 0x3c } else { 0xa0 + index as u8 };
+        orphan[at + 1] = if index == 8 {
+            3
+        } else if index == 4 {
+            1
+        } else {
+            7
+        };
+        if index != 8 {
+            orphan[at + 4..at + 8].copy_from_slice(&native.handler.to_le_bytes());
+        }
+    }
+    assert_eq!(
+        CommandDispatch::inspect(&orphan)
+            .unwrap()
+            .record(0x3c, 1)
+            .unwrap()
+            .off,
+        native.off
+    );
+    assert_eq!(
+        ResponseIo::inspect(&orphan).unwrap().writer(),
+        ResponseIo::inspect(original).unwrap().writer()
+    );
+    assert!(CommandScanner::inspect(original)
+        .unwrap()
+        .table_roots(&orphan)
+        .is_err());
+    let mut cycle = original.to_vec();
+    let root = *commands.roots().first().unwrap();
+    cycle[root + 1] = 4;
+    cycle[root + 4..root + 8].copy_from_slice(&(root as u32).to_le_bytes());
+    assert!(CommandDispatch::inspect(&cycle).is_err());
+}
+
+#[test]
+fn native_response_contract_corpus() {
+    let Ok(path) = std::env::var("FREEMKV_BASE_ROLE_CORPUS") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(std::env::var("FREEMKV_BASE_ROLE_HOARD").unwrap());
+    let rows: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let mut records = Vec::new();
+    for row in rows.as_array().unwrap() {
+        let image = std::fs::read(root.join(row["path"].as_str().unwrap())).unwrap();
+        use sha2::Digest;
+        assert_eq!(
+            format!("{:x}", sha2::Sha256::digest(&image)),
+            row["sha256"].as_str().unwrap()
+        );
+        let new = mediatek_optical::image::analysis::ResponseIo::inspect(&image);
+        let result = match new {
+            Ok(io) => {
+                let scanner = mediatek_optical::image::analysis::CommandScanner::inspect(&image)
+                    .unwrap_or_else(|e| panic!("{} scanner: {e}", row["sha256"]));
+                assert_eq!(
+                    scanner.entry() as u32,
+                    Mt1959Engine.find_scanner_entry(&image).unwrap()
+                );
+                let roots = scanner
+                    .table_roots(&image)
+                    .unwrap_or_else(|e| panic!("{} table roots: {e}", row["sha256"]));
+                assert!(!roots.is_empty());
+                let prior = row["hits"][0]["site"]
+                    .as_u64()
+                    .zip(row["hits"][0]["values"][0].as_u64())
+                    .map(|(writer, buffer)| (writer as u32, buffer as u32));
+                serde_json::json!({"sha256":row["sha256"],"status":"matched","writer":io.writer(),"buffer":io.buffer_offset(),"commit":io.commit().entry(),"source_cell":io.commit().source_cell(),"length_cell":io.commit().length_cell(),"ready_cell":io.commit().ready_cell(),"old_writer":prior.map(|v|v.0),"old_buffer":prior.map(|v|v.1),"selection_changed":prior.is_some_and(|v|v!=(io.writer() as u32,io.buffer_offset())),"legacy_writer_missing":prior.is_none()})
+            }
+            Err(e) => {
+                serde_json::json!({"sha256":row["sha256"],"status":"unavailable","reason":e.to_string()})
+            }
+        };
+        records.push(result);
+    }
+    if let Ok(path) = std::env::var("FREEMKV_BASE_ROLE_OUTPUT") {
+        std::fs::write(path, serde_json::to_vec_pretty(&records).unwrap()).unwrap();
+    }
+}
+
+fn writer_decoy(image: &[u8], bad_offset: bool) -> Vec<u8> {
+    let mut output = image.to_vec();
+    let native = 0xa2074;
+    let decoy = 0x90000;
+    output[decoy..decoy + 24].copy_from_slice(&image[native..native + 24]);
+    for offset in [0, 4, 10] {
+        let old = native + offset;
+        let new = decoy + offset;
+        let op = u16::from_le_bytes(output[new..new + 2].try_into().unwrap());
+        let original = ((old + 4) & !3) + usize::from(op & 255) * 4;
+        let copied = ((new + 4) & !3) + usize::from(op & 255) * 4;
+        output[copied..copied + 4].copy_from_slice(&image[original..original + 4]);
+        if bad_offset && offset == 0 {
+            output[copied..copied + 4].copy_from_slice(&0xdeadbeefu32.to_le_bytes());
+        }
+    }
+    output
+}
+#[test]
+fn response_writer_ignores_unrelated_buffer_and_refuses_duplicate_role() {
+    let image = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    assert_eq!(
+        Mt1959Engine
+            .find_response_writer(&writer_decoy(image, true))
+            .unwrap(),
+        (0xa2074, 0xaf90)
+    );
+    assert!(Mt1959Engine
+        .find_response_writer(&writer_decoy(image, false))
+        .is_err());
+}
+
+#[test]
+fn response_committer_requires_length_queue_and_balanced_return() {
+    use mediatek_optical::image::analysis::ResponseCommit;
+    use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
+    let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let contract = ResponseCommit::at(original, 0x98180).unwrap();
+    assert!(!contract.length_writes().is_empty());
+    assert!(!contract.returns().is_empty());
+    for (site, replacement) in [(0x981a6, 1u8), (0x981aa, 1), (0x981b0, 2)] {
+        let mut changed = original.to_vec();
+        let mut ins = decode_at(original, site).unwrap();
+        if replacement == 2 {
+            ins.mnemonic = "strh";
+        } else {
+            ins.operands = ins
+                .operands
+                .as_slice()
+                .enumerate()
+                .map(|(index, operand)| {
+                    if index == 0 {
+                        Operand::Reg(Reg(replacement))
+                    } else {
+                        operand
+                    }
+                })
+                .collect();
+        }
+        let bytes = encode_bytes(&ins).unwrap();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x98180).is_err(),
+            "accepted broken suffix at {site:x}"
+        );
+    }
+    for site in [0x98192, 0x98196, 0x9819c, 0x9819e, 0x981a2] {
+        let mut changed = original.to_vec();
+        let mut ins = decode_at(original, site).unwrap();
+        match ins.mnemonic {
+            "sub" => ins.mnemonic = "add",
+            "add" => ins.mnemonic = "sub",
+            "b" => {
+                ins.cond = Some(if ins.cond == Some(thumb_asm::Cond::Eq) {
+                    thumb_asm::Cond::Ne
+                } else {
+                    thumb_asm::Cond::Eq
+                })
+            }
+            "lsl" => {
+                ins.operands = ins
+                    .operands
+                    .as_slice()
+                    .enumerate()
+                    .map(|(i, op)| if i == 2 { Operand::Imm(30) } else { op })
+                    .collect()
+            }
+            other => panic!("unexpected normalization instruction {other}"),
+        }
+        let bytes = encode_bytes(&ins).unwrap();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x98180).is_err(),
+            "accepted wrong length normalization at {site:x}"
+        );
+    }
+    let mut premature = original.to_vec();
+    let mut asm = thumb_asm::Asm::new();
+    asm.bx(14);
+    premature[0x981aa..0x981ac].copy_from_slice(&asm.finish().unwrap()[..2]);
+    assert!(ResponseCommit::at(&premature, 0x98180).is_err());
+    let wh = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let mut unbalanced = wh.to_vec();
+    let mut asm = thumb_asm::Asm::new();
+    asm.push((1 << 5) | (1 << 8));
+    unbalanced[0x985fe..0x98600].copy_from_slice(&asm.finish().unwrap()[..2]);
+    assert!(ResponseCommit::at(&unbalanced, 0x985fc).is_err());
+}
+
+#[test]
+fn response_committer_preserves_pointer_and_count_relationships() {
+    use mediatek_optical::image::analysis::ResponseCommit;
+    use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
+    let original = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    assert!(ResponseCommit::at(original, 0x985fc).is_ok());
+    for (site, index, replacement) in [
+        (0x9862e, 1, Operand::Reg(Reg(3))),
+        (0x98630, 2, Operand::Reg(Reg(0))),
+        (0x98632, 0, Operand::Reg(Reg(0))),
+        (0x98638, 0, Operand::Reg(Reg(0))),
+        (0x98644, 1, Operand::Reg(Reg(1))),
+        (0x98648, 0, Operand::Reg(Reg(0))),
+    ] {
+        let mut ins = decode_at(original, site).unwrap();
+        ins.operands = ins
+            .operands
+            .as_slice()
+            .enumerate()
+            .map(|(i, op)| if i == index { replacement } else { op })
+            .collect();
+        let bytes = encode_bytes(&ins).unwrap();
+        let mut changed = original.to_vec();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x985fc).is_err(),
+            "accepted wrong expression at {site:x}"
+        );
+    }
+    for site in [0x98634, 0x9863a, 0x98640] {
+        let mut ins = decode_at(original, site).unwrap();
+        ins.cond = ins.cond.map(|cond| cond.invert());
+        let bytes = encode_bytes(&ins).unwrap();
+        let mut changed = original.to_vec();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x985fc).is_err(),
+            "accepted reversed clamp guard at {site:x}"
+        );
+    }
+}
+
+#[test]
+fn response_writer_supports_immediate_shift_buffer_offsets() {
+    let image = include_bytes!("../../tests/fixtures/BW16D1HT_OEM_3.03.bin");
+    let io = mediatek_optical::image::analysis::ResponseIo::inspect(image).unwrap();
+    assert_eq!((io.writer(), io.buffer_offset()), (0xa192c, 0xda00));
+    assert_eq!(
+        Mt1959Engine.find_response_writer(image).unwrap(),
+        (0xa192c, 0xda00)
+    );
 }

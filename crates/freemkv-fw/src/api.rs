@@ -288,6 +288,11 @@ fn modify_once(
     defaults: &crate::boot::BootSettings,
 ) -> Result<(engine::ModifyReport, crate::boot::BootSupport)> {
     let eng = engine::detect(image)?;
+    if mediatek_optical::image::is_drive_read(image) {
+        return Err(anyhow::anyhow!(
+            "This is a raw MediaTek drive dump with a read-back boot page, not a flashable firmware image. Select an OEM update image or a valid firmware backup to modify."
+        ).context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
+    }
     freemkv_flash::cmac::validate_flags(image)?;
     if let Some((output, support)) = crate::boot::update(image, defaults)? {
         let mut report = eng.modify(image)?;

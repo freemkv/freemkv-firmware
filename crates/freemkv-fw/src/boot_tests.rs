@@ -186,25 +186,39 @@ fn saved_settings_cannot_override_boot_but_runtime_reset_uses_same_defaults() {
     for initial in [0u8, 1, 255] {
         ram.fill(initial);
         for pc in (0..bytes.len()).step_by(2) {
-            let op = u16::from_le_bytes(bytes[pc..pc + 2].try_into().unwrap());
-            if op == 0xbc0f {
-                break;
-            }
-            match op {
-                0xb51f => {} // preserve registers on stack
-                op if op & 0xf800 == 0x4800 => {
-                    let at = ((pc + 4) & !3) + usize::from(op & 255) * 4;
-                    regs[usize::from((op >> 8) & 7)] =
-                        u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+            use thumb_asm::isa::Operand;
+            let ins = thumb_asm::isa::decode_at(&bytes, pc).expect("decoded boot instruction");
+            match ins.mnemonic {
+                "push" => {}
+                "pop" => break, // argument restore ends the initialization prefix
+                "ldr" => {
+                    let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
+                        panic!("LDR destination");
+                    };
+                    regs[usize::from(dest.num())] = thumb_asm::analysis::literal_value(&bytes, pc)
+                        .expect("initialization prefix loads only literals");
                 }
-                op if op & 0xf800 == 0x2000 => {
-                    regs[usize::from((op >> 8) & 7)] = u32::from(op & 255)
+                "mov" => {
+                    let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
+                        panic!("MOV destination");
+                    };
+                    regs[usize::from(dest.num())] = match ins.operands.get(1) {
+                        Some(Operand::Imm(value)) => value as u32,
+                        Some(Operand::Reg(source)) => regs[usize::from(source.num())],
+                        _ => panic!("MOV source"),
+                    };
                 }
-                op if op & 0xf800 == 0x7000 => {
-                    let address = regs[usize::from((op >> 3) & 7)] + u32::from((op >> 6) & 31);
-                    ram[(address - base) as usize] = regs[usize::from(op & 7)] as u8;
+                "strb" => {
+                    let (Some(Operand::Reg(source)), Some(Operand::Mem(memory))) =
+                        (ins.operands.get(0), ins.operands.get(1))
+                    else {
+                        panic!("STRB operands");
+                    };
+                    assert!(memory.index.is_none() && memory.add);
+                    let address = regs[usize::from(memory.base.num())] + memory.offset;
+                    ram[(address - base) as usize] = regs[usize::from(source.num())] as u8;
                 }
-                _ => panic!("unexpected boot instruction {op:04x}; review startup behavior"),
+                _ => panic!("unexpected boot instruction {ins:?}; review startup behavior"),
             }
         }
         assert_eq!(ram, defaults.flags());
@@ -352,4 +366,18 @@ fn shared_reset_records_refuse_a_forged_third_instruction_site() {
         .unwrap_err()
         .to_string()
         .contains("empty third site"));
+}
+
+#[test]
+fn normal_modify_refuses_a_raw_drive_dump_before_creating_unflashable_output() {
+    let mut image = fixture();
+    let mirror = image[0x10000..0x10400].to_vec();
+    image[..0x400].copy_from_slice(&mirror);
+    assert!(mediatek_optical::image::is_drive_read(&image));
+    let error = crate::api::modify_with_defaults(&image, &BootSettings::standard()).unwrap_err();
+    assert!(format!("{error:#}").contains("raw MediaTek drive dump"));
+    assert_eq!(
+        error.downcast_ref::<freemkv_flash::user_error::IssueCode>(),
+        Some(&freemkv_flash::user_error::IssueCode::UnsupportedFirmware)
+    );
 }

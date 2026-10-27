@@ -9,7 +9,7 @@ fn routing_evidence<R: std::fmt::Debug>(
         "area":format!("{:?}",c.area),"site":c.site,"original":c.original,
         "accept":c.accept,"reject":c.reject,"stub":c.bytes,
         "region_start":c.region_start,"calculation_end":c.calculation_end,
-        "caller":{"entry":c.caller.entry,"stack_bytes":c.caller.stack_bytes,"returns":c.caller.returns},
+        "caller":{"entry":c.caller.entry(),"stack_bytes":c.caller.stack_bytes(),"returns":c.caller.returns()},
         "bypass":bypass,
     })
 }
@@ -20,6 +20,14 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "ram-references" {
+            let map = mediatek_optical::image::analysis::RamReferences::inspect(&image);
+            println!(
+                "{}",
+                serde_json::json!({"bytes":map.bytes(),"incomplete":map.incomplete(),"calls":map.calls(),"uses":map.uses(),"fills":map.fills()})
+            );
+            return Ok(());
+        }
         if offset == "speed-policy" {
             let p = mediatek_optical::image::analysis::NativeSpeedPolicy::detect(&image)?;
             println!(
@@ -97,14 +105,14 @@ fn main() -> anyhow::Result<()> {
                         "cached_layer":read_position.contract.cached_layer,"status":read_position.contract.status,
                         "stub":read_position.bytes,"original":read_position.original},
                     "calibration":calibration.as_ref().map(|c|serde_json::json!({
-                        "entry":c.contract.caller.entry,"site":c.contract.site,"resume":c.contract.site+6,
+                        "entry":c.contract.caller.entry(),"site":c.contract.site,"resume":c.contract.site+6,
                         "original_base":c.contract.original_base,"coefficients":c.contract.c7_coefficients,
                         "original":c.original,"stub":c.bytes,
-                        "caller":{"entry":c.contract.caller.entry,"stack_bytes":c.contract.caller.stack_bytes,"returns":c.contract.caller.returns}
+                        "caller":{"entry":c.contract.caller.entry(),"stack_bytes":c.contract.caller.stack_bytes(),"returns":c.contract.caller.returns()}
                     })),
                     "completion":{"recovery_region":completion.recovery_region,"recovery_end":completion.recovery_end,
                         "recovery_state_load":completion.recovery_state_load,"recovery_state_register":completion.recovery_state_register,
-                        "recovery_request_register":completion.recovery_request_register,"recovery_flag_register":completion.recovery_flag_register,"recovery_caller":{"entry":completion.recovery_caller.entry,"returns":completion.recovery_caller.returns},"controller_region":completion.controller_region,"controller_end":completion.controller_region+0x6c,
+                        "recovery_request_register":completion.recovery_request_register,"recovery_flag_register":completion.recovery_flag_register,"recovery_caller":{"entry":completion.recovery_caller.entry(),"returns":completion.recovery_caller.returns()},"controller_region":completion.controller_region,"controller_end":completion.controller_region+0x6c,
                         "boundary_region":completion.boundary_region,"boundary_end":completion.boundary_end,"boundaries":completion.boundaries},
                     "parameter_profile":{
                         "variant":format!("{:?}",parameter.contract.variant),
@@ -120,7 +128,7 @@ fn main() -> anyhow::Result<()> {
                         "format":d.contract.format,"format_flag":d.contract.format_flag,"layers":d.contract.layers,
                         "layer_store":d.contract.layer_store,"one_register":d.contract.one_register,
                         "stub":d.bytes,"original":d.original,
-                        "caller":{"entry":d.caller.entry,"stack_bytes":d.caller.stack_bytes,"returns":d.caller.returns},
+                        "caller":{"entry":d.caller.entry(),"stack_bytes":d.caller.stack_bytes(),"returns":d.caller.returns()},
                     })),
                     "areas":UhdArea::ALL.iter().map(|&area| {
                         let contract = plan.areas().area(area).unwrap();
@@ -135,13 +143,13 @@ fn main() -> anyhow::Result<()> {
         if offset == "classic-speed-candidate" {
             let role = mediatek_optical::image::analysis::ClassicSpeed::detect(&image)?;
             let stub = freemkv_fw::engine::mt1959::Mt1959Engine
-                .build_speed_stub_classic(0x0200f000, role.maximum_cell)?;
+                .build_speed_stub_classic(0x0200f000, role.maximum_cell())?;
             println!(
                 "{}",
-                serde_json::json!({"entry":role.entry,"site":role.site,
-                "maximum_cell":role.maximum_cell,"optimum_cell":role.optimum_cell,
-                "media_cell":role.media_cell,"consumer":role.consumer,"flag_base":0x0200f000u32,
-                "stub":stub,"branch":thumb_asm::encode_b_wide(role.site, 0x1ff000)})
+                serde_json::json!({"entry":role.entry(),"site":role.site(),
+                "maximum_cell":role.maximum_cell(),"optimum_cell":role.optimum_cell(),
+                "media_cell":role.media_cell(),"consumer":role.consumer(),"flag_base":0x0200f000u32,
+                "stub":stub,"branch":thumb_asm::encode_b_wide(role.site(), 0x1ff000)})
             );
             return Ok(());
         }

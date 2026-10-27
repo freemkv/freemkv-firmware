@@ -146,12 +146,11 @@ pub struct CreateReport {
     pub hrl_stub_va: u32,
     /// File offset of the downgrade-enable (DE) byte written unconditionally.
     pub de_off: u32,
-    /// SRAM flag-table base actually used by this build (currently the provisional
-    /// placeholder; see `FLAG_BASE_PLACEHOLDER`).
+    /// SRAM flag-table base actually used by this build.
     pub flag_base: u32,
-    /// The provably-free SRAM cell the build-time scanner independently derived
-    /// from THIS image (for audit / eventual placeholder swap). Not yet consumed
-    /// as the flag base — reported so the swap is a one-liner once validated.
+    /// Statically unreferenced SRAM candidate derived from this image. This is
+    /// also the selected classic base; modern builds use their separate fixed
+    /// cell. Neither static absence nor this field proves runtime ownership.
     pub free_sram_cell: u32,
 }
 

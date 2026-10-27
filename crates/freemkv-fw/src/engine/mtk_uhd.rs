@@ -396,8 +396,8 @@ impl UhdConversionPlan {
         a.cmp_imm(3, 0xc7);
         a.bne(oem);
         a.pop(8);
-        a.raw16(0x78a1);
-        a.raw16(0x0989);
+        a.ldrb_imm(1, 4, 2);
+        a.lsrs_imm(1, 1, 6);
         a.cmp_imm(1, 1);
         a.bne(zero);
         tail(&mut a, contract.layer_one);
@@ -405,7 +405,7 @@ impl UhdConversionPlan {
         tail(&mut a, contract.layer_zero);
         a.bind(oem);
         a.pop(8);
-        a.raw16(0x2900);
+        a.cmp_imm(1, 0);
         a.bne(reject);
         tail(&mut a, contract.decode.accept());
         a.bind(reject);
@@ -479,15 +479,15 @@ impl UhdConversionPlan {
         a.bne(oem);
         a.pop(0x0a);
         a.ldr_lit(0, contract.original_base);
-        a.raw16(0x3058);
+        a.adds_imm(0, 0x58);
         a.ldr_lit(0, coefficients);
-        a.raw16(0x5b80);
+        a.ldrh_reg(0, 0, 6);
         tail(&mut a, contract.site + 6);
         a.bind(oem);
         a.pop(0x0a);
         a.ldr_lit(0, contract.original_base);
-        a.raw16(0x3058);
-        a.raw16(0x5b80);
+        a.adds_imm(0, 0x58);
+        a.ldrh_reg(0, 0, 6);
         tail(&mut a, contract.site + 6);
         let original = image[contract.site..contract.site + 6].to_vec();
         Ok(Some(UhdCalibrationCandidate {
@@ -601,7 +601,7 @@ pub struct UhdRoutingCandidate<R = UhdArea> {
 fn tail(a: &mut Asm, target: usize) {
     a.push(0x0108); // r3,lr; preserve r3 while replacing only the stacked return
     a.ldr_lit(3, target as u32 | 1);
-    a.raw16(0x9301); // str r3,[sp,4]
+    a.str_sp(3, 4); // str r3,[sp,4]
     a.pop(0x0108); // r3,pc; LR itself is unchanged
 }
 fn flag_address(flags: u32) -> Result<u32> {
@@ -641,9 +641,11 @@ fn selection_case(
     a.bne(oem);
     restore_cv(a, cv);
     a.pop(8);
-    for &op in replay {
-        a.raw16(op);
-    }
+    let replay_bytes = replay
+        .iter()
+        .flat_map(|word| word.to_le_bytes())
+        .collect::<Vec<_>>();
+    a.replay(&replay_bytes);
     if let Some((register, value)) = relocated_load {
         a.ldr_lit(u16::from(register), value);
     }
@@ -651,9 +653,11 @@ fn selection_case(
     a.bind(oem);
     restore_cv(a, cv);
     a.pop(8);
-    for &op in replay {
-        a.raw16(op);
-    }
+    let replay_bytes = replay
+        .iter()
+        .flat_map(|word| word.to_le_bytes())
+        .collect::<Vec<_>>();
+    a.replay(&replay_bytes);
     if let Some((register, value)) = relocated_load {
         a.ldr_lit(u16::from(register), value);
     }
@@ -667,7 +671,7 @@ fn restore_cv(a: &mut Asm, seed: Option<u32>) {
         // ADDS r3,r3,r3 establishes the saved C/V combination; native BICS
         // then establishes N/Z. No Thumb-2 MRS or ARM-mode helper is needed.
         a.ldr_lit(3, seed);
-        a.raw16(0x18db);
+        a.adds_reg(3, 3, 3);
     }
 }
 fn emit_c7_selection(
@@ -689,7 +693,10 @@ fn emit_c7_selection_relocated(
 ) -> Result<Vec<u8>> {
     let mut a = Asm::new();
     let flag = flag_address(flags)?;
-    if replay.first().is_some_and(|h| h & 0xffc0 == 0x4380) {
+    let replay_bytes: Vec<_> = replay.iter().flat_map(|word| word.to_le_bytes()).collect();
+    if thumb_asm::isa::decode_at(&replay_bytes, 0)
+        .is_some_and(|instruction| instruction.mnemonic == "bic" && instruction.sets_flags)
+    {
         // BICS preserves incoming C/V. Capture both through branches before any
         // new flag-setting instruction, so OEM behavior also preserves flags.
         let v1 = a.label();
@@ -803,7 +810,7 @@ pub fn emit_di_layers(flags: u32) -> Result<Vec<u8>> {
     a.cmp_imm(1, 4);
     a.bhi(done);
     a.movs_imm(2, 0xf3);
-    a.raw16(0x4010);
+    a.ands(0, 2);
     a.subs_imm(1, 1);
     a.lsls_imm(1, 1, 2);
     a.orrs(0, 1);
@@ -869,7 +876,7 @@ mod tests {
                 &CLASSIC[candidate.site..candidate.site + candidate.original.len()],
                 candidate.original
             );
-            assert!(candidate.caller.entry < candidate.site);
+            assert!(candidate.caller.entry() < candidate.site);
             assert!(candidate.calculation_end.is_none());
         }
         let mut changed = CLASSIC.to_vec();
@@ -958,7 +965,7 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
     let caller =
         mediatek_optical::image::analysis::SavedLink::detect(image, contract.prevalidation)?;
     ensure!(
-        caller.entry == contract.entry && caller.stack_bytes == 40,
+        caller.entry() == contract.entry && caller.stack_bytes() == 40,
         "DI caller frame disagrees"
     );
     let original = image[contract.prevalidation..contract.replay_continuation].to_vec();
@@ -971,7 +978,7 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
     let attribute_ok = a.label();
     let two = a.label();
     let assign = a.label();
-    a.raw16(0x466b); // r3 = native caller SP, before any local push.
+    a.mov_reg(3, 13); // r3 = native caller SP, before any local push.
     a.push(0x12f); // r0-r3,r5,lr; save every scratch and the incoming V flag.
     a.bvs(v1);
     a.movs_imm(5, 0);
@@ -1012,7 +1019,7 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
     a.bind(assign);
     a.strb_imm(0, 4, 0);
     a.pop(0x2f);
-    a.raw16(0xb001); // Drop saved local LR; native parent restores its own LR.
+    a.add_sp(4); // Drop saved local LR; native parent restores its own LR.
     a.ldrb_imm(2, 4, 0);
     a.movs_imm(contract.one_register as u16, 1);
     tail(&mut a, contract.format);
@@ -1020,16 +1027,14 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
     a.cmp_imm(5, 0);
     a.beq(v0);
     a.ldr_lit(0, 0x4000_0000);
-    a.raw16(0x1800); // ADDS r0,r0,r0: restore V=1.
+    a.adds_reg(0, 0, 0); // ADDS r0,r0,r0: restore V=1.
     a.b(replay);
     a.bind(v0);
     a.cmp_reg(5, 5); // Restore V=0.
     a.bind(replay);
     a.pop(0x2f);
-    a.raw16(0xb001);
-    for word in original.as_chunks::<2>().0 {
-        a.raw16(u16::from_le_bytes(*word));
-    }
+    a.add_sp(4);
+    a.replay(&original);
     tail(&mut a, contract.replay_continuation);
     Ok(UhdDiCandidate {
         contract,
@@ -1175,9 +1180,11 @@ pub(super) fn install_conversion(
         let branch = thumb_asm::encode_bl(site, stub).context("conversion branch out of range")?;
         thumb_asm::write(&mut working, stub as usize, &bytes);
         thumb_asm::write(&mut working, site, &branch);
-        for at in (site + 4..site + original.len()).step_by(2) {
-            thumb_asm::write(&mut working, at, &0x46c0u16.to_le_bytes());
+        let mut padding = Asm::new();
+        for _ in (site + 4..site + original.len()).step_by(2) {
+            padding.mov_reg(8, 8);
         }
+        thumb_asm::write(&mut working, site + 4, &padding.finish()?);
         crate::install_guard::verify_branch(
             &working,
             site,

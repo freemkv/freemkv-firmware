@@ -7,6 +7,19 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Refuse raw MediaTek drive dumps before authoring an output that Flash cannot
+  install. Explain that an OEM update image or valid backup is required.
+
+- Preserve all four native boot-initialization arguments, callee-saved registers,
+  aligned stack, native return value and flags through the boot detour.
+- Resolve READ BUFFER records through the native registered command-table graph,
+  rejecting disconnected tables and cycles. Bind response writers and committers
+  to their callers, exact buffer, DMA counts and balanced return paths.
+- Expand SRAM-reference analysis to decoded aliases and bounded copy/clear loops.
+  Reserve guards and the complete flag/scratch footprint below the conservative
+  placement ceiling on classic builds too; static absence remains separate from
+  runtime storage ownership.
+
 - Install complete MT1939 UHD conversion through normal Modify. Require the
   source-bound recognition, routing, controller, position, completion, calibration
   and speed contracts together; commit the whole group atomically. Store the

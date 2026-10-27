@@ -22,7 +22,7 @@
 //! behaviour is byte-identical. `flags` stays `0x01` — which on hardware is a
 //! drive-*ready* gate, NOT a media gate: the command answers with no disc.
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 
 use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
@@ -47,8 +47,6 @@ pub(crate) const CHAIN_FLAG: u8 = 0x04;
 pub(crate) const TERM_FLAG: u8 = 0x03;
 /// Record stride in bytes.
 pub(crate) const STRIDE: usize = 8;
-/// Minimum contiguous valid records to treat a byte range as a real table run.
-pub(crate) const MIN_RUN: usize = 8;
 /// Where injected code may live (past the loader); the scanner region and
 /// beyond. Free space is searched from here up.
 pub(crate) const CODE_REGION_START: usize = 0x0000_9c00;
@@ -67,43 +65,19 @@ pub(crate) const NUM_FEATURES: u8 = 6;
 /// The SRAM (on-chip working RAM) window scanned by [`Mt1959Engine::find_free_sram_cell`]
 /// and holding every runtime flag/scratch cell.
 pub(crate) const SRAM_LO: u32 = 0x0200_0000;
-pub(crate) const SRAM_HI: u32 = 0x0200_2000;
 
-/// Mapped-SRAM ceiling for the MT1959 family (a chip constant).
-///
-/// **Confirmation model — empirical, not documentary.** No MT1959 datasheet,
-/// boot-ROM dump, or memory map is public (MediaTek ODD-controller specs are
-/// NDA-only and none has leaked; the vendor page lists speeds only). So this
-/// bound is proven on the actual silicon, by three converging lines of evidence
-/// — which is *ground truth*, arguably stronger than a rev-specific spec sheet:
-///   1. runtime full-RAM capture — highest non-zero byte is `0x020019ff`, then a
-///      hard all-zero void;
-///   2. hardware write-persistence — writes at/above `0x02001a00` are read-as-
-///      zero and discarded (exactly why the old `0x02001a00` flag base silently
-///      failed), while writes below persist;
-///   3. static code refs — the image never touches SRAM at/above this bound.
-///
-/// Real RAM is `[SRAM_LO, SRAM_END)`; a flag/scratch cell MUST live below
-/// `SRAM_END`, and [`Mt1959Engine::assert_sram_cell_free`] re-checks that per
-/// image at build time so the derivation can never silently rot.
+/// Conservative SRAM placement ceiling inferred from the owned MT1959 capture
+/// and write-persistence observations. This is not a documented memory map or
+/// evidence that every MT1939/MT1959 model has the same runtime layout.
+/// Static placement checks stay below this ceiling on both paths.
 pub(crate) const SRAM_END: u32 = 0x0200_1a00;
 
-/// Flag-table base in on-chip SRAM (a chip constant, like the other `0x0200_xxxx`
-/// cells the OEM code loads — not a flash offset, so it is a literal, not a find).
-///
-/// The `3C 0E` handler persists each toggle's state to `FLAG_TABLE_BASE + subfn`,
-/// and each OEM-code trampoline (Speed 0x02, Region 0x03) reads its own flag byte
-/// there. It sits in a **204-byte free hole** at `0x02000e3c..0x02000f07`:
-/// flash-unreferenced AND live-zero under the heaviest runtime in the full-RAM
-/// capture, bracketed by live cells (`0x02000e38` below, `0x02000f08` above), and
-/// byte-identical across all 24 owned MT1959 images (1.00–1.04 + variants, all
-/// 1.03 MK models). See `research/libredrive/mtk/SRAM_FLAG_CELL.md`.
-///
-/// This REPLACES the earlier placeholder `0x02001a00`, which hardware proved is
-/// the FIRST UNMAPPED address (reads-zero, writes discarded) — not free RAM. The
-/// build-time "largest unreferenced gap" scanner ([`Mt1959Engine::find_free_sram_cell`])
-/// is unsound (it picked `0x0200120c`, which is live-in-use via computed base
-/// pointers) and is retained only for audit reporting.
+/// Modern flag-table location supported by the owned BU40N runtime capture.
+/// The captured gap was `0x02000e3c..0x02000f08`; each image is additionally
+/// checked for observed static references with four-byte guards. Capture and
+/// static absence do not prove this address is unused under every workload or
+/// model. Classic firmware has real uses here and selects a separate candidate.
+/// See `research/libredrive/mtk/SRAM_FLAG_CELL.md` for the capture's limits.
 pub(crate) const FLAG_TABLE_BASE: u32 = 0x0200_0e40;
 
 /// TEMPORARY flash-write probe ([`abi::Verb::FlashWrite`]) constants.
@@ -504,75 +478,20 @@ pub(crate) fn identity_blob() -> Vec<u8> {
 /// Resolve the pc-relative literal an `ldr rX, [pc, #imm]` at file offset `at`
 /// loads (`None` if the halfword there is not such a load).
 pub(crate) fn pc_literal(image: &[u8], at: usize) -> Option<u32> {
-    let hw = u16::from_le_bytes([*image.get(at)?, *image.get(at + 1)?]);
-    if (hw & 0xF800) != 0x4800 {
+    let ins = thumb_asm::isa::decode_at(image, at)?;
+    if ins.len() != 2 {
         return None;
     }
-    let pool = ((at + 4) & !3) + (hw & 0xFF) as usize * 4;
-    if pool + 4 > image.len() {
-        return None; // literal pool past the image tail — not decodable
-    }
-    Some(thumb::read_u32(image, pool))
+    thumb_asm::analysis::literal_value(image, at)
 }
 
-/// The set of SRAM addresses (in `SRAM_LO..SRAM_HI`) that code references, used
-/// by [`Mt1959Engine::find_free_sram_cell`]. Over-approximate on purpose: a
-/// pc-relative literal in the SRAM window marks its 4-byte cell, and if the loaded
-/// register is then used as a base (`[rX,#off]`) the `base..base+off` span is
-/// marked too. See the finder's docs for why derefs of out-of-window pointer cells
-/// don't over-count.
+/// Observed SRAM references, including direct data/ARM literals and decoded
+/// Thumb aliases across local control flow. A clean static footprint alone is
+/// not evidence of runtime ownership or writability.
 pub(crate) fn referenced_sram(image: &[u8]) -> std::collections::BTreeSet<u32> {
-    pub(crate) fn mark(used: &mut std::collections::BTreeSet<u32>, base: u32, span: u32) {
-        for k in 0..span {
-            let x = base.wrapping_add(k);
-            if (SRAM_LO..SRAM_HI).contains(&x) {
-                used.insert(x);
-            }
-        }
-    }
-    let mut used = std::collections::BTreeSet::new();
-    let mut o = 0usize;
-    while o + 2 <= image.len() {
-        let hw = u16::from_le_bytes([image[o], image[o + 1]]);
-        // `ldr rX,[pc,#imm]` with a literal in the SRAM window.
-        if (hw & 0xF800) == 0x4800 {
-            if let Some(lit) = pc_literal(image, o) {
-                if (SRAM_LO..SRAM_HI).contains(&lit) {
-                    let rx = (hw >> 8) & 7;
-                    mark(&mut used, lit, 4);
-                    // Base-register reach: scan the next few instructions for
-                    // `[rX,#off]` accesses; mark the whole base..base+off span.
-                    let mut max_off = 0u32;
-                    let mut p = o + 2;
-                    let mut steps = 0;
-                    while p + 2 <= image.len() && steps < 16 {
-                        let h = u16::from_le_bytes([image[p], image[p + 1]]);
-                        // rX redefined by another pc-relative load → stop.
-                        if (h & 0xF800) == 0x4800 && ((h >> 8) & 7) == rx {
-                            break;
-                        }
-                        if ((h >> 3) & 7) == rx {
-                            let imm5 = ((h >> 6) & 0x1F) as u32;
-                            let reach = match h & 0xF800 {
-                                0x6800 | 0x6000 => imm5 * 4 + 4, // ldr/str word
-                                0x7800 | 0x7000 => imm5 + 1,     // ldrb/strb
-                                0x8800 | 0x8000 => imm5 * 2 + 2, // ldrh/strh
-                                _ => 0,
-                            };
-                            max_off = max_off.max(reach);
-                        }
-                        p += 2;
-                        steps += 1;
-                    }
-                    if max_off > 4 {
-                        mark(&mut used, lit, max_off);
-                    }
-                }
-            }
-        }
-        o += 2;
-    }
-    used
+    mediatek_optical::image::analysis::RamReferences::inspect(image)
+        .bytes()
+        .clone()
 }
 
 /// Whether the halfwords at `off` match `sig` (each entry `(value, mask)`,
@@ -680,32 +599,14 @@ fn find_unique_variant(
 // (`decode_bl_target` removed 0.8.14: use [`thumb::decode_bl`] from the
 // standalone `thumb-asm` crate — same contract, single source of truth.)
 
-/// From a resolved [`BOOT_INIT_SIG`] hook `site` (`anchor+4`, the boot-status
-/// reload), follow the cold/warm-boot `bmi` at `anchor+8` to the convergence point
-/// and decode the 32-bit `bl <orig_init>` that sits there.
-///
-/// The `bmi` is a Thumb T1 conditional branch (`0xD4xx`) whose signed 8-bit
-/// immediate is a halfword count relative to `(anchor+8)+4`, so the convergence
-/// address is `conv = (anchor+8) + 4 + (simm8 << 1)`. On BU40N this resolves to
-/// `0x13d428`, the first instruction after the cold-boot bss/SRAM clear rejoins
-/// the warm path. Returns `(conv, orig_init)` — the detour site and the original
-/// init routine the boot stub tail-calls — or `None` when [`thumb::decode_bl`]
-/// on `conv` returns `None` (i.e. the instruction at `conv` is not a full
-/// Thumb-2 BL(T1) encoding), so a build fails closed rather than mis-patching.
+/// Follow the decoded cold/warm convergence branch and its native init call.
 pub(crate) fn boot_init_convergence(image: &[u8], site: usize) -> Option<(usize, u32)> {
-    let anchor = site.checked_sub(4)?;
-    let bmi_at = anchor + 8;
-    let bmi = u16::from_le_bytes([*image.get(bmi_at)?, *image.get(bmi_at + 1)?]);
-    if (bmi & 0xFF00) != 0xD400 {
-        return None; // not the expected cold/warm-boot `bmi`
+    let branch = thumb::isa::decode_at(image, site.checked_add(4)?)?;
+    if branch.mnemonic != "b" || branch.cond != Some(thumb::Cond::Mi) {
+        return None;
     }
-    let simm8 = (bmi & 0x00FF) as u8 as i8 as i32;
-    let conv = ((bmi_at as i32 + 4) + (simm8 << 1)) as usize;
-    // `thumb::decode_bl` (thumb-asm) fully validates the Thumb-2 BL(T1) shape
-    // internally — it returns `None` unless h1/h2 match the encoding — so no
-    // separate pre-check is needed here.
-    let orig_init = thumb::decode_bl(image, conv)?;
-    Some((conv, orig_init))
+    let convergence = branch.branch_target()? as usize;
+    Some((convergence, thumb::decode_bl(image, convergence)?))
 }
 
 /// Emit code writing the 32-bit register `src` big-endian into the reply buffer
@@ -798,100 +699,19 @@ impl BootInitSite {
 }
 
 impl Mt1959Engine {
-    /// Locate the scanner's entry (`push {…,lr}`) by its unique `0x3C` mode-gate
-    /// `cmp r2,#{6,7,A,B,C}` chain, then the nearest preceding push. Fails loud
-    /// if the signature is absent — without the scanner we cannot prove the
-    /// record format, so we refuse rather than guess.
+    /// Require one connected native scanner: incoming CDB, table stride,
+    /// linked/terminal records, READ BUFFER routing, and balanced handler calls.
     pub fn find_scanner_entry(&self, image: &[u8]) -> Result<u32> {
-        // cmp r2,#imm8  ==  0x2A00 | imm8  ->  little-endian [imm8, 0x2A]
-        let pats: [[u8; 2]; 5] = [
-            [0x06, 0x2A],
-            [0x07, 0x2A],
-            [0x0A, 0x2A],
-            [0x0B, 0x2A],
-            [0x0C, 0x2A],
-        ];
-        let lo = 0x0001_8000usize.min(image.len());
-        let hi = 0x0002_0000usize.min(image.len());
-        // Collect every DISTINCT scanner prologue whose 0x40-byte window carries the
-        // full cmp chain, then demand exactly one — the "prove it or refuse" contract
-        // every other finder in this file uses. Adjacent overlapping windows resolve to
-        // the same push-lr and collapse; two genuinely different functions each carrying
-        // the chain would be ambiguous and must refuse rather than silently pick the
-        // first (which may be an incidental literal-pool/switch-table match, not the
-        // real SCSI scanner).
-        let mut prologues: Vec<u32> = Vec::new();
-        for base in lo..hi {
-            let end = (base + 0x40).min(image.len());
-            let w = &image[base..end];
-            if !pats.iter().all(|p| w.windows(2).any(|c| c == p)) {
-                continue;
-            }
-            // walk back to the function's push {..,lr} (0xB5xx)
-            let mut p = base & !1;
-            let mut found = None;
-            for _ in 0..0x80 {
-                if p < 2 {
-                    break;
-                }
-                let hw = u16::from_le_bytes([image[p], image[p + 1]]);
-                if (hw & 0xFF00) == 0xB500 {
-                    found = Some(p as u32);
-                    break;
-                }
-                p -= 2;
-            }
-            match found {
-                Some(pr) if !prologues.contains(&pr) => prologues.push(pr),
-                Some(_) => {}
-                None => {
-                    bail!(
-                        "scanner mode-gate found near 0x{base:x} but no push-lr prologue before it"
-                    )
-                }
-            }
-        }
-        match prologues.as_slice() {
-            [one] => Ok(*one),
-            [] => bail!(
-                "MT1959 scanner signature (READ BUFFER mode-gate cmp chain) not found — cannot \
-                 prove the dispatch record format; refusing to patch"
-            ),
-            many => bail!(
-                "MT1959 scanner signature resolved {} distinct prologues in [0x{lo:x},0x{hi:x}) \
-                 (want exactly 1) — ambiguous, refusing to patch",
-                many.len()
-            ),
-        }
+        mediatek_optical::image::analysis::CommandScanner::inspect(image)
+            .map(|scanner| scanner.entry() as u32)
+            .context("native command scanner contract")
     }
 
-    /// The CDB base the scanner loads to read the incoming command: the literal
-    /// of the first `ldr r3, [pc, #imm]` at the scanner entry.
+    /// Incoming command bytes proven by the connected native scanner grammar.
     pub fn find_cdb_base(&self, image: &[u8]) -> Result<u32> {
-        let entry = self.find_scanner_entry(image)? as usize;
-        // entry+2 is the scanner's CDB-base load: `ldr r3,[pc,#imm]` (0x4Bxx) on
-        // MT1959 / JB8, or `ldr r5,[pc,#imm]` (0x4Dxx) on the MT1939 classic
-        // scanner (proven, engine-scope §1). Accept either destination register;
-        // the pool literal + SRAM-window check below is what actually validates it.
-        let ins_off = entry + 2;
-        if ins_off + 2 > image.len() {
-            bail!("scanner entry+2 (0x{ins_off:x}) runs past the image tail");
-        }
-        let hw = u16::from_le_bytes([image[ins_off], image[ins_off + 1]]);
-        let rt = (hw >> 8) & 0x7;
-        if (hw & 0xF800) != 0x4800 || !(rt == 3 || rt == 5) {
-            bail!("scanner entry+2 is not `ldr r3/r5,[pc,#imm]` (got 0x{hw:04x})");
-        }
-        let imm8 = (hw & 0xFF) as usize;
-        let pool = ((ins_off + 4) & !3) + imm8 * 4;
-        if pool + 4 > image.len() {
-            bail!("scanner cdb-base literal pool (0x{pool:x}) runs past the image tail");
-        }
-        let val = thumb::read_u32(image, pool);
-        if !(0x0200_0000..0x0200_2000).contains(&val) {
-            bail!("scanner cdb-base literal 0x{val:08x} is not in the expected SRAM window");
-        }
-        Ok(val)
+        mediatek_optical::image::analysis::CommandScanner::inspect(image)
+            .map(|scanner| scanner.cdb())
+            .context("native CDB operand contract")
     }
 
     /// The sense-setter routine `set_sense(key, asc, ascq)` the scanner
@@ -921,22 +741,16 @@ impl Mt1959Engine {
     /// with the live media-gated flag and an in-image handler, and requiring
     /// exactly one whose handler lands on a real `push {…,lr}` prologue.
     pub fn find_live_record(&self, image: &[u8], opcode: u8) -> Result<CommandRecord> {
-        // Dispatch-table windows come from the image's LINEAGE PROFILE (data, not a
-        // `_classic` fork), tried ORIGINAL-FIRST: MT1959 images resolve in the first
-        // (MT1959) window and never consult the relocated JBC6 window, so their emit
-        // stays byte-identical. JBC6/older-MT1939 keep the same record format but a
-        // window above 0x180000; classic lists its own ~0x1a4000 window.
-        let windows = super::profile::for_image(image).live_record_windows;
-        let mut last = None;
-        for &(lo, hi) in windows {
-            match self.find_live_record_in(image, opcode, lo, hi) {
-                Ok(r) => return Ok(r),
-                Err(e) => last = Some(e),
-            }
-        }
-        Err(last.unwrap_or_else(|| {
-            anyhow!("no dispatch-table window configured for this lineage (opcode 0x{opcode:02x})")
-        }))
+        let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(image)
+            .context("native command ownership")?;
+        let record = commands
+            .record(opcode, LIVE_FLAGS)
+            .context("live command record")?;
+        ensure!(
+            thumb::prologue_is_push_lr(image, (record.handler & !1) as usize, 6),
+            "native command handler has no supported saved-LR entry"
+        );
+        Ok(*record)
     }
 
     /// [`Self::find_live_record`] over an explicit table window. dispatch table lives in the lineage-profile window (MT1959 at 0x140000..0x160000); the MT1939 **classic**
@@ -950,66 +764,12 @@ impl Mt1959Engine {
         table_lo: usize,
         table_hi: usize,
     ) -> Result<CommandRecord> {
-        let end = table_hi.min(image.len());
-        let valid = |p: usize| -> bool {
-            if p + STRIDE > image.len() {
-                return false;
-            }
-            let fl = image[p + 1];
-            let resv = u16::from_le_bytes([image[p + 2], image[p + 3]]);
-            let h = thumb::read_u32(image, p + 4);
-            resv == 0 && matches!(fl, 0..=9 | 0x80 | 0x87) && (h == 0 || h < 0x0200_0000)
-        };
-        let mut hits: Vec<CommandRecord> = Vec::new();
-        let mut off = table_lo;
-        while off + STRIDE <= end {
-            if !valid(off) {
-                off += 4;
-                continue;
-            }
-            let mut p = off;
-            let mut run = 0usize;
-            while p + STRIDE <= image.len() && valid(p) {
-                run += 1;
-                p += STRIDE;
-            }
-            if run >= MIN_RUN {
-                let mut q = off;
-                for _ in 0..run {
-                    let op = image[q];
-                    let fl = image[q + 1];
-                    let h = thumb::read_u32(image, q + 4);
-                    if op == opcode && fl == LIVE_FLAGS && (0x1000..0x0020_0000).contains(&(h & !1))
-                    {
-                        hits.push(CommandRecord {
-                            off: q,
-                            opcode: op,
-                            flags: fl,
-                            handler: h,
-                        });
-                    }
-                    q += STRIDE;
-                }
-                off = p;
-            } else {
-                off += 4;
-            }
-        }
-        if hits.len() != 1 {
-            bail!(
-                "expected exactly one live 0x{opcode:02X} record in a coherent table, found {} — \
-                 ambiguous, refusing to patch",
-                hits.len()
-            );
-        }
-        let rec = hits[0];
-        if !thumb::prologue_is_push_lr(image, (rec.handler & !1) as usize, 6) {
-            bail!(
-                "0x{opcode:02X} handler 0x{:08x} has no push-lr prologue — not a real handler",
-                rec.handler
-            );
-        }
-        Ok(rec)
+        let record = self.find_live_record(image, opcode)?;
+        ensure!(
+            (table_lo..table_hi).contains(&record.off),
+            "proven native command record is outside the requested extent"
+        );
+        Ok(record)
     }
 
     /// Largest run of erased flash (`0xFF`) of at least `need` bytes, 4-aligned,
@@ -1026,29 +786,9 @@ impl Mt1959Engine {
     /// signature over its (fixed) body, which loads `0xaf90`, `[0x02000c7c]`,
     /// `[0x02000c78]`, then `strb r1,[r0]; bx lr`. Returns `(writer, commit_off)`.
     pub fn find_response_writer(&self, image: &[u8]) -> Result<(u32, u32)> {
-        // ldr r2,[pc] | adds r0,r0,r2 | ldr r2,[pc] | ldr r2,[r2] | adds r0,r2,r0 |
-        // ldr r2,[pc] | lsls r0,r0,#8 | ldr r2,[r2] | lsrs r0,r0,#8 | adds r0,r0,r2 |
-        // strb r1,[r0] | bx lr
-        const SIG: &[(u16, u16)] = &[
-            (0x4A00, 0xFF00),
-            (0x1880, 0xFFFF),
-            (0x4A00, 0xFF00),
-            (0x6812, 0xFFFF),
-            (0x1810, 0xFFFF),
-            (0x4A00, 0xFF00),
-            (0x0200, 0xFFFF),
-            (0x6812, 0xFFFF),
-            (0x0A00, 0xFFFF),
-            (0x1880, 0xFFFF),
-            (0x7001, 0xFFFF),
-            (0x4770, 0xFFFF),
-        ];
-        let at = find_masked(image, SIG, 0x0009_0000, 0x000b_0000)
-            .ok_or_else(|| anyhow!("response byte-writer signature not found"))?;
-        // the buffer-base offset is the first literal the writer loads (0xaf90).
-        let commit_off = pc_literal(image, at)
-            .ok_or_else(|| anyhow!("writer's first ldr is not pc-relative"))?;
-        Ok((at as u32, commit_off))
+        let io = mediatek_optical::image::analysis::ResponseIo::inspect(image)
+            .map_err(|error| anyhow!("native response I/O: {error}"))?;
+        Ok((io.writer() as u32, io.buffer_offset()))
     }
 
     /// The response-commit routine `commit(r0=buffer_offset)` and the transfer
@@ -1066,19 +806,9 @@ impl Mt1959Engine {
     /// control-block base loaded for the `[rN,#0x28]` store is a `0x04..` literal,
     /// so the entry scan keeps only the `ldr r1,[pc]` that targets SRAM.
     pub fn find_response_commit(&self, image: &[u8]) -> Result<(u32, u32)> {
-        // Commit windows come from the image's LINEAGE PROFILE, tried ORIGINAL-FIRST:
-        // MT1959 resolves in the first window (byte-identical); JBC6/older-MT1939 places
-        // the same commit routine (same three anchors) above 0xA0000, listed second.
-        let windows = super::profile::for_image(image).commit_windows;
-        let mut last = None;
-        for &(lo, hi) in windows {
-            match self.find_response_commit_in(image, lo, hi) {
-                Ok(r) => return Ok(r),
-                Err(e) => last = Some(e),
-            }
-        }
-        Err(last
-            .unwrap_or_else(|| anyhow!("no response-commit window configured for this lineage")))
+        let io = mediatek_optical::image::analysis::ResponseIo::inspect(image)
+            .map_err(|error| anyhow!("native response I/O: {error}"))?;
+        Ok((io.commit().entry() as u32, io.commit().length_cell()))
     }
 
     /// [`Self::find_response_commit`] over an explicit `[lo,hi)` code window.
@@ -1088,47 +818,9 @@ impl Mt1959Engine {
         lo: usize,
         hi: usize,
     ) -> Result<(u32, u32)> {
-        const SRAM: std::ops::Range<u32> = 0x0200_0000..0x0200_2000;
-        let hi = hi.min(image.len().saturating_sub(4));
-        // `str r0,[rN,#0x28]`: opcode/imm/rt fixed, rn (bits 5:3) free.
-        let is_str_28 = |hw: u16| (hw & 0xFFC7) == 0x6280;
-        // `ldr rT,[pc,#imm]` for a specific rT.
-        let is_ldr_pc = |hw: u16, rt: u16| (hw & 0xF800) == 0x4800 && ((hw >> 8) & 7) == rt;
-
-        let mut off = lo;
-        while off + 4 <= hi {
-            let hw0 = u16::from_le_bytes([image[off], image[off + 1]]);
-            let hw1 = u16::from_le_bytes([image[off + 2], image[off + 3]]);
-            // (a)+(b): DMA-source store immediately followed by the length load.
-            if is_str_28(hw0) && is_ldr_pc(hw1, 0) {
-                if let Some(len) = pc_literal(image, off + 2).filter(|v| SRAM.contains(v)) {
-                    // (c): walk back to the routine's opening `ldr r1,[pc]`→SRAM
-                    // (the base-pointer cell), skipping the MMIO base load.
-                    let mut p = off;
-                    let mut entry = None;
-                    for _ in 0..0x20 {
-                        if p < lo + 2 {
-                            break;
-                        }
-                        p -= 2;
-                        let hw = u16::from_le_bytes([image[p], image[p + 1]]);
-                        if is_ldr_pc(hw, 1) {
-                            if let Some(v) = pc_literal(image, p) {
-                                if SRAM.contains(&v) {
-                                    entry = Some(p as u32);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if let Some(entry) = entry {
-                        return Ok((entry, len));
-                    }
-                }
-            }
-            off += 2;
-        }
-        bail!("response-commit anchors (str [rN,#0x28] + length load) not found")
+        let commit = mediatek_optical::image::analysis::ResponseCommit::inspect_in(image, lo, hi)
+            .map_err(|error| anyhow!("native response committer: {error}"))?;
+        Ok((commit.entry() as u32, commit.length_cell()))
     }
 
     /// Locate the OEM flash **PROGRAM** routine (`program(r0=src, r1=dest, r2=len,
@@ -1469,7 +1161,7 @@ impl Mt1959Engine {
     /// `>= 2` (which makes the producer bail with ABORTED COMMAND until power-cycle).
     pub fn find_vid_agid_struct(&self, image: &[u8]) -> Result<u32> {
         mediatek_optical::image::analysis::VidGate::inspect(image)
-            .and_then(|gate| gate.agid_base(image))
+            .and_then(|gate| gate.agid_address())
             .map_err(|e| anyhow!("VID AGID operand binding: {e}"))
     }
 
@@ -1735,35 +1427,10 @@ impl Mt1959Engine {
         Ok(de as u32)
     }
 
-    /// Build-time SRAM-reference scanner: derive a provably-unused SRAM flag cell
-    /// **per-image**, never hardcoded. Returns the base (4-aligned) of the largest
-    /// contiguous run of SRAM addresses that no code references.
-    ///
-    /// The referenced set is built conservatively (over-approximate, so we never
-    /// pick a live cell): every `ldr rX,[pc,#imm]` whose pooled literal is in the
-    /// SRAM window is marked used, and if that register is then used as a base
-    /// (`[rX,#off]`) the whole `base..base+off` span is marked too (base-register
-    /// reach). Pointer cells such as `[0x02000c78]`/`[0x02000c7c]` resolve at
-    /// runtime to addresses *outside* the SRAM window (the data bank/overlay), so
-    /// their dereference targets are correctly NOT counted — only the 4-byte cell
-    /// itself is (a `[rX,#0]` deref). Because some SRAM is reached via computed
-    /// base pointers that leave no literal, the LARGEST unreferenced gap is chosen
-    /// (the region most likely genuinely reserved).
-    ///
-    /// Cross-check: on OEM 1.00 the live DumpAll sweep found a 1536-byte zero gap
-    /// at `0x02001a00`; this scanner independently reports the largest free gap as
-    /// `0x0200120c..0x02002000` (3572 bytes) on both 1.00 and 1.03 — which
-    /// *contains* `0x02001a00` — so the flag-table base sits inside it.
-    /// Hybrid safety belt for a chip-constant SRAM cell (flag table / V5 scratch):
-    /// the VALUE is a family constant (SRAM layout is per-chip, validated free +
-    /// live-zero across all owned MT1959 images via the full-RAM capture), but at
-    /// build time we still ASSERT, against THIS image, that `[base-4, base+len+4)`
-    /// (cell + a 4-byte guard each side) is (a) entirely inside mapped RAM
-    /// `[SRAM_LO, SRAM_END)` and (b) not touched by any static SRAM reference. Static
-    /// reference-analysis is sound in the safety direction — a reference means
-    /// corruption risk — so a clean pass means we won't clobber live state; the
-    /// "not written at runtime" guarantee comes from the one-time runtime capture.
-    /// Refuses to build (rather than emit a dangerous cell) if either check fails.
+    /// Reject overlap with observed static references, including a four-byte
+    /// guard on each side, and reject storage beyond the conservative RAM ceiling.
+    /// Passing this check does not establish runtime ownership or cover arbitrary
+    /// indirect code. The modern fixed cell also has model-specific capture evidence.
     pub(crate) fn assert_sram_cell_free(
         &self,
         image: &[u8],
@@ -1771,58 +1438,59 @@ impl Mt1959Engine {
         len: u32,
         what: &str,
     ) -> Result<()> {
-        let lo = base.saturating_sub(4);
-        let hi = base + len + 4;
-        if base < SRAM_LO || hi > SRAM_END {
-            bail!(
-                "{what} cell {base:#010x}..{:#010x} is outside mapped SRAM \
-                 [{SRAM_LO:#010x}, {SRAM_END:#010x}) — would be discarded/unmapped",
+        let lo = base
+            .checked_sub(4)
+            .ok_or_else(|| anyhow!("{what}: SRAM lower guard underflows"))?;
+        let hi = base
+            .checked_add(len)
+            .and_then(|end| end.checked_add(4))
+            .ok_or_else(|| anyhow!("{what}: SRAM upper guard overflows"))?;
+        if lo < SRAM_LO || hi > SRAM_END {
+            return Err(anyhow!(
+                "{what} cell {base:#010x}..{:#010x} is outside the supported SRAM placement range \
+                 [{SRAM_LO:#010x}, {SRAM_END:#010x})",
                 base + len
-            );
+            )
+            .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
         }
         let used = referenced_sram(image);
         for a in lo..hi {
             if used.contains(&a) {
-                bail!(
+                return Err(anyhow!(
                     "{what} cell {base:#010x}..{:#010x} overlaps a code-referenced SRAM \
                      address {a:#010x} (+guard) — refusing to clobber live state",
                     base + len
-                );
+                )
+                .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
             }
         }
         Ok(())
     }
 
-    #[allow(dead_code)]
+    /// Select a statically unreferenced candidate within the conservative RAM
+    /// ceiling, reserving guards and the complete flag/scratch footprint.
+    /// This is a placement candidate, not proof of runtime memory ownership.
     pub fn find_free_sram_cell(&self, image: &[u8]) -> Result<u32> {
         let used = referenced_sram(image);
-        let (mut best_base, mut best_len) = (0u32, 0usize);
-        let (mut cur_base, mut cur_len) = (SRAM_LO, 0usize);
-        let mut a = SRAM_LO;
-        while a < SRAM_HI {
-            if used.contains(&a) {
-                if cur_len > best_len {
-                    best_len = cur_len;
-                    best_base = cur_base;
+        let footprint = (FLASHWRITE_SCRATCH_OFF + 1).max(u32::from(NUM_FEATURES) + 1);
+        let mut best: Option<(u32, u32)> = None;
+        let mut start = SRAM_LO;
+        for end in (SRAM_LO..=SRAM_END).filter(|a| *a == SRAM_END || used.contains(a)) {
+            let candidate = (start + 4 + 3) & !3; // leading guard, then word alignment
+            if candidate + footprint + 4 <= end {
+                let usable = end - candidate - 4;
+                if best.is_none_or(|(_, previous)| usable > previous) {
+                    best = Some((candidate, usable));
                 }
-                cur_len = 0;
-                cur_base = a + 1;
-            } else {
-                cur_len += 1;
             }
-            a += 1;
+            start = end + 1;
         }
-        if cur_len > best_len {
-            best_len = cur_len;
-            best_base = cur_base;
-        }
-        if best_len < NUM_FEATURES as usize + 2 {
-            bail!(
-                "largest unreferenced SRAM gap is only {best_len} bytes — too small for a flag \
-                 table; refusing to guess a cell"
-            );
-        }
-        Ok((best_base + 3) & !3)
+        best.map(|(base, _)| base).ok_or_else(|| {
+            anyhow!(
+                "no statically unreferenced SRAM candidate fits the complete {footprint}-byte \
+             flag/scratch footprint and guards below {SRAM_END:#010x}"
+            )
+        })
     }
 
     /// Assemble the freemkv `0x3C 0E` handler for the `verb [feature] [state]`
@@ -1902,9 +1570,18 @@ impl Mt1959Engine {
         identity: Vec<u8>,
         defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
-        let cdb = self.find_cdb_base(image)?;
-        let (writer, commit_off) = self.find_response_writer(image)?;
-        let (commit, length_field) = self.find_response_commit(image)?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let cdb = analysis
+            .commands()
+            .context("native command ownership")?
+            .scanner()
+            .cdb();
+        let response = analysis.response().context("native response I/O")?;
+        let (writer, commit_off) = (response.writer() as u32, response.buffer_offset());
+        let (commit, length_field) = (
+            response.commit().entry() as u32,
+            response.commit().length_cell(),
+        );
         // OEM flash PROGRAM routine, recovered per image (no hardcoded VA) — the
         // [`abi::Verb::FlashWrite`] probe `bl`s this.
         let flash_program = self.find_flash_program(image)?;
@@ -2518,7 +2195,7 @@ impl Mt1959Engine {
 
         a.bind(oem);
         a.strb_imm(2, 0, 8); // frame[4] = r2 (OEM TypeCode/#resets/#changes)
-        a.raw16(0x466B); // mov r3,sp — re-read the RegionMask source from sp[3]
+        a.mov_reg(3, 13); // mov r3,sp — re-read the RegionMask source from sp[3]
         a.ldrb_imm(2, 3, 3); // r2 = s3 (frame[4] already emitted, r2 free)
         a.strb_imm(2, 0, 8); // frame[5] = s3 (OEM RegionMask)
         a.strb_imm(4, 0, 8); // frame[6] = r4 (RPCScheme = 1, RPC-2)
@@ -2723,7 +2400,7 @@ impl Mt1959Engine {
     pub(crate) fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let refuse = a.label();
-        a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
+        a.ldrb_imm(0, 2, 7); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
         a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // shared runtime setting
         a.ldrb_imm(3, 3, 0); // r3 = Unrestricted flag byte
         a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force BD refuse (0xFF passthrough / 0x01 on stay OEM; boot hook makes 0x00 unreachable at power-on)
@@ -2765,7 +2442,7 @@ impl Mt1959Engine {
     pub(crate) fn build_uhd_gate_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let refuse = a.label();
-        a.raw16(0x79D0); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
+        a.ldrb_imm(0, 2, 7); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
         a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // r3 = &flag[Unrestricted]
         a.ldrb_imm(3, 3, 0); // r3 = Unrestricted flag byte
         a.cmp_imm(3, abi::STATE_OFF); // 0x00 = force UHD refuse (0xFF passthrough / 0x01 on stay OEM)
@@ -2893,13 +2570,13 @@ impl Mt1959Engine {
         if let Some(refusal) = scoped_refusal {
             a.push(0x0108);
             a.ldr_lit(3, refusal | 1);
-            a.raw16(0x9301);
+            a.str_sp(3, 4);
             a.pop(0x0108);
         }
         a.bind(deny);
         a.push(0x0108);
         a.ldr_lit(3, deny_va | 1);
-        a.raw16(0x9301); // str r3,[sp,#4]: replace stacked return with OEM failure continuation
+        a.str_sp(3, 4); // str r3,[sp,#4]: replace stacked return with OEM failure continuation
         a.pop(0x0108);
         a.finish().map_err(anyhow::Error::from)
     }
@@ -2930,7 +2607,7 @@ impl Mt1959Engine {
         a.bne(original);
         a.push(0x0108);
         a.ldr_lit(3, contract.refusal() as u32 | 1);
-        a.raw16(0x9301);
+        a.str_sp(3, 4);
         a.pop(0x0108);
         a.bind(original);
         a.cmp_imm(0, 0xC);
@@ -2939,7 +2616,7 @@ impl Mt1959Engine {
         a.bind(deny);
         a.push(0x0108);
         a.ldr_lit(3, contract.deny() as u32 | 1);
-        a.raw16(0x9301);
+        a.str_sp(3, 4);
         a.pop(0x0108);
         Ok((contract.site(), a.finish()?))
     }
@@ -3393,15 +3070,8 @@ impl Mt1959Engine {
         defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
-        // push {r0,r1,r2,r3,r4,lr} — preserve orig_init's args + return addr,
-        // AND include an even-count `r4` pad so sp is 8-byte aligned at the
-        // downstream `blx r3` call site. Without the pad the 5-word push
-        // followed by a 4-word pop leaves sp at S-4 (4-mod-8) at the call,
-        // breaking AAPCS entry alignment. Benign for a pure Thumb-1
-        // `orig_init` on BU40N (no `ldrd/strd`/64-bit/VFP that observes it),
-        // but a latent hazard for any lineage where the callee widens. The
-        // sibling deny-reset stub (`build_deny_reset_stub` above) already
-        // uses this same pattern for the same reason.
+        // Preserve all four native arguments and the caller's r4. Keep two
+        // words on the stack across the call so its entry remains 8-byte aligned.
         a.push(0x011F); // push {r0-r4, lr}       6 words → sp 8-aligned
                         // Initialize every flag, including the otherwise-unused saved marker.
         a.ldr_lit(0, flag_base); // r0 = &flag table (SRAM)
@@ -3411,9 +3081,14 @@ impl Mt1959Engine {
         }
         // Boot choices are authoritative. Saved runtime settings are loaded only
         // by an explicit RESET_TO_FLASH, never implicitly during startup.
-        a.pop(0x000F); // pop {r0,r1,r2,r3}   restore the args orig_init may read
-        a.ldr_lit(3, orig_init | 1); // r3 = orig_init (Thumb bit set for blx)
-        a.blx(3); // tail-call orig_init at sp=S-8 (AAPCS-aligned); lr := &(pop {pc})
+        // R12 is call-clobbered, unlike the four restored argument registers.
+        // Load its target through the saved r4, then restore r4 before entry.
+        a.ldr_lit(4, orig_init | 1);
+        a.mov_reg(12, 4);
+        a.pop(0x000F); // r0-r3 are exactly the native call's arguments
+        a.mov_reg(4, 13);
+        a.ldr_imm(4, 4, 0); // saved caller r4, without changing flags
+        a.blx(12); // call at sp=S-8; retain the native result and return flags
         a.pop(0x0110); // pop {r4, pc}   restore r4 pad + return to conv+4
         a.finish().map_err(anyhow::Error::from)
     }

@@ -50,8 +50,13 @@ const EXPECT_HANDLER_HEX: &str =
 // and saved reload with standard/custom settings; offsets and covered CMACs move.
 // The three-way auth hook now shares its register-preserving body across BU/WH;
 // Off takes native refusal. Independent CPU tests cover all nibble/setting pairs.
-const EXPECT_CMAC_1: &str = "4f99f4614ba4cbb8b77404c02bfe3da3";
-const EXPECT_CMAC_15: &str = "41f93094192a868580512ce030d3c9f9";
+// Reviewed boot-ABI amendment: load the native target through r12, preserve
+// native r0-r3 and r4, and retain the aligned two-word return frame. The eight
+// additional bytes relocate subsequent stubs and their branch displacements.
+// Independent Unicorn execution fails on the previous output's overwritten r3
+// and passes on the corrected output, including native return value and NZCV.
+const EXPECT_CMAC_1: &str = "a3124aa4e48df0aa932df7d90743c359";
+const EXPECT_CMAC_15: &str = "c08714a961799bb2e1d580e65a9cd69d";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -330,17 +335,14 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.handler_bytes.len()
     );
 
-    // The build-time SRAM scanner still reports its (unsound) candidate for audit,
-    // but the flag base actually used is the validated 204-byte free hole at
-    // 0x02000e40 (hardware-proven writable+free; 0x02001a00 was unmapped).
+    // The guarded static candidate remains separate from modern's fixed flag
+    // cell. Neither the candidate nor a zero-valued capture proves all runtime
+    // workloads leave the storage unused.
     assert_eq!(
-        report.free_sram_cell, 0x0200_120c,
-        "scanner free SRAM cell (audit-only, unsound)"
+        report.free_sram_cell, 0x0200_145c,
+        "guarded statically unreferenced SRAM candidate (not runtime ownership)"
     );
-    assert_eq!(
-        report.flag_base, 0x0200_0e40,
-        "flag-table base (validated free hole)"
-    );
+    assert_eq!(report.flag_base, 0x0200_0e40, "modern flag-table base");
     // Always-on boot-init hook: the cold/warm-boot convergence `bl <orig_init>` (the
     // BOOT_INIT_SIG anchor's `bmi` target, 0x13d428 on 1.00 — the first call AFTER the
     // cold-boot SRAM clear), detoured to a stub that writes 0xFF into every flag at
@@ -492,11 +494,6 @@ fn hoard_roots() -> Vec<String> {
 /// flash) that proved identical across every owned VID-capable image.
 const EXPECT_VID_OUT_BUF: u32 = 0x0021_0c00;
 
-/// The scanner-derived largest free SRAM gap base — identical on the two required
-/// BU40N images (1.00 + 1.03): `0x0200120c..0x02002000` (3572 bytes), which
-/// contains the `0x02001a00` gap the live sweep found.
-const EXPECT_FREE_SRAM: u32 = 0x0200_120c;
-
 /// The downgrade-enable byte offset (identity-page slot), identical fleet-wide.
 const EXPECT_DE_OFF: u32 = 0x001e_c056;
 
@@ -544,17 +541,15 @@ fn finders_hold_across_owned_images() {
         assert!(report.vid_gate_setter != 0, "VID gate-setter for {path}");
         assert!(report.setdiscmode != 0, "SetDiscMode for {path}");
         // Speed (0x02) + Region-free (0x03) must be wired, and the DE byte + the
-        // scanner-derived free cell must agree across both required BU40N images.
+        // scanner-derived candidate must stay inside the guarded placement bounds.
         assert!(report.speed_stub_va != 0, "Speed (0x02) wired for {path}");
         assert!(
             report.region_stub_va != 0,
             "Region-free (0x03) wired for {path}"
         );
         assert_eq!(report.de_off, EXPECT_DE_OFF, "DE byte for {path}");
-        assert_eq!(
-            report.free_sram_cell, EXPECT_FREE_SRAM,
-            "scanner free SRAM cell for {path}"
-        );
+        assert!(report.free_sram_cell >= super::SRAM_LO + 4);
+        assert!(report.free_sram_cell + super::FLASHWRITE_SCRATCH_OFF + 1 + 4 <= super::SRAM_END);
         checked_required += 1;
     }
     if checked_required == 0 {
@@ -641,7 +636,7 @@ fn find_free_sram_cell_picks_largest_unreferenced_gap() {
         .expect("a free gap must exist");
     // 0x02000010..0x02000014 is used; the largest gap is the high tail, whose base
     // (0x02000014) is already 4-aligned.
-    assert_eq!(cell, 0x0200_0014);
+    assert_eq!(cell, 0x0200_0018); // leaves the four-byte lower guard
 }
 
 /// Base-register reach: a literal used as `[rX,#off]` marks the whole span, so the
@@ -656,7 +651,24 @@ fn find_free_sram_cell_marks_base_register_reach() {
     img[4..8].copy_from_slice(&0x0200_0010u32.to_le_bytes()); // base literal
     let cell = Mt1959Engine.find_free_sram_cell(&img).unwrap();
     // 0x02000010..(0x02000010+0x1f+1)=0x02000030 marked used → high gap base 0x30.
-    assert_eq!(cell, 0x0200_0030);
+    assert_eq!(cell, 0x0200_0034); // leaves the four-byte lower guard
+}
+
+/// The old search could select the entirely unreferenced tail above the
+/// conservative mapped ceiling. Filling mapped RAM must now refuse placement.
+#[test]
+fn sram_candidate_never_uses_the_unmapped_high_tail_or_an_unguarded_cell() {
+    let image: Vec<u8> = (super::SRAM_LO..super::SRAM_END)
+        .step_by(4)
+        .flat_map(u32::to_le_bytes)
+        .collect();
+    assert!(Mt1959Engine.find_free_sram_cell(&image).is_err());
+    assert!(Mt1959Engine
+        .assert_sram_cell_free(&[], super::SRAM_LO, 7, "test")
+        .is_err());
+    assert!(Mt1959Engine
+        .assert_sram_cell_free(&[], u32::MAX - 4, 16, "test")
+        .is_err());
 }
 
 /// A valid `ldr r0,[pc,#0]` whose literal pool (offset 4) lies past this 2-byte
@@ -1467,7 +1479,7 @@ fn build_boot_init_fills_defaults_without_saved_overlay_and_tail_calls_orig() {
             .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
     };
     // Preserves orig_init's args + lr AND pads with r4 so sp is 8-byte aligned
-    // at the downstream `blx r3` (AAPCS entry alignment):
+    // at the downstream `blx r12` (AAPCS entry alignment):
     // `push {r0,r1,r2,r3,r4,lr}` (0xB51F).
     assert!(
         has16(0xB51F),
@@ -1518,9 +1530,18 @@ fn build_boot_init_fills_defaults_without_saved_overlay_and_tail_calls_orig() {
         has16(0xBC0F),
         "boot stub pops {{r0-r3}} before tail-calling"
     );
-    // Loads orig_init with the Thumb bit set and tail-calls it: `blx r3` (0x4798).
+    // The target uses r12, preserving the native fourth argument in r3.
     assert!(has32(orig_init | 1), "boot stub loads orig_init|1");
-    assert!(has16(0x4798), "boot stub tail-calls orig_init via blx r3");
+    assert!(
+        (0..stub.len()).step_by(2).any(|pc| {
+            thumb_asm::isa::decode_at(&stub, pc).is_some_and(|ins| {
+                ins.mnemonic == "blx"
+                    && ins.operands.get(0)
+                        == Some(thumb_asm::isa::Operand::Reg(thumb_asm::isa::Reg(12)))
+            })
+        }),
+        "boot stub calls orig_init through scratch r12, preserving r3"
+    );
     // Returns to conv+4 AND restores the r4 sp-align pad: `pop {r4, pc}` (0xBD10).
     assert!(
         has16(0xBD10),
