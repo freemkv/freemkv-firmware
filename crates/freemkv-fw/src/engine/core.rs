@@ -1089,17 +1089,12 @@ impl Mt1959Engine {
     /// hardcoded). Calling the producer stages the CLEAR VID into that buffer
     /// before any transit encryption.
     pub fn find_vid_producer(&self, image: &[u8]) -> Result<(u32, u32)> {
-        let gate = self.find_vid_gate(image)? + 16; // the `ldrb r0,[r0]` gate
-        let mut p = gate;
-        let producer = loop {
-            if p < 2 || gate - p > 0x200 {
-                bail!("VID producer prologue (push {{r4-r7,lr}}) not found before the gate");
-            }
-            if u16::from_le_bytes([image[p], image[p + 1]]) == 0xB5F0 {
-                break p;
-            }
-            p -= 2;
-        };
+        let contract = mediatek_optical::image::analysis::VidGate::inspect(image)
+            .map_err(|e| anyhow!("VID producer contract: {e}"))?;
+        let gate = contract.anchor() + 16;
+        let producer = contract
+            .producer_entry()
+            .map_err(|e| anyhow!("VID producer entry: {e}"))?;
         // The scratch-buffer literal: a runtime address in [0x00201000,0x00300000)
         // above the flash image. Require exactly one distinct value in the body.
         let mut out: Option<u32> = None;

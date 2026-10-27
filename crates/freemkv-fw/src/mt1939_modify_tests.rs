@@ -110,3 +110,80 @@ fn normal_modify_corpus_has_complete_editable_settings() {
         .unwrap();
     }
 }
+
+/// Exercise held images with partial support too: only advertised choices may
+/// be selected, and absence of editable settings is a valid, explicit outcome.
+#[test]
+fn held_modify_corpus_roundtrips_every_advertised_choice() {
+    use std::io::Write;
+    let Ok(path) = std::env::var("FREEMKV_HELD_MODIFY_CORPUS") else {
+        return;
+    };
+    let hoard = std::path::PathBuf::from(std::env::var("FREEMKV_NORMAL_MODIFY_HOARD").unwrap());
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let mut output =
+        std::fs::File::create(std::env::var("FREEMKV_HELD_MODIFY_OUTPUT").unwrap()).unwrap();
+    for row in manifest["images"].as_array().unwrap() {
+        let data = std::fs::read(hoard.join(row["path"].as_str().unwrap())).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&data)),
+            row["sha256"].as_str().unwrap()
+        );
+        let (report, support) =
+            crate::api::modify_with_defaults(&data, &BootSettings::standard()).unwrap();
+        assert!(engine::audit::audit_image(&data, &report).ok());
+        assert!(freemkv_flash::cmac::verify(&report.image));
+        freemkv_flash::crossflash::admits(
+            freemkv_flash::crossflash::Platform::Mediatek,
+            &data,
+            &report.image,
+        )
+        .unwrap();
+        let stored = crate::boot::inspect(&report.image).unwrap();
+        let mut choices = 0;
+        for feature in BootFeature::ALL {
+            if !support.supports(feature) {
+                continue;
+            }
+            let (settings, reopened_support) =
+                stored.as_ref().expect("advertised settings must reopen");
+            assert!(reopened_support.supports(feature));
+            for value in [0, 1, 255] {
+                if !support.supports_value(feature, value) {
+                    continue;
+                }
+                let text = match (feature, value) {
+                    (BootFeature::Speed, 1) => "uncapped",
+                    (BootFeature::Region, 1) => "free",
+                    (_, 0) => "off",
+                    (_, 1) => "on",
+                    _ => "oem",
+                };
+                let mut changed = settings.clone();
+                changed.set(feature, text).unwrap();
+                let (updated, updated_support) =
+                    crate::api::modify_with_defaults(&report.image, &changed).unwrap();
+                assert!(updated_support.supports_value(feature, value));
+                assert_eq!(
+                    crate::boot::inspect(&updated.image)
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .value(feature),
+                    changed.value(feature)
+                );
+                assert!(freemkv_flash::cmac::verify(&updated.image));
+                freemkv_flash::crossflash::admits(
+                    freemkv_flash::crossflash::Platform::Mediatek,
+                    &data,
+                    &updated.image,
+                )
+                .unwrap();
+                choices += 1;
+            }
+        }
+        writeln!(output, "{}", serde_json::json!({"input_sha256": row["sha256"], "output_sha256":format!("{:x}", Sha256::digest(&report.image)), "advertised_choices_tested":choices, "audit":"passed", "integrity":"passed", "admission":"passed"})).unwrap();
+        output.flush().unwrap();
+    }
+}

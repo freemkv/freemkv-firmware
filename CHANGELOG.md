@@ -73,6 +73,9 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Flash
 
+- Support SXLT/OEM-branded Pioneer captures through native descriptor and receiver contracts, fixed-width INQUIRY identity recovery, and the existing ungated finalizer’s alternate register allocation. Preserve captured Kernel/Normal bytes and exact live-descriptor checks.
+- Explain unrecognized Pioneer backup layouts as a support limitation after a successful read. Offer a raw dump for investigation; generic backup failures no longer imply a connection fault.
+
 - Standardize Pioneer CDB response parsing in the optical library and select
   one backend from protocol evidence. Remove duplicated SAT/REC support lists
   from backup and envelope reconstruction. Preserve captured firmware without

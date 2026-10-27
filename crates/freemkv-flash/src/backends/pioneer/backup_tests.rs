@@ -2161,3 +2161,59 @@ fn backup_without_oem_seeds_is_independent_of_platform_prefix() {
         assert!(!provenance.kernel_oem && !provenance.normal_oem);
     }
 }
+
+#[test]
+fn oem_branded_capture_replays_through_the_normal_backup_workflow() {
+    struct OemReplay(BoundedBackupReplay);
+    impl ScsiDevice for OemReplay {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            if cdb == [0x12, 0, 0, 0, len as u8, 0] && matches!(len, 36 | 96) {
+                let mut response = vec![0; len];
+                response[0] = 5;
+                response[8..16].copy_from_slice(b"SXLT    ");
+                response[16..32].copy_from_slice(b"BDE-PR1EP  PP100");
+                response[32..36].copy_from_slice(b"3.01");
+                return Ok(response);
+            }
+            self.0.command_in(cdb, len)
+        }
+        fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+            self.0.command_out(cdb, data)
+        }
+        fn describe(&self) -> String {
+            "OEM capture replay; no hardware".into()
+        }
+    }
+    let kernel = include_bytes!("../../../tests/fixtures/pioneer-sxlt/sxlt-id75-kernel.bin");
+    let header = include_bytes!("../../../tests/fixtures/pioneer-sxlt/sxlt-id75-normal-header.bin");
+    let mut normal = vec![0xff; 0x1b7b00];
+    normal[..header.len()].copy_from_slice(header);
+    let balance = normal.len() - 4;
+    normal[balance..].fill(0);
+    let (words, remainder) = normal.as_chunks::<4>();
+    assert!(remainder.is_empty());
+    let sum = words.iter().fold(0u32, |sum, word| {
+        sum.wrapping_add(u32::from_be_bytes(*word))
+    });
+    normal[balance..].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+    let mut replay = OemReplay(BoundedBackupReplay::new(kernel, &normal));
+    let archive = capture_signed_candidate(&mut replay).unwrap();
+    assert_eq!(replay.0.refused_reads, 0);
+    validate_envelope_package(&archive, "BDE-PR1EP  PP100").unwrap();
+    let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
+    let k = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap();
+    let n = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap();
+    let decoded_kernel = pioneer_optical::envelope::decode_envelope(&k.bytes).unwrap();
+    let decoded_normal =
+        pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, &decoded_kernel).unwrap();
+    assert_eq!(decoded_kernel.image, kernel.as_slice());
+    assert_eq!(decoded_normal.image, normal);
+}

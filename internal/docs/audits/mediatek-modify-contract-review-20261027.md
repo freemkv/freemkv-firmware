@@ -81,3 +81,31 @@ classification must demote raw MediaTek readbacks from OEM to dump using the
 shared library detector. The WH16NS60 1.00 source is a raw archive; no OEM updater
 is recorded for that hash. Original captures are retained, not withdrawn merely
 because they require reconstruction before flashing.
+
+## Completed corpus/settings/CPU checkpoint
+
+- All 108 publication-group images passed every advertised settings choice,
+  reopened verification, integrity checks and offline Flash admission.
+- The other 85 supported held inputs passed the support-aware settings matrix
+  (932 advertised choice executions). These manifests are disjoint, covering
+  all 193 supported held inputs, including partial-support/base-only outputs.
+- All 178 emitted authentication hooks passed per-input execution against native
+  continuations, live registers, SP and CMP flags: 34,432 CPU cases.
+- All 24 classic inputs passed 118,656 routing comparisons, 345,648 DI-entry
+  cases, and 23,040 native speed selector/tail comparisons.
+- The final output ledger binds all 193 retained outputs to exact input/output
+  SHA-256 and admission records. Its placement metadata has been inspected;
+  this is separate from final per-output logical sign-off, which remains open.
+- Three remaining code-space refusals are two MK inputs and one Omni input.
+  No publication-group image refuses for allocation.
+- The raw WH16NS60 readback now resides under dump after canonical rebuild.
+  It has an existing stored-form component match outside drive-written regions.
+
+The 87a7f28 dev CI run caught a synthetic CLI fixture whose boot and mirror pages
+were identical. The fixture now represents a stored image; the CLI suite passes
+35 tests with one opt-in ignored. No runtime guard was relaxed.
+
+During report triage, new Pioneer SXLT captures exposed OEM-brand assumptions
+in descriptor recognition, fixed-width inquiry spelling, and native receiver
+policy. Fixes live in pioneer-optical dev; host backup replay and error-message
+regressions exercise the ordinary workflow. These do not alter MediaTek outputs.

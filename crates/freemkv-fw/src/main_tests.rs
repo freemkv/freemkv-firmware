@@ -745,6 +745,8 @@ fn cmd_create_builds_audits_and_writes_the_oem_base() {
 #[test]
 fn modify_already_enabled_de_succeeds_and_preserves_firmware_bytes() {
     let mut image = vec![0; 0x200000];
+    // A stored image must differ from the boot mirror returned by a raw read.
+    image[0] = 1;
     let banner = freemkv_chipset::BANNER_OFFSET;
     image[banner..banner + 16].copy_from_slice(b"MT1939 Boot Code");
     let desc = freemkv_chipset::DESCRIPTOR_OFFSET;
