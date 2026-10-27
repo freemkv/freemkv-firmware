@@ -7,6 +7,10 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Preserve R3 on the HRL rejection continuation as well as the clean path.
+  Check native registers, stack, flags and each advertised HRL setting on an
+  independent CPU against actual Modify outputs.
+
 - Preserve the shared native calculation rejection path when both MT1939 UHD
   selectors are installed; never return into the middle of the other detour.
   Exercise both selectors together in the CPU regression matrix.

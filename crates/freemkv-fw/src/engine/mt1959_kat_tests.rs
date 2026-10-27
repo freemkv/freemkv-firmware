@@ -55,8 +55,9 @@ const EXPECT_HANDLER_HEX: &str =
 // additional bytes relocate subsequent stubs and their branch displacements.
 // Independent Unicorn execution fails on the previous output's overwritten r3
 // and passes on the corrected output, including native return value and NZCV.
-const EXPECT_CMAC_1: &str = "a3124aa4e48df0aa932df7d90743c359";
-const EXPECT_CMAC_15: &str = "c08714a961799bb2e1d580e65a9cd69d";
+// HRL rejection preserves R3 through the continuation, including its tail frame.
+const EXPECT_CMAC_1: &str = "cc7db77884dd560c8b705bebcbfa3707";
+const EXPECT_CMAC_15: &str = "2b1a2d058495374f1d17f2e7c18bf3ec";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()

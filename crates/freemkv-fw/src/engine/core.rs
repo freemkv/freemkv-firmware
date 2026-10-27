@@ -2750,7 +2750,7 @@ impl Mt1959Engine {
     /// certs accepted, non-destructive); otherwise it replicates OEM exactly (clean
     /// iff `r0==0`, else jump to the `revoke` 6F/00 path). `r3` is saved/restored;
     /// `r0`/`lr` untouched on the clean path, so behaviour is OEM-identical when the
-    /// flag is off (`0x00` boot / `0xFF` passthrough) — the stealth invariant. The
+    /// flag is On or OEM (`0x01` / `0xFF`) — the stealth invariant. The
     /// crypto verify (`bl <ca7e4>`) and the success writer are on other paths and
     /// are left intact.
     pub(crate) fn build_hrl_skip_stub(&self, flag_base: u32, revoke: u32) -> Result<Vec<u8>> {
@@ -2764,9 +2764,13 @@ impl Mt1959Engine {
         a.cmp_imm(0, 0); // OEM: clean iff HRL result == 0
         a.beq(clean);
         // revoked / blank: replicate the OEM `bne <revoke>` (jump to the 6F/00 path).
-        a.pop(0x0008); // restore r3, balance the stack
+        a.pop(0x0008); // restore r3 before the native continuation
+                       // Preserve R3 on rejection too. Using it as the BX target after POP
+                       // would replace the native value with the continuation address.
+        a.push(0x0108); // r3, lr; replace only the stacked return
         a.ldr_lit(3, revoke | 1);
-        a.bx(3);
+        a.str_sp(3, 4);
+        a.pop(0x0108); // r3, pc; native R3, SP and comparison flags survive
         a.bind(clean);
         a.pop(0x0008); // restore r3
         a.bx(14); // bx lr -> the site's clean fall-through

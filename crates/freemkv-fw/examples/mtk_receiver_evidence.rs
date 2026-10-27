@@ -20,6 +20,75 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "installed-hrl" {
+            let report: serde_json::Value = serde_json::from_slice(&std::fs::read(
+                std::env::args()
+                    .nth(3)
+                    .ok_or_else(|| anyhow::anyhow!("report path required"))?,
+            )?)?;
+            let modified = std::fs::read(
+                std::env::args()
+                    .nth(4)
+                    .ok_or_else(|| anyhow::anyhow!("modified image required"))?,
+            )?;
+            let facts: std::collections::BTreeMap<_, _> = report["levers"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("missing levers"))?
+                .iter()
+                .flat_map(|lever| lever["facts"].as_object().into_iter().flatten())
+                .filter_map(|(key, value)| value.as_u64().map(|v| (key.as_str(), v as usize)))
+                .collect();
+            let stub = *facts
+                .get("hrl_stub_va")
+                .ok_or_else(|| anyhow::anyhow!("missing HRL stub"))?;
+            let flag_slot = thumb_asm::analysis::literal_value(&modified, stub + 2)
+                .ok_or_else(|| anyhow::anyhow!("missing HRL flag load"))?;
+            let mut sites = Vec::new();
+            for (key, site) in &facts {
+                if !key.starts_with("hrl_site") || *site == 0 {
+                    continue;
+                }
+                let branch = thumb_asm::isa::decode_at(&image, site + 2)
+                    .ok_or_else(|| anyhow::anyhow!("invalid native HRL branch"))?;
+                anyhow::ensure!(
+                    branch.mnemonic == "b" && branch.cond == Some(thumb_asm::Cond::Ne),
+                    "native HRL branch is not BNE"
+                );
+                let installed = thumb_asm::isa::decode_at(&modified, *site)
+                    .ok_or_else(|| anyhow::anyhow!("missing installed HRL branch"))?;
+                anyhow::ensure!(
+                    installed.mnemonic == "bl" && installed.branch_target() == Some(stub as u32),
+                    "HRL install does not reach its reported stub"
+                );
+                let mut cursor = site + 4;
+                let mut clean_end = None;
+                for _ in 0..2 {
+                    use thumb_asm::isa::{Operand, Reg};
+                    let instruction = thumb_asm::isa::decode_at(&image, cursor)
+                        .ok_or_else(|| anyhow::anyhow!("invalid HRL clean continuation"))?;
+                    anyhow::ensure!(
+                        matches!(instruction.mnemonic, "ldr" | "ldrb") && !instruction.sets_flags,
+                        "HRL clean continuation needs further dataflow review"
+                    );
+                    anyhow::ensure!(!instruction.operands.as_slice().skip(1).any(|operand|
+                        matches!(operand, Operand::Reg(Reg(0))) ||
+                        matches!(operand, Operand::Mem(m) if m.base == Reg(0) || m.index.is_some_and(|(reg,_)|reg==Reg(0)))),
+                        "HRL result is consumed before being replaced");
+                    cursor += instruction.len();
+                    if instruction.operands.get(0) == Some(Operand::Reg(Reg(0))) {
+                        clean_end = Some(cursor);
+                        break;
+                    }
+                }
+                anyhow::ensure!(clean_end.is_some(), "HRL clean result lifetime is unproven");
+                sites.push(serde_json::json!({"site":site,"revoke":branch.branch_target(),"clean_end":clean_end}));
+            }
+            println!(
+                "{}",
+                serde_json::json!({"flag_slot":flag_slot,"sites":sites})
+            );
+            return Ok(());
+        }
         if offset == "ram-references" {
             let map = mediatek_optical::image::analysis::RamReferences::inspect(&image);
             println!(

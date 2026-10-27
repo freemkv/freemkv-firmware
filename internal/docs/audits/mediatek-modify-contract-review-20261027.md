@@ -161,3 +161,28 @@ normal-Modify outputs are being regenerated.
 The 24 previous classic outputs are superseded audit artifacts, not final
 sign-off. The broader logical review remains open. This issue was found before
 any release of the conversion code.
+
+
+## HRL register and clean-path review
+
+The stricter native-versus-emitted HRL comparison found that the rejection tail
+restored R3, then overwrote it with the branch target. The emitter now uses a
+stacked return target, preserving the native R3, balanced SP and comparison flags
+without assuming R3 is dead at every native rejection continuation. The regression
+fails against the retained preceding outputs and passes on fresh BU40N and classic
+BE14NU40 outputs. Both CI and QA run that independent CPU test. No Thumb encoding
+was written by hand: installed branch targets and flag literals are decoded by
+thumb-asm, and the tail is assembled by thumb-asm.
+
+All 284 clean HRL continuations across 178 inputs overwrite the lookup result
+before consuming it. The observed prefixes are loads of the AGID byte through R5
+or a literal-loaded R6, or a load through R6 after loading R1. The CPU regression
+now follows these native loads, comparing a forced clean route with a genuinely
+clean native result; it does not stop at the hook's return address alone.
+
+After this change, all 1,085 held inputs were queried and all 193 supported outputs
+rebuilt and admitted again. Exactly the 178 HRL-capable output hashes changed;
+the other 15 supported output hashes and all capability decisions stayed equal.
+All 220 library tests and all-target release Clippy passed. The all-input HRL CPU
+matrix, affected-output settings matrix and updated pointer inventory are running
+at this checkpoint. Their final receipts supersede the preceding output hashes.
