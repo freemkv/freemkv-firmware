@@ -109,3 +109,30 @@ During report triage, new Pioneer SXLT captures exposed OEM-brand assumptions
 in descriptor recognition, fixed-width inquiry spelling, and native receiver
 policy. Fixes live in pioneer-optical dev; host backup replay and error-message
 regressions exercise the ordinary workflow. These do not alter MediaTek outputs.
+
+
+## Current dev checkpoint after diagnostic imports
+
+Dev commit `5d4b5163324816026795e5f6f93b4b27a78e1de6` passed the full
+[CI workflow](https://github.com/freemkv/freemkv-firmware/actions/runs/40582181198)
+and the comment, identity, leak and documentation guards. The native response
+corpus paths are absolute so Cargo's crate working directory cannot change their
+meaning. The same Cargo invocation and independent CPU checks passed locally.
+
+The latest 1,085-input parity run uses Modify producer SHA-256
+`3d126e958692d7f88b0f4554b2c30a687a7a8011a8d4d2826cb2c1e1d3885fd8`.
+All statuses and retained output hashes match the preceding complete run. The
+readback detector now requires the exact two-MiB geometry; three legitimate
+512-KiB Optorite OEM inputs remain OEM. This corrects classification without
+relaxing the guard for the three full raw MediaTek captures.
+
+Both new Epson-family Kernel/Normal pairs are locally approved Community
+imports. The SXLT source is retained as a raw capture; its Kernel-derived envelope
+reconstruction is explicitly recorded rather than presented as an OEM original.
+The shared Pioneer fix passes ordinary backup replay and offline Flash admission.
+The specific unsupported-layout error no longer advises checking the connection.
+These imports are staged only and require the fixed Flash app before deployment.
+Extractor commit `378e574a` remains local on dev, with no remote push.
+
+This checkpoint closes CI and diagnostic-import work. It does not close the
+remaining personal per-output logical review or the assurance limits above.

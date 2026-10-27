@@ -3036,18 +3036,13 @@ impl Mt1959Engine {
     /// and explicit RESET_TO_FLASH can reload a saved session configuration.
     ///
     /// # Register / frame contract
-    /// The detour replaces the original `bl <orig_init>`, so the stub must run
-    /// `orig_init` itself. It `push {r0,r1,r2,r3,lr}` to preserve everything
-    /// `orig_init` might read (it is an arg-less init in the boot sequence, but the
-    /// args are preserved to be safe) plus the return address, writes the flag table
-    /// (clobbering `r0`/`r1`), then `pop {r0,r1,r2,r3}` to restore the args and
-    /// tail-calls the original via `ldr r3,=orig_init|1; blx r3` (`r3` — the last,
-    /// least-likely arg — is the sole sacrificed scratch, which is harmless for an
-    /// arg-less callee, and `r0..r2` still carry their originals). `blx` reloads `lr`
-    /// with the address of the final `pop {pc}`, which returns to `conv+4` (the
-    /// instruction after the detoured call). The stub does NOT replay the boot-status
-    /// reload `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` — that stays in place at the old
-    /// `anchor+4` site, which is no longer touched.
+    /// The stub replaces `bl <orig_init>` and preserves all four native arguments.
+    /// It saves R0-R4 and LR, initializes the flags, puts the native target in
+    /// call-clobbered R12, then restores R0-R3 and the caller's R4 before BLX.
+    /// The remaining two stack words keep the native call eight-byte aligned.
+    /// After that call, `pop {r4, pc}` restores the frame without changing the
+    /// native return value or NZCV. The boot-status reload at the old anchor
+    /// remains untouched.
     #[cfg(test)]
     pub(crate) fn build_boot_init(
         &self,
@@ -3142,20 +3137,10 @@ impl Mt1959Engine {
     /// `(conv, stub_va)` — the convergence detour site (the reported `boot_init_site`)
     /// and the stub address.
     ///
-    /// **Fail-closed** on both no-site and unconfirmed-site:
-    /// * `None` from [`Self::find_boot_init`] (prologue is neither known shape) BAILS
-    ///   rather than shipping an image that would boot every feature to OFF (`0x00`).
-    /// * a [`BootInitSite::ClassicUnconfirmed`] site (MT1939-classic, matched via
-    ///   [`BOOT_INIT_SIG_CLASSIC`]) ALSO bails: the classic reload site resolves and
-    ///   is unit-tested, but it is a called leaf helper whose power-on call-order is
-    ///   HARDWARE-UNCONFIRMED, so auto-shipping a boot hook there could brick a
-    ///   classic drive. Classic images therefore degrade to DE-only exactly as
-    ///   before — unchanged production behaviour — until the site is blessed.
-    ///
-    /// Only a [`BootInitSite::Modern`] site is shipped. Tri-state OFF is safe once a
-    /// boot-init site writes `0xFF` at power-on; blessing classic production emit is
-    /// a deliberate one-line flip after on-silicon verification, not a code change to
-    /// the finder (which is already complete).
+    /// A missing boot site refuses emission. Modern sites follow the validated
+    /// cold/warm convergence call; classic sites use the uniquely resolved helper
+    /// caller when `CLASSIC_BOOT_BLESSED` permits it. The resolver checks that
+    /// policy before this emitter consumes the resolved pair.
     pub(crate) fn emit_boot_init(
         &self,
         _image: &[u8],
