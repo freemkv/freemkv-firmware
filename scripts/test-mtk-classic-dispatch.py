@@ -359,7 +359,8 @@ def candidate_cases(builder, source=None, records=None):
             value = raw >> 4
             old, old_flags = execute(raw, setting, False)
             target, flags = execute(raw, setting, True)
-            expected = 'C' if setting == 1 and value >= 12 else 'refuse' if setting == 0 and value >= 12 else old
+            # Normal Modify never broadens unproven D/E/F authentication classes.
+            expected = 'refuse' if setting == 0 and value == 12 else old
             assert target == expected, (value, setting, target, old)
             assert flags == old_flags, 'did not preserve original CMP flags'
             cases += 1
