@@ -147,17 +147,17 @@ def main():
             modified = output.read_bytes()
             if name == 'BU40N_OEM_1.00.bin':
                 execute_boot_arguments(modified)
-                bd_site = facts['bd_site']
-                for setting in (0, 1, 255):
-                    for retired in (0, 1, 255):
-                        for media_class in range(16):
-                            old_flags = execute_bd(original, bd_site, setting, retired, media_class)
-                            flags = execute_bd(modified, bd_site, setting, retired, media_class)
-                            if setting == 0:
-                                assert flags & 0x40000000 == 0, (setting, retired, media_class, 'Off must refuse')
-                            else:
-                                assert flags == old_flags, (setting, retired, media_class, 'retired flag altered native BD decision')
-                            cases += 1
+                for media_site in (facts['bd_site'], facts['uhd_site']):
+                    for setting in (0, 1, 255):
+                        for retired in (0, 1, 255):
+                            for media_class in range(256):
+                                old_flags = execute_bd(original, media_site, setting, retired, media_class)
+                                flags = execute_bd(modified, media_site, setting, retired, media_class)
+                                if setting == 0:
+                                    assert flags & 0x40000000 == 0, (media_site, setting, retired, media_class, 'Off must refuse')
+                                else:
+                                    assert flags == old_flags, (media_site, setting, retired, media_class, 'retired flag altered native media decision')
+                                cases += 1
             for setting in (0, 1, 255, 2):
                 for value in range(16):
                     old_target, old_flags = execute(original, site, deny, value, setting, value_register)

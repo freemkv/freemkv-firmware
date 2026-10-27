@@ -188,6 +188,7 @@ jobs:
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-program-routing.py
           cargo build -p freemkv-fw --example mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hrl-execution.py --fw target/debug/freemkv-fw --builder target/debug/examples/mtk_receiver_evidence
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-region-execution.py --fw target/debug/freemkv-fw --builder target/debug/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-frame-execution.py --candidate-builder target/debug/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-dispatch.py --candidate-builder target/debug/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-speed.py --builder target/debug/examples/mtk_receiver_evidence

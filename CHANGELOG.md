@@ -7,6 +7,9 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Make Unrestricted Off refuse every explicit media class, including the reserved
+  `0xFF` value, without using a sentinel that can accidentally compare equal.
+
 - Preserve R3 on the HRL rejection continuation as well as the clean path.
   Check native registers, stack, flags and each advertised HRL setting on an
   independent CPU against actual Modify outputs.

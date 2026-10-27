@@ -186,3 +186,38 @@ the other 15 supported output hashes and all capability decisions stayed equal.
 All 220 library tests and all-target release Clippy passed. The all-input HRL CPU
 matrix, affected-output settings matrix and updated pointer inventory are running
 at this checkpoint. Their final receipts supersede the preceding output hashes.
+
+
+## Explicit-media and Region final test checkpoint
+
+The explicit BD/UHD refusal arm used `class != 0xFF` to force a negative
+comparison. Extending independent execution from the low nibble to every byte
+found that reserved class `0xFF` instead compared equal. Both emitters now compare
+the already-zero Off flag with one. This guarantees refusal without changing the
+stub length. The regression fails on the preceding output and passes after the
+fix. All 53 explicit-gate images pass 325,632 native-versus-emitted comparisons:
+both gates, all 256 classes, OEM/On/Off/unknown modes, and three retired-slot values.
+
+All 1,085 inputs were re-queried and all 193 supported outputs admitted again.
+Exactly 53 output hashes changed. Their complete byte differences outside the
+integrity table are exactly the two 16-bit comparison instructions; placements,
+reports and all other hook bytes are identical. All 220 library tests and release
+all-target Clippy pass. The expanded pinned CPU suite passes 5,504 cases.
+
+Region execution now follows the complete native FIFO response and saved return
+frame, rather than stopping at the hook boundary. All 178 images passed 42,720
+comparisons across OEM/free/locked/unknown states, type/count values and region
+masks. The test checks all four response bytes, restored R3/R4, remaining
+callee-saved registers and balanced final SP. Both CI and QA run pinned modern
+and classic fixtures.
+
+The HRL settings rerun completed all 178 inputs. The subsequent rerun of the 53
+changed explicit-gate outputs is being finished against their new hashes. Modern
+speed continuation review covered 165 inputs: 146 R2-index and 19 R0-index layouts.
+The fall-through replaces the index before reading it; the exit either replaces
+it before use or returns with it dead under the native caller ABI. The R2 cleanup
+callee replaces R2 before consuming it. Per-input decoded traces are retained.
+
+The remaining final review is the encryption/AKE/VID continuation evidence and
+the consolidated personal per-input sign-off. These completed matrices are not
+being substituted for those remaining checks.

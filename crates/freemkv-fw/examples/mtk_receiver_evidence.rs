@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
-        if offset == "installed-hrl" {
+        if matches!(offset.as_str(), "installed-hrl" | "installed-region") {
             let report: serde_json::Value = serde_json::from_slice(&std::fs::read(
                 std::env::args()
                     .nth(3)
@@ -38,6 +38,27 @@ fn main() -> anyhow::Result<()> {
                 .flat_map(|lever| lever["facts"].as_object().into_iter().flatten())
                 .filter_map(|(key, value)| value.as_u64().map(|v| (key.as_str(), v as usize)))
                 .collect();
+            if offset == "installed-region" {
+                let stub = *facts
+                    .get("region_stub_va")
+                    .ok_or_else(|| anyhow::anyhow!("missing region stub"))?;
+                let anchor = *facts
+                    .get("region_emitter")
+                    .ok_or_else(|| anyhow::anyhow!("missing region emitter"))?;
+                let flag_slot = thumb_asm::analysis::literal_value(&modified, stub)
+                    .ok_or_else(|| anyhow::anyhow!("missing region flag load"))?;
+                let installed = thumb_asm::isa::decode_at(&modified, anchor + 6)
+                    .ok_or_else(|| anyhow::anyhow!("missing region install"))?;
+                anyhow::ensure!(
+                    installed.mnemonic == "bl" && installed.branch_target() == Some(stub as u32),
+                    "region install does not reach its reported stub"
+                );
+                println!(
+                    "{}",
+                    serde_json::json!({"entry":anchor,"flag_slot":flag_slot})
+                );
+                return Ok(());
+            }
             let stub = *facts
                 .get("hrl_stub_va")
                 .ok_or_else(|| anyhow::anyhow!("missing HRL stub"))?;

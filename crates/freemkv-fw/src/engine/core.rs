@@ -2389,7 +2389,7 @@ impl Mt1959Engine {
     ///     cmp r0,#2` verbatim, so the caller's `beq` sees the exact OEM flags — BD
     ///     acceptance is byte-behaviour-identical to OEM. Inert (stealth) until armed.
     ///   * `== STATE_OFF` (`0x00`): after the class replay, force a non-equal compare
-    ///     (`cmp r0,#0xff`; class is never `0xff`) so the caller's `beq <accept>` is
+    ///     (the already-zero flag compared with one) so the caller's `beq <accept>` is
     ///     NOT taken and control falls into the OEM deny block, which raises the
     ///     drive's own `6F` refusal sense — the drive REFUSES the BD disc.
     pub(crate) fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
@@ -2403,7 +2403,7 @@ impl Mt1959Engine {
         a.cmp_imm(0, 2); // stealth: replay `cmp r0,#2` LAST so the caller's `beq` sees OEM flags
         a.bx(14); // bx lr -> caller's `beq <accept>` at anchor+20 (OEM acceptance)
         a.bind(refuse);
-        a.cmp_imm(0, 0xff); // armed: class never 0xff -> Z=0 -> caller's `beq` falls through to OEM deny (6F)
+        a.cmp_imm(3, 1); // flag is zero here: Z=0 for every class byte, including 0xff
         a.bx(14);
         a.finish().map_err(anyhow::Error::from)
     }
@@ -2431,7 +2431,7 @@ impl Mt1959Engine {
     ///     acceptance is byte-behaviour-identical to OEM (the drive reads UHD discs
     ///     natively; ON is accept). Inert (stealth) until armed OFF.
     ///   * `== STATE_OFF` (`0x00`): after the class replay, force a non-equal compare
-    ///     (`cmp r0,#0xff`; class is never `0xff`) so the caller's `bne <deny>` IS
+    ///     (the already-zero flag compared with one) so the caller's `bne <deny>` IS
     ///     taken and control jumps into the OEM `6F/05` deny block — the drive REFUSES
     ///     the UHD disc, symmetric with the BD arm.
     pub(crate) fn build_uhd_gate_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
@@ -2445,7 +2445,7 @@ impl Mt1959Engine {
         a.cmp_imm(0, 3); // stealth: replay `cmp r0,#3` LAST so the caller's `bne` sees OEM flags
         a.bx(14); // bx lr -> caller's `bne <deny>` at anchor+8 (class==3 -> Z=1 -> accept)
         a.bind(refuse);
-        a.cmp_imm(0, 0xff); // armed: class never 0xff -> Z=0 -> caller's `bne` jumps to OEM deny (6F/05)
+        a.cmp_imm(3, 1); // flag is zero here: Z=0 for every class byte, including 0xff
         a.bx(14);
         a.finish().map_err(anyhow::Error::from)
     }
