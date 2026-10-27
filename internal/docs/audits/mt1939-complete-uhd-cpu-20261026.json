@@ -1,0 +1,5461 @@
+{
+  "policy": "complete experimental software contracts; public conversion gated; physical UHD reading unproven",
+  "script_sha256": "0ab07445a657d37f1a5647ec395fdc76f70f40348698ee6e6c385f539f3b13f2",
+  "builder_sha256": "3a6e25642552454a6b7377f07ffc696ec13ee3c53606bec21381ce96add24663",
+  "images": [
+    {
+      "sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732564,
+        "entry": 1068544,
+        "lookup": 1068654,
+        "oem_coefficients": 1732302,
+        "patch_required": true,
+        "rates": 1732172,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037514,
+          "returns": [
+            1037904
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 424132,
+          "returns": [
+            424682
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075772,
+          "returns": [
+            1076302
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388556,
+          "returns": [
+            1389142,
+            1389160
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089666,
+          "returns": [
+            1089802
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494724,
+          "returns": [
+            494926
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666804,
+          "returns": [
+            1666894,
+            1671330
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666804,
+          "returns": [
+            1671330
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068544,
+          "returns": [
+            1068656
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666804,
+          "returns": [
+            1671330
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+      "state_address": 33529300,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4800,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 0,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1729354,
+        "entry": 1065104,
+        "lookup": 1065146,
+        "oem_coefficients": 1729354,
+        "patch_required": false,
+        "rates": 1729224,
+        "variant": "StateIndependent"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 82,
+      "callers": {
+        "ControlBit": {
+          "entry": 221378,
+          "returns": [
+            221770
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204246,
+          "returns": [
+            204860,
+            204934,
+            204972,
+            204988,
+            205028,
+            205090,
+            205164,
+            205210,
+            205226,
+            205282
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1033210,
+          "returns": [
+            1034152,
+            1034156,
+            1034198
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1033210,
+          "returns": [
+            1034152,
+            1034156,
+            1034198
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1034250,
+          "returns": [
+            1034640
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 422356,
+          "returns": [
+            422906
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1072240,
+          "returns": [
+            1072770
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1383786,
+          "returns": [
+            1384330,
+            1384348
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1086040,
+          "returns": [
+            1086174
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 492128,
+          "returns": [
+            492330
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 218858,
+          "returns": [
+            219214
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220032,
+          "returns": [
+            221200
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 203774,
+          "returns": [
+            203982,
+            204032
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 295352,
+          "returns": [
+            295746
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1663936,
+          "returns": [
+            1664026,
+            1668438
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1663936,
+          "returns": [
+            1668438
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1031316,
+          "returns": [
+            1031470
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1031316,
+          "returns": [
+            1031470
+          ],
+          "stack_bytes": 20
+        },
+        "PositionSetupInput": {
+          "entry": 1031048,
+          "returns": [
+            1031314
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1031048,
+          "returns": [
+            1031314
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1059064,
+          "returns": [
+            1059394
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1059064,
+          "returns": [
+            1059394
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222008,
+          "returns": [
+            222544
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222008,
+          "returns": [
+            222544
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1663936,
+          "returns": [
+            1668438
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4800,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 0,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1724346,
+        "entry": 1063024,
+        "lookup": 1063066,
+        "oem_coefficients": 1724346,
+        "patch_required": false,
+        "rates": 1724216,
+        "variant": "StateIndependent"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 82,
+      "callers": {
+        "ControlBit": {
+          "entry": 221766,
+          "returns": [
+            222158
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204634,
+          "returns": [
+            205248,
+            205322,
+            205360,
+            205376,
+            205416,
+            205478,
+            205552,
+            205598,
+            205614,
+            205670
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1031014,
+          "returns": [
+            1031956,
+            1031960,
+            1032002
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1031014,
+          "returns": [
+            1031956,
+            1031960,
+            1032002
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1032054,
+          "returns": [
+            1032444
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423808,
+          "returns": [
+            424346
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1070172,
+          "returns": [
+            1070702
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1380796,
+          "returns": [
+            1381382,
+            1381400
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1084050,
+          "returns": [
+            1084184
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 493792,
+          "returns": [
+            493994
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219246,
+          "returns": [
+            219602
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220420,
+          "returns": [
+            221588
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204162,
+          "returns": [
+            204370,
+            204420
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 295776,
+          "returns": [
+            296170
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1659044,
+          "returns": [
+            1659134,
+            1663480
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1659044,
+          "returns": [
+            1663480
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1029120,
+          "returns": [
+            1029274
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1029120,
+          "returns": [
+            1029274
+          ],
+          "stack_bytes": 20
+        },
+        "PositionSetupInput": {
+          "entry": 1028852,
+          "returns": [
+            1029118
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1028852,
+          "returns": [
+            1029118
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1056984,
+          "returns": [
+            1057314
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1056984,
+          "returns": [
+            1057314
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222396,
+          "returns": [
+            222932
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222396,
+          "returns": [
+            222932
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1659044,
+          "returns": [
+            1663480
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732864,
+        "entry": 1068168,
+        "lookup": 1068278,
+        "oem_coefficients": 1732602,
+        "patch_required": true,
+        "rates": 1732472,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037138,
+          "returns": [
+            1037528
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075588,
+          "returns": [
+            1076118
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388696,
+          "returns": [
+            1389282,
+            1389300
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089482,
+          "returns": [
+            1089618
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1667104,
+          "returns": [
+            1667194,
+            1671630
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1667104,
+          "returns": [
+            1671630
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068168,
+          "returns": [
+            1068280
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1667104,
+          "returns": [
+            1671630
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1735712,
+        "entry": 1069276,
+        "lookup": 1069386,
+        "oem_coefficients": 1735450,
+        "patch_required": true,
+        "rates": 1735320,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1037206,
+          "returns": [
+            1038148,
+            1038152,
+            1038194
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1037206,
+          "returns": [
+            1038148,
+            1038152,
+            1038194
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1038246,
+          "returns": [
+            1038636
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1076696,
+          "returns": [
+            1077226
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1389480,
+          "returns": [
+            1390066,
+            1390084
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1090590,
+          "returns": [
+            1090726
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1669952,
+          "returns": [
+            1670042,
+            1674478
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1669952,
+          "returns": [
+            1674478
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1035312,
+          "returns": [
+            1035466
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1035312,
+          "returns": [
+            1035466
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1069276,
+          "returns": [
+            1069388
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1035044,
+          "returns": [
+            1035310
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1035044,
+          "returns": [
+            1035310
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1063236,
+          "returns": [
+            1063566
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1063236,
+          "returns": [
+            1063566
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1669952,
+          "returns": [
+            1674478
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732468,
+        "entry": 1068168,
+        "lookup": 1068278,
+        "oem_coefficients": 1732206,
+        "patch_required": true,
+        "rates": 1732076,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037138,
+          "returns": [
+            1037528
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075588,
+          "returns": [
+            1076118
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388372,
+          "returns": [
+            1388958,
+            1388976
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089482,
+          "returns": [
+            1089618
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666708,
+          "returns": [
+            1666798,
+            1671234
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666708,
+          "returns": [
+            1671234
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068168,
+          "returns": [
+            1068280
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666708,
+          "returns": [
+            1671234
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1736076,
+        "entry": 1070596,
+        "lookup": 1070706,
+        "oem_coefficients": 1735814,
+        "patch_required": true,
+        "rates": 1735684,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1038526,
+          "returns": [
+            1039468,
+            1039472,
+            1039514
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1038526,
+          "returns": [
+            1039468,
+            1039472,
+            1039514
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1039566,
+          "returns": [
+            1039956
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 424168,
+          "returns": [
+            424718
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1077824,
+          "returns": [
+            1078354
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1389740,
+          "returns": [
+            1390326,
+            1390344
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1091718,
+          "returns": [
+            1091854
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494760,
+          "returns": [
+            494962
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1670220,
+          "returns": [
+            1670310,
+            1674746
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1670220,
+          "returns": [
+            1674746
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1036632,
+          "returns": [
+            1036786
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1036632,
+          "returns": [
+            1036786
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1070596,
+          "returns": [
+            1070708
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1036364,
+          "returns": [
+            1036630
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1036364,
+          "returns": [
+            1036630
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1064556,
+          "returns": [
+            1064886
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1064556,
+          "returns": [
+            1064886
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1670220,
+          "returns": [
+            1674746
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732636,
+        "entry": 1068544,
+        "lookup": 1068654,
+        "oem_coefficients": 1732374,
+        "patch_required": true,
+        "rates": 1732244,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037514,
+          "returns": [
+            1037904
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 424132,
+          "returns": [
+            424682
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075772,
+          "returns": [
+            1076302
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388556,
+          "returns": [
+            1389142,
+            1389160
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089666,
+          "returns": [
+            1089802
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494724,
+          "returns": [
+            494926
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666876,
+          "returns": [
+            1666966,
+            1671402
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666876,
+          "returns": [
+            1671402
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068544,
+          "returns": [
+            1068656
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666876,
+          "returns": [
+            1671402
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1735760,
+        "entry": 1069276,
+        "lookup": 1069386,
+        "oem_coefficients": 1735498,
+        "patch_required": true,
+        "rates": 1735368,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1037206,
+          "returns": [
+            1038148,
+            1038152,
+            1038194
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1037206,
+          "returns": [
+            1038148,
+            1038152,
+            1038194
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1038246,
+          "returns": [
+            1038636
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1076696,
+          "returns": [
+            1077226
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1389480,
+          "returns": [
+            1390066,
+            1390084
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1090590,
+          "returns": [
+            1090726
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1670000,
+          "returns": [
+            1670090,
+            1674526
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1670000,
+          "returns": [
+            1674526
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1035312,
+          "returns": [
+            1035466
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1035312,
+          "returns": [
+            1035466
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1069276,
+          "returns": [
+            1069388
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1035044,
+          "returns": [
+            1035310
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1035044,
+          "returns": [
+            1035310
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1063236,
+          "returns": [
+            1063566
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1063236,
+          "returns": [
+            1063566
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1670000,
+          "returns": [
+            1674526
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732916,
+        "entry": 1068172,
+        "lookup": 1068282,
+        "oem_coefficients": 1732654,
+        "patch_required": true,
+        "rates": 1732524,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036102,
+          "returns": [
+            1037044,
+            1037048,
+            1037090
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036102,
+          "returns": [
+            1037044,
+            1037048,
+            1037090
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037142,
+          "returns": [
+            1037532
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075592,
+          "returns": [
+            1076122
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388740,
+          "returns": [
+            1389326,
+            1389344
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089486,
+          "returns": [
+            1089622
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1667156,
+          "returns": [
+            1667246,
+            1671682
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1667156,
+          "returns": [
+            1671682
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034208,
+          "returns": [
+            1034362
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034208,
+          "returns": [
+            1034362
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068172,
+          "returns": [
+            1068284
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1033940,
+          "returns": [
+            1034206
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1033940,
+          "returns": [
+            1034206
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062132,
+          "returns": [
+            1062462
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062132,
+          "returns": [
+            1062462
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1667156,
+          "returns": [
+            1671682
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732636,
+        "entry": 1068544,
+        "lookup": 1068654,
+        "oem_coefficients": 1732374,
+        "patch_required": true,
+        "rates": 1732244,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037514,
+          "returns": [
+            1037904
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 424132,
+          "returns": [
+            424682
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075772,
+          "returns": [
+            1076302
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388556,
+          "returns": [
+            1389142,
+            1389160
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089666,
+          "returns": [
+            1089802
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494724,
+          "returns": [
+            494926
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666876,
+          "returns": [
+            1666966,
+            1671402
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666876,
+          "returns": [
+            1671402
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068544,
+          "returns": [
+            1068656
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666876,
+          "returns": [
+            1671402
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732540,
+        "entry": 1068168,
+        "lookup": 1068278,
+        "oem_coefficients": 1732278,
+        "patch_required": true,
+        "rates": 1732148,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037138,
+          "returns": [
+            1037528
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075588,
+          "returns": [
+            1076118
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388372,
+          "returns": [
+            1388958,
+            1388976
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089482,
+          "returns": [
+            1089618
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666780,
+          "returns": [
+            1666870,
+            1671306
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666780,
+          "returns": [
+            1671306
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068168,
+          "returns": [
+            1068280
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666780,
+          "returns": [
+            1671306
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732864,
+        "entry": 1068168,
+        "lookup": 1068278,
+        "oem_coefficients": 1732602,
+        "patch_required": true,
+        "rates": 1732472,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037138,
+          "returns": [
+            1037528
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075588,
+          "returns": [
+            1076118
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388696,
+          "returns": [
+            1389282,
+            1389300
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089482,
+          "returns": [
+            1089618
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1667104,
+          "returns": [
+            1667194,
+            1671630
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1667104,
+          "returns": [
+            1671630
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068168,
+          "returns": [
+            1068280
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1667104,
+          "returns": [
+            1671630
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+      "state_address": 33529300,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1738752,
+        "entry": 1071208,
+        "lookup": 1071318,
+        "oem_coefficients": 1738490,
+        "patch_required": true,
+        "rates": 1738360,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1039138,
+          "returns": [
+            1040080,
+            1040084,
+            1040126
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1039138,
+          "returns": [
+            1040080,
+            1040084,
+            1040126
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1040178,
+          "returns": [
+            1040568
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 424336,
+          "returns": [
+            424886
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1078440,
+          "returns": [
+            1078970
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1392064,
+          "returns": [
+            1392650,
+            1392668
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1092334,
+          "returns": [
+            1092470
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 495048,
+          "returns": [
+            495250
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1672900,
+          "returns": [
+            1672990,
+            1677426
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1672900,
+          "returns": [
+            1677426
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1037244,
+          "returns": [
+            1037398
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1037244,
+          "returns": [
+            1037398
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1071208,
+          "returns": [
+            1071320
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1036976,
+          "returns": [
+            1037242
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1036976,
+          "returns": [
+            1037242
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1065168,
+          "returns": [
+            1065498
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1065168,
+          "returns": [
+            1065498
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1672900,
+          "returns": [
+            1677426
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4800,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 0,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1725514,
+        "entry": 1063940,
+        "lookup": 1063982,
+        "oem_coefficients": 1725514,
+        "patch_required": false,
+        "rates": 1725384,
+        "variant": "StateIndependent"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 82,
+      "callers": {
+        "ControlBit": {
+          "entry": 221402,
+          "returns": [
+            221794
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204270,
+          "returns": [
+            204884,
+            204958,
+            204996,
+            205012,
+            205052,
+            205114,
+            205188,
+            205234,
+            205250,
+            205306
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1032046,
+          "returns": [
+            1032988,
+            1032992,
+            1033034
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1032046,
+          "returns": [
+            1032988,
+            1032992,
+            1033034
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1033086,
+          "returns": [
+            1033476
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 422380,
+          "returns": [
+            422930
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1071088,
+          "returns": [
+            1071618
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1382624,
+          "returns": [
+            1383210,
+            1383228
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1084966,
+          "returns": [
+            1085100
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 492324,
+          "returns": [
+            492526
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 218882,
+          "returns": [
+            219238
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220056,
+          "returns": [
+            221224
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 203798,
+          "returns": [
+            204006,
+            204056
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 295380,
+          "returns": [
+            295774
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1660188,
+          "returns": [
+            1660278,
+            1664690
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1660188,
+          "returns": [
+            1664690
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1030152,
+          "returns": [
+            1030306
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1030152,
+          "returns": [
+            1030306
+          ],
+          "stack_bytes": 20
+        },
+        "PositionSetupInput": {
+          "entry": 1029884,
+          "returns": [
+            1030150
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1029884,
+          "returns": [
+            1030150
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1057900,
+          "returns": [
+            1058230
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1057900,
+          "returns": [
+            1058230
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222032,
+          "returns": [
+            222568
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222032,
+          "returns": [
+            222568
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1660188,
+          "returns": [
+            1664690
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732540,
+        "entry": 1068168,
+        "lookup": 1068278,
+        "oem_coefficients": 1732278,
+        "patch_required": true,
+        "rates": 1732148,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037138,
+          "returns": [
+            1037528
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075588,
+          "returns": [
+            1076118
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388372,
+          "returns": [
+            1388958,
+            1388976
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089482,
+          "returns": [
+            1089618
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666780,
+          "returns": [
+            1666870,
+            1671306
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666780,
+          "returns": [
+            1671306
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068168,
+          "returns": [
+            1068280
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666780,
+          "returns": [
+            1671306
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1730012,
+        "entry": 1066700,
+        "lookup": 1066810,
+        "oem_coefficients": 1729750,
+        "patch_required": true,
+        "rates": 1729620,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222046,
+          "returns": [
+            222438
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204910,
+          "returns": [
+            205524,
+            205598,
+            205636,
+            205652,
+            205692,
+            205754,
+            205828,
+            205874,
+            205890,
+            205946
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1034630,
+          "returns": [
+            1035572,
+            1035576,
+            1035618
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1034630,
+          "returns": [
+            1035572,
+            1035576,
+            1035618
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1035670,
+          "returns": [
+            1036060
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423712,
+          "returns": [
+            424262
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1074120,
+          "returns": [
+            1074650
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1386092,
+          "returns": [
+            1386678,
+            1386696
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1087998,
+          "returns": [
+            1088132
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494236,
+          "returns": [
+            494438
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219526,
+          "returns": [
+            219882
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220700,
+          "returns": [
+            221868
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204438,
+          "returns": [
+            204646,
+            204696
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296136,
+          "returns": [
+            296530
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1664332,
+          "returns": [
+            1664422,
+            1668858
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1664332,
+          "returns": [
+            1668858
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1032736,
+          "returns": [
+            1032890
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1032736,
+          "returns": [
+            1032890
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1066700,
+          "returns": [
+            1066812
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1032468,
+          "returns": [
+            1032734
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1032468,
+          "returns": [
+            1032734
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1060660,
+          "returns": [
+            1060990
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1060660,
+          "returns": [
+            1060990
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222676,
+          "returns": [
+            223212
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222676,
+          "returns": [
+            223212
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1664332,
+          "returns": [
+            1668858
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4800,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 0,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732894,
+        "entry": 1068756,
+        "lookup": 1068798,
+        "oem_coefficients": 1732894,
+        "patch_required": false,
+        "rates": 1732764,
+        "variant": "StateIndependent"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 82,
+      "callers": {
+        "ControlBit": {
+          "entry": 221990,
+          "returns": [
+            222382
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204858,
+          "returns": [
+            205472,
+            205546,
+            205584,
+            205600,
+            205640,
+            205702,
+            205776,
+            205822,
+            205838,
+            205894
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036686,
+          "returns": [
+            1037628,
+            1037632,
+            1037674
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036686,
+          "returns": [
+            1037628,
+            1037632,
+            1037674
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037726,
+          "returns": [
+            1038116
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423868,
+          "returns": [
+            424418
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075908,
+          "returns": [
+            1076438
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1387012,
+          "returns": [
+            1387598,
+            1387616
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089786,
+          "returns": [
+            1089920
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494344,
+          "returns": [
+            494546
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219470,
+          "returns": [
+            219826
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220644,
+          "returns": [
+            221812
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204386,
+          "returns": [
+            204594,
+            204644
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 295976,
+          "returns": [
+            296370
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1667380,
+          "returns": [
+            1667470,
+            1671906
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1667380,
+          "returns": [
+            1671906
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034792,
+          "returns": [
+            1034946
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034792,
+          "returns": [
+            1034946
+          ],
+          "stack_bytes": 20
+        },
+        "PositionSetupInput": {
+          "entry": 1034524,
+          "returns": [
+            1034790
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1034524,
+          "returns": [
+            1034790
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062716,
+          "returns": [
+            1063046
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062716,
+          "returns": [
+            1063046
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222620,
+          "returns": [
+            223156
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222620,
+          "returns": [
+            223156
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1667380,
+          "returns": [
+            1671906
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+      "state_address": 33529300,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1733600,
+        "entry": 1068984,
+        "lookup": 1069094,
+        "oem_coefficients": 1733338,
+        "patch_required": true,
+        "rates": 1733208,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1037910,
+          "returns": [
+            1038852,
+            1038856,
+            1038898
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1037910,
+          "returns": [
+            1038852,
+            1038856,
+            1038898
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1038950,
+          "returns": [
+            1039340
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423836,
+          "returns": [
+            424386
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1076410,
+          "returns": [
+            1076940
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1389224,
+          "returns": [
+            1389810,
+            1389828
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1090306,
+          "returns": [
+            1090442
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 495440,
+          "returns": [
+            495642
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1667656,
+          "returns": [
+            1667746,
+            1672182
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1667656,
+          "returns": [
+            1672182
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1036016,
+          "returns": [
+            1036170
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1036016,
+          "returns": [
+            1036170
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068984,
+          "returns": [
+            1069096
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1035748,
+          "returns": [
+            1036014
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1035748,
+          "returns": [
+            1036014
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062944,
+          "returns": [
+            1063274
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062944,
+          "returns": [
+            1063274
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1667656,
+          "returns": [
+            1672182
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4800,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 0,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1725514,
+        "entry": 1063940,
+        "lookup": 1063982,
+        "oem_coefficients": 1725514,
+        "patch_required": false,
+        "rates": 1725384,
+        "variant": "StateIndependent"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 82,
+      "callers": {
+        "ControlBit": {
+          "entry": 221402,
+          "returns": [
+            221794
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204270,
+          "returns": [
+            204884,
+            204958,
+            204996,
+            205012,
+            205052,
+            205114,
+            205188,
+            205234,
+            205250,
+            205306
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1032046,
+          "returns": [
+            1032988,
+            1032992,
+            1033034
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1032046,
+          "returns": [
+            1032988,
+            1032992,
+            1033034
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1033086,
+          "returns": [
+            1033476
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 422380,
+          "returns": [
+            422930
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1071088,
+          "returns": [
+            1071618
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1382624,
+          "returns": [
+            1383210,
+            1383228
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1084966,
+          "returns": [
+            1085100
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 492324,
+          "returns": [
+            492526
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 218882,
+          "returns": [
+            219238
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220056,
+          "returns": [
+            221224
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 203798,
+          "returns": [
+            204006,
+            204056
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 295380,
+          "returns": [
+            295774
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1660188,
+          "returns": [
+            1660278,
+            1664690
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1660188,
+          "returns": [
+            1664690
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1030152,
+          "returns": [
+            1030306
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1030152,
+          "returns": [
+            1030306
+          ],
+          "stack_bytes": 20
+        },
+        "PositionSetupInput": {
+          "entry": 1029884,
+          "returns": [
+            1030150
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1029884,
+          "returns": [
+            1030150
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1057900,
+          "returns": [
+            1058230
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1057900,
+          "returns": [
+            1058230
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222032,
+          "returns": [
+            222568
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222032,
+          "returns": [
+            222568
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1660188,
+          "returns": [
+            1664690
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732540,
+        "entry": 1068168,
+        "lookup": 1068278,
+        "oem_coefficients": 1732278,
+        "patch_required": true,
+        "rates": 1732148,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036098,
+          "returns": [
+            1037040,
+            1037044,
+            1037086
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037138,
+          "returns": [
+            1037528
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 423720,
+          "returns": [
+            424270
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075588,
+          "returns": [
+            1076118
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388372,
+          "returns": [
+            1388958,
+            1388976
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089482,
+          "returns": [
+            1089618
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494360,
+          "returns": [
+            494562
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666780,
+          "returns": [
+            1666870,
+            1671306
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666780,
+          "returns": [
+            1671306
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034204,
+          "returns": [
+            1034358
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068168,
+          "returns": [
+            1068280
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1033936,
+          "returns": [
+            1034202
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062128,
+          "returns": [
+            1062458
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666780,
+          "returns": [
+            1671306
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4800,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 0,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1728922,
+        "entry": 1065984,
+        "lookup": 1066026,
+        "oem_coefficients": 1728922,
+        "patch_required": false,
+        "rates": 1728792,
+        "variant": "StateIndependent"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 82,
+      "callers": {
+        "ControlBit": {
+          "entry": 221402,
+          "returns": [
+            221794
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204270,
+          "returns": [
+            204884,
+            204958,
+            204996,
+            205012,
+            205052,
+            205114,
+            205188,
+            205234,
+            205250,
+            205306
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1034090,
+          "returns": [
+            1035032,
+            1035036,
+            1035078
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1034090,
+          "returns": [
+            1035032,
+            1035036,
+            1035078
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1035130,
+          "returns": [
+            1035520
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 422424,
+          "returns": [
+            422974
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1073132,
+          "returns": [
+            1073662
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1383800,
+          "returns": [
+            1384386,
+            1384404
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1087010,
+          "returns": [
+            1087144
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 492368,
+          "returns": [
+            492570
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 218882,
+          "returns": [
+            219238
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220056,
+          "returns": [
+            221224
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 203798,
+          "returns": [
+            204006,
+            204056
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 295380,
+          "returns": [
+            295774
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1663500,
+          "returns": [
+            1663590,
+            1668002
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1663500,
+          "returns": [
+            1668002
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1032196,
+          "returns": [
+            1032350
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1032196,
+          "returns": [
+            1032350
+          ],
+          "stack_bytes": 20
+        },
+        "PositionSetupInput": {
+          "entry": 1031928,
+          "returns": [
+            1032194
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1031928,
+          "returns": [
+            1032194
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1059944,
+          "returns": [
+            1060274
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1059944,
+          "returns": [
+            1060274
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222032,
+          "returns": [
+            222568
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222032,
+          "returns": [
+            222568
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1663500,
+          "returns": [
+            1668002
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732960,
+        "entry": 1068544,
+        "lookup": 1068654,
+        "oem_coefficients": 1732698,
+        "patch_required": true,
+        "rates": 1732568,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037514,
+          "returns": [
+            1037904
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 424132,
+          "returns": [
+            424682
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075772,
+          "returns": [
+            1076302
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388880,
+          "returns": [
+            1389466,
+            1389484
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089666,
+          "returns": [
+            1089802
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494724,
+          "returns": [
+            494926
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1667200,
+          "returns": [
+            1667290,
+            1671726
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1667200,
+          "returns": [
+            1671726
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068544,
+          "returns": [
+            1068656
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1667200,
+          "returns": [
+            1671726
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    },
+    {
+      "sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+      "state_address": 33529299,
+      "completion_cases": 384,
+      "native_recovery_cases": 32,
+      "routing_cases": 4992,
+      "calculation_cases": 320,
+      "parameter_cases": 312,
+      "di_mode_cases": 1024,
+      "boundary_cases": 48,
+      "position_cases": 192,
+      "calibration_cases": 3072,
+      "read_position_cases": 3072,
+      "read_control_cases": 128,
+      "position_setup_cases": 360,
+      "media_defaults_cases": 3072,
+      "parameter_profile": {
+        "coefficients": 1732564,
+        "entry": 1068544,
+        "lookup": 1068654,
+        "oem_coefficients": 1732302,
+        "patch_required": true,
+        "rates": 1732172,
+        "variant": "MediaSelected"
+      },
+      "di_cases": 14402,
+      "parent_return_cases": 84,
+      "callers": {
+        "ControlBit": {
+          "entry": 222002,
+          "returns": [
+            222394
+          ],
+          "stack_bytes": 12
+        },
+        "ControlField": {
+          "entry": 204866,
+          "returns": [
+            205480,
+            205554,
+            205592,
+            205608,
+            205648,
+            205710,
+            205784,
+            205830,
+            205846,
+            205902
+          ],
+          "stack_bytes": 20
+        },
+        "ForwardCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ReverseCalculation": {
+          "entry": 1036474,
+          "returns": [
+            1037416,
+            1037420,
+            1037462
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterNibble": {
+          "entry": 1037514,
+          "returns": [
+            1037904
+          ],
+          "stack_bytes": 32
+        },
+        "MediaDefaults": {
+          "entry": 424132,
+          "returns": [
+            424682
+          ],
+          "stack_bytes": 24
+        },
+        "ReadControl": {
+          "entry": 1075772,
+          "returns": [
+            1076302
+          ],
+          "stack_bytes": 32
+        },
+        "ReadBoundary": {
+          "entry": 1388556,
+          "returns": [
+            1389142,
+            1389160
+          ],
+          "stack_bytes": 32
+        },
+        "DiMode": {
+          "entry": 1089666,
+          "returns": [
+            1089802
+          ],
+          "stack_bytes": 40
+        },
+        "InitializationBypass": {
+          "entry": 494724,
+          "returns": [
+            494926
+          ],
+          "stack_bytes": 24
+        },
+        "Control18": {
+          "entry": 219482,
+          "returns": [
+            219838
+          ],
+          "stack_bytes": 24
+        },
+        "Mode23": {
+          "entry": 220656,
+          "returns": [
+            221824
+          ],
+          "stack_bytes": 32
+        },
+        "ParameterClass": {
+          "entry": 204394,
+          "returns": [
+            204602,
+            204652
+          ],
+          "stack_bytes": 32
+        },
+        "RequestArgument": {
+          "entry": 296096,
+          "returns": [
+            296490
+          ],
+          "stack_bytes": 24
+        },
+        "ReadValue": {
+          "entry": 1666804,
+          "returns": [
+            1666894,
+            1671330
+          ],
+          "stack_bytes": 72
+        },
+        "ReadStatus": {
+          "entry": 1666804,
+          "returns": [
+            1671330
+          ],
+          "stack_bytes": 72
+        },
+        "PositionInput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "PositionOutput": {
+          "entry": 1034580,
+          "returns": [
+            1034734
+          ],
+          "stack_bytes": 20
+        },
+        "ParameterTable": {
+          "entry": 1068544,
+          "returns": [
+            1068656
+          ],
+          "stack_bytes": 24
+        },
+        "PositionSetupInput": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "PositionSetupCommand": {
+          "entry": 1034312,
+          "returns": [
+            1034578
+          ],
+          "stack_bytes": 32
+        },
+        "ReadUpperRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ReadLowerRange": {
+          "entry": 1062504,
+          "returns": [
+            1062834
+          ],
+          "stack_bytes": 24
+        },
+        "ControllerTiming": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ControllerMode": {
+          "entry": 222632,
+          "returns": [
+            223168
+          ],
+          "stack_bytes": 20
+        },
+        "ReadCompletionBoundary": {
+          "entry": 1666804,
+          "returns": [
+            1671330
+          ],
+          "stack_bytes": 72
+        }
+      },
+      "pending": []
+    }
+  ]
+}

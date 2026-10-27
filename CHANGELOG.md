@@ -7,6 +7,11 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Complete the experimental classic UHD software-contract group with paired
+  controller-field and read-completion boundary hooks. Preserve native ROM
+  recovery dispatch and OEM speed policy. Validate complete signed builds across
+  all 24 classic inputs; public UHD conversion remains gated for hardware testing.
+
 - Lock native speed-policy coverage across 24 classic and 171 modern MediaTek
   images. Bind defaults to their requested-rate clamp; retain image-specific OEM
   limits and execute C7/C8 Speed regressions. No new UHD capability is enabled.

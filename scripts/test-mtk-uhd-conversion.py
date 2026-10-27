@@ -24,6 +24,8 @@ def machine(data):
     cpu.mem_map(0x01ff0000, 0x20000)
     cpu.mem_map(0x04200000, 0x10000)
     cpu.mem_map(0x04040000, 0x10000)
+    cpu.mem_map(0x04080000, 0x10000)
+    cpu.mem_map(0x040b0000, 0x10000)
     cpu.mem_map(0x03000000, 0x10000)
     return cpu
 
@@ -79,6 +81,8 @@ def routing(data, evidence, states):
                         if candidate['area'] in ('PositionSetupInput','PositionSetupCommand'):
                             cpu.reg_write(reg.UC_ARM_REG_R6,evidence['state'])
                             cpu.reg_write(reg.UC_ARM_REG_R7,0xc8)
+                        if candidate['area'] in ('ControllerTiming','ControllerMode'):
+                            cpu.reg_write(reg.UC_ARM_REG_R2,0x04208240)
                         if candidate['area'] == 'ReadControl':
                             cpu.reg_write(reg.UC_ARM_REG_R0,0x042080c0)
                         if candidate['area'] in ('ReadUpperRange','ReadLowerRange'):
@@ -663,6 +667,110 @@ def media_defaults(data,evidence):
     return count
 
 
+def recovery_dispatch(data,evidence):
+    """C7/C8 must already select the same native ROM read-entry call and status path."""
+    p=evidence['completion'];start,end=p['recovery_region'],p['recovery_end']
+    branch=end-2;op=struct.unpack_from('<H',data,branch)[0]
+    assert op&0xff00==0xd100
+    delta=op&255;delta=delta if delta<128 else delta-256
+    failed=branch+4+delta*2
+    cpu=machine(data);calls=[]
+    def hook(c,at,_size,_user):
+        if at in (end,failed):c.emu_stop();return
+        op=struct.unpack_from('<H',data,at)[0]
+        if op&0xf800==0xf000:
+            second=struct.unpack_from('<H',data,at+2)[0]
+            assert second&0xf800==0xf800
+            offset=((op&0x7ff)<<12)|((second&0x7ff)<<1)
+            if offset&(1<<22):offset-=1<<23
+            calls.append((at+4+offset,tuple(c.reg_read(r) for r in REGISTERS[:4])))
+            c.reg_write(reg.UC_ARM_REG_R0,returned[0])
+            c.reg_write(reg.UC_ARM_REG_LR,(at+4)|1)
+            c.reg_write(reg.UC_ARM_REG_PC,(at+4)|1)
+    cpu.hook_add(UC_HOOK_CODE,hook);returned=[0];count=0
+    for parameter in (0,1,8,255):
+        for flag in (0,1):
+            for result in (0,1,0x20,0xb0):
+                observed=[]
+                for state in (0xc7,0xc8):
+                    cpu.mem_write(0x01ff0000,b'\0'*0x20000)
+                    setup(cpu,evidence['state'],evidence['flag_base'],state,1,0)
+                    # Execute the actual pointer producer, not an assumed state register.
+                    cpu.emu_start(p['recovery_state_load']|1,0x200000,count=2)
+                    assert cpu.reg_read(REGISTERS[p['recovery_state_register']])==evidence['state']
+                    cpu.reg_write(reg.UC_ARM_REG_R0,0)
+                    cpu.reg_write(REGISTERS[p['recovery_request_register']],0x02004000)
+                    cpu.reg_write(REGISTERS[p['recovery_flag_register']],flag)
+                    cpu.mem_write(0x02004000,b'\0'*32)
+                    cpu.mem_write(0x0200400b,bytes([parameter]));calls.clear();returned[0]=result
+                    cpu.emu_start(start|1,0x200000,count=100)
+                    assert len(calls)==1 and calls[0][1][0]==parameter
+                    assert cpu.reg_read(reg.UC_ARM_REG_PC)==(end if result==0 else failed)
+                    assert cpu.mem_read(0x02004000,1)[0]==result
+                    assert cpu.mem_read(0x0200400e,1)[0]==flag
+                    assert cpu.mem_read(evidence['state'],1)[0]==state
+                    observed.append((calls.copy(),bytes(cpu.mem_read(0x02004000,32))))
+                assert observed[0]==observed[1],('native ROM recovery',parameter,flag,result,observed)
+                count+=1
+    return count
+
+
+def completion(data, evidence):
+    """Compare actual controller stores and read-completion reflection to native C8.
+
+    OEM/Off/invalid flags use original media paths. No optical behavior simulated.
+    """
+    native, patched = machine(data), machine(data)
+    parts = [c for c in evidence['candidates'] if c['area'] in ('ControllerTiming','ControllerMode','ReadCompletionBoundary')]
+    assert len(parts)==3
+    for index,candidate in enumerate(parts):
+        stub=STUB+index*0x400; site=candidate['site'];delta=stub-site-4
+        patched.mem_write(stub,bytes(candidate['stub']))
+        patched.mem_write(site,struct.pack('<HH',0xf000|((delta>>12)&0x7ff),0xf800|((delta>>1)&0x7ff)))
+        if len(candidate['original'])==6:patched.mem_write(site+4,b'\xc0\x46')
+    p=evidence['completion'];count=0
+    at=p['controller_region']+66;op=struct.unpack_from('<H',data,at)[0]
+    assert op&0xff00==0x4800
+    mode_cell=struct.unpack_from('<I',data,((at+4)&~3)+(op&255)*4)[0]-0x40+0x30
+    targets=(0x04208260,0x04208810,mode_cell)
+    stops={p['controller_end'],p['boundary_end'],parts[2]['reject']}
+    for cpu in (native,patched):
+        cpu.hook_add(UC_HOOK_CODE,lambda c,at,_size,_user:c.emu_stop() if at in stops else None)
+    for state in (0x40,0xc0,0xc4,0xc7,0xc8,0xcc):
+        for flag in (0,1,2,255):
+            for initial in (0,0xffffffff,0x12345678,0xa5a55a5a):
+                results=[]
+                for index,cpu in enumerate((native,patched)):
+                    reference=0xc8 if index==0 and state==0xc7 and flag==1 else state
+                    setup(cpu,evidence['state'],evidence['flag_base'],reference,flag,0)
+                    cpu.reg_write(reg.UC_ARM_REG_R1,0x04208810)
+                    cpu.reg_write(reg.UC_ARM_REG_R2,0x04208260)
+                    for addr in targets:cpu.mem_write(addr,struct.pack('<I',initial))
+                    cpu.emu_start(p['controller_region']|1,0x200000,count=1000)
+                    assert cpu.reg_read(reg.UC_ARM_REG_PC)==p['controller_end']
+                    results.append([bytes(cpu.mem_read(addr,4)) for addr in targets])
+                assert results[0]==results[1],('controller fields',state,flag,initial,results)
+                count+=1
+            for request in (0,99,100,101,199,200,201,299,300,301,0x3ffffff,0x7ffffff):
+                results=[]
+                for index,cpu in enumerate((native,patched)):
+                    cpu.mem_write(0x01ff0000,b'\0'*0x20000)
+                    reference=0xc8 if index==0 and state==0xc7 and flag==1 else state
+                    setup(cpu,evidence['state'],evidence['flag_base'],reference,flag,0)
+                    for cell,value in zip(p['boundaries'],(100,200,300)):cpu.mem_write(cell,struct.pack('<I',value))
+                    cpu.mem_write(0x03008028,struct.pack('<I',request))
+                    cpu.mem_write(0x040b0048,struct.pack('<I',0xdeadbeef))
+                    try:
+                        cpu.emu_start(p['boundary_region']|1,0x200000,count=1000)
+                    except Exception as error:
+                        raise AssertionError(('completion boundary',state,flag,request,index,hex(cpu.reg_read(reg.UC_ARM_REG_PC)),p)) from error
+                    assert cpu.reg_read(reg.UC_ARM_REG_PC) in (p['boundary_end'],parts[2]['reject'])
+                    results.append((bytes(cpu.mem_read(0x03008028,4)),bytes(cpu.mem_read(0x040b0048,4))))
+                assert results[0]==results[1],('completion boundary',state,flag,request,results)
+                count+=1
+    return count
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--builder', type=Path, required=True)
@@ -682,7 +790,7 @@ def main():
             data = source.read_bytes()
             assert hashlib.sha256(data).hexdigest() == row['sha256']
             evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(source), 'uhd-conversion']))
-            assert evidence['pending'] and len(evidence['candidates']) == 22 + int(evidence['parameter_profile']['patch_required'])
+            assert not evidence['pending'] and len(evidence['candidates']) == 25 + int(evidence['parameter_profile']['patch_required'])
             cases = routing(data, evidence, (0, 0x40, 0x80, 0xc0, 0xc4, 0xc7, 0xc8, 0xcb, 0xcc, 0xcf, 0xe0, 0xf0))
             arithmetic_cases = calculations(data, evidence)
             parameter_cases = parameters(data, evidence)
@@ -693,19 +801,22 @@ def main():
             read_position_cases = read_position(data, evidence)
             read_control_cases = read_control(data, evidence)
             position_setup_cases = position_setup(data, evidence)
+            recovery_cases=recovery_dispatch(data,evidence)
+            completion_cases=completion(data,evidence)
             media_defaults_cases = media_defaults(data, evidence)
             di_cases = di_entry(data, evidence)
             parent_cases = parent_returns(data, evidence)
-            records.append({'sha256':row['sha256'], 'state_address':evidence['state'], 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'position_cases':position_cases, 'calibration_cases':calibration_cases, 'read_position_cases':read_position_cases, 'read_control_cases':read_control_cases, 'position_setup_cases':position_setup_cases, 'media_defaults_cases':media_defaults_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
+            records.append({'sha256':row['sha256'], 'state_address':evidence['state'],'completion_cases':completion_cases,'native_recovery_cases':recovery_cases, 'routing_cases':cases, 'calculation_cases':arithmetic_cases, 'parameter_cases':parameter_cases, 'di_mode_cases':mode_cases, 'boundary_cases':boundary_cases, 'position_cases':position_cases, 'calibration_cases':calibration_cases, 'read_position_cases':read_position_cases, 'read_control_cases':read_control_cases, 'position_setup_cases':position_setup_cases, 'media_defaults_cases':media_defaults_cases, 'parameter_profile':evidence['parameter_profile'], 'di_cases':di_cases, 'parent_return_cases':parent_cases, 'callers':{c['area']:c['caller'] for c in evidence['candidates']}, 'pending':evidence['pending']})
             print(f"{row['sha256'][:12]}: {cases} native-versus-emitted cases passed", flush=True)
         if args.output:
-            args.output.write_text(json.dumps({'policy':'research stubs only; no conversion enabled',
+            args.output.write_text(json.dumps({'policy':'complete experimental software contracts; public conversion gated; physical UHD reading unproven',
+                'script_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                 'builder_sha256':hashlib.sha256(args.builder.read_bytes()).hexdigest(), 'images':records}, indent=2) + '\n')
         print(f"PASS: {len(records)} classic inputs; {sum(r['routing_cases'] for r in records)} routing comparisons; {sum(r['di_cases'] for r in records)} DI entry cases")
         return
     evidence = json.loads(subprocess.check_output([str(args.builder.resolve()), str(args.image), 'uhd-conversion']))
-    assert evidence['pending'], 'research components must not enable standard conversion'
-    assert len(evidence['candidates']) == 22 + int(evidence['parameter_profile']['patch_required'])
+    assert not evidence['pending'], 'complete experimental software contracts required'
+    assert len(evidence['candidates']) == 25 + int(evidence['parameter_profile']['patch_required'])
     data = args.image.read_bytes()
     cases = routing(data, evidence, range(256))
     arithmetic_cases = calculations(data, evidence)
@@ -717,11 +828,13 @@ def main():
     read_position_cases = read_position(data, evidence)
     read_control_cases = read_control(data, evidence)
     position_setup_cases = position_setup(data, evidence)
+    recovery_cases=recovery_dispatch(data,evidence)
+    completion_cases=completion(data,evidence)
     media_defaults_cases = media_defaults(data, evidence)
     di_cases = di_entry(data, evidence)
     parent_cases = parent_returns(data, evidence)
     helper_cases = helpers(data, evidence)
-    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {read_position_cases} native read-position cases; {read_control_cases} controller cases; {position_setup_cases} native setup cases; {media_defaults_cases} media-default cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; conversion remains gated')
+    print(f'PASS: {cases} native-versus-emitted routing cases; {arithmetic_cases} native arithmetic cases; {parameter_cases} native parameter cases; {mode_cases} DI mode cases; {boundary_cases} read-boundary cases; {position_cases} full position cases; {calibration_cases} calibration cases; {read_position_cases} native read-position cases; {read_control_cases} controller cases; {position_setup_cases} native setup cases; {media_defaults_cases} media-default cases; {recovery_cases} native recovery comparisons; {completion_cases} native completion cases; {helper_cases} DI helper cases; {di_cases} native DI entry cases; {parent_cases} parent-return cases; software contracts complete; public conversion remains gated')
 
 
 if __name__ == '__main__':

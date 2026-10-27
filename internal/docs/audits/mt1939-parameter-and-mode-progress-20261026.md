@@ -54,3 +54,9 @@ speed-policy validation across all 24 classic images and 171 modern comparisons.
 Retain the native image-specific limits and requested-rate clamp; no blanket rate
 rewrite is justified. This does not close the remaining recovery/controller work
 or promote the internal conversion probe to hardware-test readiness.
+
+Completion follow-up: [complete experimental software group](mt1939-complete-uhd-software-20261026.md)
+binds the remaining paired controller fields, the separate read-completion
+boundary body and native ROM recovery dispatch. The known software-contract gate
+is now complete across all 24 inputs; production installation and physical UHD
+reading remain separate from the offline evidence.

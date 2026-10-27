@@ -75,6 +75,15 @@ fn main() -> anyhow::Result<()> {
             );
             let (read_position, range_candidates) = plan.read_position_candidates(&image, flags)?;
             records.extend(range_candidates.iter().map(|c| routing_evidence(c, None)));
+            records.extend(
+                plan.completion_candidates(&image, flags)?
+                    .iter()
+                    .map(|c| routing_evidence(c, None)),
+            );
+            let completion = mediatek_optical::image::analysis::ClassicReadCompletion::inspect(
+                &image,
+                plan.state_address(),
+            )?;
             let calibration = plan.calibration_candidate(&image, flags)?;
             let di = freemkv_fw::engine::mtk_uhd::di_prevalidation_candidate(&image, flags).ok();
             println!(
@@ -93,6 +102,10 @@ fn main() -> anyhow::Result<()> {
                         "original":c.original,"stub":c.bytes,
                         "caller":{"entry":c.contract.caller.entry,"stack_bytes":c.contract.caller.stack_bytes,"returns":c.contract.caller.returns}
                     })),
+                    "completion":{"recovery_region":completion.recovery_region,"recovery_end":completion.recovery_end,
+                        "recovery_state_load":completion.recovery_state_load,"recovery_state_register":completion.recovery_state_register,
+                        "recovery_request_register":completion.recovery_request_register,"recovery_flag_register":completion.recovery_flag_register,"recovery_caller":{"entry":completion.recovery_caller.entry,"returns":completion.recovery_caller.returns},"controller_region":completion.controller_region,"controller_end":completion.controller_region+0x6c,
+                        "boundary_region":completion.boundary_region,"boundary_end":completion.boundary_end,"boundaries":completion.boundaries},
                     "parameter_profile":{
                         "variant":format!("{:?}",parameter.contract.variant),
                         "entry":parameter.contract.entry,"lookup":parameter.contract.lookup,

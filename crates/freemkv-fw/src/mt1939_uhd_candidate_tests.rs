@@ -183,8 +183,8 @@ fn classic_uhd_research_corpus_builds_without_changing_originals() {
     }
 }
 
-/// Internal placement/integrity probe, not a complete UHD conversion. Keep the
-/// public completion gate closed while reverse/indirect consumers are unresolved.
+/// Complete experimental software build. Public installation remains gated;
+/// offline placement and admission cannot establish physical UHD reading.
 fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
     use crate::engine::mtk_uhd::{di_prevalidation_candidate, UhdConversionPlan};
     ensure!(
@@ -204,10 +204,7 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
     );
     let flags = fact(&report, "flag_base")?;
     let plan = UhdConversionPlan::inspect(image)?;
-    ensure!(
-        plan.require_complete_conversion().is_err(),
-        "use the normal builder for a complete conversion"
-    );
+    plan.require_complete_conversion()?;
     let di = di_prevalidation_candidate(image, flags)?;
     let mut parts = vec![(
         "DiscInformation".to_string(),
@@ -224,6 +221,14 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
         ));
     }
     for part in plan.auxiliary_candidates(image, flags)? {
+        parts.push((
+            format!("{:?}", part.area),
+            part.site,
+            part.original,
+            part.bytes,
+        ));
+    }
+    for part in plan.completion_candidates(image, flags)? {
         parts.push((
             format!("{:?}", part.area),
             part.site,
@@ -283,7 +288,7 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
         ));
     }
     ensure!(
-        parts.len() == 24 + usize::from(parameter_patch) + usize::from(calibration_patch),
+        parts.len() == 27 + usize::from(parameter_patch) + usize::from(calibration_patch),
         "research probe is missing reviewed components"
     );
     let mut installed = Vec::new();
@@ -350,7 +355,8 @@ fn di_routing_probe(image: &[u8]) -> Result<(Vec<u8>, serde_json::Value)> {
         image,
         &report.image,
     )?;
-    let record = serde_json::json!({"scope":"internal placement/integrity probe, not a complete UHD conversion",
+    let record = serde_json::json!({"scope":"complete experimental software conversion; physical UHD reading unproven",
+        "software_contracts_complete":true,
         "ready_for_hardware_test":false,"physical_uhd_validated":false,
         "input_sha256":format!("{:x}",Sha256::digest(image)),
         "output_sha256":format!("{:x}",Sha256::digest(&report.image)),
@@ -368,7 +374,7 @@ fn classic_di_probe_places_signs_and_admits_without_promoting_standard_support()
     let (probe, record) = di_routing_probe(image).unwrap();
     assert_ne!(probe.as_slice(), image);
     assert_eq!(record["ready_for_hardware_test"], false);
-    assert_eq!(record["installed"].as_array().unwrap().len(), 26);
+    assert_eq!(record["installed"].as_array().unwrap().len(), 29);
     assert_eq!(image.as_slice(), before.as_slice());
     let (_, support) = crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
     assert!(!support.supports(BootFeature::Unrestricted));
@@ -388,4 +394,41 @@ fn selected_hardware_di_probe_is_saved_only_when_explicitly_requested() {
         serde_json::to_vec_pretty(&record).unwrap(),
     )
     .unwrap();
+}
+
+/// Exhaustive offline build/sign/admission sweep; never saves a tester BIN.
+#[test]
+fn complete_classic_corpus_builds_signs_and_admits_without_public_promotion() {
+    let Ok(path) = std::env::var("FREEMKV_MT1939_COMPLETE_CORPUS") else {
+        return;
+    };
+    let hoard = std::path::PathBuf::from(std::env::var("FREEMKV_MT1939_COMPLETE_HOARD").unwrap());
+    let input: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let mut records = Vec::new();
+    for row in input["images"].as_array().unwrap() {
+        if row["identity"]["chip"] != "MT1939" {
+            continue;
+        }
+        let data = std::fs::read(hoard.join(row["path"].as_str().unwrap())).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&data)),
+            row["sha256"].as_str().unwrap()
+        );
+        let (_, record) = di_routing_probe(&data)
+            .unwrap_or_else(|e| panic!("{} complete conversion: {e:#}", row["sha256"]));
+        assert_eq!(record["pending"], serde_json::json!([]));
+        assert_eq!(record["software_contracts_complete"], true);
+        assert_eq!(record["physical_uhd_validated"], false);
+        eprintln!(
+            "{} signed conversion passed",
+            row["sha256"].as_str().unwrap()
+        );
+        records.push(record);
+    }
+    assert_eq!(records.len(), 24);
+    if let Ok(output) = std::env::var("FREEMKV_MT1939_COMPLETE_OUTPUT") {
+        std::fs::write(output,serde_json::to_vec_pretty(&serde_json::json!({"scope":"offline complete software conversion; no tester BIN saved",
+                    "producer_test_binary_sha256":format!("{:x}",Sha256::digest(std::fs::read(std::env::current_exe().unwrap()).unwrap())),
+                    "images":records})).unwrap()).unwrap();
+    }
 }

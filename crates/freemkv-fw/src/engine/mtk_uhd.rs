@@ -1,8 +1,8 @@
 //! Component-based UHD conversion planning and research hook emission.
 //!
 //! Locators live in mediatek-optical. This module owns policy and Thumb emission.
-//! A collection of matched regions is not a complete conversion: no ordinary
-//! Modify output installs these hooks until the remaining contracts are proven.
+//! The complete experimental group requires every named software contract.
+//! Ordinary Modify does not install it; hardware validation remains separate.
 use anyhow::{ensure, Context, Result};
 use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
 use sha2::{Digest, Sha256};
@@ -26,6 +26,7 @@ pub struct UhdConversionPlan {
     areas: UhdAreas,
     state: u32,
     source_hash: [u8; 32],
+    pending: Vec<&'static str>,
 }
 impl UhdConversionPlan {
     /// Select each implementation separately and require their common state cell.
@@ -37,7 +38,78 @@ impl UhdConversionPlan {
         areas
             .area(UhdArea::DiscInformation)
             .context("UHD DI recognition contract")?;
+        let mut pending = Vec::new();
+        if areas
+            .area(UhdArea::DiscInformation)?
+            .variant()
+            .starts_with("classic")
+        {
+            use mediatek_optical::image::analysis::*;
+            let checks = [
+                (
+                    "disc-information recognition",
+                    ClassicDi::detect(image).map(|_| ()),
+                ),
+                (
+                    "auxiliary native selectors",
+                    ClassicConsumer::inspect(image, state).map(|_| ()),
+                ),
+                (
+                    "position scaling",
+                    ClassicPosition::detect(image, state).map(|_| ()),
+                ),
+                (
+                    "position setup",
+                    ClassicPositionSetup::detect(image, state).map(|_| ()),
+                ),
+                (
+                    "read-position decode and ranges",
+                    ClassicReadPosition::detect(image, state).map(|_| ()),
+                ),
+                (
+                    "parameter lookup",
+                    ClassicParameter::detect(image, state).map(|_| ()),
+                ),
+                (
+                    "startup calibration",
+                    ClassicCalibration::detect(image, state).map(|_| ()),
+                ),
+                (
+                    "controller completion and native recovery",
+                    ClassicReadCompletion::inspect(image, state).map(|_| ()),
+                ),
+                (
+                    "native speed defaults and request clamp",
+                    NativeSpeedPolicy::detect(image).map(|_| ()),
+                ),
+            ];
+            pending.extend(
+                checks
+                    .into_iter()
+                    .filter_map(|(name, result)| result.err().map(|_| name)),
+            );
+            for area in UhdArea::ALL {
+                if areas.area(area).is_err() {
+                    pending.push("core native routing");
+                    break;
+                }
+            }
+        }
+        if !areas
+            .area(UhdArea::DiscInformation)?
+            .variant()
+            .starts_with("classic")
+            && UhdArea::ALL.iter().any(|&area| {
+                !matches!(
+                    areas.area(area).map(|c| c.selects_c7()),
+                    Ok(None | Some(true))
+                )
+            })
+        {
+            pending.push("unvalidated non-classic conversion");
+        }
         Ok(Self {
+            pending,
             areas,
             state,
             source_hash: Sha256::digest(image).into(),
@@ -61,18 +133,10 @@ impl UhdConversionPlan {
             Some(false) => UhdAction::ExtendSelection,
         })
     }
-    /// Remaining semantic requirements. All seven locator hits alone must never
-    /// silently promote an unproven classic conversion into public capability.
+    /// Remaining software contracts for the complete experimental hook group.
+    /// An empty list does not establish optical/controller behavior on hardware.
     pub fn remaining_contracts(&self) -> Vec<&'static str> {
-        if UhdArea::ALL.iter().all(|&a| {
-            matches!(
-                self.action(a),
-                Ok(UhdAction::Native | UhdAction::PreserveHardware)
-            )
-        }) {
-            return vec![];
-        }
-        vec!["remaining indirect and structure consumers"]
+        self.pending.clone()
     }
     /// Refuse incomplete conversion before an output buffer can be modified.
     pub fn require_complete_conversion(&self) -> Result<()> {
@@ -157,6 +221,53 @@ impl UhdConversionPlan {
                 })
             })
             .collect()
+    }
+    /// Bind and emit native controller/completion roles after the original hook group.
+    pub fn completion_candidates(
+        &self,
+        image: &[u8],
+        flags: u32,
+    ) -> Result<Vec<UhdRoutingCandidate<CompletionRole>>> {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        let contract =
+            mediatek_optical::image::analysis::ClassicReadCompletion::inspect(image, self.state)?;
+        let mut result = Vec::new();
+        for (index, area) in [
+            CompletionRole::ControllerTiming,
+            CompletionRole::ControllerMode,
+            CompletionRole::ReadCompletionBoundary,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let selection = &contract.selections[index];
+            let site = selection.site();
+            result.push(UhdRoutingCandidate {
+                area,
+                region_start: if index < 2 {
+                    contract.controller_region
+                } else {
+                    contract.boundary_region
+                },
+                calculation_end: None,
+                site,
+                original: image[site..site + selection.span()].to_vec(),
+                accept: selection.accept(),
+                reject: selection.reject(),
+                bytes: emit_c7_selection(
+                    self.state,
+                    flags,
+                    selection.replay(),
+                    selection.accept(),
+                    selection.reject(),
+                )?,
+                caller: contract.callers[index].clone(),
+            });
+        }
+        Ok(result)
     }
     /// Emit both selectors only after matching the complete native position
     /// routine, including its polling loops, table loads and balanced return.
@@ -721,7 +832,7 @@ mod tests {
         assert_eq!(CLASSIC, before);
     }
     #[test]
-    fn component_plan_preserves_hardware_and_refuses_incomplete_conversion() {
+    fn component_plan_binds_complete_software_group_and_preserves_hardware() {
         let plan = UhdConversionPlan::inspect(CLASSIC).unwrap();
         assert_eq!(
             plan.action(UhdArea::HardwareDefaults).unwrap(),
@@ -731,8 +842,18 @@ mod tests {
             plan.action(UhdArea::DiscInformation).unwrap(),
             UhdAction::AddRecognition
         );
-        assert!(!plan.remaining_contracts().is_empty());
-        assert!(plan.require_complete_conversion().is_err());
+        assert!(plan.remaining_contracts().is_empty());
+        plan.require_complete_conversion().unwrap();
+        let mut changed = CLASSIC.to_vec();
+        let completion =
+            mediatek_optical::image::analysis::ClassicReadCompletion::inspect(CLASSIC, plan.state)
+                .unwrap();
+        changed[completion.controller_region + 0x20] ^= 1;
+        let broken = UhdConversionPlan::inspect(&changed).unwrap();
+        assert!(broken
+            .remaining_contracts()
+            .contains(&"controller completion and native recovery"));
+        assert!(broken.require_complete_conversion().is_err());
         let candidates = plan.routing_candidates(CLASSIC, 0x0200f000).unwrap();
         assert_eq!(candidates.len(), 5);
         for candidate in candidates {
@@ -801,11 +922,11 @@ mod tests {
                 );
             }
             if row["identity"]["chip"] == "MT1939" {
-                assert!(plan.require_complete_conversion().is_err());
+                plan.require_complete_conversion().unwrap();
                 assert_eq!(plan.routing_candidates(&data, 0x0200f000).unwrap().len(), 5);
                 assert_eq!(
                     plan.auxiliary_candidates(&data, 0x0200f000).unwrap().len(),
-                    7
+                    11
                 );
             }
         }
@@ -917,4 +1038,15 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
         bytes: a.finish()?,
         caller,
     })
+}
+
+/// Independently bound read-completion roles; no hardware constants are replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompletionRole {
+    /// Native paired timing fields.
+    ControllerTiming,
+    /// Native controller mode field.
+    ControllerMode,
+    /// Native boundary reflection on read completion.
+    ReadCompletionBoundary,
 }

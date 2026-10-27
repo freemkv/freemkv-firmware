@@ -623,7 +623,7 @@ impl Mt1959Engine {
         if let Some(raw) = levers.iter_mut().find(|lever| lever.id == LeverId::RawRead) {
             let reason = match super::mtk_uhd::UhdConversionPlan::inspect(image) {
                 Ok(plan) => match plan.require_complete_conversion() {
-                    Ok(()) => "native component handling found; no conversion installed".to_owned(),
+                    Ok(()) => "software conversion contracts complete; experimental conversion is not installed".to_owned(),
                     Err(error) => format!("{error:#}"),
                 },
                 Err(error) => format!("conversion evidence incomplete: {error:#}"),
