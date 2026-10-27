@@ -48,3 +48,9 @@ Previously identified independent mode writer: classic6799a..679b4 corresponds t
 
 
 The independent media-default writer is now source-bound and extended for C7/On. Its two native mode-selection branches must reach the same STRB store, and the rejection's unconditional branch chain must join immediately after that store. The source caller's mode-cell load is separately validated. All24 images have one matching grammar. BH16NS48 passes3072 complete mode-store cases covering all256 media states, four settings and three initial modes. C7/On writes0x1c; other inputs preserve native mode selection. The signed internal26-component probe passes integrity and offline flash admission. This closes the mode-overwrite issue; remaining controller/error-recovery/speed-policy consumers are still being classified before hardware-test readiness is claimed.
+
+Speed follow-up: [native speed-policy audit](mtk-speed-policy-20261026.md) closes
+speed-policy validation across all 24 classic images and 171 modern comparisons.
+Retain the native image-specific limits and requested-rate clamp; no blanket rate
+rewrite is justified. This does not close the remaining recovery/controller work
+or promote the internal conversion probe to hardware-test readiness.

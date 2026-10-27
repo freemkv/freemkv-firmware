@@ -135,6 +135,7 @@ jobs:
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-frame-execution.py --candidate-builder target/release/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-dispatch.py --candidate-builder target/release/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-speed.py --builder target/release/examples/mtk_receiver_evidence
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/audit-mtk-speed-policy.py --builder target/release/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-uhd-conversion.py --builder target/release/examples/mtk_receiver_evidence
 
   # clippy's output is target-dependent: cfg-gated code only gets linted on the

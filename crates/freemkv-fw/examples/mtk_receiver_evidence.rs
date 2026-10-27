@@ -20,6 +20,17 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "speed-policy" {
+            let p = mediatek_optical::image::analysis::NativeSpeedPolicy::detect(&image)?;
+            println!(
+                "{}",
+                serde_json::json!({"variant":p.variant,"entry":p.entry,"length":p.length,
+                "media_cell":p.media_cell,"maximum_cell":p.maximum_cell,"optimum_cell":p.optimum_cell,
+                "hardware_cell":p.hardware_cell,"clamp":{"entry":p.clamp.entry,"compare":p.clamp.compare,
+                "after_clamp":p.clamp.after_clamp,"request_register":p.clamp.request_register}})
+            );
+            return Ok(());
+        }
         if offset == "uhd-conversion" {
             use freemkv_fw::engine::mtk_uhd::{
                 emit_di_layers, emit_di_recognition, UhdConversionPlan,

@@ -7,6 +7,10 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Lock native speed-policy coverage across 24 classic and 171 modern MediaTek
+  images. Bind defaults to their requested-rate clamp; retain image-specific OEM
+  limits and execute C7/C8 Speed regressions. No new UHD capability is enabled.
+
 - Add component-based MediaTek UHD conversion planning and offline hook tests.
   Preserve native hardware defaults and refuse incomplete conversions; this
   development work does not enable classic UHD support yet. Bind the classic

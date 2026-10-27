@@ -2500,7 +2500,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 [[package]]
 name = "mediatek-optical"
 version = "1.2.0"
-source = "git+https://github.com/MattJackson/mediatek-optical?rev=4f23d45b62a43141a4fc8b871674fe747fee40b5#4f23d45b62a43141a4fc8b871674fe747fee40b5"
+source = "git+https://github.com/MattJackson/mediatek-optical?rev=df36543c44527630b467506c4a224645d929402f#df36543c44527630b467506c4a224645d929402f"
 dependencies = [
  "aes",
  "cmac",

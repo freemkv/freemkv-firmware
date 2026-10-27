@@ -1,0 +1,2024 @@
+[
+  {
+    "sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+    "identity": {
+      "chip": "MT1939",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE  BH14NS40",
+      "revision": "1.01",
+      "variant": "N1722A1"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 436164,
+        "compare": 436158,
+        "entry": 436148,
+        "request_register": 4
+      },
+      "entry": 424132,
+      "hardware_cell": 33557252,
+      "length": 60,
+      "maximum_cell": 33529301,
+      "media_cell": 33529299,
+      "optimum_cell": 33557260,
+      "variant": "classic"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.01/main/007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d.bin",
+    "parts": [
+      {
+        "offset": 424132,
+        "sha256": "9070fd505b89e8599d8a9917f2a3eab062af93a51e1b8d99fd2b7bad1927ecd5",
+        "hex": "f8b54c4f3878860907230c2560485d495d4a5e4c032e6cd1424e3678f60701d0042509e0434f3e7836090c2e07d13e78b608312e00d1082505700d70"
+      },
+      {
+        "offset": 424424,
+        "sha256": "365a0297157745e4553d5457966c7a1e61e5109b17c3c8cdff359ec73008d67d",
+        "hex": "040b0002"
+      },
+      {
+        "offset": 424440,
+        "sha256": "f432991d53e591a11b77112608ed0534698f929a84b40f641e85de2da49fbc7f",
+        "hex": "d39dff01"
+      },
+      {
+        "offset": 424520,
+        "sha256": "3f30ef4a12dd1b97b493aefea4f167d033b9a936d02a12ef1b02d6757c6a3655",
+        "hex": "0c0b00020da2ff01ad9dff01d59dff01"
+      },
+      {
+        "offset": 436148,
+        "sha256": "0d94ea2c72b8435d22c5dabe028fd6e648e5406e357ec352da49e04b90aaaec6",
+        "hex": "f8b504007b482038417f8c4200d9447f784d"
+      },
+      {
+        "offset": 436648,
+        "sha256": "7a75a5735cc5d11dc1251041645e72b15fce7eac5caf0ad2600073e6bb69af01",
+        "hex": "d89dff01"
+      }
+    ]
+  },
+  {
+    "sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+    "identity": {
+      "chip": "MT1939",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE  BE14NU40",
+      "revision": "1.00",
+      "variant": "N0023G4"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 433944,
+        "compare": 433938,
+        "entry": 433930,
+        "request_register": 4
+      },
+      "entry": 422356,
+      "hardware_cell": 33557254,
+      "length": 60,
+      "maximum_cell": 33529302,
+      "media_cell": 33529300,
+      "optimum_cell": 33557260,
+      "variant": "classic"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.00/main/01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c.bin",
+    "parts": [
+      {
+        "offset": 422356,
+        "sha256": "9070fd505b89e8599d8a9917f2a3eab062af93a51e1b8d99fd2b7bad1927ecd5",
+        "hex": "f8b54c4f3878860907230c2560485d495d4a5e4c032e6cd1424e3678f60701d0042509e0434f3e7836090c2e07d13e78b608312e00d1082505700d70"
+      },
+      {
+        "offset": 422648,
+        "sha256": "c239d08e65d82c7d7c24e60953dec2008a666f1767fbe99741d1ceeebf965df1",
+        "hex": "060b0002"
+      },
+      {
+        "offset": 422664,
+        "sha256": "610d36bcfe50e0142ba5d50611089b02b9c85681c12540f0455ea7d7ae6b802e",
+        "hex": "d49dff01"
+      },
+      {
+        "offset": 422744,
+        "sha256": "90aced69315d1a0bbd8b97cb0fd22b87622b6d332edb2d16e29548ff33dec0c1",
+        "hex": "0c0b00020da2ff01ad9dff01d69dff01"
+      },
+      {
+        "offset": 433930,
+        "sha256": "711aacd3558143d8914d90320b8cad3de7ab1649635fef3cacc19e7bc0492df7",
+        "hex": "f8b50400fd48817f8c4200d9847ffa4d"
+      },
+      {
+        "offset": 434948,
+        "sha256": "4dcdcdc65ca9c03884879bc8d3cfd3b68cb469dc6e4222d98a9e9dc53bb4291d",
+        "hex": "b89dff01"
+      }
+    ]
+  },
+  {
+    "sha256": "04f879f0bf676ede526f7d07f20f5c949caac7e00dbb1b2620d0c1601780d29a",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BP60NB10",
+      "revision": "1.00",
+      "variant": "NM08200"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 442648,
+        "compare": 442642,
+        "entry": 442632,
+        "request_register": 4
+      },
+      "entry": 895662,
+      "hardware_cell": 33529353,
+      "length": 62,
+      "maximum_cell": 33529351,
+      "media_cell": 33529349,
+      "optimum_cell": 33557260,
+      "variant": "slim_fixed6_c7_aware"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "mk/mediatek/MT1959/HL-DT-ST_BP60NB10_NB10/GENERAL/1.00/main/04f879f0bf676ede526f7d07f20f5c949caac7e00dbb1b2620d0c1601780d29a.bin",
+    "parts": [
+      {
+        "offset": 442632,
+        "sha256": "2f2c911dcf7ec729da30e9123e3372de33866166a748e742ec1c9ad6d2d9ac45",
+        "hex": "f8b5784d04006d1fe879844200d9ec797448"
+      },
+      {
+        "offset": 443116,
+        "sha256": "1034532df51706092387059b8a88e50c09a43e074ec477a5824469ca8a1469f2",
+        "hex": "059eff01"
+      },
+      {
+        "offset": 895662,
+        "sha256": "b6f4de3567d20fef9100ae66207c354c5788235ff7e4dfba1d2d83174a67324f",
+        "hex": "f8b5614b1878800907277449754c754d764e03287ed164480078c2070620002a53d11a7812090c2a09d11978c7294cd019788908322948d01978890845e0"
+      },
+      {
+        "offset": 895864,
+        "sha256": "fba68f19f5205e140cd8691087cf9f803ace78637c896f74ceec4b48c60f172b",
+        "hex": "28702070"
+      },
+      {
+        "offset": 896056,
+        "sha256": "1034532df51706092387059b8a88e50c09a43e074ec477a5824469ca8a1469f2",
+        "hex": "059eff01"
+      },
+      {
+        "offset": 896088,
+        "sha256": "d392ee29815e2eed744f28ff26e464d8c44cd46779f26448040eaa2eda635401",
+        "hex": "099eff01"
+      },
+      {
+        "offset": 896140,
+        "sha256": "b9407b4945f5d8da6c7c64fa34d00337b5027e94c321c2ae29353205d809e86a",
+        "hex": "c69dff010c0b0002079eff0199a3ff01"
+      }
+    ]
+  },
+  {
+    "sha256": "06ac3d3a5037a3b94922906728404800d660b766ed3ff66ab102496af798c3dc",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE  BH16NS55",
+      "revision": "1.04",
+      "variant": "NM02701"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 444104,
+        "compare": 444098,
+        "entry": 444090,
+        "request_register": 4
+      },
+      "entry": 427974,
+      "hardware_cell": 33529348,
+      "length": 72,
+      "maximum_cell": 33529346,
+      "media_cell": 33529344,
+      "optimum_cell": 33557259,
+      "variant": "modern"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "mk/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.04/main/06ac3d3a5037a3b94922906728404800d660b766ed3ff66ab102496af798c3dc.bin",
+    "parts": [
+      {
+        "offset": 427974,
+        "sha256": "f39389ac709405d02a3cab2926dbc2a617172a3502f722f221fdaf91c898f061",
+        "hex": "f8b53f4f38788509072450484e4b344e4e4a4f49032d57d13578ed0701d0042347e0374f3d782e0908250c2e0cd13b78c72b3dd03b789b08322b39d03b789b08312b42d00c2334e0"
+      },
+      {
+        "offset": 428150,
+        "sha256": "6a2b783121a72acaf951ac61ea7780a63199d87a1df0c4dc5be501089a963625",
+        "hex": "06230b700370"
+      },
+      {
+        "offset": 428200,
+        "sha256": "528d1187913e5890f4d3dded4834021453a090d83b6bfa426ecbc46bc4df838e",
+        "hex": "049eff01"
+      },
+      {
+        "offset": 428232,
+        "sha256": "8444129a4c816de7c62ad8feef5f6ec1d8747b707c2856ef1eef61a1c8f962f8",
+        "hex": "009eff01"
+      },
+      {
+        "offset": 428300,
+        "sha256": "c27f67f1af53b786001fd07b10b59f4468228e2d1d3b50b26e1091e7f238cc2c",
+        "hex": "c29dff0189a3ff010b0b0002029eff01"
+      },
+      {
+        "offset": 444090,
+        "sha256": "7c9c3cb721831d5b40b7832f512c0c361922d81dc94849bb08c95bfb6aa9469e",
+        "hex": "f8b50400664881788c4200d98478654b"
+      },
+      {
+        "offset": 444504,
+        "sha256": "8444129a4c816de7c62ad8feef5f6ec1d8747b707c2856ef1eef61a1c8f962f8",
+        "hex": "009eff01"
+      },
+      {
+        "offset": 444512,
+        "sha256": "927306565350639a1097a30b85ca74ea67a1c0370192c78e02bd2031dc250b2c",
+        "hex": "009fff01"
+      }
+    ]
+  },
+  {
+    "sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BU40N",
+      "revision": "BU11",
+      "variant": "O000300"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 441736,
+        "compare": 441730,
+        "entry": 441720,
+        "request_register": 4
+      },
+      "entry": 895860,
+      "hardware_cell": 33529352,
+      "length": 62,
+      "maximum_cell": 33529350,
+      "media_cell": 33529348,
+      "optimum_cell": 33557260,
+      "variant": "slim_fixed6_c7_aware"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/BUFFALO/BU11/main/08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a.bin",
+    "parts": [
+      {
+        "offset": 441720,
+        "sha256": "446163bf89bba33ed73bedabba3a4a94d042f8ecc8907c1c01663cf0454e7ba6",
+        "hex": "f8b50400d048001f81798c4200d98479cd49"
+      },
+      {
+        "offset": 442560,
+        "sha256": "528d1187913e5890f4d3dded4834021453a090d83b6bfa426ecbc46bc4df838e",
+        "hex": "049eff01"
+      },
+      {
+        "offset": 895860,
+        "sha256": "95c7da58f5ded5f753b93fd985dcc4468d466b14ac4ce99a2645e46384a83036",
+        "hex": "f8b5964b187880090727a649a64ca74da74e03287ed196480078c2070620002a53d11a7812090c2a09d11978c7294cd019788908322948d01978890845e0"
+      },
+      {
+        "offset": 896062,
+        "sha256": "fba68f19f5205e140cd8691087cf9f803ace78637c896f74ceec4b48c60f172b",
+        "hex": "28702070"
+      },
+      {
+        "offset": 896464,
+        "sha256": "528d1187913e5890f4d3dded4834021453a090d83b6bfa426ecbc46bc4df838e",
+        "hex": "049eff01"
+      },
+      {
+        "offset": 896484,
+        "sha256": "e89455040c1483fcdc8847cd28c82e457d8f95cd1ce1a67bc9e2761e52ff60d0",
+        "hex": "089eff01"
+      },
+      {
+        "offset": 896536,
+        "sha256": "8739450e4c8bcf41c1c9ffa005e50de9ac6fd4a4f32b3964e01aa5022d881568",
+        "hex": "c69dff010c0b0002069eff0195a3ff01"
+      }
+    ]
+  },
+  {
+    "sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+    "identity": {
+      "chip": "MT1939",
+      "vendor": "hp",
+      "model": "BD-RE  BH40N",
+      "revision": "B7C6",
+      "variant": "P166800"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 435388,
+        "compare": 435382,
+        "entry": 435374,
+        "request_register": 4
+      },
+      "entry": 423808,
+      "hardware_cell": 33557254,
+      "length": 56,
+      "maximum_cell": 33529301,
+      "media_cell": 33529299,
+      "optimum_cell": 33557260,
+      "variant": "classic_default8"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "oem/mediatek/MT1939/hp_BH40N_MT1939_Code_JB7/HP/B7C6/main/0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f.bin",
+    "parts": [
+      {
+        "offset": 423808,
+        "sha256": "b545970bc13432a5b01e814c8898abf1ec667b9025d945d8a5e96b52e19aff29",
+        "hex": "f8b5484f38788609072308255c485949594a5a4c032e65d13e4e3678f60701d0042506e03f4f3e7836090c2e04d13e78b60805700d7038e0"
+      },
+      {
+        "offset": 424084,
+        "sha256": "c239d08e65d82c7d7c24e60953dec2008a666f1767fbe99741d1ceeebf965df1",
+        "hex": "060b0002"
+      },
+      {
+        "offset": 424100,
+        "sha256": "f432991d53e591a11b77112608ed0534698f929a84b40f641e85de2da49fbc7f",
+        "hex": "d39dff01"
+      },
+      {
+        "offset": 424180,
+        "sha256": "196dd6d9c1cf856fb6fff6025103664a17afa9f98d971a24b37379f0239db3ba",
+        "hex": "0c0b000201a2ff01ad9dff01d59dff01"
+      },
+      {
+        "offset": 435374,
+        "sha256": "30277abe21f5d997fa05cb3dcf9fe7d48230f643e04e3959af817d979cfe361b",
+        "hex": "f8b50400fc48417f8c4200d9447ff94d"
+      },
+      {
+        "offset": 436388,
+        "sha256": "4dcdcdc65ca9c03884879bc8d3cfd3b68cb469dc6e4222d98a9e9dc53bb4291d",
+        "hex": "b89dff01"
+      }
+    ]
+  },
+  {
+    "sha256": "0bd77fed4ec9df86aab9d8550f3182a8a95f4c27ee8342119b1b1f9f2c8303e0",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BU40N",
+      "revision": "1.00",
+      "variant": "N000103"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 441792,
+        "compare": 441786,
+        "entry": 441776,
+        "request_register": 4
+      },
+      "entry": 896512,
+      "hardware_cell": 33529352,
+      "length": 62,
+      "maximum_cell": 33529350,
+      "media_cell": 33529348,
+      "optimum_cell": 33557260,
+      "variant": "slim_fixed6_c7_aware"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "omni/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.00/main/0bd77fed4ec9df86aab9d8550f3182a8a95f4c27ee8342119b1b1f9f2c8303e0.bin",
+    "parts": [
+      {
+        "offset": 441776,
+        "sha256": "08ab681a12789934142138647cb08b098bb75a2372f67c4944cdd93937e85d50",
+        "hex": "f8b50400b848f83881798c4200d98479b549"
+      },
+      {
+        "offset": 442520,
+        "sha256": "a1425ae5d5bc06b18942694fe68989d99193309dcbd3c623d77ce14d833690c4",
+        "hex": "f89eff01"
+      },
+      {
+        "offset": 896512,
+        "sha256": "95c7da58f5ded5f753b93fd985dcc4468d466b14ac4ce99a2645e46384a83036",
+        "hex": "f8b5964b187880090727a649a64ca74da74e03287ed196480078c2070620002a53d11a7812090c2a09d11978c7294cd019788908322948d01978890845e0"
+      },
+      {
+        "offset": 896714,
+        "sha256": "fba68f19f5205e140cd8691087cf9f803ace78637c896f74ceec4b48c60f172b",
+        "hex": "28702070"
+      },
+      {
+        "offset": 897116,
+        "sha256": "528d1187913e5890f4d3dded4834021453a090d83b6bfa426ecbc46bc4df838e",
+        "hex": "049eff01"
+      },
+      {
+        "offset": 897136,
+        "sha256": "e89455040c1483fcdc8847cd28c82e457d8f95cd1ce1a67bc9e2761e52ff60d0",
+        "hex": "089eff01"
+      },
+      {
+        "offset": 897188,
+        "sha256": "8739450e4c8bcf41c1c9ffa005e50de9ac6fd4a4f32b3964e01aa5022d881568",
+        "hex": "c69dff010c0b0002069eff0195a3ff01"
+      }
+    ]
+  },
+  {
+    "sha256": "0d085b4c854bfc03c08b2e7fde1b25096bdf888eaa65adbb28a10b529ced07ac",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "ASUS",
+      "model": "BW-16D1HT",
+      "revision": "3.02",
+      "variant": "W001800"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 443268,
+        "compare": 443262,
+        "entry": 443252,
+        "request_register": 4
+      },
+      "entry": 427104,
+      "hardware_cell": 33529346,
+      "length": 72,
+      "maximum_cell": 33529344,
+      "media_cell": 33529342,
+      "optimum_cell": 33557259,
+      "variant": "modern"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "omni/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.02/main/0d085b4c854bfc03c08b2e7fde1b25096bdf888eaa65adbb28a10b529ced07ac.bin",
+    "parts": [
+      {
+        "offset": 427104,
+        "sha256": "bc79180bdcd4a6f3dcf75c9b3cd1e771488819c65ad2e5c46dd42530506cea37",
+        "hex": "f8b53f4f38788509072450484d4b344e4d4a4f49032d57d13578ed0701d0042347e0374f3d782e0908250c2e0cd13b78c72b4ad03b789b08322b46d03b789b08312b42d00c2334e0"
+      },
+      {
+        "offset": 427282,
+        "sha256": "ea7aab7ca2aec0c8838b633566e75c70a9e0df8d46115473f9a2a279455990a6",
+        "hex": "0b700370"
+      },
+      {
+        "offset": 427306,
+        "sha256": "306e37a32d98ba2e36c9a61cc25c2b20d5958ff0d889642eae2077f3cbd38be3",
+        "hex": "4be0"
+      },
+      {
+        "offset": 427328,
+        "sha256": "543dca9ea1c3c0cd55cf15ba64ea500a36e6ff0c6731d62a8f4ac023dc90213b",
+        "hex": "029eff01"
+      },
+      {
+        "offset": 427360,
+        "sha256": "4789a11fcfe09862cd56c6995983edbc3a31156d585f602368383e0cea4bed2a",
+        "hex": "fe9dff01"
+      },
+      {
+        "offset": 427428,
+        "sha256": "b5eb0644157b05a95912b554a836ad72be78964b8069062ca14b5d38c01f569d",
+        "hex": "c29dff0185a3ff010b0b0002009eff01"
+      },
+      {
+        "offset": 427460,
+        "sha256": "113369a0826adde0a04641e8fcbfeb16998850cb416bb909a0b8271688193fde",
+        "hex": "0d700570"
+      },
+      {
+        "offset": 443252,
+        "sha256": "4a83817a0c0f1c7c478790a786ac8fa35ded5397f1d2da54b97b2f107d25f85d",
+        "hex": "f8b504003b48801c01788c4200d90478394b"
+      },
+      {
+        "offset": 443496,
+        "sha256": "09810f6a50772a7f18243dd0c8b96e25ac17a9c65ef4ac56a4bb5e01f3405568",
+        "hex": "fe9dff01009fff01"
+      }
+    ]
+  },
+  {
+    "sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BP55EB40",
+      "revision": "1.03",
+      "variant": "NM09800"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 442388,
+        "compare": 442382,
+        "entry": 442372,
+        "request_register": 4
+      },
+      "entry": 892610,
+      "hardware_cell": 33529353,
+      "length": 48,
+      "maximum_cell": 33529351,
+      "media_cell": 33529349,
+      "optimum_cell": 33557260,
+      "variant": "slim_fixed6_no_c7_test"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "mk/mediatek/MT1959/HL-DT-ST_BP55EB40_NB50/GENERAL/1.03/main/0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2.bin",
+    "parts": [
+      {
+        "offset": 442372,
+        "sha256": "a9cba040ad80a6e33675e415424857930a8e9b397174d6bc12c07420f5118c93",
+        "hex": "f8b5b24d0400fa3de879844200d9ec79ae48"
+      },
+      {
+        "offset": 443088,
+        "sha256": "02072349e6df3311a714f0061de4d6858cc44ef0e4f5d43ae0b9a49340d78a03",
+        "hex": "fa9eff01"
+      },
+      {
+        "offset": 892610,
+        "sha256": "f786059e064afbb46aac9defd4661b53daeb8656292e9fd91706ba4531536b90",
+        "hex": "f8b5664b1878800907277a497b4c7b4d7c4e032873d16a480078c2070620002a4cd11a7812090c2a02d11978890845e0"
+      },
+      {
+        "offset": 892798,
+        "sha256": "fba68f19f5205e140cd8691087cf9f803ace78637c896f74ceec4b48c60f172b",
+        "hex": "28702070"
+      },
+      {
+        "offset": 893024,
+        "sha256": "1034532df51706092387059b8a88e50c09a43e074ec477a5824469ca8a1469f2",
+        "hex": "059eff01"
+      },
+      {
+        "offset": 893060,
+        "sha256": "d392ee29815e2eed744f28ff26e464d8c44cd46779f26448040eaa2eda635401",
+        "hex": "099eff01"
+      },
+      {
+        "offset": 893112,
+        "sha256": "b9407b4945f5d8da6c7c64fa34d00337b5027e94c321c2ae29353205d809e86a",
+        "hex": "c69dff010c0b0002079eff0199a3ff01"
+      }
+    ]
+  },
+  {
+    "sha256": "11c8657aa75ed40ce492745b0934a300138b8b26bf411e43383dc79de74970c4",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "ASUS",
+      "model": "BC-12B1ST   b",
+      "revision": "3.11",
+      "variant": "WM01300"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 443374,
+        "compare": 443368,
+        "entry": 443358,
+        "request_register": 4
+      },
+      "entry": 427480,
+      "hardware_cell": 33529252,
+      "length": 78,
+      "maximum_cell": 33529250,
+      "media_cell": 33529248,
+      "optimum_cell": 33557259,
+      "variant": "modern_reader_register_variant"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "mk/mediatek/MT1959/ASUS_BC-12B1ST_MT1959_JBC6_JB8/ASUS/3.11/main/11c8657aa75ed40ce492745b0934a300138b8b26bf411e43383dc79de74970c4.bin",
+    "parts": [
+      {
+        "offset": 427480,
+        "sha256": "13e3f60d219aa80644486c79409b3b79728fac7cbf1e216392dff4e5aa962156",
+        "hex": "f8b54e4f3878850907230c245d485c4a5d49032d6dd1414d2d78ed0701d0042412e0464f3d782e0908250c2e0fd13e78c72e03d03e78b608322e01d1062403e03e78b608312e28d00c70047027e0"
+      },
+      {
+        "offset": 427764,
+        "sha256": "99cad67ed778ad5f596cc0ed0b7f9fb36d85f30516734d50580c1dfbf81b23af",
+        "hex": "a49dff01"
+      },
+      {
+        "offset": 427796,
+        "sha256": "a3ba401fe0aee92eb91e4cd4d3ebbe0b88302c2ab3c188457b05a02b3469cfc7",
+        "hex": "a09dff01"
+      },
+      {
+        "offset": 427864,
+        "sha256": "08245e784fd216b8113b41adcf7fc35226ae6f06eff5be0025e63c43741663f0",
+        "hex": "01a3ff010b0b0002a29dff01"
+      },
+      {
+        "offset": 443358,
+        "sha256": "7741fec85591d9783fa9688a96038f9fd17256b534346a19a35fe3835f6e83c1",
+        "hex": "f8b58a4d0400c03da87d844200d9ac7d874a"
+      },
+      {
+        "offset": 443916,
+        "sha256": "701b3174559f8b05bed6d4f5eba730d4fce072f587d0634b0361fd1fbbcae9f2",
+        "hex": "4c9eff01"
+      }
+    ]
+  },
+  {
+    "sha256": "12c4ee6fb88d4c5402e9e8fab0881a93fd1ab18e5a82bb87ecd4ef30c807cf53",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE  WH16NS60",
+      "revision": "1.02",
+      "variant": "N016100"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 444856,
+        "compare": 444850,
+        "entry": 444842,
+        "request_register": 4
+      },
+      "entry": 897504,
+      "hardware_cell": 33529348,
+      "length": 102,
+      "maximum_cell": 33529346,
+      "media_cell": 33529344,
+      "optimum_cell": 33557259,
+      "variant": "desktop_default8_c7_aware"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "dump/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.02/main/12c4ee6fb88d4c5402e9e8fab0881a93fd1ab18e5a82bb87ecd4ef30c807cf53.bin",
+    "parts": [
+      {
+        "offset": 444842,
+        "sha256": "188361debd1c0abc0d5a714ffd64eaa7823831077b76a9e5984aafe7ad08a770",
+        "hex": "f8b50400334881788c4200d98478304b"
+      },
+      {
+        "offset": 445052,
+        "sha256": "8444129a4c816de7c62ad8feef5f6ec1d8747b707c2856ef1eef61a1c8f962f8",
+        "hex": "009eff01"
+      },
+      {
+        "offset": 897504,
+        "sha256": "c94ccb5e8e180d235a81230e4d8456c0750a425ed173a8b8f5f5c67d8c5ccfc1",
+        "hex": "f8b53a4b18788209072704214848494e494c4a4d032a4cd12c4a1278d20702d0297021701fe0314b1a7812090c2a26d11878c72812d01878800832280ed01878800831280ad032f00ff8002808d136490878012802d00878022801d1082000e00c2028702070"
+      },
+      {
+        "offset": 897708,
+        "sha256": "528d1187913e5890f4d3dded4834021453a090d83b6bfa426ecbc46bc4df838e",
+        "hex": "049eff01"
+      },
+      {
+        "offset": 897740,
+        "sha256": "8444129a4c816de7c62ad8feef5f6ec1d8747b707c2856ef1eef61a1c8f962f8",
+        "hex": "009eff01"
+      },
+      {
+        "offset": 897800,
+        "sha256": "35da76bac5e81ef113df3fd457637e1ace53f09d0507fc16d15d25c124561bfb",
+        "hex": "219eff01"
+      },
+      {
+        "offset": 897808,
+        "sha256": "40a826dfef078f2c6611ebcb0c8a432a29dca72fe084d1ceabe3c137199b27d7",
+        "hex": "c29dff0171a3ff010b0b0002029eff01"
+      }
+    ]
+  },
+  {
+    "sha256": "243a7b0bb237724ab0831ba0d0775f281259cc29643c0617df738856875db6ba",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BDDVDRW UH12NS40",
+      "revision": "1.03",
+      "variant": "NM01800"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 444032,
+        "compare": 444026,
+        "entry": 444016,
+        "request_register": 4
+      },
+      "entry": 428064,
+      "hardware_cell": 33529254,
+      "length": 78,
+      "maximum_cell": 33529252,
+      "media_cell": 33529250,
+      "optimum_cell": 33557259,
+      "variant": "modern_reader_register_variant"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "mk/mediatek/MT1959/HL-DT-ST_UH12NS40_NS40/GENERAL/1.03/main/243a7b0bb237724ab0831ba0d0775f281259cc29643c0617df738856875db6ba.bin",
+    "parts": [
+      {
+        "offset": 428064,
+        "sha256": "13e3f60d219aa80644486c79409b3b79728fac7cbf1e216392dff4e5aa962156",
+        "hex": "f8b54e4f3878850907230c245d485c4a5d49032d6dd1414d2d78ed0701d0042412e0464f3d782e0908250c2e0fd13e78c72e03d03e78b608322e01d1062403e03e78b608312e28d00c70047027e0"
+      },
+      {
+        "offset": 428348,
+        "sha256": "25bb8e55cad3507ecad6b87f505b3cb6e414a0618e74c4e2dc663e923777b728",
+        "hex": "a69dff01"
+      },
+      {
+        "offset": 428380,
+        "sha256": "8bde64970abd0b0dcd878d14d2e3fe3064cf91b26e7d4909f6e8e0576f7c367e",
+        "hex": "a29dff01"
+      },
+      {
+        "offset": 428448,
+        "sha256": "3ff21946f05203dedca9b2e1d9e5ff3d32bb1456f3e51de1ec2dcfd83df9afe4",
+        "hex": "09a3ff010b0b0002a49dff01"
+      },
+      {
+        "offset": 444016,
+        "sha256": "5986a1242e3bbfad1b4313071d2a6c74bcc52f48c0658127e7705bc7f0c22402",
+        "hex": "f8b58a4d0400c03d287e844200d92c7e864a"
+      },
+      {
+        "offset": 444572,
+        "sha256": "701b3174559f8b05bed6d4f5eba730d4fce072f587d0634b0361fd1fbbcae9f2",
+        "hex": "4c9eff01"
+      }
+    ]
+  },
+  {
+    "sha256": "3559077e3c032451137967d4f81f3e8777f8bfbf8245e68ac4732eb5cec5f404",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BU40N",
+      "revision": "BN12",
+      "variant": "0M01001"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 441528,
+        "compare": 441522,
+        "entry": 441512,
+        "request_register": 4
+      },
+      "entry": 893836,
+      "hardware_cell": 33529352,
+      "length": 48,
+      "maximum_cell": 33529350,
+      "media_cell": 33529348,
+      "optimum_cell": 33557260,
+      "variant": "slim_fixed6_no_c7_test"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "mk/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN12/main/3559077e3c032451137967d4f81f3e8777f8bfbf8245e68ac4732eb5cec5f404.bin",
+    "parts": [
+      {
+        "offset": 441512,
+        "sha256": "a838152516f70aa22846bbf76796590574f3f226156f58770a6e3cd502b37dc0",
+        "hex": "f8b50400e748001f81798c4200d98479e44b"
+      },
+      {
+        "offset": 442444,
+        "sha256": "528d1187913e5890f4d3dded4834021453a090d83b6bfa426ecbc46bc4df838e",
+        "hex": "049eff01"
+      },
+      {
+        "offset": 893836,
+        "sha256": "1c7ccdc0dd1e0c8a7d98587a7865342edef1ece8b72b9e6d17e0245834ddb7e9",
+        "hex": "f8b5d24b187880090727d349d34cd44dd44e032873d1cc480078c2070620002a4cd11a7812090c2a02d11978890845e0"
+      },
+      {
+        "offset": 894024,
+        "sha256": "fba68f19f5205e140cd8691087cf9f803ace78637c896f74ceec4b48c60f172b",
+        "hex": "28702070"
+      },
+      {
+        "offset": 894676,
+        "sha256": "34b3493a77f7e9824220f2282bd2be3a4e7a988ffd16de6040aa45bb23d606b0",
+        "hex": "089eff01049eff01"
+      },
+      {
+        "offset": 894692,
+        "sha256": "8739450e4c8bcf41c1c9ffa005e50de9ac6fd4a4f32b3964e01aa5022d881568",
+        "hex": "c69dff010c0b0002069eff0195a3ff01"
+      }
+    ]
+  },
+  {
+    "sha256": "4af842c0acf4a9ff42b5554d6d1d320b245ab4973b174a8b7ccf1f941f7ab715",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BU40N",
+      "revision": "FR07",
+      "variant": "J000202"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 442286,
+        "compare": 442280,
+        "entry": 442270,
+        "request_register": 4
+      },
+      "entry": 895516,
+      "hardware_cell": 33529353,
+      "length": 62,
+      "maximum_cell": 33529351,
+      "media_cell": 33529349,
+      "optimum_cell": 33557260,
+      "variant": "slim_fixed6_c7_aware"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "dump/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/LG-DVD/FR07/main/4af842c0acf4a9ff42b5554d6d1d320b245ab4973b174a8b7ccf1f941f7ab715.bin",
+    "parts": [
+      {
+        "offset": 442270,
+        "sha256": "e31137acf5b5ab34b73e08e05f14eee4260bdb784a7b54be86a2ec136133c11e",
+        "hex": "f8b5040084482038c1798c4200d9c4798149"
+      },
+      {
+        "offset": 442804,
+        "sha256": "1e72d42ecf602f6c37dabba5dd7aa5e84682b2b00e4e5405c018141b6f188413",
+        "hex": "209eff01"
+      },
+      {
+        "offset": 895516,
+        "sha256": "212efd77547d1ba8bb4318ee75e682b77d1bf3b6d492ed0d917a194de19f9a8e",
+        "hex": "f8b5934b187880090727a349a34ca44da44e03287ed193480078c2070620002a53d11a7812090c2a09d11978c7294cd019788908322948d01978890845e0"
+      },
+      {
+        "offset": 895718,
+        "sha256": "fba68f19f5205e140cd8691087cf9f803ace78637c896f74ceec4b48c60f172b",
+        "hex": "28702070"
+      },
+      {
+        "offset": 896108,
+        "sha256": "1034532df51706092387059b8a88e50c09a43e074ec477a5824469ca8a1469f2",
+        "hex": "059eff01"
+      },
+      {
+        "offset": 896128,
+        "sha256": "d392ee29815e2eed744f28ff26e464d8c44cd46779f26448040eaa2eda635401",
+        "hex": "099eff01"
+      },
+      {
+        "offset": 896180,
+        "sha256": "948073275108c39b34e9c378c58bc8f0fcf5db0babb4cb0d395a43113fa46e66",
+        "hex": "c79dff010c0b0002079eff0199a3ff01"
+      }
+    ]
+  },
+  {
+    "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BU40N",
+      "revision": "CB04",
+      "variant": "H001300"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 441524,
+        "compare": 441518,
+        "entry": 441508,
+        "request_register": 4
+      },
+      "entry": 891800,
+      "hardware_cell": 33529353,
+      "length": 48,
+      "maximum_cell": 33529351,
+      "media_cell": 33529349,
+      "optimum_cell": 33557260,
+      "variant": "slim_fixed6_no_c7_test"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/CB04/CB04/main/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin",
+    "parts": [
+      {
+        "offset": 441508,
+        "sha256": "1b2c7edcca84befb21f449f5b47a1e7286426a3715f659c4b6306d75dbab43a6",
+        "hex": "f8b50400b248f838c1798c4200d9c479af4b"
+      },
+      {
+        "offset": 442228,
+        "sha256": "a1425ae5d5bc06b18942694fe68989d99193309dcbd3c623d77ce14d833690c4",
+        "hex": "f89eff01"
+      },
+      {
+        "offset": 891800,
+        "sha256": "5da09ddc607c2f867afa88ede3cde1efa629e32b0ed26e662164927f34c49d34",
+        "hex": "f8b5b74b187880090727b849b84cb94db94e032873d1a7480078c2070620002a4cd11a7812090c2a02d11978890845e0"
+      },
+      {
+        "offset": 891988,
+        "sha256": "fba68f19f5205e140cd8691087cf9f803ace78637c896f74ceec4b48c60f172b",
+        "hex": "28702070"
+      },
+      {
+        "offset": 892492,
+        "sha256": "d392ee29815e2eed744f28ff26e464d8c44cd46779f26448040eaa2eda635401",
+        "hex": "099eff01"
+      },
+      {
+        "offset": 892536,
+        "sha256": "1034532df51706092387059b8a88e50c09a43e074ec477a5824469ca8a1469f2",
+        "hex": "059eff01"
+      },
+      {
+        "offset": 892548,
+        "sha256": "948073275108c39b34e9c378c58bc8f0fcf5db0babb4cb0d395a43113fa46e66",
+        "hex": "c79dff010c0b0002079eff0199a3ff01"
+      }
+    ]
+  },
+  {
+    "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+    "identity": {
+      "chip": "MT1939",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE  BE14NU40",
+      "revision": "1.01",
+      "variant": "N002905"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 436376,
+        "compare": 436370,
+        "entry": 436360,
+        "request_register": 4
+      },
+      "entry": 424336,
+      "hardware_cell": 33557252,
+      "length": 60,
+      "maximum_cell": 33529302,
+      "media_cell": 33529300,
+      "optimum_cell": 33557260,
+      "variant": "classic"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.01/main/7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567.bin",
+    "parts": [
+      {
+        "offset": 424336,
+        "sha256": "9070fd505b89e8599d8a9917f2a3eab062af93a51e1b8d99fd2b7bad1927ecd5",
+        "hex": "f8b54c4f3878860907230c2560485d495d4a5e4c032e6cd1424e3678f60701d0042509e0434f3e7836090c2e07d13e78b608312e00d1082505700d70"
+      },
+      {
+        "offset": 424628,
+        "sha256": "365a0297157745e4553d5457966c7a1e61e5109b17c3c8cdff359ec73008d67d",
+        "hex": "040b0002"
+      },
+      {
+        "offset": 424644,
+        "sha256": "610d36bcfe50e0142ba5d50611089b02b9c85681c12540f0455ea7d7ae6b802e",
+        "hex": "d49dff01"
+      },
+      {
+        "offset": 424724,
+        "sha256": "22a38c3d57f9c48378e10ea9edeb57b8cd632f3cac531d68acae31a2e7a4472f",
+        "hex": "0c0b00021da2ff01ad9dff01d69dff01"
+      },
+      {
+        "offset": 436360,
+        "sha256": "e95d216c3c07ce2bb3fbe2205ffff8cba6614f7f8d2415215bcf77eb087d14cb",
+        "hex": "f8b504007c482038817f8c4200d9847f794d"
+      },
+      {
+        "offset": 436864,
+        "sha256": "7a75a5735cc5d11dc1251041645e72b15fce7eac5caf0ad2600073e6bb69af01",
+        "hex": "d89dff01"
+      }
+    ]
+  },
+  {
+    "sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+    "identity": {
+      "chip": "MT1939",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE  WH14NS40",
+      "revision": "1.00",
+      "variant": "N1524A4"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 433960,
+        "compare": 433954,
+        "entry": 433946,
+        "request_register": 4
+      },
+      "entry": 422380,
+      "hardware_cell": 33557254,
+      "length": 60,
+      "maximum_cell": 33529301,
+      "media_cell": 33529299,
+      "optimum_cell": 33557260,
+      "variant": "classic"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 8,
+        "optimum": 8
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 4,
+        "optimum": 4
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 12,
+        "optimum": 12
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 4,
+        "optimum": 4
+      }
+    ],
+    "clamp_cases": 512,
+    "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.00/main/8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb.bin",
+    "parts": [
+      {
+        "offset": 422380,
+        "sha256": "9070fd505b89e8599d8a9917f2a3eab062af93a51e1b8d99fd2b7bad1927ecd5",
+        "hex": "f8b54c4f3878860907230c2560485d495d4a5e4c032e6cd1424e3678f60701d0042509e0434f3e7836090c2e07d13e78b608312e00d1082505700d70"
+      },
+      {
+        "offset": 422672,
+        "sha256": "c239d08e65d82c7d7c24e60953dec2008a666f1767fbe99741d1ceeebf965df1",
+        "hex": "060b0002"
+      },
+      {
+        "offset": 422688,
+        "sha256": "f432991d53e591a11b77112608ed0534698f929a84b40f641e85de2da49fbc7f",
+        "hex": "d39dff01"
+      },
+      {
+        "offset": 422768,
+        "sha256": "196dd6d9c1cf856fb6fff6025103664a17afa9f98d971a24b37379f0239db3ba",
+        "hex": "0c0b000201a2ff01ad9dff01d59dff01"
+      },
+      {
+        "offset": 433946,
+        "sha256": "30277abe21f5d997fa05cb3dcf9fe7d48230f643e04e3959af817d979cfe361b",
+        "hex": "f8b50400fc48417f8c4200d9447ff94d"
+      },
+      {
+        "offset": 434960,
+        "sha256": "4dcdcdc65ca9c03884879bc8d3cfd3b68cb469dc6e4222d98a9e9dc53bb4291d",
+        "hex": "b89dff01"
+      }
+    ]
+  },
+  {
+    "sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+    "identity": {
+      "chip": "MT1959",
+      "vendor": "HL-DT-ST",
+      "model": "BD-RE BP50NB40",
+      "revision": "1.00",
+      "variant": "N000505"
+    },
+    "plan": {
+      "clamp": {
+        "after_clamp": 445876,
+        "compare": 445870,
+        "entry": 445860,
+        "request_register": 4
+      },
+      "entry": 430506,
+      "hardware_cell": 33529331,
+      "length": 48,
+      "maximum_cell": 33529329,
+      "media_cell": 33529327,
+      "optimum_cell": 33557260,
+      "variant": "slim_early_fixed6"
+    },
+    "cases": [
+      {
+        "media": 199,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 199,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 0,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 1,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 2,
+        "maximum": 6,
+        "optimum": 6
+      },
+      {
+        "media": 200,
+        "hardware": 255,
+        "maximum": 6,
+        "optimum": 6
+      }
+    ],
+    "clamp_cases": 256,
+    "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_MT1959_BUP1_BU1/GENERAL/1.00/main/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306.bin",
+    "parts": [
+      {
+        "offset": 430506,
+        "sha256": "4981329e7e68d37250da9926d1c7c3b2361f6e61d5b249b029601df178f83990",
+        "hex": "f0b5f64f387883090725f648f54cf649f74a032b5cd1f64b1b78de070623002e30d13e7836090c2e02d13c78a40829e0"
+      },
+      {
+        "offset": 430638,
+        "sha256": "ea7aab7ca2aec0c8838b633566e75c70a9e0df8d46115473f9a2a279455990a6",
+        "hex": "0b700370"
+      },
+      {
+        "offset": 431496,
+        "sha256": "5a53b6a638dee5e25ebc418253a959376031f42c3fc7b64f1d65b800f76ed452",
+        "hex": "ef9dff01b39dff010c0b0002f19dff0171a3ff01f39dff01"
+      },
+      {
+        "offset": 445860,
+        "sha256": "35a552055d85b801c3fae094301f5759b52dc393b3521cac57683c7a4a923e14",
+        "hex": "f8b5964d0400403d687f844200d96c7f994a"
+      },
+      {
+        "offset": 446464,
+        "sha256": "a28cb0b8879211de63b18f9e1108099cd66b9c77e7994e477cc41f2f6f1b79f4",
+        "hex": "149eff01"
+      },
+      {
+        "offset": 446492,
+        "sha256": "4e8b69e98a1c2a9361873a2ba5dd69d513cc6dff1cf3c873f196a452ea3fd5b0",
+        "hex": "149fff01"
+      }
+    ]
+  }
+]

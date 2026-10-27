@@ -72,7 +72,7 @@ def main():
             source.write(image)
             source.flush()
             plan = json.loads(subprocess.check_output([str(args.builder.resolve()), source.name, 'classic-speed-candidate']))
-        for media in (0, 0x40, 0x80, 0xc0, 0xd0, 0xff):
+        for media in (0, 0x40, 0x80, 0xc0, 0xc7, 0xc8, 0xd0, 0xff):
             for maximum in (0, 1, 4, 6, 8, 12, 24, 48, 49, 255):
                 for mode in (0, 0xc0, 0xff):
                     for setting in (0, 1, 2, 255):
