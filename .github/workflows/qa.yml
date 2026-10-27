@@ -130,8 +130,8 @@ jobs:
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hook-execution.py --fw target/release/freemkv-fw
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-runtime-execution.py --fw target/release/freemkv-fw
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-integrity-routing.py
-          FREEMKV_BASE_ROLE_CORPUS=crates/freemkv-fw/tests/fixtures/native-response-inputs.json \
-            FREEMKV_BASE_ROLE_HOARD=crates/freemkv-fw/tests/fixtures \
+          FREEMKV_BASE_ROLE_CORPUS="$PWD/crates/freemkv-fw/tests/fixtures/native-response-inputs.json" \
+            FREEMKV_BASE_ROLE_HOARD="$PWD/crates/freemkv-fw/tests/fixtures" \
             FREEMKV_BASE_ROLE_OUTPUT="$RUNNER_TEMP/native-response-contracts.json" \
             cargo test --release --locked -p freemkv-fw --lib native_response_contract_corpus
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-native-response-execution.py \
