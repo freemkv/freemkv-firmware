@@ -136,3 +136,28 @@ Extractor commit `378e574a` remains local on dev, with no remote push.
 
 This checkpoint closes CI and diagnostic-import work. It does not close the
 remaining personal per-output logical review or the assurance limits above.
+
+
+## Combined classic-continuation regression found during final review
+
+The decoded detour inventory covered 2,318 candidate installs across all 193
+retained supported outputs. Twenty-four original branch references enter the
+second half of another detoured instruction pair. Their original source branches
+are themselves replaced, but the reverse-selector stubs retained those interior
+addresses as literal continuations. Consequently, the earlier isolated component
+CPU tests did not establish correctness of the combined output.
+
+A new source-fixture regression fails before the fix. Emission now follows a
+consecutive native branch only when it has the same already-taken condition;
+no flag-changing instruction is skipped. Cycles refuse. The source-bound SDK
+continues to report the actual original native edge, while the emitter resolves
+its safe continuation. Both arithmetic selectors are installed together by the
+CPU harness using thumb-asm-generated branch bytes. Recreating the old literal
+continuation produces an invalid-instruction CPU failure; the corrected pair
+passes 320 calculation cases on the pinned fixture. All 24 inputs passed the
+first updated component matrix; the stricter final-rejection matrix and refreshed
+normal-Modify outputs are being regenerated.
+
+The 24 previous classic outputs are superseded audit artifacts, not final
+sign-off. The broader logical review remains open. This issue was found before
+any release of the conversion code.

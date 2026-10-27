@@ -157,23 +157,27 @@ def parameters(data, evidence):
 def calculations(data, evidence):
     """Run the emitted gates through the real native arithmetic and division.
 
-    Experimental C7 selects the existing C8 baseline policy. This deliberately
+    C7 selects the existing C8 baseline policy. This deliberately
     does not transplant the newer hardware/calibration flag producer.
     """
     count = 0
+    # Both native paths share the final forward rejection, after its BNE.
+    # Never stop at an interior native branch that another installed BL owns.
+    reject = next(c['reject'] for c in evidence['candidates']
+                  if c['area'] == 'ForwardCalculation')
     for candidate in evidence['candidates']:
         if candidate['calculation_end'] is None:
             continue
         cpu = machine(data)
-        cpu.mem_write(STUB, bytes(candidate['stub']))
-        site = candidate['site']
-        delta = STUB - site - 4
-        cpu.mem_write(site, struct.pack('<HH', 0xf000 | ((delta >> 12) & 0x7ff),
-                                       0xf800 | ((delta >> 1) & 0x7ff)))
+        group = evidence['calculation_group']
+        assert len(group) == 2
+        for part in group:
+            cpu.mem_write(part['stub_va'], bytes(part['stub']))
+            cpu.mem_write(part['site'], bytes(part['branch']))
         reached = [None]
 
         def stop(c, address, _size, _user):
-            if address in (candidate['calculation_end'], candidate['reject']):
+            if address in (candidate['calculation_end'], reject):
                 reached[0] = address
                 c.emu_stop()
 
@@ -189,7 +193,7 @@ def calculations(data, evidence):
                     cpu.reg_write(reg.UC_ARM_REG_R7, 0x5534)
                     cpu.emu_start(candidate['region_start'] | 1, 0x200000, count=2000)
                     accepted = state & 0xc8 == 0xc8 or (state == 0xc7 and flag == 1)
-                    assert reached[0] == (candidate['calculation_end'] if accepted else candidate['reject']), (candidate['area'], state, flag, value, reached)
+                    assert reached[0] == (candidate['calculation_end'] if accepted else reject), (candidate['area'], state, flag, value, reached)
                     if accepted:
                         delta, base = ((value // 20) * 23, 0x51b1) if state & 0xcc == 0xcc else ((value // 10) * 12, 0x5534)
                         expected = base - delta if candidate['area'] == 'ReverseCalculation' else base + delta

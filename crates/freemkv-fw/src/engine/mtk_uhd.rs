@@ -147,8 +147,8 @@ impl UhdConversionPlan {
         );
         Ok(())
     }
-    /// Emit independently validated classic selection stubs.
-    /// These bytes are not installed by ordinary Modify and grant no capability.
+    /// Emit source-bound selection stubs. Normal Modify installs them only as
+    /// part of the complete conversion; candidate emission alone changes no image.
     pub fn routing_candidates(&self, image: &[u8], flags: u32) -> Result<Vec<UhdRoutingCandidate>> {
         ensure!(
             <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
@@ -167,7 +167,12 @@ impl UhdConversionPlan {
             let width = selection.span();
             let replay = selection.replay();
             let accept = selection.accept();
-            let reject = selection.reject();
+            // A taken BNE may join another selector's BNE. That instruction
+            // can itself be overwritten by the combined conversion. Follow the
+            // already-taken condition while its flags remain unchanged, rather
+            // than returning into the middle of a new BL.
+            let reject =
+                taken_conditional_continuation(image, selection.reject(), thumb_asm::Cond::Ne)?;
             let bytes = emit_c7_selection(self.state, flags, replay, accept, reject)?;
             candidates.push(UhdRoutingCandidate {
                 area,
@@ -598,6 +603,30 @@ pub struct UhdRoutingCandidate<R = UhdArea> {
     /// Native stack/LR lifetime proof for installing a Thumb BL at this site.
     pub caller: mediatek_optical::image::analysis::SavedLink,
 }
+/// Resolve only consecutive branches with the condition already known true.
+/// No intervening instruction is skipped, so native NZCV remain authoritative.
+fn taken_conditional_continuation(
+    image: &[u8],
+    mut target: usize,
+    condition: thumb_asm::Cond,
+) -> Result<usize> {
+    let mut visited = std::collections::BTreeSet::new();
+    loop {
+        ensure!(
+            visited.insert(target),
+            "cyclic native conditional continuation"
+        );
+        let instruction = thumb_asm::isa::decode_at(image, target)
+            .context("native conditional continuation is not decodable")?;
+        if instruction.mnemonic != "b" || instruction.cond != Some(condition) {
+            return Ok(target);
+        }
+        target = instruction
+            .branch_target()
+            .context("native conditional continuation has no direct target")?
+            as usize;
+    }
+}
 fn tail(a: &mut Asm, target: usize) {
     a.push(0x0108); // r3,lr; preserve r3 while replacing only the stacked return
     a.ldr_lit(3, target as u32 | 1);
@@ -824,6 +853,63 @@ pub fn emit_di_layers(flags: u32) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     const CLASSIC: &[u8] = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    #[test]
+    fn conditional_continuations_require_the_taken_condition_and_refuse_cycles() {
+        let mut a = Asm::new();
+        let destination = a.label();
+        a.bne(destination);
+        a.bind(destination);
+        a.mov_reg(0, 0);
+        let bytes = a.finish().unwrap();
+        assert_eq!(
+            taken_conditional_continuation(&bytes, 0, thumb_asm::Cond::Ne).unwrap(),
+            2
+        );
+        assert_eq!(
+            taken_conditional_continuation(&bytes, 0, thumb_asm::Cond::Eq).unwrap(),
+            0
+        );
+        let mut a = Asm::new();
+        let cycle = a.label();
+        a.bind(cycle);
+        a.bne(cycle);
+        assert!(
+            taken_conditional_continuation(&a.finish().unwrap(), 0, thumb_asm::Cond::Ne).is_err()
+        );
+    }
+    #[test]
+    fn reverse_calculation_continuation_bypasses_the_overwritten_forward_branch() {
+        let plan = UhdConversionPlan::inspect(CLASSIC).unwrap();
+        let forward = plan
+            .areas()
+            .area(UhdArea::ForwardCalculation)
+            .unwrap()
+            .selection()
+            .unwrap();
+        let reverse = plan
+            .areas()
+            .area(UhdArea::ReverseCalculation)
+            .unwrap()
+            .selection()
+            .unwrap();
+        // The OEM reverse BNE joins the forward BNE, whose halfword will be
+        // replaced by the second half of a BL in the combined output.
+        assert_eq!(reverse.reject(), forward.site() + 2);
+        let candidates = plan.routing_candidates(CLASSIC, 0x0200f000).unwrap();
+        let emitted = candidates
+            .iter()
+            .find(|c| c.area == UhdArea::ReverseCalculation)
+            .unwrap();
+        assert_eq!(emitted.reject, forward.reject());
+        for c in &candidates {
+            assert!(
+                !candidates
+                    .iter()
+                    .any(|other| c.reject > other.site
+                        && c.reject < other.site + other.original.len())
+            );
+        }
+    }
     #[test]
     fn di_entry_candidate_binds_native_continuations_without_mutating_source() {
         let before = CLASSIC.to_vec();

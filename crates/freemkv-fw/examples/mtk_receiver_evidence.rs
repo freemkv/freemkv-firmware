@@ -47,6 +47,18 @@ fn main() -> anyhow::Result<()> {
             let plan = UhdConversionPlan::inspect(&image)?;
             let flags = 0x0200f000;
             let candidates = plan.routing_candidates(&image, flags)?;
+            // Install both arithmetic selectors together in CPU tests. Their
+            // native rejection paths share a branch, so isolated tests cannot
+            // establish that the final pair has valid continuations.
+            let calculation_group: Vec<_> = candidates.iter()
+                .filter(|c| c.calculation_end.is_some()).enumerate()
+                .map(|(index, c)| {
+                    let stub_va = 0x1fc000 + index as u32 * 0x800;
+                    Ok(serde_json::json!({"site":c.site,"stub_va":stub_va,
+                        "branch":thumb_asm::encode_bl(c.site, stub_va)
+                            .ok_or_else(|| anyhow::anyhow!("calculation test branch out of range"))?,
+                        "stub":c.bytes}))
+                }).collect::<anyhow::Result<_>>()?;
             let mut records: Vec<_> = candidates
                 .iter()
                 .map(|c| {
@@ -99,6 +111,7 @@ fn main() -> anyhow::Result<()> {
                 serde_json::json!({
                     "policy":"research component emission only; no image is written or UHD capability enabled",
                     "state":plan.state_address(), "flag_base":flags,
+                    "calculation_group":calculation_group,
                     "pending":plan.remaining_contracts(),
                     "read_position":{"entry":read_position.contract.entry,"site":read_position.contract.decode.site(),
                         "position":read_position.contract.position,"layer":read_position.contract.layer,

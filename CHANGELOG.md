@@ -7,6 +7,10 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Preserve the shared native calculation rejection path when both MT1939 UHD
+  selectors are installed; never return into the middle of the other detour.
+  Exercise both selectors together in the CPU regression matrix.
+
 - Refuse raw MediaTek drive dumps before authoring an output that Flash cannot
   install. Explain that an OEM update image or valid backup is required.
 
