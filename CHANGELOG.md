@@ -7,6 +7,9 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
+- Preserve all VID Gate-A arguments, including the native writer source pointer
+  and transfer length, through both continuations and the session-reset call.
+
 - Make Unrestricted Off refuse every explicit media class, including the reserved
   `0xFF` value, without using a sentinel that can accidentally compare equal.
 

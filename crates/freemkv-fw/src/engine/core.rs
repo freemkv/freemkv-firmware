@@ -2938,8 +2938,9 @@ impl Mt1959Engine {
     /// When `flag[Ake]==STATE_OFF` the stub jumps to `authed` (the fall-through that
     /// stages+emits VID) regardless of the auth byte; otherwise (`passthrough`/`off`)
     /// it replicates the OEM `cmp #6` (authed on `==6`, which is what the real-AKE
-    /// accept path leaves in place). `r2` scratch; `lr` dead
-    /// (producer saved it). The drive runs its own producer in its own `0xAD`
+    /// accept path leaves in place). Native registers are restored before either
+    /// continuation; R1/R2 remain the writer's source/count arguments. The drive
+    /// runs its own producer in its own `0xAD`
     /// context — no inline call, so a missing-buffer failure is a recoverable CHECK
     /// CONDITION, never a wedge.
     pub(crate) fn build_gatea_stub(
@@ -2951,59 +2952,47 @@ impl Mt1959Engine {
         reset: u32,
     ) -> Result<Vec<u8>> {
         let mut a = Asm::new();
-        let rearm = a.label(); // 04 01 bare-read: reset AGID selector, then emit
-        let authed_direct = a.label(); // 04 02 real-AKE authed: emit WITHOUT touching AGID
-        a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32); // r2 = &flag[Encryption]
-        a.ldrb_imm(2, 2, 0); // r2 = Encryption flag byte
-        a.cmp_imm(2, abi::STATE_OFF); // 0x00 (null AKE / bypass): force authed so a bare 0xAD returns the VID; ON/OEM = real AKE
+        let rearm = a.label();
+        let authed_direct = a.label();
+        // The native continuation passes R1/R2 to the response writer. They
+        // are live arguments, not scratch, even though the comparison uses R0.
+        // Save all low arguments and a target scratch, keeping an aligned call.
+        a.push(0x011f); // r0-r4, lr: 24 bytes
+        let tail = |a: &mut Asm, target: u32| {
+            a.mov_reg(4, 13);
+            a.ldr_imm(4, 4, 20); // original detour LR
+            a.mov_reg(14, 4);
+            a.ldr_lit(4, target | 1);
+            a.str_sp(4, 20); // replace only the stacked return target
+            a.pop(0x011f); // r0-r4, pc: restore the native arguments and SP
+        };
+        a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32);
+        a.ldrb_imm(2, 2, 0);
+        a.cmp_imm(2, abi::STATE_OFF);
         a.beq(rearm);
-        a.cmp_imm(0, 6); // OEM (00/0xFF): authed iff auth byte == 6 (real AKE ran)
+        a.cmp_imm(0, 6);
         a.beq(authed_direct);
-        a.ldr_lit(2, deny | 1); // else OEM deny/fallback
-        a.bx(2);
-        // 04 01 bare read: the producer bails (ABORTED) if the active AGID selector
-        // byte[agid_struct+0xa]>>6 is >= 2; a prior read or 04 00 deny advances it.
-        // Reset it to AGID 0 (byte &= 0x3F) so each read runs fresh. 04 02 untouched.
+        tail(&mut a, deny);
         a.bind(rearm);
-        // ---- De-bus latch clear (0.9.1) --------------------------------
-        // Telling the drive "the host is already authenticated" also ARMS its
-        // bus-encryption engine — and this bare-read path negotiates no bus
-        // key, so the drive wraps content with a key the host cannot have.
-        // Nothing can then decrypt it: every key is tried and every one fails.
-        //
-        // The latch is set by power-on AND by the OEM's disc-insert rearm ISR,
-        // so a boot-time or SET-time clear is not enough — any disc change
-        // re-arms it while the flag still reads 0x00. Clearing HERE puts it on
-        // the path that runs for the bare `0xAD` read itself, which is the
-        // read that precedes content, every session.
-        //
-        // PLACEMENT PROVEN ON HARDWARE before this was written, with
-        // a hardware probe splicing this exact routine into each
-        // seam of a live read cycle: control 0/16 wrapped; clear before the
-        // cycle, between the bare-VID read and the scan, and between the scan
-        // and the content reads all 16/16. 0.9.1's first attempt put the call
-        // in `build_ake_stub` instead and measured 0/16 — that stub sits on the
-        // cert-REJECT writer (`04 02`), which a bare no-cert read never
-        // reaches, so it never ran. Gate-A (`04 01`) is the path this flow
-        // actually takes. Do not move this back.
-        //
-        // Registers: `lr` is dead here (the producer saved its own), so the
-        // `blx` clobbering it is harmless and no save/restore is needed. `r0`
-        // (the per-AGID auth byte) and `r1` are preserved across the call
-        // because the callee may clobber r0-r3; the two-word push also keeps
-        // `sp` 8-byte aligned at the call, per AAPCS.
-        a.push(0x0003); // push {r0, r1}
-        a.ldr_lit(2, reset | 1); // r2 = aacs_session_reset (Thumb-tagged)
+        // Preserve R12 too: the reset may clobber every caller-saved register.
+        // Two extra words retain eight-byte alignment at its native entry.
+        a.mov_reg(4, 12);
+        a.push(0x0030); // r4 (saved r12), r5 (alignment)
+        a.ldr_lit(2, reset | 1);
         a.blx(2);
-        a.pop(0x0003); // pop {r0, r1}
-        a.ldr_lit(2, agid_struct); // r2 = &per-AGID session struct
-        a.ldrb_imm(3, 2, 0xa); // r3 = byte[base+0xa] (AGID selector in top 2 bits)
-        a.movs_imm(1, 0xC0); // r1 = 0xC0 (top-two-bits mask)
-        a.bics(3, 1); // r3 &= ~0xC0  -> AGID selector = 0
-        a.strb_imm(3, 2, 0xa); // write it back
+        a.pop(0x0030);
+        a.mov_reg(12, 4);
+        a.ldr_lit(2, agid_struct);
+        a.ldrb_imm(3, 2, 0xa);
+        a.movs_imm(1, 0xc0);
+        a.bics(3, 1);
+        a.strb_imm(3, 2, 0xa);
+        // Keep the native displaced comparison flags on the forced path too.
+        a.mov_reg(4, 13);
+        a.ldr_imm(0, 4, 0);
+        a.cmp_imm(0, 6);
         a.bind(authed_direct);
-        a.ldr_lit(2, authed | 1); // proceed to stage + emit VID
-        a.bx(2);
+        tail(&mut a, authed);
         a.finish().map_err(anyhow::Error::from)
     }
 

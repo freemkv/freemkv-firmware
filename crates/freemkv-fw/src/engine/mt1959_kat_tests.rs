@@ -57,8 +57,9 @@ const EXPECT_HANDLER_HEX: &str =
 // and passes on the corrected output, including native return value and NZCV.
 // HRL rejection preserves R3 through the continuation, including its tail frame.
 // Explicit media refusal compares its known-zero flag, not a possible class byte.
-const EXPECT_CMAC_1: &str = "1ea97f340251f95627859ff9b2dfe229";
-const EXPECT_CMAC_15: &str = "895f2d02ae4641da77fa0665c4855e8c";
+// VID Gate-A preserves the native writer source/count and all caller arguments.
+const EXPECT_CMAC_1: &str = "55f35ef8888ce00f35f3ab90506599f4";
+const EXPECT_CMAC_15: &str = "c645a54d63c45ef5b4b4b2529c19de78";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()

@@ -20,7 +20,10 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
-        if matches!(offset.as_str(), "installed-hrl" | "installed-region") {
+        if matches!(
+            offset.as_str(),
+            "installed-hrl" | "installed-region" | "installed-encryption"
+        ) {
             let report: serde_json::Value = serde_json::from_slice(&std::fs::read(
                 std::env::args()
                     .nth(3)
@@ -38,6 +41,66 @@ fn main() -> anyhow::Result<()> {
                 .flat_map(|lever| lever["facts"].as_object().into_iter().flatten())
                 .filter_map(|(key, value)| value.as_u64().map(|v| (key.as_str(), v as usize)))
                 .collect();
+            if offset == "installed-encryption" {
+                use thumb_asm::isa::{Operand, Reg};
+                let engine = freemkv_fw::engine::mt1959::Mt1959Engine;
+                let gate = *facts
+                    .get("gatea_gate")
+                    .ok_or_else(|| anyhow::anyhow!("missing VID gate"))?;
+                let candidates: Vec<_> = [gate, gate + 18]
+                    .into_iter()
+                    .filter(|at| {
+                        thumb_asm::isa::decode_at(&image, *at).is_some_and(|i| {
+                            i.mnemonic == "cmp"
+                                && i.operands.get(0) == Some(Operand::Reg(Reg(0)))
+                                && i.operands.get(1) == Some(Operand::Imm(6))
+                        })
+                    })
+                    .collect();
+                anyhow::ensure!(candidates.len() == 1, "ambiguous VID comparison");
+                let gate_site = candidates[0];
+                let branch = thumb_asm::isa::decode_at(&image, gate_site + 2)
+                    .ok_or_else(|| anyhow::anyhow!("missing VID branch"))?;
+                anyhow::ensure!(
+                    branch.mnemonic == "b" && branch.cond == Some(thumb_asm::Cond::Ne),
+                    "VID comparison has no native BNE"
+                );
+                let gate_stub = facts["gatea_stub_va"];
+                let flag_loads: Vec<_> = [gate_stub, gate_stub + 2]
+                    .into_iter()
+                    .filter_map(|at| thumb_asm::analysis::literal_value(&modified, at))
+                    .collect();
+                anyhow::ensure!(
+                    flag_loads.len() == 1,
+                    "missing or ambiguous encryption flag load"
+                );
+                let flag_slot = flag_loads[0];
+                let ake_site = facts["ake_site"];
+                let ake = thumb_asm::isa::decode_at(&image, ake_site)
+                    .ok_or_else(|| anyhow::anyhow!("missing AKE instructions"))?;
+                let variant = if ake.mnemonic == "lsr" {
+                    "classic-shift"
+                } else if ake.mnemonic == "bl" {
+                    "shared-call"
+                } else {
+                    anyhow::ensure!(ake.mnemonic == "mov", "unknown AKE entry");
+                    "reject-tail"
+                };
+                let agid = if facts.contains_key("gatea_authed") {
+                    engine.find_vid_agid_struct_classic(&image)?
+                } else {
+                    engine.find_vid_agid_struct(&image)?
+                };
+                println!(
+                    "{}",
+                    serde_json::json!({"flag_slot":flag_slot,
+                    "gate_site":gate_site,"accept":gate_site+4,"deny":branch.branch_target(),
+                    "agid":agid,"reset":engine.find_aacs_session_reset(&image)?,
+                    "setter":engine.find_vid_gate_setter(&image)?,"ake_site":ake_site,
+                    "variant":variant,"deny_site":facts.get("deny_site")})
+                );
+                return Ok(());
+            }
             if offset == "installed-region" {
                 let stub = *facts
                     .get("region_stub_va")
