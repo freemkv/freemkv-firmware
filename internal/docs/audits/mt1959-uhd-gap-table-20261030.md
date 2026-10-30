@@ -35,6 +35,9 @@ G01 is DI rejection; G02–G06 are executed C7 consumer mismatches; G07 is key-c
 | HLDS BU40N general retail | 1.05 | `fbfed0cc2d55` | [Specification](https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf) |
 | Buffalo BRUHD-PU3 / BU40N BU12 | BU12 | `920a89f98b69` | [Specification](https://www.buffalo.jp/product/detail/bruhd-pu3-bk.html) |
 
+A current download of the WH16NS60 N1.01 package from LG matches the held original byte for byte (archive SHA-256 198c01224a0a; inner WH16NS60.exe SHA-256 e99cf91b8829). The [manufacturer support page](https://www.lg.com/us/support/product/lg-WH16NS60.AUSU10B) both advertises UHD playback and lists N1.01. Full hashes and URLs are retained in mt1959-oem-variant-evidence-20261030.json.
+
+
 ## Stock-source variants with no proven gap in the reviewed paths
 
 These ten images are still 1959 non UHD under the requested definition. None is promoted by its code matches. Their qualification and full behavioral equivalence remain unresolved.
@@ -82,6 +85,14 @@ The additional worker survey executes 6,156 REPORT KEY dispatch cases and 3,078 
 Worker dispatch begins after any recorded setup call, whose effects are not assumed. Allocation execution begins after assumed valid AGID/session validation and stops at the response-length store. It neither generates nor verifies a certificate or nonce. These are source-bound protocol-stage differences, not a complete AACS2 exchange or proof that no other AACS2 code exists elsewhere.
 
 The [AACS common specification, section 4.14.2.2](https://aacsla.com/wp-content/uploads/2019/02/AACS_Spec_Common_Final_0953.pdf) describes the older 20-byte nonce and 92-byte certificate response. Primary reverse-engineering research [SGX.Fail, appendix D.2](https://sgx.fail/files/sgx.fail.pdf) describes AACS2 using 32-byte nonces and 256-bit ECC with SHA256. This explains why the older response width cannot simply be treated as complete OEM UHD authentication. Format 0x39 is recorded as another reference difference; its necessity is not inferred from its presence alone.
+
+## Native mode initialization
+
+The selector survey executes 3,168 cases across 48 bound selectors, including all 21 extended-worker images in the full OEM bucket and all nine OEM UHD references. Eleven other dump/modified images have extended workers but an unresolved selector layout. The 112 single-mode worker images have no mode cell bound by that worker contract; that alone is not an absence claim about every other routine.
+
+For matched selectors, a header word with low 16 bits 0x1003 selects mode 1 when bits 23:20 are nonzero and mode 0 otherwise. This links the reviewed protocol mode to header data. Header acquisition and device/crypto services remain outside the executed region, so it does not prove hardware support. The caller supplies an already-read word; any intermediate auxiliary call is explicitly excluded; its side effects are not assumed.
+
+OEM references themselves differ on invalid-header cleanup: some selectors clear the mode before validating the word, while others preserve the supplied previous value in this isolated stage. This revision difference is recorded, not declared another UHD gap. Full caller cleanup is not inferred from the isolated selector.
 
 ## All firmware entries
 
@@ -298,7 +309,8 @@ python3 scripts/audit-mtk-uhd-di-gates.py --scan internal/docs/audits/mt1959-uhd
 python3 scripts/audit-mtk-key-class-routing.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-keys.json
 python3 scripts/audit-mtk-uhd-consumers.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-consumers.json
 python3 scripts/audit-mtk-key-workers.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --routing /tmp/mt1959-keys.json --hoard /path/to/hoard --output /tmp/mt1959-workers.json
-python3 scripts/report-mt1959-uhd-gaps.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --di /tmp/mt1959-di.json --keys /tmp/mt1959-keys.json --consumers /tmp/mt1959-consumers.json --workers /tmp/mt1959-workers.json --out /tmp/mt1959-report
+python3 scripts/audit-mtk-key-mode-init.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --workers /tmp/mt1959-workers.json --hoard /path/to/hoard --output /tmp/mt1959-mode-init.json
+python3 scripts/report-mt1959-uhd-gaps.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --di /tmp/mt1959-di.json --keys /tmp/mt1959-keys.json --consumers /tmp/mt1959-consumers.json --workers /tmp/mt1959-workers.json --mode-init /tmp/mt1959-mode-init.json --out /tmp/mt1959-report
 ```
 
 Validation: 46,512 consumer-region executions (passive register bank; workers not executed). All 199 source hashes checked; archive members hash-bound to existing dump payloads. All 171 distinct full payloads have DI/key receipts: 1,026 DI-gate executions and 5,130 class-pair checks. The earlier executions against two archive containers are withdrawn. The scanner fixture tests, formatting and Clippy checks pass. No live AACS or disc-reading test was run.
