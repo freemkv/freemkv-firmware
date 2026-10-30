@@ -184,6 +184,7 @@ pub fn issue_severity(message: &str) -> IssueSeverity {
     }
     match message {
         "errors.backup_restricted"
+        | "errors.backup_layout_unsupported"
         | "errors.drive_firmware_unconfirmed"
         | "errors.unsupported_drive"
         | "errors.unsupported_firmware"
@@ -353,6 +354,17 @@ impl UserError {
             "errors.current_required"
         } else if error.is::<BackupReadRestricted>() {
             "errors.backup_restricted"
+        } else if (error.is::<BackupAttempt>()
+            || matches!(
+                error.downcast_ref::<IssueCode>(),
+                Some(IssueCode::BackupFailed)
+            ))
+            && matches!(
+                error.downcast_ref::<pioneer_optical::envelope::NormalLayoutError>(),
+                Some(pioneer_optical::envelope::NormalLayoutError::Unsupported)
+            )
+        {
+            "errors.backup_layout_unsupported"
         } else if let Some(code) = error.downcast_ref::<IssueCode>() {
             code.message_id()
         } else if let Some(unverified) = error.downcast_ref::<UnverifiedUpdateOutcome>() {
@@ -532,6 +544,30 @@ mod tests {
         assert_eq!(issue.id, "errors.backup_restricted");
         assert_eq!(issue.severity(), IssueSeverity::Notice);
         assert!(!issue.render(Language::En).contains("send it to us"));
+    }
+
+    #[test]
+    fn unsupported_pioneer_backup_layout_preserves_the_read_success_cause() {
+        let error = anyhow::Error::new(pioneer_optical::envelope::NormalLayoutError::Unsupported)
+            .context("determining Normal capture layout from the installed Kernel")
+            .context(IssueCode::BackupFailed)
+            .context(NoFirmwareWrite)
+            .context(BackupAttempt);
+        let issue = UserError::of(&error);
+        assert_eq!(issue.id, "errors.backup_layout_unsupported");
+        assert_eq!(issue.severity(), IssueSeverity::Notice);
+        assert_eq!(issue.consequence, Some("errors.no_firmware_write"));
+        let text = issue.render(Language::En);
+        assert!(text.contains("read successfully"));
+        assert!(text.contains("raw dump"));
+        assert!(!text.contains("connection"));
+        assert!(!text.contains("try again"));
+        let unrelated =
+            anyhow::Error::new(pioneer_optical::envelope::NormalLayoutError::Unsupported);
+        assert_ne!(
+            UserError::of(&unrelated).id,
+            "errors.backup_layout_unsupported"
+        );
     }
 
     #[test]

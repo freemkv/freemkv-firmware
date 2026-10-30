@@ -297,16 +297,14 @@ pub enum Feature {
     /// shipped); [`STATE_OFF`] (`0x00`) = No (refuse); [`STATE_ON`] (`0x01`) = Yes
     /// (accept). See CHANGELOG entry for 0.9.2.
     ///
-    /// Note: as of 0.9.2 this variant is a rename of `Uhd`. The BD-refuse detour
-    /// still reads its own [`Feature::Bd`] slot at wire id `0x04` for byte-neutral
-    /// compatibility with pre-0.9.2 KATs; the flag-slot consolidation (BD stubs
-    /// switch to reading the `Unrestricted` slot) is deferred to a follow-up.
+    /// Newly generated native BD, UHD and auth hooks all read this slot.
+    /// Older generated firmware can still read the historical BD slot.
     Unrestricted = 0x03,
     /// **Deprecated in 0.9.2.** Blu-ray (AACS 1.0) capability gate. Was folded
     /// into [`Feature::Unrestricted`] semantically in 0.9.2. `SET`/`GET` on `Bd`
     /// still round-trip via this NV slot for wire-ABI compatibility, and the
-    /// existing BD-refuse detour still reads this slot in 0.9.2. A future
-    /// release will retire runtime effect entirely.
+    /// BD-refuse detours in older firmware still read this slot. Newly generated
+    /// hooks use Unrestricted; this slot retains storage compatibility only.
     #[deprecated(
         since = "0.9.2",
         note = "`Bd` was folded into `Unrestricted` in 0.9.2. Set/Get on `Bd` still round-trip via a spare NV slot but the semantic gate is `Unrestricted`."

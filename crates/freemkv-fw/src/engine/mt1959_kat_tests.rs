@@ -29,7 +29,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// Changes to emitted code still require reviewing the handler and CMAC snapshots.
 const KAT_IDENTITY: &[u8] = b"freemkv 0.10.2";
 const EXPECT_HANDLER_HEX: &str =
-    "b14b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a94b1847f0b5a94f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700247be00d2c03d1587a3070002475e00f2c04d19c4e0420b04700246ee000246ce0f0b5974f1c79022c0bd197485979012900d262e0072900d35fe04018997901705be0042c59d19879ff2823d18e48ff21017041708170c1700171417181718b4806688b4805687619874801783170417871708178b170c178f17001793171417971718179b1712846824907220123824da84732e001280fd17b48ff210170ff214170ff2181700121c17001210171ff214171ff21817120e0734e764a1178ff290ed1ff213170ff217170ff21b1700121f17001213171ff217171ff21b1710ce0517871709178b170d178f17011793171517971719179b171ffe70025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948314601220123564da847044600e0574c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b1712846324907220123324da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ca600250e2d04d22846715db8470135f8e70c4e0e250122072a05d2b15c2846b84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e31302e32";
+    "aa4b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a24b1847f0b5a24f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700246de00d2c03d1587a3070002467e00f2c04d1954e0420b047002460e000245ee0f0b5904f1c79022c0bd190485979012900d254e0072900d351e04018997901704de0042c4bd19879ff2823d18748ff21017041708170c17001714171817184480668844805687619804801783170417871708178b170c178f17001793171417971718179b17128467b49072201237b4da84724e001280fd17448ff210170ff214170ff2181700121c17001210171ff214171ff21817112e06c4e6f4a1178ff2900d1e9e7517871709178b170d178f17011793171517971719179b171ffe70025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948314601220123564da847044600e0574c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b1712846324907220123324da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ca600250e2d04d22846715db8470135f8e70c4e0e250122072a05d2b15c2846b84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e31302e32";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -45,8 +45,21 @@ const EXPECT_HANDLER_HEX: &str =
 // (see `ake_stub_clears_the_debus_latch_and_preserves_lr`), so the injected
 // band moved. EXPECT_HANDLER_HEX is unchanged, confining the delta to the stub.
 // 0.13.4: boot no longer loads saved NV; shorter boot code relocates feature stubs.
-const EXPECT_CMAC_1: &str = "e4e6623efaa56bc612046743002b32b6";
-const EXPECT_CMAC_15: &str = "1799f48bebda26a7c9e1665b8d0721f7";
+// 0.15.4: RESET_TO_FLASH with erased NV branches to the existing reset-defaults
+// body, removing 28 duplicate bytes. Independent CPU execution checks both paths
+// and saved reload with standard/custom settings; offsets and covered CMACs move.
+// The three-way auth hook now shares its register-preserving body across BU/WH;
+// Off takes native refusal. Independent CPU tests cover all nibble/setting pairs.
+// Reviewed boot-ABI amendment: load the native target through r12, preserve
+// native r0-r3 and r4, and retain the aligned two-word return frame. The eight
+// additional bytes relocate subsequent stubs and their branch displacements.
+// Independent Unicorn execution fails on the previous output's overwritten r3
+// and passes on the corrected output, including native return value and NZCV.
+// HRL rejection preserves R3 through the continuation, including its tail frame.
+// Explicit media refusal compares its known-zero flag, not a possible class byte.
+// VID Gate-A preserves the native writer source/count and all caller arguments.
+const EXPECT_CMAC_1: &str = "55f35ef8888ce00f35f3ab90506599f4";
+const EXPECT_CMAC_15: &str = "c645a54d63c45ef5b4b4b2529c19de78";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -325,17 +338,14 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
         report.handler_bytes.len()
     );
 
-    // The build-time SRAM scanner still reports its (unsound) candidate for audit,
-    // but the flag base actually used is the validated 204-byte free hole at
-    // 0x02000e40 (hardware-proven writable+free; 0x02001a00 was unmapped).
+    // The guarded static candidate remains separate from modern's fixed flag
+    // cell. Neither the candidate nor a zero-valued capture proves all runtime
+    // workloads leave the storage unused.
     assert_eq!(
-        report.free_sram_cell, 0x0200_120c,
-        "scanner free SRAM cell (audit-only, unsound)"
+        report.free_sram_cell, 0x0200_145c,
+        "guarded statically unreferenced SRAM candidate (not runtime ownership)"
     );
-    assert_eq!(
-        report.flag_base, 0x0200_0e40,
-        "flag-table base (validated free hole)"
-    );
+    assert_eq!(report.flag_base, 0x0200_0e40, "modern flag-table base");
     // Always-on boot-init hook: the cold/warm-boot convergence `bl <orig_init>` (the
     // BOOT_INIT_SIG anchor's `bmi` target, 0x13d428 on 1.00 — the first call AFTER the
     // cold-boot SRAM clear), detoured to a stub that writes 0xFF into every flag at
@@ -392,7 +402,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // 0x0013681c on BU40N 1.00): the OEM `cmp (state>>4),#0xC; bne <6F/02>` at
     // anchor+10 = 0x00136826, detoured to a stub that widens the accepted
     // top-nibble set to include `0xEx` when `flag[Unrestricted]==STATE_ON`, and
-    // replays OEM byte-for-byte otherwise (STATE_OFF or STATE_PASSTHROUGH).
+    // replays OEM for STATE_PASSTHROUGH and takes native refusal for STATE_OFF.
     assert_eq!(
         report.auth_cell_site, 0x0013_6826,
         "auth-cell widen (Feature::Unrestricted) detours the state-band cmp (1.00)"
@@ -487,11 +497,6 @@ fn hoard_roots() -> Vec<String> {
 /// flash) that proved identical across every owned VID-capable image.
 const EXPECT_VID_OUT_BUF: u32 = 0x0021_0c00;
 
-/// The scanner-derived largest free SRAM gap base — identical on the two required
-/// BU40N images (1.00 + 1.03): `0x0200120c..0x02002000` (3572 bytes), which
-/// contains the `0x02001a00` gap the live sweep found.
-const EXPECT_FREE_SRAM: u32 = 0x0200_120c;
-
 /// The downgrade-enable byte offset (identity-page slot), identical fleet-wide.
 const EXPECT_DE_OFF: u32 = 0x001e_c056;
 
@@ -539,17 +544,15 @@ fn finders_hold_across_owned_images() {
         assert!(report.vid_gate_setter != 0, "VID gate-setter for {path}");
         assert!(report.setdiscmode != 0, "SetDiscMode for {path}");
         // Speed (0x02) + Region-free (0x03) must be wired, and the DE byte + the
-        // scanner-derived free cell must agree across both required BU40N images.
+        // scanner-derived candidate must stay inside the guarded placement bounds.
         assert!(report.speed_stub_va != 0, "Speed (0x02) wired for {path}");
         assert!(
             report.region_stub_va != 0,
             "Region-free (0x03) wired for {path}"
         );
         assert_eq!(report.de_off, EXPECT_DE_OFF, "DE byte for {path}");
-        assert_eq!(
-            report.free_sram_cell, EXPECT_FREE_SRAM,
-            "scanner free SRAM cell for {path}"
-        );
+        assert!(report.free_sram_cell >= super::SRAM_LO + 4);
+        assert!(report.free_sram_cell + super::FLASHWRITE_SCRATCH_OFF + 1 + 4 <= super::SRAM_END);
         checked_required += 1;
     }
     if checked_required == 0 {
@@ -636,7 +639,7 @@ fn find_free_sram_cell_picks_largest_unreferenced_gap() {
         .expect("a free gap must exist");
     // 0x02000010..0x02000014 is used; the largest gap is the high tail, whose base
     // (0x02000014) is already 4-aligned.
-    assert_eq!(cell, 0x0200_0014);
+    assert_eq!(cell, 0x0200_0018); // leaves the four-byte lower guard
 }
 
 /// Base-register reach: a literal used as `[rX,#off]` marks the whole span, so the
@@ -651,7 +654,24 @@ fn find_free_sram_cell_marks_base_register_reach() {
     img[4..8].copy_from_slice(&0x0200_0010u32.to_le_bytes()); // base literal
     let cell = Mt1959Engine.find_free_sram_cell(&img).unwrap();
     // 0x02000010..(0x02000010+0x1f+1)=0x02000030 marked used → high gap base 0x30.
-    assert_eq!(cell, 0x0200_0030);
+    assert_eq!(cell, 0x0200_0034); // leaves the four-byte lower guard
+}
+
+/// The old search could select the entirely unreferenced tail above the
+/// conservative mapped ceiling. Filling mapped RAM must now refuse placement.
+#[test]
+fn sram_candidate_never_uses_the_unmapped_high_tail_or_an_unguarded_cell() {
+    let image: Vec<u8> = (super::SRAM_LO..super::SRAM_END)
+        .step_by(4)
+        .flat_map(u32::to_le_bytes)
+        .collect();
+    assert!(Mt1959Engine.find_free_sram_cell(&image).is_err());
+    assert!(Mt1959Engine
+        .assert_sram_cell_free(&[], super::SRAM_LO, 7, "test")
+        .is_err());
+    assert!(Mt1959Engine
+        .assert_sram_cell_free(&[], u32::MAX - 4, 16, "test")
+        .is_err());
 }
 
 /// A valid `ldr r0,[pc,#0]` whose literal pool (offset 4) lies past this 2-byte
@@ -733,12 +753,9 @@ fn feature_flag_gating_is_reslotted() {
         "UHD gate stub reads flag[Unrestricted]"
     );
 
-    // Auth-cell widen stub — the 9th lever. Uses `cmp r3,#STATE_ON` (0x2B01, ONLY
-    // widens when flag == STATE_ON), NOT the peer `cmp r3,#STATE_OFF` convention:
-    // for auth-cell, PASSTHROUGH (0xFF) must replay OEM (which refuses `0xEx`) —
-    // it is NOT an OEM-legal accept like the peer stubs' PASSTHROUGH is. Also
-    // emits the OEM-replay `cmp r0,#0xC` (0x280C) and reads `flag[Unrestricted]`.
-    // Deny target rides on a bx-via-r3 pool literal (`deny_va | 1`).
+    // The auth hook distinguishes On, Off and OEM. The deny continuation is
+    // loaded through a stacked PC transfer, preserving the live r3 value.
+    // Independent CPU tests prove routing, register and comparison contracts.
     let deny_va = 0x0013_68f4u32;
     let auth_cell = Mt1959Engine
         .build_authcell_widen_stub(base, deny_va)
@@ -748,8 +765,8 @@ fn feature_flag_gating_is_reslotted() {
         "auth-cell widen stub gates on cmp r3,#STATE_ON (NOT the peer cmp r3,#STATE_OFF)"
     );
     assert!(
-        !has(&auth_cell, CMP_R3_OFF),
-        "auth-cell widen stub must NOT use cmp r3,#STATE_OFF (would collapse PASSTHROUGH into ON)"
+        has(&auth_cell, CMP_R3_OFF),
+        "auth-cell hook must distinguish forced refusal from OEM passthrough"
     );
     assert!(
         has(&auth_cell, 0x280C),
@@ -791,9 +808,15 @@ fn feature_flag_gating_is_reslotted() {
         !has(&bd, 0x2B02),
         "BD-refuse stub must NOT gate on the retired `cmp r3,#0x02` sentinel"
     );
-    #[allow(deprecated)]
-    let bd_flag = base + Feature::Bd as u32;
-    assert!(reads(&bd, bd_flag), "BD-refuse stub reads flag[Bd]");
+    let bd_flag = base + Feature::Unrestricted as u32;
+    assert!(
+        reads(&bd, bd_flag),
+        "BD-refuse stub reads the shared Unrestricted flag"
+    );
+    assert!(
+        !reads(&bd, base + 4),
+        "retired BD slot must not select behavior"
+    );
 
     // Region tri-state encodes all three canonical states: reads flag[Region], gates
     // on `cmp r3,#STATE_ON` (0x2B01, region-free) and `cmp r3,#STATE_OFF` (0x2B00,
@@ -951,7 +974,7 @@ fn put_hw(img: &mut [u8], off: usize, hws: &[u16]) {
 }
 
 #[test]
-fn speed_gate_finds_r0_variant_and_prefers_original() {
+fn speed_gate_finds_r0_variant_and_refuses_mixed_variants() {
     // r0 variant: `ldr r1,[pc]; ldrb r0,[r1]; cmp r0,#0x32; bhi` → reg 0.
     let mut img = vec![0u8; 0x2_0010];
     put_hw(&mut img, 0x1_1000, &[0x4900, 0x7808, 0x2832, 0xD800]);
@@ -959,11 +982,12 @@ fn speed_gate_finds_r0_variant_and_prefers_original() {
     assert_eq!(off, 0x1_1000);
     assert_eq!(reg, 0, "variant register");
 
-    // original (r2) present alongside → original wins (reg 2), variant ignored.
+    // Both register variants present: refuse the ambiguous semantic role.
     put_hw(&mut img, 0x1_2000, &[0x4900, 0x780A, 0x2A32, 0xD800]);
-    let (off, reg) = Mt1959Engine.find_speed_gate(&img).unwrap();
-    assert_eq!(off, 0x1_2000);
-    assert_eq!(reg, 2, "original preferred when present");
+    assert!(
+        Mt1959Engine.find_speed_gate(&img).is_err(),
+        "two unique encodings are still an ambiguous role"
+    );
 }
 
 #[test]
@@ -1458,7 +1482,7 @@ fn build_boot_init_fills_defaults_without_saved_overlay_and_tail_calls_orig() {
             .any(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == v)
     };
     // Preserves orig_init's args + lr AND pads with r4 so sp is 8-byte aligned
-    // at the downstream `blx r3` (AAPCS entry alignment):
+    // at the downstream `blx r12` (AAPCS entry alignment):
     // `push {r0,r1,r2,r3,r4,lr}` (0xB51F).
     assert!(
         has16(0xB51F),
@@ -1509,9 +1533,18 @@ fn build_boot_init_fills_defaults_without_saved_overlay_and_tail_calls_orig() {
         has16(0xBC0F),
         "boot stub pops {{r0-r3}} before tail-calling"
     );
-    // Loads orig_init with the Thumb bit set and tail-calls it: `blx r3` (0x4798).
+    // The target uses r12, preserving the native fourth argument in r3.
     assert!(has32(orig_init | 1), "boot stub loads orig_init|1");
-    assert!(has16(0x4798), "boot stub tail-calls orig_init via blx r3");
+    assert!(
+        (0..stub.len()).step_by(2).any(|pc| {
+            thumb_asm::isa::decode_at(&stub, pc).is_some_and(|ins| {
+                ins.mnemonic == "blx"
+                    && ins.operands.get(0)
+                        == Some(thumb_asm::isa::Operand::Reg(thumb_asm::isa::Reg(12)))
+            })
+        }),
+        "boot stub calls orig_init through scratch r12, preserving r3"
+    );
     // Returns to conv+4 AND restores the r4 sp-align pad: `pop {r4, pc}` (0xBD10).
     assert!(
         has16(0xBD10),
@@ -1978,4 +2011,33 @@ fn ake_stub_clears_the_debus_latch_and_preserves_lr() {
             "{name}: clear stays gated on flag[Encryption] == STATE_OFF"
         );
     }
+}
+
+#[test]
+fn ake_selection_refuses_competing_or_duplicate_variants_before_emission() {
+    use crate::engine::core::{AKE_GATE_SIG, AKE_GATE_SIG_NB, AKE_GATE_SIG_NB_V5, FLAG_TABLE_BASE};
+    let materialize = |sig: &[(u16, u16)]| {
+        sig.iter()
+            .flat_map(|(op, _)| op.to_le_bytes())
+            .collect::<Vec<_>>()
+    };
+    for second in [AKE_GATE_SIG, AKE_GATE_SIG_NB, AKE_GATE_SIG_NB_V5] {
+        let mut image = materialize(AKE_GATE_SIG);
+        image.extend([0xff; 32]);
+        image.extend(materialize(second));
+        let error = Mt1959Engine
+            .ake_detour(&image, FLAG_TABLE_BASE)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("ambiguous"), "{error:#}");
+    }
+}
+
+#[test]
+fn variant_scan_includes_the_final_complete_pattern() {
+    let image = [0u8, 0, 0x34, 0x12];
+    assert_eq!(
+        crate::engine::core::find_masked_all(&image, &[(0x1234, 0xffff)], 0, image.len()),
+        vec![2]
+    );
+    assert!(crate::engine::core::find_masked_all(&image, &[(0x1234, 0xffff)], 0, 3).is_empty());
 }

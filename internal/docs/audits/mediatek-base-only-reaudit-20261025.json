@@ -1,0 +1,5453 @@
+{
+  "schema": 1,
+  "producer_sha256": "aa501f23d2d433d3446d7c7469b9454db63f00f749846cb1642107fcc8879c67",
+  "flasher_sha256": "93a5d69bb9f3dcb380c8418cef3eb910c9a890f476fb7a7b26a5209a70eba47c",
+  "bucket": "base-only",
+  "scope": "exact-image Modify preview plus structural audit; optional actual builds and flasher gates; no physical validation",
+  "images": [
+    {
+      "sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.01/main/007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d.bin",
+      "baseline": {
+        "sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH14NS40",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9e24",
+        "ake_stub_va": "0x1a9ecc",
+        "gatea_stub_va": "0x1a9e90",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9ee8",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS40",
+          "revision": "1.01",
+          "variant": "N1722A1"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS40",
+          "rev": "1.01",
+          "vendor_specific": "N1722A1",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743592,
+                "handler_len": 750,
+                "boot_init_site": 1660074,
+                "boot_stub_va": 1744344,
+                "record_off": 1728404,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401368,
+                "region_stub_va": 1744392
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570026,
+                "gatea_stub_va": 1744500,
+                "gatea_authed": 1570030,
+                "ake_site": 1569682,
+                "ake_stub_va": 1744560,
+                "ake_gate": 1569676,
+                "deny": 1570084,
+                "scratch": 2165760,
+                "vid_producer": 1569934,
+                "hrl_stub_va": 1744588,
+                "hrl_site": 1569380
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "2817181bd1c0e9a40d70894c07ab5daaeca25c4b4be672c34fa7856fe8a39f59"
+      },
+      "build_validation": {
+        "output_sha256": "2817181bd1c0e9a40d70894c07ab5daaeca25c4b4be672c34fa7856fe8a39f59",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.00/main/01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c.bin",
+      "baseline": {
+        "sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BE14NU40",
+        "revision": "1.00",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9284",
+        "ake_stub_va": "0x1a932c",
+        "gatea_stub_va": "0x1a92f0",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9348",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE14NU40",
+          "revision": "1.00",
+          "variant": "N0023G4"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE14NU40",
+          "rev": "1.00",
+          "vendor_specific": "N0023G4",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1740616,
+                "handler_len": 750,
+                "boot_init_site": 1657218,
+                "boot_stub_va": 1741368,
+                "record_off": 1725448,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1397542,
+                "region_stub_va": 1741416
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1566024,
+                "gatea_stub_va": 1741524,
+                "gatea_authed": 1566028,
+                "ake_site": 1565680,
+                "ake_stub_va": 1741584,
+                "ake_gate": 1565674,
+                "deny": 1566082,
+                "scratch": 2165760,
+                "vid_producer": 1565932,
+                "hrl_stub_va": 1741612,
+                "hrl_site": 1565436
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "d6cd2dec80f3a0cd35bb6cb341fbded6740763565af05808028df28d55de0097"
+      },
+      "build_validation": {
+        "output_sha256": "d6cd2dec80f3a0cd35bb6cb341fbded6740763565af05808028df28d55de0097",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+      "path": "oem/mediatek/MT1939/hp_BH40N_MT1939_Code_JB7/HP/B7C6/main/0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f.bin",
+      "baseline": {
+        "sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH40N",
+        "revision": "B7C6",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a7ea4",
+        "ake_stub_va": "0x1a7f4c",
+        "gatea_stub_va": "0x1a7f10",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a7f68",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "hp",
+          "model": "BD-RE  BH40N",
+          "revision": "B7C6",
+          "variant": "P166800"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "hp",
+          "model": "BD-RE  BH40N",
+          "rev": "B7C6",
+          "vendor_specific": "P166800",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1735528,
+                "handler_len": 750,
+                "boot_init_site": 1652210,
+                "boot_stub_va": 1736280,
+                "record_off": 1720328,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1394592,
+                "region_stub_va": 1736328
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1561282,
+                "gatea_stub_va": 1736436,
+                "gatea_authed": 1561286,
+                "ake_site": 1560938,
+                "ake_stub_va": 1736496,
+                "ake_gate": 1560932,
+                "deny": 1561340,
+                "scratch": 2165760,
+                "vid_producer": 1561190,
+                "hrl_stub_va": 1736524,
+                "hrl_site": 1560636
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "5bef119888a046004a6397b7be5b8a3d4d74026dcc6e776ddec5e19045053a33"
+      },
+      "build_validation": {
+        "output_sha256": "5bef119888a046004a6397b7be5b8a3d4d74026dcc6e776ddec5e19045053a33",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3.bin",
+      "baseline": {
+        "sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH16NS40",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9f54",
+        "ake_stub_va": "0x1a9ffc",
+        "gatea_stub_va": "0x1a9fc0",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aa018",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "revision": "1.02",
+          "variant": "N0010A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "rev": "1.02",
+          "vendor_specific": "N0010A0",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743896,
+                "handler_len": 750,
+                "boot_init_site": 1660374,
+                "boot_stub_va": 1744648,
+                "record_off": 1728704,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401508,
+                "region_stub_va": 1744696
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570238,
+                "gatea_stub_va": 1744804,
+                "gatea_authed": 1570242,
+                "ake_site": 1569894,
+                "ake_stub_va": 1744864,
+                "ake_gate": 1569888,
+                "deny": 1570296,
+                "scratch": 2165760,
+                "vid_producer": 1570146,
+                "hrl_stub_va": 1744892,
+                "hrl_site": 1569592
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00"
+      },
+      "build_validation": {
+        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS48_MT1939_Code_JB7/GENERAL/1.01/main/163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146.bin",
+      "baseline": {
+        "sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS48",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1aaa6c",
+        "ake_stub_va": "0x1aab14",
+        "gatea_stub_va": "0x1aaad8",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aab30",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS48",
+          "revision": "1.01",
+          "variant": "N1722A1"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS48",
+          "rev": "1.01",
+          "vendor_specific": "N1722A1",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1746736,
+                "handler_len": 750,
+                "boot_init_site": 1663222,
+                "boot_stub_va": 1747488,
+                "record_off": 1731552,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1403312,
+                "region_stub_va": 1747536
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1572162,
+                "gatea_stub_va": 1747644,
+                "gatea_authed": 1572166,
+                "ake_site": 1571818,
+                "ake_stub_va": 1747704,
+                "ake_gate": 1571812,
+                "deny": 1572220,
+                "scratch": 2165760,
+                "vid_producer": 1572070,
+                "hrl_stub_va": 1747732,
+                "hrl_site": 1571516
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "7073036180c39d1021576c19edfbfb90e2c084fdec9013b17870a1be2d728b81"
+      },
+      "build_validation": {
+        "output_sha256": "7073036180c39d1021576c19edfbfb90e2c084fdec9013b17870a1be2d728b81",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6.bin",
+      "baseline": {
+        "sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS40",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9dc4",
+        "ake_stub_va": "0x1a9e6c",
+        "gatea_stub_va": "0x1a9e30",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9e88",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "revision": "1.01",
+          "variant": "N1722A1"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "rev": "1.01",
+          "vendor_specific": "N1722A1",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743496,
+                "handler_len": 750,
+                "boot_init_site": 1659978,
+                "boot_stub_va": 1744248,
+                "record_off": 1728308,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401184,
+                "region_stub_va": 1744296
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1569842,
+                "gatea_stub_va": 1744404,
+                "gatea_authed": 1569846,
+                "ake_site": 1569498,
+                "ake_stub_va": 1744464,
+                "ake_gate": 1569492,
+                "deny": 1569900,
+                "scratch": 2165760,
+                "vid_producer": 1569750,
+                "hrl_stub_va": 1744492,
+                "hrl_site": 1569196
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "b4726d86e21d003951bfd28886c526c49b3aac85cc1b01aec98bb4e8c63844d5"
+      },
+      "build_validation": {
+        "output_sha256": "b4726d86e21d003951bfd28886c526c49b3aac85cc1b01aec98bb4e8c63844d5",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "2f02308413c86c180ec863ada97fec3f594ebd7bf144e3159e91439518e57847",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.01/main/2f02308413c86c180ec863ada97fec3f594ebd7bf144e3159e91439518e57847.bin",
+      "baseline": {
+        "sha256": "2f02308413c86c180ec863ada97fec3f594ebd7bf144e3159e91439518e57847",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BE14NU40",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "2f02308413c86c180ec863ada97fec3f594ebd7bf144e3159e91439518e57847",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE14NU40",
+          "revision": "1.01",
+          "variant": "N002601"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE14NU40",
+          "rev": "1.01",
+          "vendor_specific": "N002601",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD \u2014 Downgrade (DE) applied \u00b7 Region Free + Raw read + Speed skipped",
+          "levers": [
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 RPC emitter transfers but the flag-gated detour needs the classic Identity base (sense-setter + injected handler)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "classic VID + AKE gates located (reversed, proven-unique); full raw-read detour pending the classic Identity base"
+                }
+              },
+              "facts": {
+                "vid_gate_classic": 1590176,
+                "ake_gate_classic": 1589856
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": false
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "93cbef4aae45d9545edec48811f3db2fa7030de2f2d8300ea90100ab192c9096"
+      },
+      "build_validation": {
+        "output_sha256": "93cbef4aae45d9545edec48811f3db2fa7030de2f2d8300ea90100ab192c9096",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.03/main/3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3.bin",
+      "baseline": {
+        "sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH14NS48",
+        "revision": "1.03",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1aab80",
+        "ake_stub_va": "0x1aac28",
+        "gatea_stub_va": "0x1aabec",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aac44",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS48",
+          "revision": "1.03",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS48",
+          "rev": "1.03",
+          "vendor_specific": "N0002A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1747012,
+                "handler_len": 750,
+                "boot_init_site": 1663480,
+                "boot_stub_va": 1747764,
+                "record_off": 1731820,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1403572,
+                "region_stub_va": 1747812
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1572470,
+                "gatea_stub_va": 1747920,
+                "gatea_authed": 1572474,
+                "ake_site": 1572126,
+                "ake_stub_va": 1747980,
+                "ake_gate": 1572120,
+                "deny": 1572528,
+                "scratch": 2165760,
+                "vid_producer": 1572378,
+                "hrl_stub_va": 1748008,
+                "hrl_site": 1571824
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "f1275e556b82fdba4cec8ff4588bed90957a102d6eb7d3af3c2b2243fca91437"
+      },
+      "build_validation": {
+        "output_sha256": "f1275e556b82fdba4cec8ff4588bed90957a102d6eb7d3af3c2b2243fca91437",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "3d90114273377220988f7cbd0da2ecad01d4e61a1b1089921fdee3fba2f62af9",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.03/main/3d90114273377220988f7cbd0da2ecad01d4e61a1b1089921fdee3fba2f62af9.bin",
+      "baseline": {
+        "sha256": "3d90114273377220988f7cbd0da2ecad01d4e61a1b1089921fdee3fba2f62af9",
+        "category": "mk",
+        "bytes": "2097152",
+        "model": "BD-RE  WH16NS60",
+        "revision": "1.03",
+        "result": "accepted",
+        "engine": "MT1959",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "0x1b398",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "3d90114273377220988f7cbd0da2ecad01d4e61a1b1089921fdee3fba2f62af9",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS60",
+          "revision": "1.03",
+          "variant": "NM07600"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS60",
+          "rev": "1.03",
+          "vendor_specific": "NM07600",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110724,
+                "handler_len": 758,
+                "record_off": 1374084,
+                "boot_init_site": 1296246,
+                "boot_stub_va": 111484,
+                "boot_function_entry": 1296230
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113410,
+                "speed_stub_va": 111532
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "091e638632c8595282067e6d96c1fc80979901da396ff485ce36d52adb4d9c99"
+      },
+      "build_validation": {
+        "output_sha256": "091e638632c8595282067e6d96c1fc80979901da396ff485ce36d52adb4d9c99",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "3f436c31124f6b7bbe582c67370924077018eb14e768f27d9b7194904f099aa5",
+      "path": "dump/mediatek/MT1939/ASUS_BW-16D1HT_MT1939_Code_JB7/ASUS/1.01/main/3f436c31124f6b7bbe582c67370924077018eb14e768f27d9b7194904f099aa5.bin",
+      "baseline": {
+        "sha256": "3f436c31124f6b7bbe582c67370924077018eb14e768f27d9b7194904f099aa5",
+        "category": "dump",
+        "bytes": "2097152",
+        "model": "BW-16D1HT",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "3f436c31124f6b7bbe582c67370924077018eb14e768f27d9b7194904f099aa5",
+        "producer_version": "0.15.4",
+        "status": "unchanged",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "ASUS",
+          "model": "BW-16D1HT",
+          "revision": "1.01",
+          "variant": "W170600"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "ASUS",
+          "model": "BW-16D1HT",
+          "rev": "1.01",
+          "vendor_specific": "W170600",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": false,
+          "summary": "MT1939 BD/UHD \u2014 Downgrade (DE) already set \u00b7 Region Free + Raw read + Speed skipped",
+          "levers": [
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 RPC emitter transfers but the flag-gated detour needs the classic Identity base (sense-setter + injected handler)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "classic VID + AKE gates located (reversed, proven-unique); full raw-read detour pending the classic Identity base"
+                }
+              },
+              "facts": {
+                "vid_gate_classic": 1572856,
+                "ake_gate_classic": 1572536
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": false
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "3f436c31124f6b7bbe582c67370924077018eb14e768f27d9b7194904f099aa5"
+      }
+    },
+    {
+      "sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.02/main/40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a.bin",
+      "baseline": {
+        "sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH14NS40",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9e6c",
+        "ake_stub_va": "0x1a9f14",
+        "gatea_stub_va": "0x1a9ed8",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9f30",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "revision": "1.02",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "rev": "1.02",
+          "vendor_specific": "N0002A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743664,
+                "handler_len": 750,
+                "boot_init_site": 1660146,
+                "boot_stub_va": 1744416,
+                "record_off": 1728476,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401368,
+                "region_stub_va": 1744464
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570098,
+                "gatea_stub_va": 1744572,
+                "gatea_authed": 1570102,
+                "ake_site": 1569754,
+                "ake_stub_va": 1744632,
+                "ake_gate": 1569748,
+                "deny": 1570156,
+                "scratch": 2165760,
+                "vid_producer": 1570006,
+                "hrl_stub_va": 1744660,
+                "hrl_site": 1569452
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "4e9b2de51f0e1fbd4e30853c27d7402f8c3a17bdd0b4b2e97dd187e3f758b225"
+      },
+      "build_validation": {
+        "output_sha256": "4e9b2de51f0e1fbd4e30853c27d7402f8c3a17bdd0b4b2e97dd187e3f758b225",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS48_MT1939_Code_JB7/GENERAL/1.02/main/43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3.bin",
+      "baseline": {
+        "sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS48",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1aaa9c",
+        "ake_stub_va": "0x1aab44",
+        "gatea_stub_va": "0x1aab08",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aab60",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS48",
+          "revision": "1.02",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS48",
+          "rev": "1.02",
+          "vendor_specific": "N0002A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1746784,
+                "handler_len": 750,
+                "boot_init_site": 1663270,
+                "boot_stub_va": 1747536,
+                "record_off": 1731600,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1403312,
+                "region_stub_va": 1747584
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1572210,
+                "gatea_stub_va": 1747692,
+                "gatea_authed": 1572214,
+                "ake_site": 1571866,
+                "ake_stub_va": 1747752,
+                "ake_gate": 1571860,
+                "deny": 1572268,
+                "scratch": 2165760,
+                "vid_producer": 1572118,
+                "hrl_stub_va": 1747780,
+                "hrl_site": 1571564
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "ec9bb5e16a71f7cd072f776d505f76a4092d35ac71a19db20b57c3dfbda86ead"
+      },
+      "build_validation": {
+        "output_sha256": "ec9bb5e16a71f7cd072f776d505f76a4092d35ac71a19db20b57c3dfbda86ead",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "46b41f15e053b66daccb024cba4380c45f791c2d0c2b8258cd23253fc5f0b22a",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_WH16NS48_MT1939_Code_JB7/GENERAL/1.D3/main/46b41f15e053b66daccb024cba4380c45f791c2d0c2b8258cd23253fc5f0b22a.bin",
+      "baseline": {
+        "sha256": "46b41f15e053b66daccb024cba4380c45f791c2d0c2b8258cd23253fc5f0b22a",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH16NS48",
+        "revision": "1.D3",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "46b41f15e053b66daccb024cba4380c45f791c2d0c2b8258cd23253fc5f0b22a",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS48",
+          "revision": "1.D3",
+          "variant": "N007700"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS48",
+          "rev": "1.D3",
+          "vendor_specific": "N007700",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Downgrade (DE) applied \u00b7 Region Free + Raw read + Speed skipped",
+          "levers": [
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 RPC emitter transfers but the flag-gated detour needs the classic Identity base (sense-setter + injected handler)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 VID/AKE gate anchors not located in this image"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": false
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "cf11644215c5bfe55fb1bf9b23ca924ea7468be9cc5cacc88c61a668acd475f4"
+      },
+      "build_validation": {
+        "output_sha256": "cf11644215c5bfe55fb1bf9b23ca924ea7468be9cc5cacc88c61a668acd475f4",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.03/main/614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e.bin",
+      "baseline": {
+        "sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS40",
+        "revision": "1.03",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9f84",
+        "ake_stub_va": "0x1aa02c",
+        "gatea_stub_va": "0x1a9ff0",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aa048",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "revision": "1.03",
+          "variant": "N0013A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "rev": "1.03",
+          "vendor_specific": "N0013A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743944,
+                "handler_len": 750,
+                "boot_init_site": 1660426,
+                "boot_stub_va": 1744696,
+                "record_off": 1728756,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401552,
+                "region_stub_va": 1744744
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570290,
+                "gatea_stub_va": 1744852,
+                "gatea_authed": 1570294,
+                "ake_site": 1569946,
+                "ake_stub_va": 1744912,
+                "ake_gate": 1569940,
+                "deny": 1570348,
+                "scratch": 2165760,
+                "vid_producer": 1570198,
+                "hrl_stub_va": 1744940,
+                "hrl_site": 1569644
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "732d5f8421c48c2f935539f0b46c292748e3463571c34f9445f5e9406d67245e"
+      },
+      "build_validation": {
+        "output_sha256": "732d5f8421c48c2f935539f0b46c292748e3463571c34f9445f5e9406d67245e",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.02/main/6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e.bin",
+      "baseline": {
+        "sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH14NS40",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9e6c",
+        "ake_stub_va": "0x1a9f14",
+        "gatea_stub_va": "0x1a9ed8",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9f30",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS40",
+          "revision": "1.02",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS40",
+          "rev": "1.02",
+          "vendor_specific": "N0002A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743664,
+                "handler_len": 750,
+                "boot_init_site": 1660146,
+                "boot_stub_va": 1744416,
+                "record_off": 1728476,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401368,
+                "region_stub_va": 1744464
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570098,
+                "gatea_stub_va": 1744572,
+                "gatea_authed": 1570102,
+                "ake_site": 1569754,
+                "ake_stub_va": 1744632,
+                "ake_gate": 1569748,
+                "deny": 1570156,
+                "scratch": 2165760,
+                "vid_producer": 1570006,
+                "hrl_stub_va": 1744660,
+                "hrl_site": 1569452
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "10ad0290b82afed087db3fd5fb2c1e306400b10f180fe617d52abad8768fa273"
+      },
+      "build_validation": {
+        "output_sha256": "10ad0290b82afed087db3fd5fb2c1e306400b10f180fe617d52abad8768fa273",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7.bin",
+      "baseline": {
+        "sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH16NS40",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9e0c",
+        "ake_stub_va": "0x1a9eb4",
+        "gatea_stub_va": "0x1a9e78",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9ed0",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "revision": "1.01",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "rev": "1.01",
+          "vendor_specific": "N0002A0",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743568,
+                "handler_len": 750,
+                "boot_init_site": 1660050,
+                "boot_stub_va": 1744320,
+                "record_off": 1728380,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401184,
+                "region_stub_va": 1744368
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1569914,
+                "gatea_stub_va": 1744476,
+                "gatea_authed": 1569918,
+                "ake_site": 1569570,
+                "ake_stub_va": 1744536,
+                "ake_gate": 1569564,
+                "deny": 1569972,
+                "scratch": 2165760,
+                "vid_producer": 1569822,
+                "hrl_stub_va": 1744564,
+                "hrl_site": 1569268
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72"
+      },
+      "build_validation": {
+        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+      "path": "dump/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a.bin",
+      "baseline": {
+        "sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+        "category": "dump",
+        "bytes": "2097152",
+        "model": "BD-RE  WH16NS40",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9f54",
+        "ake_stub_va": "0x1a9ffc",
+        "gatea_stub_va": "0x1a9fc0",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aa018",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "revision": "1.02",
+          "variant": "N0010A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "rev": "1.02",
+          "vendor_specific": "N0010A0",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743896,
+                "handler_len": 750,
+                "boot_init_site": 1660374,
+                "boot_stub_va": 1744648,
+                "record_off": 1728704,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401508,
+                "region_stub_va": 1744696
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570238,
+                "gatea_stub_va": 1744804,
+                "gatea_authed": 1570242,
+                "ake_site": 1569894,
+                "ake_stub_va": 1744864,
+                "ake_gate": 1569888,
+                "deny": 1570296,
+                "scratch": 2165760,
+                "vid_producer": 1570146,
+                "hrl_stub_va": 1744892,
+                "hrl_site": 1569592
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00"
+      },
+      "build_validation": {
+        "output_sha256": "c17874e111e6db000e3b8fb555d462101db8fad0ded7ba9d84438895323cdd00",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.01/main/7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567.bin",
+      "baseline": {
+        "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BE14NU40",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1ab654",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1ab6c0",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE14NU40",
+          "revision": "1.01",
+          "variant": "N002905"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE14NU40",
+          "rev": "1.01",
+          "vendor_specific": "N002905",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1749784,
+                "handler_len": 750,
+                "boot_init_site": 1666170,
+                "boot_stub_va": 1750536,
+                "record_off": 1734584,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1405896,
+                "region_stub_va": 1750584
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1574814,
+                "gatea_stub_va": 1750692,
+                "gatea_authed": 1574818,
+                "ake_site": 1574470,
+                "ake_stub_va": 1750752,
+                "ake_gate": 1574464,
+                "deny": 1574872,
+                "scratch": 2165760,
+                "vid_producer": 1574722,
+                "hrl_stub_va": 1750780,
+                "hrl_site": 1574168
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "6d4bd81a1be94782f62508b8f3a9044594cdd23f3cf4fcf8700e9a7ba04edaf7"
+      },
+      "build_validation": {
+        "output_sha256": "6d4bd81a1be94782f62508b8f3a9044594cdd23f3cf4fcf8700e9a7ba04edaf7",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.00/main/8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb.bin",
+      "baseline": {
+        "sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH14NS40",
+        "revision": "1.00",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a838c",
+        "ake_stub_va": "0x1a8434",
+        "gatea_stub_va": "0x1a83f8",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a8450",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "revision": "1.00",
+          "variant": "N1524A4"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "rev": "1.00",
+          "vendor_specific": "N1524A4",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1736784,
+                "handler_len": 750,
+                "boot_init_site": 1653404,
+                "boot_stub_va": 1737536,
+                "record_off": 1721616,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1395376,
+                "region_stub_va": 1737584
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1563432,
+                "gatea_stub_va": 1737692,
+                "gatea_authed": 1563436,
+                "ake_site": 1563088,
+                "ake_stub_va": 1737752,
+                "ake_gate": 1563082,
+                "deny": 1563490,
+                "scratch": 2165760,
+                "vid_producer": 1563340,
+                "hrl_stub_va": 1737780,
+                "hrl_site": 1562844
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "f1f0e3f70626b59c5fe45f3ab3194d09482ed0e4f0ff42bd93cce14b63d2a481"
+      },
+      "build_validation": {
+        "output_sha256": "f1f0e3f70626b59c5fe45f3ab3194d09482ed0e4f0ff42bd93cce14b63d2a481",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_UH12NS30_MT1939_Code_JBC5/GENERAL/1.01/main/84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e.bin",
+      "baseline": {
+        "sha256": "84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BDDVDRW UH12NS30",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS30",
+          "revision": "1.01",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS30",
+          "rev": "1.01",
+          "vendor_specific": "N0002A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Downgrade (DE) applied \u00b7 Region Free + Raw read + Speed skipped",
+          "levers": [
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 RPC emitter transfers but the flag-gated detour needs the classic Identity base (sense-setter + injected handler)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 VID/AKE gate anchors not located in this image"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": false
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "ef00a930e743d082c0695f1566e32e03fe49d6c3ffe7cc680a4b61c482db6e17"
+      },
+      "build_validation": {
+        "output_sha256": "ef00a930e743d082c0695f1566e32e03fe49d6c3ffe7cc680a4b61c482db6e17",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea.bin",
+      "baseline": {
+        "sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS40",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9e0c",
+        "ake_stub_va": "0x1a9eb4",
+        "gatea_stub_va": "0x1a9e78",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9ed0",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "revision": "1.02",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "rev": "1.02",
+          "vendor_specific": "N0002A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743568,
+                "handler_len": 750,
+                "boot_init_site": 1660050,
+                "boot_stub_va": 1744320,
+                "record_off": 1728380,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401184,
+                "region_stub_va": 1744368
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1569914,
+                "gatea_stub_va": 1744476,
+                "gatea_authed": 1569918,
+                "ake_site": 1569570,
+                "ake_stub_va": 1744536,
+                "ake_gate": 1569564,
+                "deny": 1569972,
+                "scratch": 2165760,
+                "vid_producer": 1569822,
+                "hrl_stub_va": 1744564,
+                "hrl_site": 1569268
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "95b35c2c6c79eb2fbf9ab006b41a41306401de595eeeac55e9b0b9b5dc521c28"
+      },
+      "build_validation": {
+        "output_sha256": "95b35c2c6c79eb2fbf9ab006b41a41306401de595eeeac55e9b0b9b5dc521c28",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.00/main/ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e.bin",
+      "baseline": {
+        "sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS40",
+        "revision": "1.00",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9420",
+        "ake_stub_va": "0x1a94c8",
+        "gatea_stub_va": "0x1a948c",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a94e4",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "revision": "1.00",
+          "variant": "N1669A2"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "rev": "1.00",
+          "vendor_specific": "N1669A2",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1741028,
+                "handler_len": 750,
+                "boot_init_site": 1657602,
+                "boot_stub_va": 1741780,
+                "record_off": 1725852,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1398904,
+                "region_stub_va": 1741828
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1567466,
+                "gatea_stub_va": 1741936,
+                "gatea_authed": 1567470,
+                "ake_site": 1567122,
+                "ake_stub_va": 1741996,
+                "ake_gate": 1567116,
+                "deny": 1567524,
+                "scratch": 2165760,
+                "vid_producer": 1567374,
+                "hrl_stub_va": 1742024,
+                "hrl_site": 1566820
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "1c3e17b45a600199cbb690a72766e8d149fdbe54f4da85ee551c0134631f06b7"
+      },
+      "build_validation": {
+        "output_sha256": "1c3e17b45a600199cbb690a72766e8d149fdbe54f4da85ee551c0134631f06b7",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.01/main/adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c.bin",
+      "baseline": {
+        "sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH14NS48",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1aa00c",
+        "ake_stub_va": "0x1aa0b4",
+        "gatea_stub_va": "0x1aa078",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aa0d0",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS48",
+          "revision": "1.01",
+          "variant": "N1663A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS48",
+          "rev": "1.01",
+          "vendor_specific": "N1663A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1744080,
+                "handler_len": 750,
+                "boot_init_site": 1660640,
+                "boot_stub_va": 1744832,
+                "record_off": 1728900,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1400844,
+                "region_stub_va": 1744880
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1569640,
+                "gatea_stub_va": 1744988,
+                "gatea_authed": 1569644,
+                "ake_site": 1569296,
+                "ake_stub_va": 1745048,
+                "ake_gate": 1569290,
+                "deny": 1569698,
+                "scratch": 2165760,
+                "vid_producer": 1569548,
+                "hrl_stub_va": 1745076,
+                "hrl_site": 1569052
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "4cba7a32df5d61ceb77562fabde78a6b677077514f72b76683b6ebb4f7501719"
+      },
+      "build_validation": {
+        "output_sha256": "4cba7a32df5d61ceb77562fabde78a6b677077514f72b76683b6ebb4f7501719",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.03/main/b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4.bin",
+      "baseline": {
+        "sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS40",
+        "revision": "1.03",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1aa240",
+        "ake_stub_va": "0x1aa2e8",
+        "gatea_stub_va": "0x1aa2ac",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aa304",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "revision": "1.03",
+          "variant": "N0026C0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS40",
+          "rev": "1.03",
+          "vendor_specific": "N0026C0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1744644,
+                "handler_len": 750,
+                "boot_init_site": 1660926,
+                "boot_stub_va": 1745396,
+                "record_off": 1729440,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1402036,
+                "region_stub_va": 1745444
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570790,
+                "gatea_stub_va": 1745552,
+                "gatea_authed": 1570794,
+                "ake_site": 1570446,
+                "ake_stub_va": 1745612,
+                "ake_gate": 1570440,
+                "deny": 1570848,
+                "scratch": 2165760,
+                "vid_producer": 1570698,
+                "hrl_stub_va": 1745640,
+                "hrl_site": 1570144
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "11e676930fa3aebd8bf5116c719a0f8b550f9af221518a116b61f4f8131b3691"
+      },
+      "build_validation": {
+        "output_sha256": "11e676930fa3aebd8bf5116c719a0f8b550f9af221518a116b61f4f8131b3691",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.00/main/d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87.bin",
+      "baseline": {
+        "sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH14NS40",
+        "revision": "1.00",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a838c",
+        "ake_stub_va": "0x1a8434",
+        "gatea_stub_va": "0x1a83f8",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a8450",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS40",
+          "revision": "1.00",
+          "variant": "N1524A4"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS40",
+          "rev": "1.00",
+          "vendor_specific": "N1524A4",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1736784,
+                "handler_len": 750,
+                "boot_init_site": 1653404,
+                "boot_stub_va": 1737536,
+                "record_off": 1721616,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1395376,
+                "region_stub_va": 1737584
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1563432,
+                "gatea_stub_va": 1737692,
+                "gatea_authed": 1563436,
+                "ake_site": 1563088,
+                "ake_stub_va": 1737752,
+                "ake_gate": 1563082,
+                "deny": 1563490,
+                "scratch": 2165760,
+                "vid_producer": 1563340,
+                "hrl_stub_va": 1737780,
+                "hrl_site": 1562844
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "1c06005179fc6de028c2b9f9046ab2521b7bdc58cb372eac6e0475955d9fd232"
+      },
+      "build_validation": {
+        "output_sha256": "1c06005179fc6de028c2b9f9046ab2521b7bdc58cb372eac6e0475955d9fd232",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "d98c2e11f400cf54133289369f19064ccabc72c69ef189f9129fc19b2d700cc8",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_UH12NS30_MT1939_Code_JBC5/GENERAL/1.02/main/d98c2e11f400cf54133289369f19064ccabc72c69ef189f9129fc19b2d700cc8.bin",
+      "baseline": {
+        "sha256": "d98c2e11f400cf54133289369f19064ccabc72c69ef189f9129fc19b2d700cc8",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BDDVDRW UH12NS30",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "d98c2e11f400cf54133289369f19064ccabc72c69ef189f9129fc19b2d700cc8",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS30",
+          "revision": "1.02",
+          "variant": "N0004A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS30",
+          "rev": "1.02",
+          "vendor_specific": "N0004A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Downgrade (DE) applied \u00b7 Region Free + Raw read + Speed skipped",
+          "levers": [
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 RPC emitter transfers but the flag-gated detour needs the classic Identity base (sense-setter + injected handler)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 VID/AKE gate anchors not located in this image"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic generation \u2014 no MT1959-style ramp-ceiling gate exists (classic uses a disc-type halfword read-speed clamp through a shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling); residual RE miss, independent of the other levers"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": false
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "f078360e2425399590d91d94ecbe961e26adc168b6f9fff40f183a56f84f5d44"
+      },
+      "build_validation": {
+        "output_sha256": "f078360e2425399590d91d94ecbe961e26adc168b6f9fff40f183a56f84f5d44",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "dc6579b6880cd3419a0ae6f856d37404848211f0792da0fe6d522d174e645790",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BH16NS60_NS60/GENERAL/1.02/main/dc6579b6880cd3419a0ae6f856d37404848211f0792da0fe6d522d174e645790.bin",
+      "baseline": {
+        "sha256": "dc6579b6880cd3419a0ae6f856d37404848211f0792da0fe6d522d174e645790",
+        "category": "mk",
+        "bytes": "2097152",
+        "model": "BD-RE  BH16NS60",
+        "revision": "1.02",
+        "result": "accepted",
+        "engine": "MT1959",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "0x1b398",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "dc6579b6880cd3419a0ae6f856d37404848211f0792da0fe6d522d174e645790",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS60",
+          "revision": "1.02",
+          "variant": "NM07600"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH16NS60",
+          "rev": "1.02",
+          "vendor_specific": "NM07600",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110724,
+                "handler_len": 758,
+                "record_off": 1374084,
+                "boot_init_site": 1296246,
+                "boot_stub_va": 111484,
+                "boot_function_entry": 1296230
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113410,
+                "speed_stub_va": 111532
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "21e8779cd3631c462e1726d7cdfd840507094590042f966f3c3adb1a89efc258"
+      },
+      "build_validation": {
+        "output_sha256": "21e8779cd3631c462e1726d7cdfd840507094590042f966f3c3adb1a89efc258",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+      "path": "dump/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56.bin",
+      "baseline": {
+        "sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+        "category": "dump",
+        "bytes": "2097152",
+        "model": "BD-RE  WH16NS40",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9e0c",
+        "ake_stub_va": "0x1a9eb4",
+        "gatea_stub_va": "0x1a9e78",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9ed0",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "revision": "1.01",
+          "variant": "N0002A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "rev": "1.01",
+          "vendor_specific": "N0002A0",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD \u2014 Identity + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743568,
+                "handler_len": 750,
+                "boot_init_site": 1660050,
+                "boot_stub_va": 1744320,
+                "record_off": 1728380,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401184,
+                "region_stub_va": 1744368
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1569914,
+                "gatea_stub_va": 1744476,
+                "gatea_authed": 1569918,
+                "ake_site": 1569570,
+                "ake_stub_va": 1744536,
+                "ake_gate": 1569564,
+                "deny": 1569972,
+                "scratch": 2165760,
+                "vid_producer": 1569822,
+                "hrl_stub_va": 1744564,
+                "hrl_site": 1569268
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72"
+      },
+      "build_validation": {
+        "output_sha256": "6593438cab452ec02707acb32a9c9f9218b154966bedc31679966904272cbb72",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.00/main/f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8.bin",
+      "baseline": {
+        "sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  BH14NS48",
+        "revision": "1.00",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9080",
+        "ake_stub_va": "0x1a9128",
+        "gatea_stub_va": "0x1a90ec",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9144",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS48",
+          "revision": "1.00",
+          "variant": "N1524A4"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BH14NS48",
+          "rev": "1.00",
+          "vendor_specific": "N1524A4",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1740100,
+                "handler_len": 750,
+                "boot_init_site": 1656706,
+                "boot_stub_va": 1740852,
+                "record_off": 1724928,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1397570,
+                "region_stub_va": 1740900
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1565756,
+                "gatea_stub_va": 1741008,
+                "gatea_authed": 1565760,
+                "ake_site": 1565412,
+                "ake_stub_va": 1741068,
+                "ake_gate": 1565406,
+                "deny": 1565814,
+                "scratch": 2165760,
+                "vid_producer": 1565664,
+                "hrl_stub_va": 1741096,
+                "hrl_site": 1565168
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "e3bdced8f0dfb7b51d2e9b7561e67e0c2919fb50c50eb4f73325108c9b75ad0c"
+      },
+      "build_validation": {
+        "output_sha256": "e3bdced8f0dfb7b51d2e9b7561e67e0c2919fb50c50eb4f73325108c9b75ad0c",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.03/main/f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814.bin",
+      "baseline": {
+        "sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH16NS60",
+        "revision": "1.03",
+        "result": "accepted",
+        "engine": "MT1959",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "0x1b398",
+        "speed_stub_va": "",
+        "region_stub_va": "",
+        "ake_stub_va": "",
+        "gatea_stub_va": "",
+        "deny_stub_va": "",
+        "hrl_stub_va": "",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS60",
+          "revision": "1.03",
+          "variant": "N017600"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS60",
+          "rev": "1.03",
+          "vendor_specific": "N017600",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110724,
+                "handler_len": 758,
+                "record_off": 1374084,
+                "boot_init_site": 1296246,
+                "boot_stub_va": 111484,
+                "boot_function_entry": 1296230
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113410,
+                "speed_stub_va": 111532
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "3fcf1f48361c47d560c9a46bae36da3155f1b4817df470d781045258c2c3bffd"
+      },
+      "build_validation": {
+        "output_sha256": "3fcf1f48361c47d560c9a46bae36da3155f1b4817df470d781045258c2c3bffd",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.03/main/f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9.bin",
+      "baseline": {
+        "sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH14NS40",
+        "revision": "1.03",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9fb4",
+        "ake_stub_va": "0x1aa05c",
+        "gatea_stub_va": "0x1aa020",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1aa078",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "revision": "1.03",
+          "variant": "N0009A0"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "rev": "1.03",
+          "vendor_specific": "N0009A0",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743992,
+                "handler_len": 750,
+                "boot_init_site": 1660470,
+                "boot_stub_va": 1744744,
+                "record_off": 1728800,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401692,
+                "region_stub_va": 1744792
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570422,
+                "gatea_stub_va": 1744900,
+                "gatea_authed": 1570426,
+                "ake_site": 1570078,
+                "ake_stub_va": 1744960,
+                "ake_gate": 1570072,
+                "deny": 1570480,
+                "scratch": 2165760,
+                "vid_producer": 1570330,
+                "hrl_stub_va": 1744988,
+                "hrl_site": 1569776
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "1cfeaeac57b452ed7e1e73f75b2af13e208fec5aa515d3fe49646012b13add5e"
+      },
+      "build_validation": {
+        "output_sha256": "1cfeaeac57b452ed7e1e73f75b2af13e208fec5aa515d3fe49646012b13add5e",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    },
+    {
+      "sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+      "path": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.01/main/fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442.bin",
+      "baseline": {
+        "sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+        "category": "oem",
+        "bytes": "2097152",
+        "model": "BD-RE  WH14NS40",
+        "revision": "1.01",
+        "result": "accepted",
+        "engine": "MT1939",
+        "bd_shape": "none",
+        "structural_audit": "pass",
+        "boot_stub_va": "",
+        "speed_stub_va": "",
+        "region_stub_va": "0x1a9e24",
+        "ake_stub_va": "0x1a9ecc",
+        "gatea_stub_va": "0x1a9e90",
+        "deny_stub_va": "",
+        "hrl_stub_va": "0x1a9ee8",
+        "bd_stub_va": "",
+        "uhd_stub_va": "",
+        "auth_cell_stub_va": "",
+        "boot_unrestricted": "False",
+        "boot_hrl": "False",
+        "boot_encryption": "False",
+        "boot_speed": "False",
+        "boot_region": "False"
+      },
+      "capability": {
+        "schema": 1,
+        "input_sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "revision": "1.01",
+          "variant": "N1722A1"
+        },
+        "report": {
+          "engine": "MT1939",
+          "family": "MT1939",
+          "chip": "MT1939",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "rev": "1.01",
+          "vendor_specific": "N1722A1",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1939 BD/UHD \u2014 Identity + Region Free + Raw read + Downgrade (DE) + Boot settings applied \u00b7 Speed skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1743592,
+                "handler_len": 750,
+                "boot_init_site": 1660074,
+                "boot_stub_va": 1744344,
+                "record_off": 1728404,
+                "flag_base": 33559048,
+                "boot_function_entry": 0
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter primitive, no byte speed_index ramp / no 0x32 ceiling) \u2014 no MT1959-style ramp-ceiling gate exists to detour (residual RE miss)"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1401368,
+                "region_stub_va": 1744392
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "gatea_gate": 1570026,
+                "gatea_stub_va": 1744500,
+                "gatea_authed": 1570030,
+                "ake_site": 1569682,
+                "ake_stub_va": 1744560,
+                "ake_gate": 1569676,
+                "deny": 1570084,
+                "scratch": 2165760,
+                "vid_producer": 1569934,
+                "hrl_stub_va": 1744588,
+                "hrl_site": 1569380
+              },
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "Applied",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "2f2903d52c60c4788f756a8a3bcb6cb5f3ee184145a7955506d604020eb33edd"
+      },
+      "build_validation": {
+        "output_sha256": "2f2903d52c60c4788f756a8a3bcb6cb5f3ee184145a7955506d604020eb33edd",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "flasher_detail": "admitted"
+      }
+    }
+  ]
+}

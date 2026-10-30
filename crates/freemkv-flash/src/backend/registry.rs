@@ -14,7 +14,6 @@ use crate::platform::ScsiDevice;
 
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
-static PIONEER_DUMP: pioneer::DumpOnly = pioneer::DumpOnly;
 
 /// Origin evidence is supplied by protocol file analysis, not the front end.
 pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
@@ -51,10 +50,7 @@ static BACKENDS: [&'static dyn Backend; 2] = [&MTK, &PIONEER];
 
 /// Every registered protocol backend, in probe order.
 pub fn backends() -> impl Iterator<Item = &'static dyn Backend> {
-    BACKENDS
-        .iter()
-        .copied()
-        .chain(std::iter::once(&PIONEER_DUMP as &dyn Backend))
+    BACKENDS.iter().copied()
 }
 
 /// A unique backend match, with device identity kept separate from the
@@ -88,19 +84,8 @@ pub(crate) fn resolve_detection(
             }
             (&MTK, "validated MT19 boot protocol signature")
         }
-        Conclusion::Detected(Evidence::Pioneer(p)) => {
-            let platform = p.identity().platform();
-            if ["SAT ", "ATA ", "SCSI"]
-                .iter()
-                .any(|prefix| platform.starts_with(prefix))
-            {
-                (&PIONEER, "validated Pioneer F1 identity structure")
-            } else {
-                (
-                    &PIONEER_DUMP,
-                    "validated Pioneer F1 identity; update dialect unsupported",
-                )
-            }
+        Conclusion::Detected(Evidence::Pioneer(_)) => {
+            (&PIONEER, "validated Pioneer CDB response contract")
         }
         Conclusion::Unknown => return Ok(None),
         Conclusion::Ambiguous => bail!(

@@ -1,0 +1,50 @@
+[
+  {
+    "path": "BU40N_OEM_1.00.bin",
+    "sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+    "expected": {
+      "writer": 663668,
+      "buffer": 44944,
+      "commit": 622976,
+      "source_cell": 33557628,
+      "length_cell": 33557618,
+      "ready_cell": 33557613
+    }
+  },
+  {
+    "path": "WH16NS58_OEM_1.V9.bin",
+    "sha256": "97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061",
+    "expected": {
+      "writer": 664680,
+      "buffer": 55776,
+      "commit": 624124,
+      "source_cell": 33557560,
+      "length_cell": 33557550,
+      "ready_cell": 33557545
+    }
+  },
+  {
+    "path": "BE14NU40_MT1939_JB7_1.01.bin",
+    "sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+    "expected": {
+      "writer": 687806,
+      "buffer": 44960,
+      "commit": 647980,
+      "source_cell": 33558004,
+      "length_cell": 33557996,
+      "ready_cell": 33557990
+    }
+  },
+  {
+    "path": "BW16D1HT_OEM_3.03.bin",
+    "sha256": "1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764",
+    "expected": {
+      "writer": 661804,
+      "buffer": 55808,
+      "commit": 623364,
+      "source_cell": 33557560,
+      "length_cell": 33557550,
+      "ready_cell": 33557545
+    }
+  }
+]

@@ -48,8 +48,6 @@ const DECOY_TARGET: usize = 0x001c_5220;
 const REGION: usize = 0x0015_9000;
 /// Classic `0x3C` dispatch table, inside the classic `~0x1a4000` window.
 const TABLE: usize = 0x001a_6b00;
-/// The BU40N OEM `0x3C` handler the grafted classic record points at.
-const OEM_3C_HANDLER: u32 = 0x0009_ad5b;
 /// The flag-table base the standalone emit tests use (the value does not matter
 /// to the emitters — only that it shows up unmodified in the stub literals).
 const FLAG_BASE: u32 = 0x0200_120c;
@@ -59,7 +57,15 @@ fn fixture() -> Vec<u8> {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/BU40N_OEM_1.00.bin"
     );
-    std::fs::read(path).unwrap_or_else(|e| panic!("BU40N fixture must be present at {path}: {e}"))
+    let mut image = std::fs::read(path)
+        .unwrap_or_else(|e| panic!("BU40N fixture must be present at {path}: {e}"));
+    // A grafted classic grammar replaces the modern one; retaining both must
+    // now be refused as ambiguous rather than resolved by search priority.
+    let modern_anchor = mediatek_optical::image::analysis::VidGate::inspect(&image)
+        .unwrap()
+        .anchor();
+    image[modern_anchor..modern_anchor + 2].fill(0);
+    image
 }
 
 fn put_hw(img: &mut [u8], off: usize, hws: &[u16]) {
@@ -108,6 +114,11 @@ fn plant_vid_gate(img: &mut [u8], at: usize, bne_lo: u8) {
             0xD100 | u16::from(bne_lo), // bne <deny>          (+32)
         ],
     );
+    put_hw(img, at - 0x10, &[0xb5f0, 0x4800]);
+    img[at - 0xc..at - 8].copy_from_slice(&0x00210c00u32.to_le_bytes());
+    put_hw(img, at + 0x30, &[0x2101]);
+    let call = thumb::encode_bl(at + 0x32, 0x000cadf8).unwrap();
+    img[at + 0x32..at + 0x36].copy_from_slice(&call);
 }
 
 /// Graft `AKE_GATE_SIG_CLASSIC` at `at`. The `b` at `+4` deliberately carries a
@@ -432,7 +443,7 @@ fn classic_rawread_emit_grounds_every_gate_address_and_installs_both_detours() {
     );
     assert_eq!(
         f("vid_producer"),
-        0x0013_675c,
+        (VID - 0x10) as u32,
         "the audit-only VID producer anchor still comes from the image"
     );
     assert_eq!(f("scratch"), 0x0021_0c00, "audit-only clear-VID scratch");
@@ -861,16 +872,28 @@ fn classic_hrl_refuses_a_revoke_target_without_room_for_the_head() {
 fn classic_full_image() -> Vec<u8> {
     let mut img = fixture();
 
-    // Classic 0x3C dispatch table: 12 coherent records (the finder needs a run
-    // of >= 8), one of them the live 0x3C pointing at the OEM handler.
-    for i in 0..12usize {
-        let p = TABLE + i * 8;
-        img[p..p + 8].copy_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+    // Relocate the actual registered table, including INQUIRY and its terminator.
+    // A coherent orphan table is not native dispatch ownership evidence.
+    let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(&img).unwrap();
+    let root = *commands.roots().first().unwrap();
+    let mut end = root;
+    loop {
+        let flags = img[end + 1];
+        end += 8;
+        if matches!(flags, 3 | 4) {
+            break;
+        }
     }
-    let live = TABLE + 5 * 8;
-    img[live] = crate::abi::READ_BUFFER_OPCODE;
-    img[live + 1] = LIVE_FLAGS;
-    img[live + 4..live + 8].copy_from_slice(&OEM_3C_HANDLER.to_le_bytes());
+    let native_table = img[root..end].to_vec();
+    let references = thumb::analysis::xrefs(&img, root as u32);
+    for reference in references {
+        if reference.kind == thumb::analysis::XrefKind::LiteralPool
+            && thumb::read_u32(&img, reference.at) == root as u32
+        {
+            img[reference.at..reference.at + 4].copy_from_slice(&(TABLE as u32).to_le_bytes());
+        }
+    }
+    img[TABLE..TABLE + native_table.len()].copy_from_slice(&native_table);
 
     put_hw(
         &mut img,
@@ -914,7 +937,9 @@ fn classic_create_repoints_the_record_thumb_tagged_and_reports_the_real_facts() 
     );
     assert_ne!(r.handler_va, 0, "the handler must be injected somewhere");
     assert_eq!(r.cdb_base, 0x0200_0d38, "classic base: CDB base");
-    assert_eq!(r.flag_base, 0x0200_120c, "classic base: derived SRAM cell");
+    assert!(r.flag_base >= super::SRAM_LO + 4);
+    assert!(r.flag_base + super::FLASHWRITE_SCRATCH_OFF + 1 + 4 <= super::SRAM_END);
+    assert_eq!(r.flag_base & 3, 0, "flag storage must remain word aligned");
 
     // Feature facts must be the grafted addresses, not neighbouring fields.
     assert_eq!(
@@ -929,7 +954,7 @@ fn classic_create_repoints_the_record_thumb_tagged_and_reports_the_real_facts() 
         (VID + 36 + 18 * 2) as u32,
         "the deny fact"
     );
-    assert_eq!(r.vid_producer, 0x0013_675c, "the VID producer fact");
+    assert_eq!(r.vid_producer, (VID - 0x10) as u32, "the VID producer fact");
     assert_eq!(r.region_emitter, REGION as u32, "the region emitter fact");
     assert_eq!(
         r.hrl_sites,

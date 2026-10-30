@@ -196,7 +196,9 @@ where
         crate::user_error::IssueCode::from(error.kind())
     };
     let status = crate::crossflash::refusal_status(&error);
-    let guidance = if code.starts_with("pioneer.settings.") {
+    let guidance = if status == crate::crossflash::CompatibilityStatus::Conditional {
+        "This supported conversion requires verification of the drive’s original hardware and settings. No firmware was written."
+    } else if code.starts_with("pioneer.settings.") {
         "A validated settings mapping is required for this firmware and is unavailable. No firmware was written."
     } else if status == crate::crossflash::CompatibilityStatus::SoftNo {
         "Intermediate transfer is required but not implemented. No firmware was written."

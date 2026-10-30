@@ -127,10 +127,12 @@ pub fn detect(dev: &mut dyn ScsiDevice) -> Result<Detection> {
             None
         }
     }
-    .and_then(|b| {
-        result.pioneer_identity = pioneer_optical::Identity::parse(&inquiry, &b);
-        match pioneer_optical::protocol::Evidence::parse(&inquiry, &b) {
-            Ok(e) => e,
+    .and_then(
+        |b| match pioneer_optical::protocol::Response::parse(&inquiry, &b) {
+            Ok(response) => {
+                result.pioneer_identity = Some(response.identity().clone());
+                response.into_evidence()
+            }
             Err(source) => {
                 result
                     .observations
@@ -144,8 +146,8 @@ pub fn detect(dev: &mut dyn ScsiDevice) -> Result<Detection> {
                 );
                 None
             }
-        }
-    });
+        },
+    );
     let mediatek_response = read(
         &mut dev,
         "MediaTek boot banner",

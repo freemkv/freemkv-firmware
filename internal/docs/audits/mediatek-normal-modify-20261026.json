@@ -1,0 +1,906 @@
+{
+  "images": [
+    {
+      "audit": "passed",
+      "input_sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+      "offline_admission": "passed",
+      "output_sha256": "7296fde99d680771145a3829ba978875a162fc4a0daf73226e3c5781e82b6796",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.01/main/007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+      "offline_admission": "passed",
+      "output_sha256": "e7127b88a8615e7fb70169e51f3a49ac2daa033fe6747f69c3b9aa8255d027f4",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.00/main/01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+      "offline_admission": "passed",
+      "output_sha256": "53127c61d83e75b052336e7e4ad6d2a2af162901f913ed4108aeeda65d9b6b1b",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/BUFFALO/BU11/main/08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+      "offline_admission": "passed",
+      "output_sha256": "04b5070f7a479160bfee3e3bb4927893d14e400b9a4cfe090f51edad0ee07b1f",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/hp_BH40N_MT1939_Code_JB7/HP/B7C6/main/0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "0bfdd3009ed1bc246f81aae50cfd9a5e4919c5295263e488c2a900500fe48728",
+      "offline_admission": "passed",
+      "output_sha256": "61c2937f73b2e6cda5d01c5173b13b22fa19758dc3597e539d5799f497da276b",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.03/main/0bfdd3009ed1bc246f81aae50cfd9a5e4919c5295263e488c2a900500fe48728.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "103b9da94c91212df6313b150d3cf7e10c6b891a4ab65c49773e891a05f96a2e",
+      "offline_admission": "passed",
+      "output_sha256": "14959cbc94032267b97e2e12b1b578417435ffa5010f3e1ea73c4a5071c83961",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/R_/1.01/main/103b9da94c91212df6313b150d3cf7e10c6b891a4ab65c49773e891a05f96a2e.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "12c4ee6fb88d4c5402e9e8fab0881a93fd1ab18e5a82bb87ecd4ef30c807cf53",
+      "offline_admission": "passed",
+      "output_sha256": "0648599a10639b498ce14ddfd40d0e17058ac31edf46dda52f4782e2b31babe1",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.02/main/12c4ee6fb88d4c5402e9e8fab0881a93fd1ab18e5a82bb87ecd4ef30c807cf53.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+      "offline_admission": "passed",
+      "output_sha256": "757cffc1bba57f1087aedb39de658e34c5eca5e735349ddf7aff5fd047d9e3b7",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "14d86e9949d93126d6ec7eaa11eeaba512569f51a8ecfce9d707cb0cec6b5e24",
+      "offline_admission": "passed",
+      "output_sha256": "a4fd34a33a9c04a6c2e940e53aed9d0a95d7d53935daf77a863d0e53c8330779",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/BUFFALO/BU10/main/14d86e9949d93126d6ec7eaa11eeaba512569f51a8ecfce9d707cb0cec6b5e24.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+      "offline_admission": "passed",
+      "output_sha256": "57c7e2024d29e84ea42d01bec33cc8cd83753ae61c6f530df16d9ad4b7f64fe7",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH16NS48_MT1939_Code_JB7/GENERAL/1.01/main/163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "164e2475aea287ec5759ee07eb285697b52923ead1288f24358a70fc7ed3ec32",
+      "offline_admission": "passed",
+      "output_sha256": "f2f79a217d86bd62376ed91f1f0535e0667742e386bd06a90079d6a1a4a1ae0f",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.04/main/164e2475aea287ec5759ee07eb285697b52923ead1288f24358a70fc7ed3ec32.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+      "offline_admission": "passed",
+      "output_sha256": "98ab42154490d023f0588298dbaeb3661df3e3af157ec67cc2dc8a04b4111db7",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.02/main/1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764",
+      "offline_admission": "passed",
+      "output_sha256": "c9c8d484fa684015d4f6d7d9e83e799b35cafe5b6a21b454ee73335a9d11e103",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.03/main/1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "20425a8ade6bb5d24bbd76fb5d5d67e744cd49e24783be87e6a89d30dfcace95",
+      "offline_admission": "passed",
+      "output_sha256": "3977ae78f0a8a082a5a3d3084a6860084712496a4ad297667b9df1d7ee0a0c52",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU50N_MT1959_BU51_BU3/GENERAL/1.00/main/20425a8ade6bb5d24bbd76fb5d5d67e744cd49e24783be87e6a89d30dfcace95.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+      "offline_admission": "passed",
+      "output_sha256": "33b4145565f4710214a57732f787a77e19a3722c91d3e276a678b7c1b7cb7942",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+      "offline_admission": "passed",
+      "output_sha256": "6649738f9f0ee40f3bcb10762af862b4db8ebaac02989bbb60f83cb739397e0e",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.00/main/221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "223e7e38b85f0d27464de596d373464cb7bf77ca825b81f2351abaf8c6cefba1",
+      "offline_admission": "passed",
+      "output_sha256": "1beff311daf2575127b32987c0cf0625f84ec8a419cf10b7c1da0d42b77972a6",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/ASUS_BW-16D1H-U_MT1959_JB8_JB8/ASUS/A204/main/223e7e38b85f0d27464de596d373464cb7bf77ca825b81f2351abaf8c6cefba1.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+      "offline_admission": "passed",
+      "output_sha256": "6fd0cbdbe7c9e95d19e63792f0005874f92265d0fa0c61e164ce42f4c2fd88dd",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.03/main/263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "2b3ea41f87764ccc497059c9e362657df545fb169d6eeb2e78ccfbd7fafee533",
+      "offline_admission": "passed",
+      "output_sha256": "1dc0a47ec6e7864522a2b3e3b9f119c8f6c33223944dcd74f68e3c079356a597",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.02/main/2b3ea41f87764ccc497059c9e362657df545fb169d6eeb2e78ccfbd7fafee533.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "3018997b63cc9a2f31618fd9b6b5c6bfe0cc921b891f4a80ac08ae3ef2b16504",
+      "offline_admission": "passed",
+      "output_sha256": "83a6baab8c6bc593dc851609028c3d0bd1cc1887457c2fd57b1fddb66519f7db",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS58_MT1959_JB8_JB8/GENERAL/1.V2/main/3018997b63cc9a2f31618fd9b6b5c6bfe0cc921b891f4a80ac08ae3ef2b16504.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "37a32bfd708b86c825877364d7e52c943d0a856ec3e5457953b61b7fa1c9a23f",
+      "offline_admission": "passed",
+      "output_sha256": "620f937b2e7ddd9a3839af71685ce33c21d73a15dec48b3d801660b05996eb3e",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.10/main/37a32bfd708b86c825877364d7e52c943d0a856ec3e5457953b61b7fa1c9a23f.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1",
+      "offline_admission": "passed",
+      "output_sha256": "d29ad098e6a14dd367129d98a311376f8a7894fa294ff39511b99c8cf3b01277",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.05/main/38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "394e6f8d6319b79fed26fb296a435e4d047c382bf8434cc870f89c6913fd27d7",
+      "offline_admission": "passed",
+      "output_sha256": "5904edf85c988b05a26cab632c0ef8c7eb0324b904740a7cbe8cda69e7e961e0",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.04/main/394e6f8d6319b79fed26fb296a435e4d047c382bf8434cc870f89c6913fd27d7.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+      "offline_admission": "passed",
+      "output_sha256": "0190b6f5fa3c43eca17dde4cf39b7549041d735c28af7c983879a78bb675856c",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.03/main/3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "3b9dd9b4c9bd295b1b4cd9d94ce592522588e95a5569f529306b962b337d0e4b",
+      "offline_admission": "passed",
+      "output_sha256": "3f8b51e3300dd0b2c95a833f7b52200a79da4c4e1b35cd9cc2f953c1a82b5409",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/hp_HLDS_BU40N_MT1959_BU5_BU3/HP/BW41/main/3b9dd9b4c9bd295b1b4cd9d94ce592522588e95a5569f529306b962b337d0e4b.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+      "offline_admission": "passed",
+      "output_sha256": "8f4162302c0edec6c0d2bbcb7c20c9b74f7531b00af772b8ca168a364bd252ff",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.03/main/3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+      "offline_admission": "passed",
+      "output_sha256": "af64f3885ab0ec82ea4add6b2050fa48585032ca9018267156416e00bc903c16",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN12/main/3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "3e3b227e1338b5bc601ad6b2ce02fd1d375b7ea6179b055412ea0702ce54615c",
+      "offline_admission": "passed",
+      "output_sha256": "50265a222dcf6e4266305da4abd399c0b2814e24378518c79cd3dc894178f972",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS40_NS50/GENERAL/1.03/main/3e3b227e1338b5bc601ad6b2ce02fd1d375b7ea6179b055412ea0702ce54615c.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "4041c0f122a902288ca8439888f68f7760616a0a37c366b825d6497b51157e46",
+      "offline_admission": "passed",
+      "output_sha256": "dd37258cce63885f85f36ca86b5e6885c966375d8a9501198fa189f778b64275",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS58_MT1959_JB8_JB8/GENERAL/1.V1/main/4041c0f122a902288ca8439888f68f7760616a0a37c366b825d6497b51157e46.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+      "offline_admission": "passed",
+      "output_sha256": "0ac355334a95a6159954c1615f8be23c5771f99957da55c57899f545b10b4651",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.02/main/40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+      "offline_admission": "passed",
+      "output_sha256": "fdc5fe7ce71efd845476d9cb57d19de90e960468da1b66b09f370c501f17798b",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH16NS48_MT1939_Code_JB7/GENERAL/1.02/main/43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "4af842c0acf4a9ff42b5554d6d1d320b245ab4973b174a8b7ccf1f941f7ab715",
+      "offline_admission": "passed",
+      "output_sha256": "7f2f98ce62801f613f98863b861c2523848166c33c8870438d59345a8c80c98c",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/LG-DVD/FR07/main/4af842c0acf4a9ff42b5554d6d1d320b245ab4973b174a8b7ccf1f941f7ab715.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "4ef56002dd392733d15378e4535115f24ba891d3266a7c87420df14df0a7089d",
+      "offline_admission": "passed",
+      "output_sha256": "9df28180bbb121dfd7987fcc8beb153b9eb88fe9e6a6f00a7cd605e5ac00ece4",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH14NS50_NS50/GENERAL/1.01/main/4ef56002dd392733d15378e4535115f24ba891d3266a7c87420df14df0a7089d.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "4f4e63cd5988f68f5729af21fe4033d0da2eeeec8f7576772f0f3a197f8eda21",
+      "offline_admission": "passed",
+      "output_sha256": "094a2a5afdc054449c1a7b63c3bf8c2f111a6eede6dd4463f98f578594cb442f",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS58_NS50/GENERAL/1.02/main/4f4e63cd5988f68f5729af21fe4033d0da2eeeec8f7576772f0f3a197f8eda21.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "53d2cdc32a2ae99864ec8fc4ea98a3a5218220aea990481f560112adaa871624",
+      "offline_admission": "passed",
+      "output_sha256": "6d3851afb7ffdd30887d45f54f71333b881c883d89a1cc39abfa5ac4453cc803",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH14NS58_NS50/GENERAL/1.00/main/53d2cdc32a2ae99864ec8fc4ea98a3a5218220aea990481f560112adaa871624.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "569cea9bb8add8b5638fbf0f5ea47b8014f851f007b2cbef2be44737d7cdbf68",
+      "offline_admission": "passed",
+      "output_sha256": "854acba633563a649e721720ae56dce0dc6be6322e31390557910a240c96c46e",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS58_MT1959_JB8_JB8/GENERAL/1.V7/main/569cea9bb8add8b5638fbf0f5ea47b8014f851f007b2cbef2be44737d7cdbf68.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "580d867cee3d219a6e61e460c11fa33e27ca43c912d1d2dc777039a6a8f3f7e9",
+      "offline_admission": "passed",
+      "output_sha256": "a80bf0ae5cc1cb01e1d73770e93564106ca94da182efa75ffeae18b5f9fef2ed",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BH16NS60_NS60/GENERAL/1.00/main/580d867cee3d219a6e61e460c11fa33e27ca43c912d1d2dc777039a6a8f3f7e9.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "58203b539de096786cde232ee3b0ef3fe824b20d7768a96b30f6a96bdac77bfb",
+      "offline_admission": "passed",
+      "output_sha256": "a4fd34a33a9c04a6c2e940e53aed9d0a95d7d53935daf77a863d0e53c8330779",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/BUFFALO/BU10/main/58203b539de096786cde232ee3b0ef3fe824b20d7768a96b30f6a96bdac77bfb.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+      "offline_admission": "passed",
+      "output_sha256": "721f420769d31c9b399746fcc31700376c00150cd1fe1e297627c301f35fddc3",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN11/main/5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69",
+      "offline_admission": "passed",
+      "output_sha256": "a6e57a0ef98d691b5f4c790e0cfa331e18b0d46a386432de4f24ef72543dda95",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.04/main/5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "5f3fa17d61118f8405248cf9d206e32824c2321c9bfda0739b75a8633c3a81e8",
+      "offline_admission": "passed",
+      "output_sha256": "3a4857759defb876e727a538c724475072d130d67c0afde601e69a6a2e93d85b",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.05/main/5f3fa17d61118f8405248cf9d206e32824c2321c9bfda0739b75a8633c3a81e8.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "5f9abd3f7169b1d6525c47c5f406c1ddb13fca5b9f93fc646a1a924f13da9779",
+      "offline_admission": "passed",
+      "output_sha256": "3ea35935bc5a5f351c7861f2d2320175bf80ab569275ef60bf160160cc46ac11",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/U101/U101/main/5f9abd3f7169b1d6525c47c5f406c1ddb13fca5b9f93fc646a1a924f13da9779.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+      "offline_admission": "passed",
+      "output_sha256": "27150e8224aaa7c56198fa7498e43aea19e55ec8377f7a5aa1e7b2d9a1fa3430",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.03/main/614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "64688690a2878c792833d9af8731004411f86d7a64ceb522a82368584d84282a",
+      "offline_admission": "passed",
+      "output_sha256": "439a9f9b231cbe539258ea3cef161db330f3b8fe26982c862dfe5bd5dba92176",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.03/main/64688690a2878c792833d9af8731004411f86d7a64ceb522a82368584d84282a.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+      "offline_admission": "passed",
+      "output_sha256": "14058b770642630096c23c2a79bdb611217fd158c7b9791b014971c00e9b6668",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.02/main/648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+      "offline_admission": "passed",
+      "output_sha256": "75cbdae991b5a08d7f3cb9fc52ea664d62990921032ac0120dbe96a0d7eeb14b",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.02/main/6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "6d9fdb2bd658165a073e6144c8938057e08d8cba7ca108274b120dd30c55328f",
+      "offline_admission": "passed",
+      "output_sha256": "95644b81426edd70c8c57660f48666756ac5d8c7596fac6e4a888999828f3865",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS58_NS50/GENERAL/1.00/main/6d9fdb2bd658165a073e6144c8938057e08d8cba7ca108274b120dd30c55328f.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "731bcf7aa48dacbcb5729f97576cf24b90d7a795a330c2ab8a801c57eb738f0e",
+      "offline_admission": "passed",
+      "output_sha256": "3b7343f0c3714f6bae43ea757f35722bac9d24b6b6e6f0318ccf50cca7aec576",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_CH12NS40_NS40/GENERAL/1.01/main/731bcf7aa48dacbcb5729f97576cf24b90d7a795a330c2ab8a801c57eb738f0e.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "784e017fbacd2250fc37ee442869db82ccc8d637d78126b570ba33c0256d1715",
+      "offline_admission": "passed",
+      "output_sha256": "dc6a966794d2071a6830e0b0ec0f37ab18395fd6af073c249ca1f2eb3657f493",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.02/main/784e017fbacd2250fc37ee442869db82ccc8d637d78126b570ba33c0256d1715.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+      "offline_admission": "passed",
+      "output_sha256": "4a111876ea3c8f12d9420d891616c585b7c1c12d34a7a03c28d1012d12922078",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/CB04/CB04/main/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+      "offline_admission": "passed",
+      "output_sha256": "37e4d97e8a10161e0848b2b5f80fcb729bed3464a206799836ed1f6769c001c0",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+      "offline_admission": "passed",
+      "output_sha256": "b7ef5b6ecdf3d6367602a58ea11b4ddd5fc17dc68b7939039d2d588dfb493e13",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/D_/A103/main/7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+      "offline_admission": "passed",
+      "output_sha256": "552466a315474926805fbd6f781b9f949ee72e72b0ac1260d181d9fea3130456",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.04/main/7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+      "offline_admission": "passed",
+      "output_sha256": "757cffc1bba57f1087aedb39de658e34c5eca5e735349ddf7aff5fd047d9e3b7",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+      "offline_admission": "passed",
+      "output_sha256": "154b9160110af9dfd4ab0fe65308ea1d91e5b9b639807ada00611c5e6d3f7f51",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BE14NU40_MT1939_Code_JB7/GENERAL/1.01/main/7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "83ea24bb07b8a7a451bba1856d1db18b7f54b1823b9d148e213f25daf2e0a1d2",
+      "offline_admission": "passed",
+      "output_sha256": "dc6a966794d2071a6830e0b0ec0f37ab18395fd6af073c249ca1f2eb3657f493",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.02/main/83ea24bb07b8a7a451bba1856d1db18b7f54b1823b9d148e213f25daf2e0a1d2.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+      "offline_admission": "passed",
+      "output_sha256": "f16d6d34588534198669c292e413db811a0767e4be6056c41664ab424b01d799",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.00/main/8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "87790f053877e3e1bdd22969d70a7b1b6ed36624bb474bfcdee6526ac6e227c0",
+      "offline_admission": "passed",
+      "output_sha256": "99be645cc1f1f28e7aa98d6265eb60901e187a0af302fbb8c154173f7a0ead8a",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_WH16NS40_NS50/GENERAL/1.02/main/87790f053877e3e1bdd22969d70a7b1b6ed36624bb474bfcdee6526ac6e227c0.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "8961b80b005c1b2ba7a8dbc10a4bd3fe6680bd2befcc71de95bd32de34bb4482",
+      "offline_admission": "passed",
+      "output_sha256": "935e5e4aa9e74a03260ee76054ca05b703adb0cec0f1d712e1cfa93c5b6dd305",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BC-12B1ST_MT1959_JBC6_JB8/ASUS/3.01/main/8961b80b005c1b2ba7a8dbc10a4bd3fe6680bd2befcc71de95bd32de34bb4482.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+      "offline_admission": "passed",
+      "output_sha256": "b642005f7d196183747fa8f164adbae1c2e181c44123538e5aa527c344873e72",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.02/main/8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801",
+      "offline_admission": "passed",
+      "output_sha256": "7e3484f00536de2f66916fdc5ec8767f0638a8781ba01dcb0ae05a5bf2a248a7",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/BUFFALO/BU12/main/920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "93ea068da225140d9628c105d88d13088982c61024bf6cca03e0fe456d53a721",
+      "offline_admission": "passed",
+      "output_sha256": "21bcb279376d6bb105287d754e569f6a16ada4614c7da3fefad3a8f4a109e21f",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BC-12D2HT_MT1959_JBC6_JB8/ASUS/3.01/main/93ea068da225140d9628c105d88d13088982c61024bf6cca03e0fe456d53a721.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+      "offline_admission": "passed",
+      "output_sha256": "b9831596328c44d0a43d939aadc09570cd82bdb374e62d7d3d3a4f3ed929bd38",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.01/main/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061",
+      "offline_admission": "passed",
+      "output_sha256": "2177e48d405c03f04d37bfe0934463a24995015bbd33bc7e0b199ec1d1cff18e",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS58_MT1959_JB8_JB8/GENERAL/1.V9/main/97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263",
+      "offline_admission": "passed",
+      "output_sha256": "9cc90e650ac765f555bb9d7a20e488a3d7bb9d9fbc99e2ff3bec06947efe3cb0",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.02/main/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "9c46e6972b7950004e9746256c97b79e8e681faad1a4174b542477ad6ff5257e",
+      "offline_admission": "passed",
+      "output_sha256": "8b3b592cf4c5aa27acd44439fbc59e669c4fca5f9c72f6efbfe345562471541c",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.01/main/9c46e6972b7950004e9746256c97b79e8e681faad1a4174b542477ad6ff5257e.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "9f5bc003674065d4b5108ba45033c418cd38be4e46e5d218dc82409260c2f05c",
+      "offline_admission": "passed",
+      "output_sha256": "de1f3c0f45125613a88ffd098be8d746b3be71d9b0373c0768dace53471873bd",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BC-12D2HT_MT1959_JBC6_JB8/ASUS/3.11/main/9f5bc003674065d4b5108ba45033c418cd38be4e46e5d218dc82409260c2f05c.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7",
+      "offline_admission": "passed",
+      "output_sha256": "17edf1124ac6e6dccd50bb01c44256765c96e65aed64b73491b8dd1c0af084ce",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.02/main/a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "a5bb75b8dbec1684e596f473aa53905f9f723b2b2f9c448550cb523145f90dd3",
+      "offline_admission": "passed",
+      "output_sha256": "07eef872e13f51e63de9da37466fab2b0b6c7836b4594f71188c68d95293ec8c",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS40_NS50/GENERAL/1.03/main/a5bb75b8dbec1684e596f473aa53905f9f723b2b2f9c448550cb523145f90dd3.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "aaeea1ba97d05fae0b4de1ff1b84076f8ba897cb15b45a398f9bc4c25fe1738b",
+      "offline_admission": "passed",
+      "output_sha256": "6d3851afb7ffdd30887d45f54f71333b881c883d89a1cc39abfa5ac4453cc803",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BH14NS58_NS50/GENERAL/1.00/main/aaeea1ba97d05fae0b4de1ff1b84076f8ba897cb15b45a398f9bc4c25fe1738b.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+      "offline_admission": "passed",
+      "output_sha256": "4e9ac3936917b77ec6332dc30e3a1bc8cd42efd9d29f1370d4b8e39c9e223df2",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.00/main/ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "acbe782ebc3c4850a24f852b8dc2ec42059f6b131e29d96157b09505628c415b",
+      "offline_admission": "passed",
+      "output_sha256": "4f9fb8df079b70968d06884a93e79009b7ac1bf81e67da37b7840289f777a658",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS40_NS50/GENERAL/1.02/main/acbe782ebc3c4850a24f852b8dc2ec42059f6b131e29d96157b09505628c415b.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+      "offline_admission": "passed",
+      "output_sha256": "8dd7378d9d9751f5e61110be771c61760fb1a44ce44fa4f5cbdb3974ea096777",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.01/main/adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "ae0c03138570c73d0ba8ed6d7d5e9798ee54e6c22fcb4c815a86eea3301180f6",
+      "offline_admission": "passed",
+      "output_sha256": "b10d0c7efd03b67ae24970b92f83b5ae110cb5f1761f184d375a86ad06fcbe6b",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BC-12B1ST_MT1959_JBC6_JB8/ASUS/3.11/main/ae0c03138570c73d0ba8ed6d7d5e9798ee54e6c22fcb4c815a86eea3301180f6.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+      "offline_admission": "passed",
+      "output_sha256": "cea744a742c1c98e738c0c079f381d72e826a2438aed7e3ecc9b088fb4f24abe",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.01/main/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+      "offline_admission": "passed",
+      "output_sha256": "7c7af97070690f4e2c42a7003caf44d7e87dfe278cc59e5c64093bb38c15b5ca",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH16NS40_MT1939_Code_JB7/GENERAL/1.03/main/b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "b7a368da0fcbe905e45a09c6523bdd6f80557ce455272238c73868aa4ae4bd41",
+      "offline_admission": "passed",
+      "output_sha256": "95c11f1ced041a1cf922717712848d4a4a1c4689969b26f6e4736f2585c97f99",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS50_NS50/GENERAL/1.01/main/b7a368da0fcbe905e45a09c6523bdd6f80557ce455272238c73868aa4ae4bd41.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "bc4e6126b880475d58c21e8639ea81f33facc3d4c8284bf6a739d8e8f6c75921",
+      "offline_admission": "passed",
+      "output_sha256": "2480c663f7a70f45913f6644dd1d3c326c84efcf94ed764b312565e8300a730b",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BH16NS40_NS50/GENERAL/1.04/main/bc4e6126b880475d58c21e8639ea81f33facc3d4c8284bf6a739d8e8f6c75921.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "bdfd6f290ba8172d4c46d8c822013255043f4ad30deb8604608fa0397bddb648",
+      "offline_admission": "passed",
+      "output_sha256": "9f5cdbbd64cf3b833249e06efd0a7a5ad165c47b9911b94a31165611826e84c6",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.02/main/bdfd6f290ba8172d4c46d8c822013255043f4ad30deb8604608fa0397bddb648.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+      "offline_admission": "passed",
+      "output_sha256": "db6a9c524df35610616cc7141aa824c38621187f9ca0f091600b386b4bd9b3a5",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.01/main/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "beb8330e79d08824a62d5eb2b91a144ebb34c9acba8d393d8b32f2b2ae3196de",
+      "offline_admission": "passed",
+      "output_sha256": "4f9fb8df079b70968d06884a93e79009b7ac1bf81e67da37b7840289f777a658",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BH16NS40_NS50/GENERAL/1.02/main/beb8330e79d08824a62d5eb2b91a144ebb34c9acba8d393d8b32f2b2ae3196de.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "c328b6561228dc4c26f3eee901bd51af353b2f4eefb74d8be02da2c9a76606fb",
+      "offline_admission": "passed",
+      "output_sha256": "2c3444640decbd49c3bd2b4fe7866f30ad79896392375177781207e451c7e8b2",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/X_/TK03/main/c328b6561228dc4c26f3eee901bd51af353b2f4eefb74d8be02da2c9a76606fb.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "c4d995f031fe757d9823f7410f81c88ce7ba26e14b77e766792bff2e53a8b90f",
+      "offline_admission": "passed",
+      "output_sha256": "dbe276cb99edef6e24e28d613c947d4839479847101c8141e5e0000bac21160e",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN12/main/c4d995f031fe757d9823f7410f81c88ce7ba26e14b77e766792bff2e53a8b90f.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "c68cd76b6ca94c077ee7c1fd4ab4ebee06056683158f2259302fd687069e5dca",
+      "offline_admission": "passed",
+      "output_sha256": "89fa7f50c2c758fb084d861454c03f5fd8687d381d28b99a204424ea6385898f",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/hp_HLDS_BU40N_MT1959_BU5_BU3/HP/BW42/main/c68cd76b6ca94c077ee7c1fd4ab4ebee06056683158f2259302fd687069e5dca.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+      "offline_admission": "passed",
+      "output_sha256": "c21a61f712ac6ffe825a647acd6ebd141e137791ff2e042fb5caa1d89fc881b2",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_MT1959_BUP1_BU1/GENERAL/1.00/main/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "ca7e8db8576a0ab5f5376270159c133195ba1f60d90e7e7465dae7f4dacc3532",
+      "offline_admission": "passed",
+      "output_sha256": "0e099c219f665ae6520ae80fafb553bb18297bd2ee877ccc58699e33dafc7981",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.05/main/ca7e8db8576a0ab5f5376270159c133195ba1f60d90e7e7465dae7f4dacc3532.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "ccc97e4f92e47b6fc1fab1e9baa1860020c7f104efa9ffb649321a173523adfb",
+      "offline_admission": "passed",
+      "output_sha256": "a301e679c467f56e077ac2e1338dbe74602b6589280d08da687bddf9e263ab37",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS58_NS50/GENERAL/1.01/main/ccc97e4f92e47b6fc1fab1e9baa1860020c7f104efa9ffb649321a173523adfb.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "d133893209392b74cb0c3c1225cc4c0e8b1d927f1f671261ecc82525405e47e0",
+      "offline_admission": "passed",
+      "output_sha256": "5b79010e7ea2d7fc9864962d7373edd73fac78d58a51a1d68b8001df1c015363",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.00/main/d133893209392b74cb0c3c1225cc4c0e8b1d927f1f671261ecc82525405e47e0.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "d1e4d3d704c6f2f8ea200d64ff39e3a1a564769dfa66798039015c615536cf4b",
+      "offline_admission": "passed",
+      "output_sha256": "fe0f33dbf91d31f24ceb5c78e709fd50bfe51cc04daffce168cee1ad49529594",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/hp_HLDS_BU50N_MT1959_BU51_BU3/HP/BW51/main/d1e4d3d704c6f2f8ea200d64ff39e3a1a564769dfa66798039015c615536cf4b.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+      "offline_admission": "passed",
+      "output_sha256": "249ea73374068dbf888bb4b2e4be41b26222168920f421684f5326f0eea7b8eb",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH14NS40_MT1939_Code_JB7/GENERAL/1.00/main/d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "dd03cdae194de03a710b5f6e88dfedf421fd20667a3cc9ec58e828bd769ab2ed",
+      "offline_admission": "passed",
+      "output_sha256": "47e0b8a0fd37ea8eb17efc2d6bf31a705604563bab0ca0b074295e1685d29778",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/ASUS_BC-12D2HT_MT1959_JBC6_JB8/ASUS/3.00/main/dd03cdae194de03a710b5f6e88dfedf421fd20667a3cc9ec58e828bd769ab2ed.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "dd27dc3901ea0ef2e8704a54c8e0f3be44d11cbef061b202f69ef96f70522681",
+      "offline_admission": "passed",
+      "output_sha256": "f47fdb179869c476a54ca3238283ae952822d477ad5dfb81978c476492bebfb3",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH16NS40_NS50/GENERAL/1.05/main/dd27dc3901ea0ef2e8704a54c8e0f3be44d11cbef061b202f69ef96f70522681.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "de13d8d0fd56ffa16ef6bcffcab946e3839cefd85975d8e925dfbb4e8e881f72",
+      "offline_admission": "passed",
+      "output_sha256": "d146824c1fe6bbbce105cb3e58e42f5926aa3ca1bd36c3ee08ee7eb2dc892688",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.03/main/de13d8d0fd56ffa16ef6bcffcab946e3839cefd85975d8e925dfbb4e8e881f72.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "e24060184915a9860a84ea7d0ad23fee478e6eb31af86da589f5723c8e29a1cd",
+      "offline_admission": "passed",
+      "output_sha256": "37739a27dab87d3c9ba389170c464e1f6e8b3a9130bdf74648c6a18097cb470d",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS58_MT1959_JB8_JB8/GENERAL/1.V5/main/e24060184915a9860a84ea7d0ad23fee478e6eb31af86da589f5723c8e29a1cd.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+      "offline_admission": "passed",
+      "output_sha256": "00968b718d929f0d823dca77d168f6e41a35a9fab547af2dd158d5ff29785230",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BP55EB40_NB50/GENERAL/1.01/main/e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "e64c4ca5244594d0b7943cbedf71a9cced2ae7c3d9b98624aa84d7e3130bac8a",
+      "offline_admission": "passed",
+      "output_sha256": "55b098c934aed1bcc623e79d22c10e5635a381873b0326fac61c8f40f70e585c",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BP55EB40_NB50/GENERAL/1.02/main/e64c4ca5244594d0b7943cbedf71a9cced2ae7c3d9b98624aa84d7e3130bac8a.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "e9d8bcddf85aab6627c90623efcb7a39ee97681a68b729ef58fea391bc99b33a",
+      "offline_admission": "passed",
+      "output_sha256": "bba2341b3b50c0239dc29f6956198de11f4f6f8ef7d661a12474c6875651cd66",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/ASUS_BW-16D1H-U_MT1959_JB8_JB8/ASUS/A203/main/e9d8bcddf85aab6627c90623efcb7a39ee97681a68b729ef58fea391bc99b33a.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "eb0e2e7275448919aa72bec63ed0cd24ca360fcb0a8347601e85c2750f0d173a",
+      "offline_admission": "passed",
+      "output_sha256": "e8fa951a7116afc28a5ad4b0e6986cae0dfeb6683c7f619f3199bdb9693ffe8a",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BH14NS58_NS50/GENERAL/1.01/main/eb0e2e7275448919aa72bec63ed0cd24ca360fcb0a8347601e85c2750f0d173a.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+      "offline_admission": "passed",
+      "output_sha256": "1517be0e7c8b62cdbf31d7970f6ef224edab05a332751ab388a4108fc1e7ae5d",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_UH12NS40_NS40/GENERAL/1.03/main/eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+      "offline_admission": "passed",
+      "output_sha256": "37e4d97e8a10161e0848b2b5f80fcb729bed3464a206799836ed1f6769c001c0",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1939/HL-DT-ST_WH16NS40_MT1939_Code_JB7/GENERAL/1.01/main/eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+      "offline_admission": "passed",
+      "output_sha256": "0f598dd1a05166c29062edfe50c5bf18912c50ad30d502145c157fd2b4c19306",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_BH14NS48_MT1939_Code_JB7/GENERAL/1.00/main/f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8",
+      "offline_admission": "passed",
+      "output_sha256": "54cd7172761dd2d37163aa3b0faf799974d8b3d0307c5422fbd44e1d962c0c37",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BP60NB10_NB10/GENERAL/1.00/main/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+      "offline_admission": "passed",
+      "output_sha256": "faf89e84e1245947fa130658878d1af196b5deb1be4ecd308bad8ecca15e87ab",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.03/main/f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "fb9174aa26153911120a92d95beb8cf598f1f860344af2ccf67e98a99f4ca049",
+      "offline_admission": "passed",
+      "output_sha256": "a3b832d638f94b2d1c42908d5e48c673b229227a0e7f826371b62ce7fe3d0b87",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "dump/mediatek/MT1959/HL-DT-ST_BP60NB10_NB10/GENERAL/1.01/main/fb9174aa26153911120a92d95beb8cf598f1f860344af2ccf67e98a99f4ca049.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "fbe641e5e808e8127c0196e28bc8a10ba9d8ae61bd8645affff9f259b4a6b25c",
+      "offline_admission": "passed",
+      "output_sha256": "f129ca241a0e780a76a8e557454fad6f260967fe6d254e223d1a36bf83f89473",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_UH12NS40_NS40/GENERAL/1.01/main/fbe641e5e808e8127c0196e28bc8a10ba9d8ae61bd8645affff9f259b4a6b25c.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d",
+      "offline_admission": "passed",
+      "output_sha256": "462594b66493b7d9af84eb33556ac5b86bba7555e2ef4bb4b2c7911ba915761d",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.05/main/fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+      "offline_admission": "passed",
+      "output_sha256": "c3027a5f585d32f7d469d8fd8441288edad0db44ad915b72efffc312b829da0c",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1939/HL-DT-ST_WH14NS40_MT1939_Code_JB7/GENERAL/1.01/main/fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442.bin"
+    },
+    {
+      "audit": "passed",
+      "input_sha256": "ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f",
+      "offline_admission": "passed",
+      "output_sha256": "319a466ee60063f67e97d67ae6259918fe70859812ab2e2c1208fa3512442ab9",
+      "settings": "all advertised choices reconfigured through normal Modify",
+      "source": "oem/mediatek/MT1959/HL-DT-ST_WH16NS40_NS50/GENERAL/1.05/main/ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f.bin"
+    }
+  ],
+  "path": "normal Modify",
+  "schema": 1,
+  "scope": "normal Modify; source-bound software validation, no physical UHD reading claim",
+  "published_coverage": {
+    "6": 108,
+    "5": 0,
+    "4": 0,
+    "3": 0,
+    "2": 0,
+    "1": 1,
+    "0": 5
+  },
+  "held_coverage": {
+    "6": 181,
+    "5": 0,
+    "4": 0,
+    "3": 0,
+    "2": 0,
+    "1": 11,
+    "0": 5
+  },
+  "held_total": 1085,
+  "held_statuses": {
+    "supported": 196,
+    "unchanged": 1,
+    "unsupported": 887,
+    "invalid": 1
+  },
+  "held_status_regressions": 0,
+  "counting": "six labels: Speed, Region, HRL, AKE, Bus, combined BD/UHD; five boot controls",
+  "settings_updates": "every advertised OEM/On/Off, uncapped and region-free choice updated through normal Modify, reinspected, CMAC-verified and admitted",
+  "cpu_authentication_cases": 1040,
+  "independent_review": "no remaining blockers after two rounds of fixes",
+  "physical_uhd_validated": false,
+  "producer_sha256": "7272656de3a1718477381788edcb3efd0a8f961df52f89c918df9ba5e06c1c7d",
+  "optical_revision": "d4b419345e1276b34f346b37b5ff1c9b1652b89f",
+  "capability_preview_output_agreement": 108,
+  "cpu_test_script_sha256": "aeebfdb926e6ad3579b64a2a3224154d3fa37737edebe9685c3fd238e0112011"
+}

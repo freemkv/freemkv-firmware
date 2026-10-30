@@ -256,7 +256,7 @@ fn unsupported_capture_identity_stops_before_service_entry_or_memory_reads() {
     inquiry[8..16].copy_from_slice(b"PIONEER ");
     inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
     inquiry[32..36].copy_from_slice(b"1.00");
-    for hardware in [b"ATA 0009", b"SCSI0001", b"UNKNOWN "] {
+    for hardware in [b"        ", b"REC \0\0\0\0", b"NEW GHIJ"] {
         let mut f1 = vec![0; 48];
         f1[16..24].copy_from_slice(hardware);
         let mut dev = IdentityOnlyCapture {
@@ -268,7 +268,7 @@ fn unsupported_capture_identity_stops_before_service_entry_or_memory_reads() {
         assert!(capture_signed_candidate(&mut dev)
             .unwrap_err()
             .to_string()
-            .contains("H8/SAT hardware identity"));
+            .contains("could not read a complete hardware identity"));
         assert_eq!(dev.commands, 2);
         assert_eq!(dev.writes, 0);
     }
@@ -333,6 +333,7 @@ impl ScsiDevice for CaptureReplay {
                 return Ok(bytes[..len].to_vec());
             }
             let mut data = vec![0; len];
+            data[0] = 5;
             data[8..16].copy_from_slice(b"PIONEER ");
             data[16..32].copy_from_slice(b"BD-RW   BDR-UD04");
             data[32..36].copy_from_slice(b"1.14");
@@ -341,7 +342,12 @@ impl ScsiDevice for CaptureReplay {
         if cdb == [0x3c, 2, 0xf1, 0, 0, 0, 0, 0, 48, 0] {
             assert_eq!(len, 48);
             let mut data = vec![0; 48];
-            data[16..24].copy_from_slice(b"SAT 8A10");
+            data[16..24].copy_from_slice(
+                &self.dump[KERNEL_IMAGE_BASE + 0x1000..KERNEL_IMAGE_BASE + 0x1008],
+            );
+            data[24..32].copy_from_slice(
+                &self.dump[KERNEL_IMAGE_BASE + 0x1008..KERNEL_IMAGE_BASE + 0x1010],
+            );
             return Ok(data);
         }
         if cdb == [0x3c, 0x06, 0, 0, 0x30, 0, 0, 0, 0x20, 0] {
@@ -395,6 +401,7 @@ impl ScsiDevice for CaptureReplay {
 fn unknown_sat_receiver_stops_after_kernel_capture() {
     let mut dump = vec![0; NORMAL_IMAGE_BASE];
     dump[KERNEL_IMAGE_BASE + 0x1000..KERNEL_IMAGE_BASE + 0x1008].copy_from_slice(b"SAT 8A10");
+    dump[KERNEL_IMAGE_BASE + 0x1008..KERNEL_IMAGE_BASE + 0x100c].copy_from_slice(b"ID40");
     // The replay has no Normal bytes. Any read beyond the Kernel panics,
     // proving rejection occurs before guessing Normal geometry.
     let mut replay = CaptureReplay {
@@ -1101,8 +1108,7 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
     let mut seen_hardware = std::collections::HashSet::new();
     let all_pairs = std::env::var_os("PIONEER_ALL_PAIRS_KAT").is_some();
     let mut built = 0;
-    let mut eligible_sat_pairs = 0;
-    let mut refused_non_sat_pairs = 0;
+    let mut eligible_pairs = 0;
     let mut refused_relabelled_sat_pairs = 0;
     let mut refused_checksum_sat_pairs = 0;
     let mut refused_identity_shapes = 0;
@@ -1189,53 +1195,7 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                 h.revision
             );
             inquiry[32..36].copy_from_slice(&h.revision.as_bytes()[..4]);
-            // Match the production backup capability boundary exactly. Every
-            // non-SAT pair must prove refusal using its usable identity before
-            // any firmware access; every SAT pair keeps the reconstruction gate.
-            if !h.hardware_version.as_bytes().starts_with(b"SAT ") {
-                assert_eq!(
-                    h.hardware_version.len(),
-                    8,
-                    "{}: unusable hardware identity",
-                    path.display()
-                );
-                let mut f1 = vec![b' '; 48];
-                f1[16..24].copy_from_slice(h.hardware_version.as_bytes());
-                let mut dev = IdentityOnlyCapture {
-                    inquiry: inquiry.to_vec(),
-                    f1,
-                    commands: 0,
-                    writes: 0,
-                };
-                let error = capture_signed_candidate(&mut dev).unwrap_err();
-                assert!(
-                    error
-                        .to_string()
-                        .contains("H8/SAT hardware identity required"),
-                    "{}: unsupported capture did not reach the hardware preflight refusal: {error:#}",
-                    path.display()
-                );
-                assert_eq!(
-                    dev.commands,
-                    2,
-                    "{}: capture went beyond identity reads",
-                    path.display()
-                );
-                assert_eq!(
-                    dev.writes,
-                    0,
-                    "{}: unsupported capture issued a write",
-                    path.display()
-                );
-                refused_non_sat_pairs += 1;
-                eprintln!(
-                    "capture refused before firmware I/O: {} hardware={}",
-                    path.display(),
-                    h.hardware_version
-                );
-                continue;
-            }
-            eligible_sat_pairs += 1;
+            eligible_pairs += 1;
             let id = match embedded_envelope_id(&inquiry, &k.image, &n.image) {
                 Ok(id) => id,
                 Err(error) => {
@@ -1494,8 +1454,7 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                 }
                 Err(error) => {
                     if !zero_be32_sum(&n.image)
-                        && error.to_string()
-                            == "images do not satisfy Pioneer H8/SAT image structure"
+                        && error.to_string() == "images do not satisfy Pioneer H8 image structure"
                     {
                         prove_checksum_invalid_normal_refusal(
                             &inquiry,
@@ -1541,7 +1500,7 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
         }
     }
     eprintln!(
-        "capture capability: {eligible_sat_pairs} SAT pairs ({refused_relabelled_sat_pairs} relabeled headers refused after decoded-body proof; {refused_checksum_sat_pairs} checksum-invalid Normals excluded with exact Kernel-only capture); {refused_non_sat_pairs} non-SAT pairs refused before firmware I/O"
+        "capture capability: {eligible_pairs} receiver-derived pairs ({refused_relabelled_sat_pairs} relabeled headers refused after decoded-body proof; {refused_checksum_sat_pairs} checksum-invalid Normals excluded with exact Kernel-only capture)"
     );
     eprintln!(
         "builder corpus: {built} built, {} unsupported; {exact_text} exact textual headers, {exact_name} exact names, {signature_range_match} matching signature ranges",
@@ -1557,7 +1516,7 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
     assert!(built > 0);
     assert_eq!(
         built + refused_relabelled_sat_pairs + refused_checksum_sat_pairs,
-        eligible_sat_pairs,
+        eligible_pairs,
         "SAT pairs lack reconstruction or explicit production refusal evidence"
     );
     assert_eq!(
@@ -1577,15 +1536,11 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
         "unexplained signature change"
     );
     assert_eq!(
-        built
-            + refused_relabelled_sat_pairs
-            + refused_checksum_sat_pairs
-            + refused_non_sat_pairs
-            + refused_identity_shapes,
+        built + refused_relabelled_sat_pairs + refused_checksum_sat_pairs + refused_identity_shapes,
         seen_hardware.len(),
         "decoded pairs lack positive or explicit negative evidence"
     );
-    eprintln!("final evidence: {built} reconstructed ({signature_range_match} OEM signatures, {unsigned_candidates} explicit unsigned candidates); {canonical_headers} canonical actual-body headers, {canonical_names} canonical filenames; {refused_non_sat_pairs} non-SAT preflight refusals, {refused_relabelled_sat_pairs} relabeled identity refusals, {refused_checksum_sat_pairs} invalid Normal checksums with Kernel-only preservation, {refused_identity_shapes} malformed declared identity parser refusals");
+    eprintln!("final evidence: {built} reconstructed ({signature_range_match} OEM signatures, {unsigned_candidates} explicit unsigned candidates); {canonical_headers} canonical actual-body headers, {canonical_names} canonical filenames; {refused_relabelled_sat_pairs} relabeled identity refusals, {refused_checksum_sat_pairs} invalid Normal checksums with Kernel-only preservation, {refused_identity_shapes} malformed declared identity parser refusals");
 }
 
 #[test]
@@ -2086,4 +2041,179 @@ fn xd06u_backup_normal_matches_oem_exactly_when_configured() {
     assert_eq!(k.bytes, held_kernel);
     let provenance = package_provenance(&rebuilt);
     assert!(provenance.kernel_oem && provenance.normal_oem);
+}
+
+/// Replay the report's actual identity and readable address space, without any
+/// physical device or write/update path. Optional user artifacts stay local.
+#[test]
+fn rec_report_capture_preserves_firmware_without_oem_metadata() {
+    let Ok(path) = std::env::var("PIONEER_REC_REPORT_DUMP") else {
+        return;
+    };
+    struct ReportReplay {
+        inner: CaptureReplay,
+        inquiry: Vec<u8>,
+        identity: Vec<u8>,
+    }
+    impl ScsiDevice for ReportReplay {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            if cdb.first() == Some(&0x12) {
+                return Ok(self.inquiry[..len].to_vec());
+            }
+            if cdb.get(..3) == Some(&[0x3c, 2, 0xf1]) {
+                return Ok(self.identity.clone());
+            }
+            self.inner.command_in(cdb, len)
+        }
+        fn command_out(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
+            self.inner.command_out(cdb, bytes)
+        }
+        fn describe(&self) -> String {
+            "REC report replay; no hardware".into()
+        }
+    }
+    let bytes = std::fs::read(path).unwrap();
+    let directory = super::super::dump::directory(&bytes).unwrap().unwrap();
+    let section = |name| {
+        let row = directory["sections"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["name"] == name)
+            .unwrap();
+        let offset = row["file_offset"].as_u64().unwrap() as usize;
+        let length = row["length"].as_u64().unwrap() as usize;
+        bytes[offset..offset + length].to_vec()
+    };
+    let mut replay = ReportReplay {
+        inquiry: section("inquiry"),
+        identity: section("identity"),
+        inner: CaptureReplay {
+            dump: bytes.clone(),
+            reads: 0,
+            knocks: 0,
+            corrupt_second_pass: false,
+        },
+    };
+    let package = capture_signed_candidate(&mut replay).unwrap();
+    validate_envelope_package(&package, "BD-RW BDR-L13SH").unwrap();
+    let bundle = Bundle::from_backup_tar_bytes(&package).unwrap();
+    assert_eq!(bundle.components.len(), 2);
+    let kernel = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap();
+    let kernel = pioneer_optical::envelope::decode_envelope(&kernel.bytes).unwrap();
+    assert_eq!(kernel.image, bytes[KERNEL_IMAGE_BASE..NORMAL_IMAGE_BASE]);
+    let normal = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap();
+    let normal =
+        pioneer_optical::envelope::decode_envelope_with_kernel(&normal.bytes, &kernel).unwrap();
+    assert_eq!(
+        normal.image,
+        bytes[NORMAL_IMAGE_BASE..NORMAL_IMAGE_BASE + normal.image.len()]
+    );
+    assert!(!package_provenance(&package).normal_oem);
+    if let Ok(path) = std::env::var("PIONEER_REC_REPORT_PACKAGE") {
+        std::fs::write(path, package).unwrap();
+    }
+}
+
+#[test]
+fn backup_without_oem_seeds_is_independent_of_platform_prefix() {
+    for hardware in [
+        b"SAT 8A10",
+        b"REC 8C00",
+        b"NEW 1234",
+        b"SCSI0001",
+        b"ATA 0009",
+    ] {
+        let (mut kernel, normal) = bounded_backup_fixture();
+        kernel[0x1000..0x1008].copy_from_slice(hardware);
+        let sum = kernel.as_chunks::<4>().0.iter().fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
+        });
+        let old = u32::from_be_bytes(kernel[0x1020..0x1024].try_into().unwrap());
+        kernel[0x1020..0x1024].copy_from_slice(&old.wrapping_sub(sum).to_be_bytes());
+        let mut replay = BoundedBackupReplay::new(&kernel, &normal);
+        let archive = capture_signed_candidate(&mut replay).unwrap();
+        validate_envelope_package(&archive, "BD-RW BDR-UD04").unwrap();
+        let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
+        let k = bundle
+            .components
+            .iter()
+            .find(|c| c.role == Role::Kernel)
+            .unwrap();
+        let n = bundle
+            .components
+            .iter()
+            .find(|c| c.role == Role::Main)
+            .unwrap();
+        let k = pioneer_optical::envelope::decode_envelope(&k.bytes).unwrap();
+        let n = pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, &k).unwrap();
+        assert_eq!(k.image, kernel);
+        assert_eq!(n.image, normal);
+        let provenance = package_provenance(&archive);
+        assert!(!provenance.kernel_oem && !provenance.normal_oem);
+    }
+}
+
+#[test]
+fn oem_branded_capture_replays_through_the_normal_backup_workflow() {
+    struct OemReplay(BoundedBackupReplay);
+    impl ScsiDevice for OemReplay {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            if cdb == [0x12, 0, 0, 0, len as u8, 0] && matches!(len, 36 | 96) {
+                let mut response = vec![0; len];
+                response[0] = 5;
+                response[8..16].copy_from_slice(b"SXLT    ");
+                response[16..32].copy_from_slice(b"BDE-PR1EP  PP100");
+                response[32..36].copy_from_slice(b"3.01");
+                return Ok(response);
+            }
+            self.0.command_in(cdb, len)
+        }
+        fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+            self.0.command_out(cdb, data)
+        }
+        fn describe(&self) -> String {
+            "OEM capture replay; no hardware".into()
+        }
+    }
+    let kernel = include_bytes!("../../../tests/fixtures/pioneer-sxlt/sxlt-id75-kernel.bin");
+    let header = include_bytes!("../../../tests/fixtures/pioneer-sxlt/sxlt-id75-normal-header.bin");
+    let mut normal = vec![0xff; 0x1b7b00];
+    normal[..header.len()].copy_from_slice(header);
+    let balance = normal.len() - 4;
+    normal[balance..].fill(0);
+    let (words, remainder) = normal.as_chunks::<4>();
+    assert!(remainder.is_empty());
+    let sum = words.iter().fold(0u32, |sum, word| {
+        sum.wrapping_add(u32::from_be_bytes(*word))
+    });
+    normal[balance..].copy_from_slice(&0u32.wrapping_sub(sum).to_be_bytes());
+    let mut replay = OemReplay(BoundedBackupReplay::new(kernel, &normal));
+    let archive = capture_signed_candidate(&mut replay).unwrap();
+    assert_eq!(replay.0.refused_reads, 0);
+    validate_envelope_package(&archive, "BDE-PR1EP  PP100").unwrap();
+    let bundle = Bundle::from_backup_tar_bytes(&archive).unwrap();
+    let k = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Kernel)
+        .unwrap();
+    let n = bundle
+        .components
+        .iter()
+        .find(|c| c.role == Role::Main)
+        .unwrap();
+    let decoded_kernel = pioneer_optical::envelope::decode_envelope(&k.bytes).unwrap();
+    let decoded_normal =
+        pioneer_optical::envelope::decode_envelope_with_kernel(&n.bytes, &decoded_kernel).unwrap();
+    assert_eq!(decoded_kernel.image, kernel.as_slice());
+    assert_eq!(decoded_normal.image, normal);
 }

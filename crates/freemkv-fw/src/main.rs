@@ -48,6 +48,12 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Query exact-image capabilities as JSON using the real Modify preview.
+    /// Reports unsupported inputs explicitly; never saves generated firmware.
+    Capabilities {
+        /// Firmware image or MediaTek release package.
+        input: PathBuf,
+    },
     /// Create freemkv firmware from an OEM image: hijack the `READ BUFFER`
     /// (`0x3C`) handler via the platform engine and re-sign.
     #[command(name = "modify", alias = "create")]
@@ -132,6 +138,7 @@ fn main() -> ExitCode {
     };
     let operation = match &cli.command {
         Command::Create { .. } => "create",
+        Command::Capabilities { .. } => "capabilities",
         Command::Verify { .. } => "verify",
         Command::Info { .. } => "info",
     };
@@ -143,6 +150,14 @@ fn main() -> ExitCode {
     };
     let result = diagnostics::run(operation, || {
         let code = match cli.command {
+            Command::Capabilities { input } => {
+                let artifact = freemkv_fw::artifact::Artifact::parse(diagnostics::read(&input)?)?;
+                println!(
+                    "{}",
+                    freemkv_fw::capabilities::report_json(artifact.image())
+                );
+                Ok(ExitCode::SUCCESS)
+            }
             Command::Create {
                 input,
                 output,
@@ -878,6 +893,7 @@ fn base_report_json(outcome: &api::CreateOutcome) -> String {
     s.push_str(&format!("\"boot_init_site\":{},", r.boot_init_site));
     s.push_str(&format!("\"de_off\":{},", r.de_off));
     s.push_str(&format!("\"speed_gate\":{},", r.speed_gate));
+    s.push_str(&format!("\"speed_tail_site\":{},", r.speed_tail_site));
     s.push_str(&format!("\"region_emitter\":{},", r.region_emitter));
     s.push_str(&format!("\"ake_gate\":{},", r.ake_gate));
     s.push_str(&format!("\"uhd_stub_va\":{},", r.uhd_stub_va));

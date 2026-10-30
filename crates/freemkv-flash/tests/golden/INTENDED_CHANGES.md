@@ -217,6 +217,16 @@ reason: P4
 +saved file: 146432 bytes sha256=f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
 ```
 
+### Pioneer dump (recover): bounded replay
+reason: PROTO
+The synthetic capture device now reports optical PDT 5 and its actual Kernel tag,
+so backup uses the same valid CDB contract as discovery. Only the captured
+identity sections and their recorded dump/directory hashes change.
+```diff
+-saved file: 16883069 bytes; body sha256=ad014a01fb01cc08256975884a0a0719617b641fd141025b6bea37e358e6aa5b directory(time masked) sha256=0a005af45c41a0ba8a4a49026e673bdb3d3ba49f362f071fa20a1b4dce5737e9
++saved file: 16883069 bytes; body sha256=d96dd36548221d3662922fea0da0ff285a1bd2f448babfbd3cb98e2699411cff directory(time masked) sha256=c0e8de22c670c9cfdbc96fec4a7aff6db3881e242c3adf358023e49fa5912e90
+```
+
 ## check_file.txt
 
 ### check_file empty.bin

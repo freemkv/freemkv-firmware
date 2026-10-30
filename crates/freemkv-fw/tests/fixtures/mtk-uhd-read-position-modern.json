@@ -1,0 +1,121 @@
+{
+  "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+  "scope": "Native C7 read-position decoder and literal pools; calls intercepted only for logging/controller notification",
+  "parts": [
+    {
+      "offset": 893096,
+      "sha256": "be6a8b067c6475cd5136b5a7c33f03a9feb0bfcbd411ea3c3a488483c077b889",
+      "hex": "f8b5fc4c2178fc4a00911078ef2108401070fa48007c800771d5f948006af94e306064f753fa3068002869d03068c108f548016000683060f44a1078c821814301270025f24800293ed1b178890901290bd12178012905d00078012802d03168ec4841e03068ec4960e002290fd12178022906d00078022803d03168e748f0f74dfeb0788006800eb070022010e0032921780fd1032906d00078032803d03168df48f0f73bfe3068de4948403060032020703ee0002905d00078002802d03168d9483fe0257034e0d04a1178c72918d1b17889090129217809d10129c2d000780128bfd03168d148f0f718febae70029e8d000780028e5d03168cd4822e05be04ae01178cc221140c4291ed1b1788906002921780fda002906d10078002803d13168c448f0f7fafd3068c349484030602770f57014e00129c4d100780128c1d13168be48f0f7eafdbce72178012906d10078012803d13168b948f0f7dffd2570aa4a1078c8231900814302d01078c72802d1b078222808d3107883430cd01078c72809d0b0781c2806d29b4a1078102108431070ab4805709c480078cc221040c02809d020780099884205d02078a6494000085eb6f7aefef8bd"
+    },
+    {
+      "offset": 894108,
+      "sha256": "40a0cbc97179c56e3b3e3a0e59d6b6d5887388024fea4dc350801119c54809b5",
+      "hex": "020b0002"
+    },
+    {
+      "offset": 894112,
+      "sha256": "23514c4424fcd3e72a78f5926cd1bf8db4fede155d2ea49624cfa3cebe19202a",
+      "hex": "0f0b0002"
+    },
+    {
+      "offset": 894116,
+      "sha256": "66a7dca1c430a0b3783d7f8994057225f9a8956d1c494f02452134e29f3dc5ca",
+      "hex": "00200804"
+    },
+    {
+      "offset": 894120,
+      "sha256": "371844d6b042c5b5d0d7e52c3577c46f38544df78ac23871b870c405571c7a4d",
+      "hex": "00210804"
+    },
+    {
+      "offset": 894124,
+      "sha256": "8dc5949abbeb3f513e416b4c1ce3f3422f32c3ce82da7579c9ad6cabeb5c7a2e",
+      "hex": "380b0002"
+    },
+    {
+      "offset": 894128,
+      "sha256": "f30dcfcd5afeed5d53b9eafddba8a26f7efee41345656dff74d8ed0e013f35af",
+      "hex": "d00b0002"
+    },
+    {
+      "offset": 894132,
+      "sha256": "8444129a4c816de7c62ad8feef5f6ec1d8747b707c2856ef1eef61a1c8f962f8",
+      "hex": "009eff01"
+    },
+    {
+      "offset": 894136,
+      "sha256": "4be69930f0f5981698cf52f8eb0e8b376d894222d8a77273eedaf644f5c460e0",
+      "hex": "030b0002"
+    },
+    {
+      "offset": 894140,
+      "sha256": "17d8c6f85f0f3f1ae657113ea44c815d2b14b3f1c44413bb82aa4c6896270ae6",
+      "hex": "ea04971f"
+    },
+    {
+      "offset": 894144,
+      "sha256": "f0719ff82cddcf65532f157a47f8c9850dce7c81e6b58698b24adfc2866157db",
+      "hex": "ffff7f00"
+    },
+    {
+      "offset": 894148,
+      "sha256": "ae50d3db63266a09669689e20c627d73be3bf31ac6753752786b271f666f1880",
+      "hex": "ea04981f"
+    },
+    {
+      "offset": 894152,
+      "sha256": "7dbdc75cf568c360e02a2d8f52d767915d00dbc7ea18493e0c9287d53c4d4bc5",
+      "hex": "ea04991f"
+    },
+    {
+      "offset": 894156,
+      "sha256": "6fc6f4524161c3ae0d316812d7088e3fcd372023edaea2d7821093be40ae1060",
+      "hex": "ffffff00"
+    },
+    {
+      "offset": 894160,
+      "sha256": "14534cec1cdd3fd8f917676fe1b9e049b27d06b6897ecaadf7946597e3e0c30a",
+      "hex": "ea049a1f"
+    },
+    {
+      "offset": 894164,
+      "sha256": "0b136510f86b56c787bedca01e1ea363a93692d49a66f8a98231a2c9013cb8cb",
+      "hex": "ea049b1f"
+    },
+    {
+      "offset": 894168,
+      "sha256": "e7a02a4b70de47c64721b54a1acdb28d975b6a333bcbd04c702ab9298996cdeb",
+      "hex": "ea049c1f"
+    },
+    {
+      "offset": 894172,
+      "sha256": "8cf8afc54a1049704b583784af3eb9a3eab3e95c50ce0b701f690c52d78c967d",
+      "hex": "ea049d1f"
+    },
+    {
+      "offset": 894176,
+      "sha256": "f060d5712596683f6c99ccd99f266aa90677baba1e063c389511ad6ce1675c44",
+      "hex": "ffff3f00"
+    },
+    {
+      "offset": 894180,
+      "sha256": "7d3733de313d338531c0e123cedebccdf030272ed9e56e2f69441ecb75c1afb0",
+      "hex": "ea049e1f"
+    },
+    {
+      "offset": 894184,
+      "sha256": "68976436e834f11880972af9598c9f48be8019d419ae4bd866b74939f02ac714",
+      "hex": "ea049f1f"
+    },
+    {
+      "offset": 894188,
+      "sha256": "bbdb10efc9e10dae43325e98c47ca8f80f6dee8bf70dfd57a4152a24c7401468",
+      "hex": "c30b0002"
+    },
+    {
+      "offset": 894192,
+      "sha256": "8c3350a09c6bd3a5c7f4b5a43e51ae148a3298e032af8f6c43b25ada31dc5d32",
+      "hex": "500b0002"
+    }
+  ]
+}

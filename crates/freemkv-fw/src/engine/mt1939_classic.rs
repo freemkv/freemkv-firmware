@@ -20,6 +20,78 @@ use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
 impl Mt1959Engine {
+    /// Thumb-1 selector detour: choose the native maximum only when enabled.
+    /// The library proves every leaf path reaches this tail and binds RMAX to
+    /// its native setter and the selector consumer to OPTM. No write speed or
+    /// hardware/media maximum initializer is changed.
+    pub fn build_speed_stub_classic(&self, flag_base: u32, maximum_cell: u32) -> Result<Vec<u8>> {
+        let mut a = Asm::new();
+        let oem = a.label();
+        // The Thumb-1 entry saves the native LR before BL overwrites it.
+        a.push(8);
+        a.mov_reg(3, 13);
+        a.ldr_imm(3, 3, 4);
+        a.mov_reg(14, 3);
+        a.pop(8);
+        a.add_sp(4);
+        a.push(2);
+        a.ldr_lit(1, flag_base + abi::Feature::Speed as u32);
+        a.ldrb_imm(1, 1, 0);
+        a.cmp_imm(1, abi::STATE_ON);
+        a.bne(oem);
+        a.ldr_lit(1, maximum_cell);
+        a.ldrb_imm(1, 1, 0);
+        a.cmp_imm(1, 0);
+        a.beq(oem);
+        a.cmp_imm(1, 48);
+        a.bhi(oem);
+        a.mov_reg(0, 1);
+        a.bind(oem);
+        a.pop(2);
+        a.lsls_imm(0, 0, 24);
+        a.lsrs_imm(0, 0, 24);
+        a.bx(14);
+        a.finish().map_err(anyhow::Error::from)
+    }
+
+    fn emit_speed_classic(
+        &self,
+        image: &[u8],
+        out: &mut [u8],
+        flag_base: u32,
+    ) -> Result<Vec<(&'static str, u32)>> {
+        let role = mediatek_optical::image::analysis::ClassicSpeed::detect(image)
+            .map_err(|e| anyhow!("native read-speed selector: {e}"))?;
+        let bytes = self.build_speed_stub_classic(flag_base, role.maximum_cell())?;
+        let va = self.free_space(out, bytes.len())?;
+        let branch = thumb::encode_bl(role.site() + 2, va)
+            .ok_or_else(|| anyhow!("classic Speed tail branch out of range"))?;
+        let mut entry = Asm::new();
+        entry.push(0x100);
+        let mut entry = entry.finish()?;
+        entry.truncate(2); // finish pads the instruction-only fragment to four bytes.
+        entry.extend_from_slice(&branch);
+        let mut candidate = out.to_vec();
+        thumb::write(&mut candidate, va as usize, &bytes);
+        thumb::write(&mut candidate, role.site(), &entry);
+        crate::install_guard::verify_branch(
+            &candidate,
+            role.site() + 2,
+            thumb::BranchKind::Bl,
+            va,
+            "classic Speed",
+        )?;
+        out.copy_from_slice(&candidate);
+        Ok(vec![
+            ("speed_tail_site", role.site() as u32),
+            ("speed_stub_va", va),
+            ("speed_selector", role.entry() as u32),
+            ("speed_maximum_cell", role.maximum_cell()),
+            ("speed_optimum_cell", role.optimum_cell()),
+            ("speed_consumer", role.consumer() as u32),
+        ])
+    }
+
     /// The **classic**-generation per-AGID session-struct base. The classic VID
     /// producer reads the AGID selector from the CDB base the scanner loads into
     /// `r5` (`ldrb r0,[r5,#0xa]`), so the struct base IS the CDB base — NOT the
@@ -81,14 +153,10 @@ impl Mt1959Engine {
     /// BARE base (handler + record repoint + CMAC only) and ships NO feature stub —
     /// never a feature that would boot into its OFF state without the 0xFF-fill.
     ///
-    /// The classic feature set that actually resolves (measured over the 17 classic
-    /// images): **Region-free** 17/17, **Raw-read** Gate-A + Encryption 17/17.
-    /// **Speed**, **UHD** and **BD** are genuine architecture misses on this pre-UHD
-    /// (2012–2016) silicon: no ramp-ceiling gate (Speed), no disc-version classifier
-    /// (UHD), and no separate disc-mode/class REPORT-KEY accept gate (BD — acceptance
-    /// is purely AKE-gated, already handled). **HRL** 17/17 (classic cert-revocation
-    /// lookup via `emit_hrl_classic`). Net classic set: Region + Raw-read/Encryption
-    /// + HRL = 17/17.
+    /// Feature availability follows the emitted hooks. Classic read speed uses
+    /// the native selector/RMAX contract, not the modern ramp gate. Region,
+    /// Encryption and HRL retain their own evidence. UHD/BD conversion remains
+    /// unavailable until the native recognition and read path are established.
     pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
         self.build_report_classic_with_defaults(image, &BootSettings::standard())
     }
@@ -137,6 +205,12 @@ impl Mt1959Engine {
         let flag_base = self
             .find_free_sram_cell(image)
             .context("classic base: free SRAM cell for the flag table")?;
+        self.assert_sram_cell_free(
+            image,
+            flag_base,
+            super::core::FLASHWRITE_SCRATCH_OFF + 1,
+            "classic flag table and flash scratch",
+        )?;
 
         // Classic reboot verb: bake `boot_init_site - 0x10` (the classic caller_bl_site,
         // minus 0x10 — the analogous offset to the modern boot function prologue). If
@@ -186,6 +260,8 @@ impl Mt1959Engine {
         let mut uhd_stub_va = 0u32;
         let mut bd_gate_site = 0u32;
         let mut bd_stub_va = 0u32;
+        let mut speed_tail_site = 0;
+        let mut speed_stub_va = 0;
         let mut hrl_sites: Vec<u32> = Vec::new();
         let mut hrl_stub_va = 0u32;
 
@@ -203,6 +279,15 @@ impl Mt1959Engine {
         {
             boot_init_site = site;
             boot_stub_va = va;
+
+            if let Ok(facts) = self.emit_speed_classic(image, &mut out, flag_base) {
+                speed_tail_site = facts
+                    .iter()
+                    .find(|(k, _)| *k == "speed_tail_site")
+                    .unwrap()
+                    .1;
+                speed_stub_va = facts.iter().find(|(k, _)| *k == "speed_stub_va").unwrap().1;
+            }
 
             // Region-free — classic REGION_EMIT_SIG window (proven on classic, the
             // same emit `build_modify_classic` ships).
@@ -230,9 +315,9 @@ impl Mt1959Engine {
                 vid_producer = fact("vid_producer");
             }
 
-            // UHD / BD / HRL — the modern AACS detours, tried best-effort. On classic
-            // these are HONEST MISSES: UHD (no disc-version classifier — these are
-            // pre-UHD 2012–2016 BD writers) and BD (no separate disc-mode/class REPORT-KEY
+            // UHD / BD / HRL — modern AACS detours, tried best-effort.
+            // Classic UHD recognition/read behavior remains unproven. No separate
+            // validated disc-mode/class REPORT-KEY
             // accept gate; BD acceptance is purely AKE-gated, which freemkv already
             // handles 17/17) were both disasm-proven genuinely absent — the classic
             // refusal is generic auth-gated inline sense with no unique anchor, so there
@@ -304,9 +389,9 @@ impl Mt1959Engine {
             vid_out_buf: 0,
             vid_gate_setter: 0,
             setdiscmode: 0,
-            // Speed is a documented classic MISS (no MT1959-style ramp-ceiling gate).
             speed_gate: 0,
-            speed_stub_va: 0,
+            speed_tail_site,
+            speed_stub_va,
             region_emitter,
             region_stub_va,
             ake_gate,
@@ -320,12 +405,10 @@ impl Mt1959Engine {
             uhd_stub_va,
             bd_gate_site,
             bd_stub_va,
-            // Auth-cell state-band widen (MT1959-family only): the classic MT1939
-            // lineage does not carry the extended `ldr r4,[pc,...] = 0x01FF9E04`
-            // shape (its post-classification path is different), so this lever is
-            // never wired on classic. Report 0s.
+            // Experimental classic UHD conversion stays on the research branch.
             auth_cell_site: 0,
             auth_cell_stub_va: 0,
+            auth_cell_refusal: false,
             hrl_sites,
             hrl_stub_va,
             de_off: de_off.unwrap_or(0),
@@ -365,8 +448,8 @@ impl Mt1959Engine {
     /// stay reported-only: the classic clear-VID scratch/deny path is INFERRED and
     /// the classic ramp ceiling is unreversed, so they are NOT emitted.
     ///
-    /// Every byte written is well-formed, lands in a provably-free SRAM cell /
-    /// CMAC-covered free space, the image re-signs + self-verifies, and it passes
+    /// Storage passes the static SRAM overlap checks and code is placed within
+    /// authenticated erased space. The image re-signs, self-verifies, and passes
     /// the structural detour audit — so, being structurally valid, Identity +
     /// Region-free + DE are produced unconditionally (no flag). What is not yet
     /// proven is runtime behavior on a real classic drive; the whole report carries
@@ -420,12 +503,18 @@ impl Mt1959Engine {
             )
             .context("classic base: live 0x3C dispatch record")?;
 
-        // Provably-free SRAM cell for the freemkv flag table (classic SRAM map
+        // Statically unreferenced candidate for the freemkv flag table (classic SRAM map
         // differs from MT1959, so we do not reuse the MT1959 FLAG_TABLE_BASE
         // placeholder — we derive an unreferenced cell from THIS image).
         let flag_base = self
             .find_free_sram_cell(image)
             .context("classic base: free SRAM cell for the flag table")?;
+        self.assert_sram_cell_free(
+            image,
+            flag_base,
+            super::core::FLASHWRITE_SCRATCH_OFF + 1,
+            "classic flag table and flash scratch",
+        )?;
 
         // Classic reboot verb: same rule as build_report_classic — bake
         // `boot_init_site - 0x10` from the classic caller_bl_site when it
@@ -456,16 +545,10 @@ impl Mt1959Engine {
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
 
-        // Fail-closed: the classic (MT1939) prologue now RESOLVES via
-        // BOOT_INIT_SIG_CLASSIC, but find_boot_init tags it ClassicUnconfirmed and
-        // emit_boot_init BAILS on that (hardware-unconfirmed leaf-helper call-order) —
-        // tri-state OFF (`0x00`) is unsafe without a boot hook to write `0xFF` at
-        // power-on, and the shared feature stubs (Region-lock etc.) would otherwise boot
-        // every classic drive into their OFF state. The caller (mt1939::modify) degrades
-        // to the DE-only path. Lifting this is a one-line flip in emit_boot_init once the
-        // classic site is blessed on silicon (see TODO(hw-confirm) there).
+        // Use the existing classic caller-order contract. Report the installed
+        // boot hook so capability consumers can expose only its actual controls.
         let boot_init_pair = self.resolve_boot_init_pair(image)?;
-        let (_boot_init_site, _boot_stub_va) =
+        let (boot_init_site, boot_stub_va) =
             self.emit_boot_init(image, &mut out, flag_base, boot_init_pair, defaults)?;
 
         let mut levers: Vec<LeverReport> = Vec::new();
@@ -479,27 +562,19 @@ impl Mt1959Engine {
             LeverId::Identity,
             vec![
                 ("handler_va", handler_va),
+                ("handler_len", handler_bytes.len() as u32),
+                ("boot_init_site", boot_init_site),
+                ("boot_stub_va", boot_stub_va),
                 ("record_off", record.off as u32),
                 ("flag_base", flag_base),
                 ("boot_function_entry", boot_function_entry),
             ],
         ));
 
-        // Speed — the MT1959 ramp-ceiling gate (a byte `speed_index` in an SRAM
-        // cell, `cmp #0x32; bhi <ramp-exit>`, incremented by a rate-limit counter)
-        // does NOT exist on classic MT1939: RE of all 11 classic speed-miss images
-        // finds no incrementing byte-index ramp and no `#0x32` ceiling anywhere in
-        // the image. Classic read speed is a disc-type halfword clamp routed through
-        // a shared limiter primitive (`~0x1b854` on BH16NS40 1.00, disc-type gated
-        // max values 0x64/0xc8/0x190/0x1f4), with no single detourable ramp gate
-        // matching the MT1959 stub contract. A residual miss by real architecture
-        // difference, not a missing signature — see the fleet survey notes.
-        levers.push(LeverReport::missed(
-            LeverId::Speed,
-            "MT1939 classic uses a disc-type halfword read-speed clamp (shared limiter \
-             primitive, no byte speed_index ramp / no 0x32 ceiling) — no MT1959-style \
-             ramp-ceiling gate exists to detour (residual RE miss)",
-        ));
+        levers.push(match self.emit_speed_classic(image, &mut out, flag_base) {
+            Ok(facts) => LeverReport::applied(LeverId::Speed, facts),
+            Err(e) => LeverReport::missed(LeverId::Speed, format!("{e:#}")),
+        });
 
         // Region-free — REGION_EMIT_SIG transfers to classic in a higher window.
         // Structurally valid + self-verifies → produced unconditionally.
