@@ -207,3 +207,7 @@ pub fn for_family(fam: ChipFamily) -> Result<Box<dyn Engine>> {
 #[cfg(test)]
 #[path = "engine_tests.rs"]
 mod tests;
+
+// Experimental conversion stays outside production authoring.
+#[cfg(test)]
+pub mod mt1939_research;
