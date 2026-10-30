@@ -19,6 +19,7 @@ STUB = 0x1ff000
 
 def machine(data):
     cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0, data)
     cpu.mem_map(0x01ff0000, 0x20000)

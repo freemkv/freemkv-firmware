@@ -1,5 +1,10 @@
 # MT1939 experimental UHD software completion
 
+Follow-up: [native UHD recognition comparison, 2026-10-30](mt1939-recognition-comparison-20261030.md)
+demonstrates a U/format-1 recognition path in WH16NS60 firmware that the earlier
+comparison did not cover. The completion claim below concerns the previously
+enumerated software contracts, not all native-UHD behavior or physical success.
+
 The known software-contract group is complete for all 24 held classic conversion
 candidates. Production Modify still installs none of the experimental conversion
 group. No tester BIN was saved, website changed, or release promoted. Physical UHD

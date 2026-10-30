@@ -316,16 +316,25 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 if let (Some(site), Some(stub)) =
                     (fact(l, "speed_tail_site"), fact(l, "speed_stub_va"))
                 {
+                    let mut entry = thumb::Asm::new();
+                    entry.push(0x100);
+                    let entry = entry.finish().expect("PUSH LR is encodable");
+                    checks.push(AuditCheck {
+                        lever: name,
+                        what: "classic speed saved return".into(),
+                        ok: img.get(site as usize..site as usize + 2) == Some(&entry[..2]),
+                        detail: format!("PUSH LR before the classic speed call at 0x{site:08x}"),
+                    });
                     check_branch_impl(
                         &mut checks,
                         name,
                         "classic speed tail",
                         img,
                         BranchInstall {
-                            site,
+                            site: site + 2,
                             stub,
-                            expected: thumb::encode_b_wide(site as usize, stub),
-                            kind: "b.w",
+                            expected: thumb::encode_bl(site as usize + 2, stub),
+                            kind: "bl",
                         },
                     );
                 } else if let (Some(gate), Some(stub)) =

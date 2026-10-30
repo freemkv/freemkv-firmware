@@ -20,6 +20,32 @@ fn main() -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("usage: mtk_receiver_evidence IMAGE"))?;
     let image = std::fs::read(path)?;
     if let Some(offset) = std::env::args().nth(2) {
+        if offset == "native-uhd" {
+            use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
+            let areas = UhdAreas::inspect(&image);
+            let records: Vec<_> = UhdArea::ALL
+                .into_iter()
+                .map(|area| match areas.area(area) {
+                    Ok(c) => serde_json::json!({"area":format!("{area:?}"),
+                        "variant":c.variant(),"site":c.site(),"length":c.length(),
+                        "selects_c7":c.selects_c7(),
+                        "literals":c.literals().iter().map(|l| serde_json::json!({
+                            "instruction":l.instruction,"register":l.register,"value":l.value
+                        })).collect::<Vec<_>>(),
+                        "edges":c.edges().iter().map(|e| serde_json::json!({
+                            "instruction":e.instruction,"target":e.target
+                        })).collect::<Vec<_>>()}),
+                    Err(e) => serde_json::json!({"area":format!("{area:?}"),
+                        "error":format!("{e:?}")}),
+                })
+                .collect();
+            println!(
+                "{}",
+                serde_json::json!({"areas":records,
+                "policy":"Native code evidence only; unmatched roles are unknown, not absent UHD support."})
+            );
+            return Ok(());
+        }
         if matches!(
             offset.as_str(),
             "installed-hrl" | "installed-region" | "installed-encryption"
@@ -173,6 +199,23 @@ fn main() -> anyhow::Result<()> {
             );
             return Ok(());
         }
+        if offset == "read-dispatch" {
+            let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(&image)?;
+            println!(
+                "{}",
+                serde_json::json!({
+                "policy":"initial registrar roots only; later media-specific table registration and handler semantics are not established",
+                    "roots":commands.roots(),
+                    "records":commands.records().iter()
+                        .filter(|r| [0x00, 0x03, 0x25, 0x28, 0x46, 0x9e, 0xa8, 0xad].contains(&r.opcode))
+                        .map(|r| serde_json::json!({"record":r.off,"opcode":r.opcode,
+                        "flags":r.flags,"handler":r.handler & !1,
+                        "kind":if r.handler == 0 { "placeholder" } else { "handler" }}))
+                        .collect::<Vec<_>>()
+                })
+            );
+            return Ok(());
+        }
         if offset == "ram-references" {
             let map = mediatek_optical::image::analysis::RamReferences::inspect(&image);
             println!(
@@ -310,12 +353,20 @@ fn main() -> anyhow::Result<()> {
             let role = mediatek_optical::image::analysis::ClassicSpeed::detect(&image)?;
             let stub = freemkv_fw::engine::mt1959::Mt1959Engine
                 .build_speed_stub_classic(0x0200f000, role.maximum_cell())?;
+            let mut entry = thumb_asm::Asm::new();
+            entry.push(0x100);
+            let mut entry = entry.finish()?;
+            entry.truncate(2);
+            entry.extend_from_slice(
+                &thumb_asm::encode_bl(role.site() + 2, 0x1ff000)
+                    .ok_or_else(|| anyhow::anyhow!("classic speed test branch out of range"))?,
+            );
             println!(
                 "{}",
                 serde_json::json!({"entry":role.entry(),"site":role.site(),
                 "maximum_cell":role.maximum_cell(),"optimum_cell":role.optimum_cell(),
                 "media_cell":role.media_cell(),"consumer":role.consumer(),"flag_base":0x0200f000u32,
-                "stub":stub,"branch":thumb_asm::encode_b_wide(role.site(), 0x1ff000)})
+                "stub":stub,"branch":entry})
             );
             return Ok(());
         }

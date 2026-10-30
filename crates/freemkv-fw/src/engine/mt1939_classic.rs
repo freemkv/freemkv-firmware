@@ -27,6 +27,13 @@ impl Mt1959Engine {
     pub fn build_speed_stub_classic(&self, flag_base: u32, maximum_cell: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let oem = a.label();
+        // The Thumb-1 entry saves the native LR before BL overwrites it.
+        a.push(8);
+        a.mov_reg(3, 13);
+        a.ldr_imm(3, 3, 4);
+        a.mov_reg(14, 3);
+        a.pop(8);
+        a.add_sp(4);
         a.push(2);
         a.ldr_lit(1, flag_base + abi::Feature::Speed as u32);
         a.ldrb_imm(1, 1, 0);
@@ -57,15 +64,20 @@ impl Mt1959Engine {
             .map_err(|e| anyhow!("native read-speed selector: {e}"))?;
         let bytes = self.build_speed_stub_classic(flag_base, role.maximum_cell())?;
         let va = self.free_space(out, bytes.len())?;
-        let branch = thumb::encode_b_wide(role.site(), va)
+        let branch = thumb::encode_bl(role.site() + 2, va)
             .ok_or_else(|| anyhow!("classic Speed tail branch out of range"))?;
+        let mut entry = Asm::new();
+        entry.push(0x100);
+        let mut entry = entry.finish()?;
+        entry.truncate(2); // finish pads the instruction-only fragment to four bytes.
+        entry.extend_from_slice(&branch);
         let mut candidate = out.to_vec();
         thumb::write(&mut candidate, va as usize, &bytes);
-        thumb::write(&mut candidate, role.site(), &branch);
+        thumb::write(&mut candidate, role.site(), &entry);
         crate::install_guard::verify_branch(
             &candidate,
-            role.site(),
-            thumb::BranchKind::BWide,
+            role.site() + 2,
+            thumb::BranchKind::Bl,
             va,
             "classic Speed",
         )?;
@@ -481,6 +493,29 @@ impl Mt1959Engine {
         cap: &Capability,
         defaults: &BootSettings,
     ) -> Result<ModifyReport> {
+        self.build_modify_classic_group(image, chip, cap, defaults, true)
+    }
+
+    /// Research baseline with no conversion group; only test code can select it.
+    #[cfg(test)]
+    pub(crate) fn build_detection_baseline_classic(
+        &self,
+        image: &[u8],
+        chip: &ChipInfo,
+        cap: &Capability,
+        defaults: &BootSettings,
+    ) -> Result<ModifyReport> {
+        self.build_modify_classic_group(image, chip, cap, defaults, false)
+    }
+
+    fn build_modify_classic_group(
+        &self,
+        image: &[u8],
+        chip: &ChipInfo,
+        cap: &Capability,
+        defaults: &BootSettings,
+        conversion: bool,
+    ) -> Result<ModifyReport> {
         // Idempotency: a re-fed freemkv-modified classic image reports every lever
         // AlreadyPresent and returns byte-identical (see `build_modify`).
         if is_freemkv_patched(image) {
@@ -649,7 +684,10 @@ impl Mt1959Engine {
         });
 
         // A complete group is installed by normal Modify, never a separate builder.
-        if let Some(raw) = levers.iter_mut().find(|lever| lever.id == LeverId::RawRead) {
+        if let Some(raw) = levers
+            .iter_mut()
+            .find(|lever| conversion && lever.id == LeverId::RawRead)
+        {
             let plan = super::mtk_uhd::UhdConversionPlan::inspect(image).and_then(|plan| {
                 plan.require_complete_conversion()?;
                 anyhow::ensure!(

@@ -1,0 +1,10 @@
+{
+  "package": "/Users/matthew/Desktop/BH16NS48-UHD-state-capture-Windows.zip",
+  "package_sha256": "4ffb637b1841f2ffeb6ef8e2859f63e80501b2c2b5cacc991207908afc95f2fe",
+  "exe_sha256": "1ce8ef61bdc1fb48e191dcd7586da904a02d6e994cbea5aaed6a1d1b5c616a4c",
+  "source_sha256": "7620c6c34a1050213f97ebdf37b7f5623ec5b9211bee477d551a06543cf20954",
+  "target": "x86_64-pc-windows-msvc",
+  "crt": "static",
+  "tests": "3 mock tests passed; Clippy -D warnings passed; three sample guards checked against delivered BIN",
+  "hardware_execution": "not performed on development Mac"
+}

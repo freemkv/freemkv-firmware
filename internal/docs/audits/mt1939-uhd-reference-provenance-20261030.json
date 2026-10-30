@@ -1,0 +1,2766 @@
+{
+  "source_url": "https://www.makemkv.com/download/mk-firmware-pack-20200720.zip",
+  "guide_url": "https://forum.makemkv.com/forum/viewtopic.php?t=19634",
+  "archive_sha256": "5c03087d4ad1df1d4f638d1a047a9addf11abf86284997fc891e174667797ab5",
+  "references": [
+    {
+      "member": "mk-firmware-pack-20200720/MK/ASUS/BW-16D1HT/ASUS-BW-16D1HT-3.10-WM01601-211901041014.bin",
+      "sha256": "e04ed8f38ce9e85804bc0709a9321dc43f3e468ce0c0c3bc027a1c9805556f14",
+      "bytes": 2097152,
+      "local_path": "/Users/matthew/Developer/tmp/mt1939-uhd-references-20261030/ASUS-BW-16D1HT-3.10-WM01601-211901041014.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 918402,
+                "target": 918432
+              },
+              {
+                "instruction": 918408,
+                "target": 918500
+              },
+              {
+                "instruction": 918416,
+                "target": 918424
+              },
+              {
+                "instruction": 918422,
+                "target": 918500
+              },
+              {
+                "instruction": 918426,
+                "target": 918500
+              },
+              {
+                "instruction": 918430,
+                "target": 918384
+              }
+            ],
+            "length": 36,
+            "literals": [],
+            "selects_c7": true,
+            "site": 918396,
+            "variant": "modern"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 157448,
+                "target": 157456
+              },
+              {
+                "instruction": 157454,
+                "target": 157466
+              },
+              {
+                "instruction": 157464,
+                "target": 157472
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 157434,
+                "register": 2,
+                "value": 33529342
+              },
+              {
+                "instruction": 157442,
+                "register": 0,
+                "value": 69243008
+              }
+            ],
+            "selects_c7": true,
+            "site": 157434,
+            "variant": "modern"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 208486,
+                "target": 208494
+              },
+              {
+                "instruction": 208492,
+                "target": 208678
+              },
+              {
+                "instruction": 208500,
+                "target": 208716
+              }
+            ],
+            "length": 24,
+            "literals": [
+              {
+                "instruction": 208478,
+                "register": 6,
+                "value": 33529342
+              }
+            ],
+            "selects_c7": true,
+            "site": 208478,
+            "variant": "modern"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 886904,
+                "target": 886944
+              },
+              {
+                "instruction": 886910,
+                "target": 886948
+              },
+              {
+                "instruction": 886916,
+                "target": 1306392
+              },
+              {
+                "instruction": 886926,
+                "target": 886962
+              }
+            ],
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 886892,
+                "register": 0,
+                "value": 33529342
+              },
+              {
+                "instruction": 886924,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 886892,
+            "variant": "modern"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 887028,
+                "target": 887102
+              },
+              {
+                "instruction": 887036,
+                "target": 887070
+              },
+              {
+                "instruction": 887042,
+                "target": 1306392
+              },
+              {
+                "instruction": 887052,
+                "target": 887098
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 887016,
+                "register": 0,
+                "value": 33529342
+              },
+              {
+                "instruction": 887026,
+                "register": 1,
+                "value": 33557271
+              },
+              {
+                "instruction": 887050,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887014,
+            "variant": "modern"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 888376,
+                "target": 888508
+              },
+              {
+                "instruction": 888384,
+                "target": 888388
+              },
+              {
+                "instruction": 888398,
+                "target": 888406
+              },
+              {
+                "instruction": 888404,
+                "target": 888424
+              },
+              {
+                "instruction": 888412,
+                "target": 888424
+              },
+              {
+                "instruction": 888422,
+                "target": 888440
+              }
+            ],
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 888364,
+                "register": 1,
+                "value": 33529342
+              },
+              {
+                "instruction": 888394,
+                "register": 5,
+                "value": 69251456
+              },
+              {
+                "instruction": 888406,
+                "register": 2,
+                "value": 33557264
+              },
+              {
+                "instruction": 888426,
+                "register": 3,
+                "value": 1378225
+              }
+            ],
+            "selects_c7": true,
+            "site": 888364,
+            "variant": "modern"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 427322,
+                "target": 427500
+              },
+              {
+                "instruction": 427328,
+                "target": 427334
+              },
+              {
+                "instruction": 427332,
+                "target": 427478
+              },
+              {
+                "instruction": 427344,
+                "target": 427372
+              },
+              {
+                "instruction": 427350,
+                "target": 427502
+              },
+              {
+                "instruction": 427358,
+                "target": 427502
+              },
+              {
+                "instruction": 427366,
+                "target": 427502
+              },
+              {
+                "instruction": 427370,
+                "target": 427478
+              }
+            ],
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 427302,
+                "register": 7,
+                "value": 33529342
+              },
+              {
+                "instruction": 427310,
+                "register": 0,
+                "value": 33557259
+              },
+              {
+                "instruction": 427312,
+                "register": 3,
+                "value": 33529282
+              },
+              {
+                "instruction": 427314,
+                "register": 6,
+                "value": 33529346
+              },
+              {
+                "instruction": 427316,
+                "register": 2,
+                "value": 33530757
+              },
+              {
+                "instruction": 427318,
+                "register": 1,
+                "value": 33529344
+              },
+              {
+                "instruction": 427334,
+                "register": 7,
+                "value": 33529342
+              }
+            ],
+            "selects_c7": null,
+            "site": 427300,
+            "variant": "modern"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    },
+    {
+      "member": "mk-firmware-pack-20200720/MK/old/HL-DT-ST-BD-RE_BU40N-1.03-NM00000-211810241934.bin",
+      "sha256": "64900e8d69212f5d729b9dfa45ef0f317378db8c8b48083a7cb99831235b5d57",
+      "bytes": 2097152,
+      "local_path": "/Users/matthew/Developer/tmp/mt1939-uhd-references-20261030/HL-DT-ST-BD-RE_BU40N-1.03-NM00000-211810241934.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 921182,
+                "target": 921220
+              },
+              {
+                "instruction": 921194,
+                "target": 921242
+              },
+              {
+                "instruction": 921198,
+                "target": 921286
+              },
+              {
+                "instruction": 921206,
+                "target": 921212
+              },
+              {
+                "instruction": 921210,
+                "target": 921242
+              },
+              {
+                "instruction": 921214,
+                "target": 921286
+              },
+              {
+                "instruction": 921218,
+                "target": 921242
+              }
+            ],
+            "length": 46,
+            "literals": [
+              {
+                "instruction": 921184,
+                "register": 1,
+                "value": 33557273
+              }
+            ],
+            "selects_c7": true,
+            "site": 921174,
+            "variant": "modern_u_flag_variant"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 167786,
+                "target": 167794
+              },
+              {
+                "instruction": 167792,
+                "target": 167804
+              },
+              {
+                "instruction": 167802,
+                "target": 167810
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167772,
+                "register": 2,
+                "value": 33529348
+              },
+              {
+                "instruction": 167780,
+                "register": 0,
+                "value": 69242944
+              }
+            ],
+            "selects_c7": true,
+            "site": 167772,
+            "variant": "modern_base40"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 218186,
+                "target": 218202
+              },
+              {
+                "instruction": 218194,
+                "target": 218202
+              },
+              {
+                "instruction": 218200,
+                "target": 218386
+              },
+              {
+                "instruction": 218206,
+                "target": 218382
+              }
+            ],
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218178,
+                "register": 6,
+                "value": 33529348
+              }
+            ],
+            "selects_c7": true,
+            "site": 218178,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 887058,
+                "target": 887098
+              },
+              {
+                "instruction": 887064,
+                "target": 887102
+              },
+              {
+                "instruction": 887070,
+                "target": 1296072
+              },
+              {
+                "instruction": 887080,
+                "target": 887116
+              }
+            ],
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 887046,
+                "register": 0,
+                "value": 33529348
+              },
+              {
+                "instruction": 887078,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887046,
+            "variant": "modern"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 887288,
+                "target": 887364
+              },
+              {
+                "instruction": 887296,
+                "target": 887332
+              },
+              {
+                "instruction": 887302,
+                "target": 1296072
+              },
+              {
+                "instruction": 887312,
+                "target": 887360
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 887276,
+                "register": 0,
+                "value": 33529348
+              },
+              {
+                "instruction": 887286,
+                "register": 1,
+                "value": 33557274
+              },
+              {
+                "instruction": 887310,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887274,
+            "variant": "modern"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 888608,
+                "target": 888740
+              },
+              {
+                "instruction": 888616,
+                "target": 888620
+              },
+              {
+                "instruction": 888630,
+                "target": 888638
+              },
+              {
+                "instruction": 888636,
+                "target": 888656
+              },
+              {
+                "instruction": 888644,
+                "target": 888656
+              },
+              {
+                "instruction": 888654,
+                "target": 888672
+              }
+            ],
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 888596,
+                "register": 7,
+                "value": 33529348
+              },
+              {
+                "instruction": 888626,
+                "register": 3,
+                "value": 69251456
+              },
+              {
+                "instruction": 888638,
+                "register": 1,
+                "value": 33557265
+              },
+              {
+                "instruction": 888658,
+                "register": 2,
+                "value": 1367075
+              }
+            ],
+            "selects_c7": true,
+            "site": 888596,
+            "variant": "modern_register_variant"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 896504,
+                "target": 896760
+              },
+              {
+                "instruction": 896516,
+                "target": 896686
+              },
+              {
+                "instruction": 896524,
+                "target": 896546
+              },
+              {
+                "instruction": 896530,
+                "target": 896686
+              },
+              {
+                "instruction": 896538,
+                "target": 896686
+              },
+              {
+                "instruction": 896544,
+                "target": 896686
+              }
+            ],
+            "length": 62,
+            "literals": [
+              {
+                "instruction": 896486,
+                "register": 3,
+                "value": 33529348
+              },
+              {
+                "instruction": 896494,
+                "register": 1,
+                "value": 33529286
+              },
+              {
+                "instruction": 896496,
+                "register": 4,
+                "value": 33557260
+              },
+              {
+                "instruction": 896498,
+                "register": 5,
+                "value": 33529350
+              },
+              {
+                "instruction": 896500,
+                "register": 6,
+                "value": 33530773
+              },
+              {
+                "instruction": 896506,
+                "register": 0,
+                "value": 33529352
+              }
+            ],
+            "selects_c7": null,
+            "site": 896484,
+            "variant": "slim_fixed6_c7_aware"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    },
+    {
+      "member": "mk-firmware-pack-20200720/MK/old/HL-DT-ST-BD-RE_WH16NS60-1.02-NM00100-211810291936.bin",
+      "sha256": "c5e351d25f647599185b117f569a98c42c1fc54f6bc07d21410677afa6372510",
+      "bytes": 2097152,
+      "local_path": "/Users/matthew/Developer/tmp/mt1939-uhd-references-20261030/HL-DT-ST-BD-RE_WH16NS60-1.02-NM00100-211810291936.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 927234,
+                "target": 927274
+              },
+              {
+                "instruction": 927246,
+                "target": 927296
+              },
+              {
+                "instruction": 927250,
+                "target": 927340
+              },
+              {
+                "instruction": 927258,
+                "target": 927266
+              },
+              {
+                "instruction": 927264,
+                "target": 927340
+              },
+              {
+                "instruction": 927268,
+                "target": 927340
+              },
+              {
+                "instruction": 927272,
+                "target": 927296
+              }
+            ],
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 927236,
+                "register": 1,
+                "value": 33557491
+              }
+            ],
+            "selects_c7": true,
+            "site": 927226,
+            "variant": "modern_u_flag_store_variant"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 167074,
+                "target": 167082
+              },
+              {
+                "instruction": 167080,
+                "target": 167092
+              },
+              {
+                "instruction": 167090,
+                "target": 167098
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167060,
+                "register": 2,
+                "value": 33529344
+              },
+              {
+                "instruction": 167068,
+                "register": 0,
+                "value": 69243008
+              }
+            ],
+            "selects_c7": true,
+            "site": 167060,
+            "variant": "modern"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 217318,
+                "target": 217334
+              },
+              {
+                "instruction": 217326,
+                "target": 217334
+              },
+              {
+                "instruction": 217332,
+                "target": 217518
+              },
+              {
+                "instruction": 217338,
+                "target": 217514
+              }
+            ],
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 217310,
+                "register": 6,
+                "value": 33529344
+              }
+            ],
+            "selects_c7": true,
+            "site": 217310,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 890864,
+                "target": 890904
+              },
+              {
+                "instruction": 890870,
+                "target": 890908
+              },
+              {
+                "instruction": 890876,
+                "target": 1290900
+              },
+              {
+                "instruction": 890886,
+                "target": 890922
+              }
+            ],
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 890852,
+                "register": 0,
+                "value": 33529344
+              },
+              {
+                "instruction": 890884,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 890852,
+            "variant": "modern"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 890988,
+                "target": 891062
+              },
+              {
+                "instruction": 890996,
+                "target": 891030
+              },
+              {
+                "instruction": 891002,
+                "target": 1290900
+              },
+              {
+                "instruction": 891012,
+                "target": 891058
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 890976,
+                "register": 0,
+                "value": 33529344
+              },
+              {
+                "instruction": 890986,
+                "register": 1,
+                "value": 33557271
+              },
+              {
+                "instruction": 891010,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 890974,
+            "variant": "modern"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 892336,
+                "target": 892468
+              },
+              {
+                "instruction": 892344,
+                "target": 892348
+              },
+              {
+                "instruction": 892358,
+                "target": 892366
+              },
+              {
+                "instruction": 892364,
+                "target": 892384
+              },
+              {
+                "instruction": 892372,
+                "target": 892384
+              },
+              {
+                "instruction": 892382,
+                "target": 892400
+              }
+            ],
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 892324,
+                "register": 7,
+                "value": 33529344
+              },
+              {
+                "instruction": 892354,
+                "register": 3,
+                "value": 69251456
+              },
+              {
+                "instruction": 892366,
+                "register": 1,
+                "value": 33557264
+              },
+              {
+                "instruction": 892386,
+                "register": 2,
+                "value": 1363401
+              }
+            ],
+            "selects_c7": true,
+            "site": 892324,
+            "variant": "modern_register_variant"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 897526,
+                "target": 897682
+              },
+              {
+                "instruction": 897534,
+                "target": 897542
+              },
+              {
+                "instruction": 897540,
+                "target": 897606
+              },
+              {
+                "instruction": 897550,
+                "target": 897630
+              },
+              {
+                "instruction": 897556,
+                "target": 897596
+              },
+              {
+                "instruction": 897564,
+                "target": 897596
+              },
+              {
+                "instruction": 897572,
+                "target": 897596
+              },
+              {
+                "instruction": 897574,
+                "target": 1102408
+              },
+              {
+                "instruction": 897580,
+                "target": 897600
+              },
+              {
+                "instruction": 897588,
+                "target": 897596
+              },
+              {
+                "instruction": 897594,
+                "target": 897600
+              },
+              {
+                "instruction": 897598,
+                "target": 897602
+              }
+            ],
+            "length": 102,
+            "literals": [
+              {
+                "instruction": 897506,
+                "register": 3,
+                "value": 33529344
+              },
+              {
+                "instruction": 897516,
+                "register": 0,
+                "value": 33529282
+              },
+              {
+                "instruction": 897518,
+                "register": 6,
+                "value": 33530737
+              },
+              {
+                "instruction": 897520,
+                "register": 4,
+                "value": 33557259
+              },
+              {
+                "instruction": 897522,
+                "register": 5,
+                "value": 33529346
+              },
+              {
+                "instruction": 897528,
+                "register": 2,
+                "value": 33529348
+              },
+              {
+                "instruction": 897542,
+                "register": 3,
+                "value": 33529344
+              },
+              {
+                "instruction": 897582,
+                "register": 1,
+                "value": 33529377
+              }
+            ],
+            "selects_c7": null,
+            "site": 897504,
+            "variant": "desktop_default8_c7_aware"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    }
+  ],
+  "qualification": "Documented UHD model/version references and exact developer-archive bytes; these individual SHA256 images have not been personally hardware-tested in this session.",
+  "comparisons": [
+    {
+      "member": "mk-firmware-pack-20200720/MK/ASUS/BW-16D1HT/ASUS-BW-16D1HT-3.10-WM01601-211901041014.bin",
+      "sha256": "e04ed8f38ce9e85804bc0709a9321dc43f3e468ce0c0c3bc027a1c9805556f14",
+      "bytes": 2097152,
+      "local_path": "/Users/matthew/Developer/tmp/mt1939-uhd-references-20261030/ASUS-BW-16D1HT-3.10-WM01601-211901041014.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 918402,
+                "target": 918432
+              },
+              {
+                "instruction": 918408,
+                "target": 918500
+              },
+              {
+                "instruction": 918416,
+                "target": 918424
+              },
+              {
+                "instruction": 918422,
+                "target": 918500
+              },
+              {
+                "instruction": 918426,
+                "target": 918500
+              },
+              {
+                "instruction": 918430,
+                "target": 918384
+              }
+            ],
+            "length": 36,
+            "literals": [],
+            "selects_c7": true,
+            "site": 918396,
+            "variant": "modern"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 157448,
+                "target": 157456
+              },
+              {
+                "instruction": 157454,
+                "target": 157466
+              },
+              {
+                "instruction": 157464,
+                "target": 157472
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 157434,
+                "register": 2,
+                "value": 33529342
+              },
+              {
+                "instruction": 157442,
+                "register": 0,
+                "value": 69243008
+              }
+            ],
+            "selects_c7": true,
+            "site": 157434,
+            "variant": "modern"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 208486,
+                "target": 208494
+              },
+              {
+                "instruction": 208492,
+                "target": 208678
+              },
+              {
+                "instruction": 208500,
+                "target": 208716
+              }
+            ],
+            "length": 24,
+            "literals": [
+              {
+                "instruction": 208478,
+                "register": 6,
+                "value": 33529342
+              }
+            ],
+            "selects_c7": true,
+            "site": 208478,
+            "variant": "modern"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 886904,
+                "target": 886944
+              },
+              {
+                "instruction": 886910,
+                "target": 886948
+              },
+              {
+                "instruction": 886916,
+                "target": 1306392
+              },
+              {
+                "instruction": 886926,
+                "target": 886962
+              }
+            ],
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 886892,
+                "register": 0,
+                "value": 33529342
+              },
+              {
+                "instruction": 886924,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 886892,
+            "variant": "modern"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 887028,
+                "target": 887102
+              },
+              {
+                "instruction": 887036,
+                "target": 887070
+              },
+              {
+                "instruction": 887042,
+                "target": 1306392
+              },
+              {
+                "instruction": 887052,
+                "target": 887098
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 887016,
+                "register": 0,
+                "value": 33529342
+              },
+              {
+                "instruction": 887026,
+                "register": 1,
+                "value": 33557271
+              },
+              {
+                "instruction": 887050,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887014,
+            "variant": "modern"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 888376,
+                "target": 888508
+              },
+              {
+                "instruction": 888384,
+                "target": 888388
+              },
+              {
+                "instruction": 888398,
+                "target": 888406
+              },
+              {
+                "instruction": 888404,
+                "target": 888424
+              },
+              {
+                "instruction": 888412,
+                "target": 888424
+              },
+              {
+                "instruction": 888422,
+                "target": 888440
+              }
+            ],
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 888364,
+                "register": 1,
+                "value": 33529342
+              },
+              {
+                "instruction": 888394,
+                "register": 5,
+                "value": 69251456
+              },
+              {
+                "instruction": 888406,
+                "register": 2,
+                "value": 33557264
+              },
+              {
+                "instruction": 888426,
+                "register": 3,
+                "value": 1378225
+              }
+            ],
+            "selects_c7": true,
+            "site": 888364,
+            "variant": "modern"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 427322,
+                "target": 427500
+              },
+              {
+                "instruction": 427328,
+                "target": 427334
+              },
+              {
+                "instruction": 427332,
+                "target": 427478
+              },
+              {
+                "instruction": 427344,
+                "target": 427372
+              },
+              {
+                "instruction": 427350,
+                "target": 427502
+              },
+              {
+                "instruction": 427358,
+                "target": 427502
+              },
+              {
+                "instruction": 427366,
+                "target": 427502
+              },
+              {
+                "instruction": 427370,
+                "target": 427478
+              }
+            ],
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 427302,
+                "register": 7,
+                "value": 33529342
+              },
+              {
+                "instruction": 427310,
+                "register": 0,
+                "value": 33557259
+              },
+              {
+                "instruction": 427312,
+                "register": 3,
+                "value": 33529282
+              },
+              {
+                "instruction": 427314,
+                "register": 6,
+                "value": 33529346
+              },
+              {
+                "instruction": 427316,
+                "register": 2,
+                "value": 33530757
+              },
+              {
+                "instruction": 427318,
+                "register": 1,
+                "value": 33529344
+              },
+              {
+                "instruction": 427334,
+                "register": 7,
+                "value": 33529342
+              }
+            ],
+            "selects_c7": null,
+            "site": 427300,
+            "variant": "modern"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    },
+    {
+      "member": "mk-firmware-pack-20200720/MK/old/HL-DT-ST-BD-RE_BU40N-1.03-NM00000-211810241934.bin",
+      "sha256": "64900e8d69212f5d729b9dfa45ef0f317378db8c8b48083a7cb99831235b5d57",
+      "bytes": 2097152,
+      "local_path": "/Users/matthew/Developer/tmp/mt1939-uhd-references-20261030/HL-DT-ST-BD-RE_BU40N-1.03-NM00000-211810241934.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 921182,
+                "target": 921220
+              },
+              {
+                "instruction": 921194,
+                "target": 921242
+              },
+              {
+                "instruction": 921198,
+                "target": 921286
+              },
+              {
+                "instruction": 921206,
+                "target": 921212
+              },
+              {
+                "instruction": 921210,
+                "target": 921242
+              },
+              {
+                "instruction": 921214,
+                "target": 921286
+              },
+              {
+                "instruction": 921218,
+                "target": 921242
+              }
+            ],
+            "length": 46,
+            "literals": [
+              {
+                "instruction": 921184,
+                "register": 1,
+                "value": 33557273
+              }
+            ],
+            "selects_c7": true,
+            "site": 921174,
+            "variant": "modern_u_flag_variant"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 167786,
+                "target": 167794
+              },
+              {
+                "instruction": 167792,
+                "target": 167804
+              },
+              {
+                "instruction": 167802,
+                "target": 167810
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167772,
+                "register": 2,
+                "value": 33529348
+              },
+              {
+                "instruction": 167780,
+                "register": 0,
+                "value": 69242944
+              }
+            ],
+            "selects_c7": true,
+            "site": 167772,
+            "variant": "modern_base40"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 218186,
+                "target": 218202
+              },
+              {
+                "instruction": 218194,
+                "target": 218202
+              },
+              {
+                "instruction": 218200,
+                "target": 218386
+              },
+              {
+                "instruction": 218206,
+                "target": 218382
+              }
+            ],
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218178,
+                "register": 6,
+                "value": 33529348
+              }
+            ],
+            "selects_c7": true,
+            "site": 218178,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 887058,
+                "target": 887098
+              },
+              {
+                "instruction": 887064,
+                "target": 887102
+              },
+              {
+                "instruction": 887070,
+                "target": 1296072
+              },
+              {
+                "instruction": 887080,
+                "target": 887116
+              }
+            ],
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 887046,
+                "register": 0,
+                "value": 33529348
+              },
+              {
+                "instruction": 887078,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887046,
+            "variant": "modern"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 887288,
+                "target": 887364
+              },
+              {
+                "instruction": 887296,
+                "target": 887332
+              },
+              {
+                "instruction": 887302,
+                "target": 1296072
+              },
+              {
+                "instruction": 887312,
+                "target": 887360
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 887276,
+                "register": 0,
+                "value": 33529348
+              },
+              {
+                "instruction": 887286,
+                "register": 1,
+                "value": 33557274
+              },
+              {
+                "instruction": 887310,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887274,
+            "variant": "modern"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 888608,
+                "target": 888740
+              },
+              {
+                "instruction": 888616,
+                "target": 888620
+              },
+              {
+                "instruction": 888630,
+                "target": 888638
+              },
+              {
+                "instruction": 888636,
+                "target": 888656
+              },
+              {
+                "instruction": 888644,
+                "target": 888656
+              },
+              {
+                "instruction": 888654,
+                "target": 888672
+              }
+            ],
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 888596,
+                "register": 7,
+                "value": 33529348
+              },
+              {
+                "instruction": 888626,
+                "register": 3,
+                "value": 69251456
+              },
+              {
+                "instruction": 888638,
+                "register": 1,
+                "value": 33557265
+              },
+              {
+                "instruction": 888658,
+                "register": 2,
+                "value": 1367075
+              }
+            ],
+            "selects_c7": true,
+            "site": 888596,
+            "variant": "modern_register_variant"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 896504,
+                "target": 896760
+              },
+              {
+                "instruction": 896516,
+                "target": 896686
+              },
+              {
+                "instruction": 896524,
+                "target": 896546
+              },
+              {
+                "instruction": 896530,
+                "target": 896686
+              },
+              {
+                "instruction": 896538,
+                "target": 896686
+              },
+              {
+                "instruction": 896544,
+                "target": 896686
+              }
+            ],
+            "length": 62,
+            "literals": [
+              {
+                "instruction": 896486,
+                "register": 3,
+                "value": 33529348
+              },
+              {
+                "instruction": 896494,
+                "register": 1,
+                "value": 33529286
+              },
+              {
+                "instruction": 896496,
+                "register": 4,
+                "value": 33557260
+              },
+              {
+                "instruction": 896498,
+                "register": 5,
+                "value": 33529350
+              },
+              {
+                "instruction": 896500,
+                "register": 6,
+                "value": 33530773
+              },
+              {
+                "instruction": 896506,
+                "register": 0,
+                "value": 33529352
+              }
+            ],
+            "selects_c7": null,
+            "site": 896484,
+            "variant": "slim_fixed6_c7_aware"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    },
+    {
+      "member": "mk-firmware-pack-20200720/MK/old/HL-DT-ST-BD-RE_WH16NS60-1.02-NM00100-211810291936.bin",
+      "sha256": "c5e351d25f647599185b117f569a98c42c1fc54f6bc07d21410677afa6372510",
+      "bytes": 2097152,
+      "local_path": "/Users/matthew/Developer/tmp/mt1939-uhd-references-20261030/HL-DT-ST-BD-RE_WH16NS60-1.02-NM00100-211810291936.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 927234,
+                "target": 927274
+              },
+              {
+                "instruction": 927246,
+                "target": 927296
+              },
+              {
+                "instruction": 927250,
+                "target": 927340
+              },
+              {
+                "instruction": 927258,
+                "target": 927266
+              },
+              {
+                "instruction": 927264,
+                "target": 927340
+              },
+              {
+                "instruction": 927268,
+                "target": 927340
+              },
+              {
+                "instruction": 927272,
+                "target": 927296
+              }
+            ],
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 927236,
+                "register": 1,
+                "value": 33557491
+              }
+            ],
+            "selects_c7": true,
+            "site": 927226,
+            "variant": "modern_u_flag_store_variant"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 167074,
+                "target": 167082
+              },
+              {
+                "instruction": 167080,
+                "target": 167092
+              },
+              {
+                "instruction": 167090,
+                "target": 167098
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167060,
+                "register": 2,
+                "value": 33529344
+              },
+              {
+                "instruction": 167068,
+                "register": 0,
+                "value": 69243008
+              }
+            ],
+            "selects_c7": true,
+            "site": 167060,
+            "variant": "modern"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 217318,
+                "target": 217334
+              },
+              {
+                "instruction": 217326,
+                "target": 217334
+              },
+              {
+                "instruction": 217332,
+                "target": 217518
+              },
+              {
+                "instruction": 217338,
+                "target": 217514
+              }
+            ],
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 217310,
+                "register": 6,
+                "value": 33529344
+              }
+            ],
+            "selects_c7": true,
+            "site": 217310,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 890864,
+                "target": 890904
+              },
+              {
+                "instruction": 890870,
+                "target": 890908
+              },
+              {
+                "instruction": 890876,
+                "target": 1290900
+              },
+              {
+                "instruction": 890886,
+                "target": 890922
+              }
+            ],
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 890852,
+                "register": 0,
+                "value": 33529344
+              },
+              {
+                "instruction": 890884,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 890852,
+            "variant": "modern"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 890988,
+                "target": 891062
+              },
+              {
+                "instruction": 890996,
+                "target": 891030
+              },
+              {
+                "instruction": 891002,
+                "target": 1290900
+              },
+              {
+                "instruction": 891012,
+                "target": 891058
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 890976,
+                "register": 0,
+                "value": 33529344
+              },
+              {
+                "instruction": 890986,
+                "register": 1,
+                "value": 33557271
+              },
+              {
+                "instruction": 891010,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 890974,
+            "variant": "modern"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 892336,
+                "target": 892468
+              },
+              {
+                "instruction": 892344,
+                "target": 892348
+              },
+              {
+                "instruction": 892358,
+                "target": 892366
+              },
+              {
+                "instruction": 892364,
+                "target": 892384
+              },
+              {
+                "instruction": 892372,
+                "target": 892384
+              },
+              {
+                "instruction": 892382,
+                "target": 892400
+              }
+            ],
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 892324,
+                "register": 7,
+                "value": 33529344
+              },
+              {
+                "instruction": 892354,
+                "register": 3,
+                "value": 69251456
+              },
+              {
+                "instruction": 892366,
+                "register": 1,
+                "value": 33557264
+              },
+              {
+                "instruction": 892386,
+                "register": 2,
+                "value": 1363401
+              }
+            ],
+            "selects_c7": true,
+            "site": 892324,
+            "variant": "modern_register_variant"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 897526,
+                "target": 897682
+              },
+              {
+                "instruction": 897534,
+                "target": 897542
+              },
+              {
+                "instruction": 897540,
+                "target": 897606
+              },
+              {
+                "instruction": 897550,
+                "target": 897630
+              },
+              {
+                "instruction": 897556,
+                "target": 897596
+              },
+              {
+                "instruction": 897564,
+                "target": 897596
+              },
+              {
+                "instruction": 897572,
+                "target": 897596
+              },
+              {
+                "instruction": 897574,
+                "target": 1102408
+              },
+              {
+                "instruction": 897580,
+                "target": 897600
+              },
+              {
+                "instruction": 897588,
+                "target": 897596
+              },
+              {
+                "instruction": 897594,
+                "target": 897600
+              },
+              {
+                "instruction": 897598,
+                "target": 897602
+              }
+            ],
+            "length": 102,
+            "literals": [
+              {
+                "instruction": 897506,
+                "register": 3,
+                "value": 33529344
+              },
+              {
+                "instruction": 897516,
+                "register": 0,
+                "value": 33529282
+              },
+              {
+                "instruction": 897518,
+                "register": 6,
+                "value": 33530737
+              },
+              {
+                "instruction": 897520,
+                "register": 4,
+                "value": 33557259
+              },
+              {
+                "instruction": 897522,
+                "register": 5,
+                "value": 33529346
+              },
+              {
+                "instruction": 897528,
+                "register": 2,
+                "value": 33529348
+              },
+              {
+                "instruction": 897542,
+                "register": 3,
+                "value": 33529344
+              },
+              {
+                "instruction": 897582,
+                "register": 1,
+                "value": 33529377
+              }
+            ],
+            "selects_c7": null,
+            "site": 897504,
+            "variant": "desktop_default8_c7_aware"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    },
+    {
+      "local_path": "/Users/matthew/Developer/freemkv/freemkv-firmware/crates/freemkv-fw/tests/fixtures/BU40N_OEM_1.00.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 921130,
+                "target": 921168
+              },
+              {
+                "instruction": 921142,
+                "target": 921190
+              },
+              {
+                "instruction": 921146,
+                "target": 921234
+              },
+              {
+                "instruction": 921154,
+                "target": 921160
+              },
+              {
+                "instruction": 921158,
+                "target": 921190
+              },
+              {
+                "instruction": 921162,
+                "target": 921234
+              },
+              {
+                "instruction": 921166,
+                "target": 921190
+              }
+            ],
+            "length": 46,
+            "literals": [
+              {
+                "instruction": 921132,
+                "register": 1,
+                "value": 33557273
+              }
+            ],
+            "selects_c7": true,
+            "site": 921122,
+            "variant": "modern_u_flag_variant"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 167586,
+                "target": 167594
+              },
+              {
+                "instruction": 167592,
+                "target": 167604
+              },
+              {
+                "instruction": 167602,
+                "target": 167610
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167572,
+                "register": 2,
+                "value": 33529348
+              },
+              {
+                "instruction": 167580,
+                "register": 0,
+                "value": 69242944
+              }
+            ],
+            "selects_c7": true,
+            "site": 167572,
+            "variant": "modern_base40"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 217986,
+                "target": 218002
+              },
+              {
+                "instruction": 217994,
+                "target": 218002
+              },
+              {
+                "instruction": 218000,
+                "target": 218186
+              },
+              {
+                "instruction": 218006,
+                "target": 218182
+              }
+            ],
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 217978,
+                "register": 6,
+                "value": 33529348
+              }
+            ],
+            "selects_c7": true,
+            "site": 217978,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 887086,
+                "target": 887126
+              },
+              {
+                "instruction": 887092,
+                "target": 887130
+              },
+              {
+                "instruction": 887098,
+                "target": 1294964
+              },
+              {
+                "instruction": 887108,
+                "target": 887144
+              }
+            ],
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 887074,
+                "register": 0,
+                "value": 33529348
+              },
+              {
+                "instruction": 887106,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887074,
+            "variant": "modern"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 887316,
+                "target": 887392
+              },
+              {
+                "instruction": 887324,
+                "target": 887360
+              },
+              {
+                "instruction": 887330,
+                "target": 1294964
+              },
+              {
+                "instruction": 887340,
+                "target": 887388
+              }
+            ],
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 887304,
+                "register": 0,
+                "value": 33529348
+              },
+              {
+                "instruction": 887314,
+                "register": 1,
+                "value": 33557274
+              },
+              {
+                "instruction": 887338,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": true,
+            "site": 887302,
+            "variant": "modern"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 888636,
+                "target": 888768
+              },
+              {
+                "instruction": 888644,
+                "target": 888648
+              },
+              {
+                "instruction": 888658,
+                "target": 888666
+              },
+              {
+                "instruction": 888664,
+                "target": 888684
+              },
+              {
+                "instruction": 888672,
+                "target": 888684
+              },
+              {
+                "instruction": 888682,
+                "target": 888700
+              }
+            ],
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 888624,
+                "register": 7,
+                "value": 33529348
+              },
+              {
+                "instruction": 888654,
+                "register": 3,
+                "value": 69251456
+              },
+              {
+                "instruction": 888666,
+                "register": 1,
+                "value": 33557265
+              },
+              {
+                "instruction": 888686,
+                "register": 2,
+                "value": 1365421
+              }
+            ],
+            "selects_c7": true,
+            "site": 888624,
+            "variant": "modern_register_variant"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 896532,
+                "target": 896788
+              },
+              {
+                "instruction": 896544,
+                "target": 896714
+              },
+              {
+                "instruction": 896552,
+                "target": 896574
+              },
+              {
+                "instruction": 896558,
+                "target": 896714
+              },
+              {
+                "instruction": 896566,
+                "target": 896714
+              },
+              {
+                "instruction": 896572,
+                "target": 896714
+              }
+            ],
+            "length": 62,
+            "literals": [
+              {
+                "instruction": 896514,
+                "register": 3,
+                "value": 33529348
+              },
+              {
+                "instruction": 896522,
+                "register": 1,
+                "value": 33529286
+              },
+              {
+                "instruction": 896524,
+                "register": 4,
+                "value": 33557260
+              },
+              {
+                "instruction": 896526,
+                "register": 5,
+                "value": 33529350
+              },
+              {
+                "instruction": 896528,
+                "register": 6,
+                "value": 33530773
+              },
+              {
+                "instruction": 896534,
+                "register": 0,
+                "value": 33529352
+              }
+            ],
+            "selects_c7": null,
+            "site": 896512,
+            "variant": "slim_fixed6_c7_aware"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    },
+    {
+      "local_path": "/Users/matthew/Developer/firmware-extractor/hoard/originals/43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3/BH16NS48_1.02_43c484dc.bin",
+      "native_uhd": {
+        "areas": [
+          {
+            "area": "DiscInformation",
+            "edges": [
+              {
+                "instruction": 1091816,
+                "target": 1091838
+              },
+              {
+                "instruction": 1091824,
+                "target": 1091834
+              },
+              {
+                "instruction": 1091828,
+                "target": 1091834
+              },
+              {
+                "instruction": 1091832,
+                "target": 1091892
+              },
+              {
+                "instruction": 1091836,
+                "target": 1091892
+              }
+            ],
+            "length": 28,
+            "literals": [],
+            "selects_c7": false,
+            "site": 1091810,
+            "variant": "classic"
+          },
+          {
+            "area": "ControlBit",
+            "edges": [
+              {
+                "instruction": 222336,
+                "target": 222344
+              },
+              {
+                "instruction": 222342,
+                "target": 222348
+              }
+            ],
+            "length": 28,
+            "literals": [
+              {
+                "instruction": 222322,
+                "register": 0,
+                "value": 33529299
+              },
+              {
+                "instruction": 222330,
+                "register": 0,
+                "value": 69242880
+              }
+            ],
+            "selects_c7": false,
+            "site": 222322,
+            "variant": "classic"
+          },
+          {
+            "area": "ControlField",
+            "edges": [
+              {
+                "instruction": 205130,
+                "target": 205142
+              },
+              {
+                "instruction": 205140,
+                "target": 205264
+              },
+              {
+                "instruction": 205150,
+                "target": 205232
+              },
+              {
+                "instruction": 205162,
+                "target": 205264
+              }
+            ],
+            "length": 44,
+            "literals": [
+              {
+                "instruction": 205120,
+                "register": 6,
+                "value": 33529299
+              },
+              {
+                "instruction": 205142,
+                "register": 6,
+                "value": 33529299
+              }
+            ],
+            "selects_c7": false,
+            "site": 205120,
+            "variant": "classic"
+          },
+          {
+            "area": "ForwardCalculation",
+            "edges": [
+              {
+                "instruction": 1037378,
+                "target": 1037612
+              },
+              {
+                "instruction": 1037386,
+                "target": 1037420
+              },
+              {
+                "instruction": 1037392,
+                "target": 1659600
+              },
+              {
+                "instruction": 1037402,
+                "target": 1037434
+              }
+            ],
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 1037366,
+                "register": 1,
+                "value": 33529299
+              },
+              {
+                "instruction": 1037400,
+                "register": 1,
+                "value": 20913
+              }
+            ],
+            "selects_c7": false,
+            "site": 1037366,
+            "variant": "classic"
+          },
+          {
+            "area": "ReverseCalculation",
+            "edges": [
+              {
+                "instruction": 1037498,
+                "target": 1037378
+              },
+              {
+                "instruction": 1037506,
+                "target": 1037540
+              }
+            ],
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 1037486,
+                "register": 1,
+                "value": 33529299
+              }
+            ],
+            "selects_c7": false,
+            "site": 1037486,
+            "variant": "classic"
+          },
+          {
+            "area": "ParameterNibble",
+            "edges": [
+              {
+                "instruction": 1038260,
+                "target": 1038376
+              },
+              {
+                "instruction": 1038268,
+                "target": 1038272
+              },
+              {
+                "instruction": 1038282,
+                "target": 1038302
+              },
+              {
+                "instruction": 1038290,
+                "target": 1038302
+              },
+              {
+                "instruction": 1038300,
+                "target": 1038318
+              }
+            ],
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 1038248,
+                "register": 1,
+                "value": 33529299
+              },
+              {
+                "instruction": 1038278,
+                "register": 5,
+                "value": 69251456
+              },
+              {
+                "instruction": 1038284,
+                "register": 2,
+                "value": 33557269
+              },
+              {
+                "instruction": 1038304,
+                "register": 3,
+                "value": 1719629
+              }
+            ],
+            "selects_c7": false,
+            "site": 1038248,
+            "variant": "classic"
+          },
+          {
+            "area": "HardwareDefaults",
+            "edges": [
+              {
+                "instruction": 423742,
+                "target": 423962
+              },
+              {
+                "instruction": 423750,
+                "target": 423756
+              },
+              {
+                "instruction": 423754,
+                "target": 423776
+              },
+              {
+                "instruction": 423764,
+                "target": 423782
+              },
+              {
+                "instruction": 423772,
+                "target": 423776
+              }
+            ],
+            "length": 60,
+            "literals": [
+              {
+                "instruction": 423722,
+                "register": 7,
+                "value": 33529299
+              },
+              {
+                "instruction": 423732,
+                "register": 0,
+                "value": 33529301
+              },
+              {
+                "instruction": 423734,
+                "register": 1,
+                "value": 33557260
+              },
+              {
+                "instruction": 423736,
+                "register": 2,
+                "value": 33530381
+              },
+              {
+                "instruction": 423738,
+                "register": 4,
+                "value": 33529261
+              },
+              {
+                "instruction": 423744,
+                "register": 6,
+                "value": 33557252
+              },
+              {
+                "instruction": 423756,
+                "register": 7,
+                "value": 33529299
+              }
+            ],
+            "selects_c7": null,
+            "site": 423720,
+            "variant": "classic"
+          }
+        ],
+        "policy": "Native code evidence only; unmatched roles are unknown, not absent UHD support."
+      }
+    }
+  ],
+  "bu40n_modification": {
+    "input_sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+    "output_sha256": "9e8f4a8462fcc16350511cf0fad16bf850f0c212943149267bbcba952679ff6a",
+    "validation": "CLI modify --audit succeeded; static evidence only; no hardware test this session",
+    "levers": [
+      {
+        "id": "Identity",
+        "label": "Identity",
+        "outcome": "Applied",
+        "facts": {
+          "handler_va": 1390952,
+          "handler_len": 758,
+          "record_off": 1375604,
+          "boot_init_site": 1299496,
+          "boot_stub_va": 1391712,
+          "boot_function_entry": 1299480
+        },
+        "hooks": []
+      },
+      {
+        "id": "Speed",
+        "label": "Speed",
+        "outcome": "Applied",
+        "facts": {
+          "speed_gate": 113442,
+          "speed_stub_va": 1391768
+        },
+        "hooks": []
+      },
+      {
+        "id": "RegionFree",
+        "label": "Region Free",
+        "outcome": "Applied",
+        "facts": {
+          "region_emitter": 1153168,
+          "region_stub_va": 1391816
+        },
+        "hooks": []
+      },
+      {
+        "id": "RawRead",
+        "label": "Raw read",
+        "outcome": "Applied",
+        "facts": {
+          "ake_gate": 1271188,
+          "ake_site": 1271200,
+          "ake_stub_va": 1391924,
+          "gatea_gate": 1271726,
+          "gatea_stub_va": 1391964,
+          "deny_site": 1271800,
+          "deny_stub_va": 1392052,
+          "vid_producer": 1271644,
+          "uhd_site": 1271234,
+          "uhd_stub_va": 1392068,
+          "hrl_stub_va": 1392092,
+          "hrl_site": 1270580,
+          "hrl_site2": 1270648,
+          "hrl_site3": 1270698,
+          "bd_site": 1271246,
+          "bd_stub_va": 1392128,
+          "auth_cell_site": 1271846,
+          "auth_cell_stub_va": 1392152,
+          "auth_cell_refusal": 1
+        },
+        "hooks": [
+          {
+            "id": "ake",
+            "status": "applied",
+            "variant": "reject-tail-call",
+            "reason": null
+          },
+          {
+            "id": "vid",
+            "status": "applied",
+            "variant": "Direct",
+            "reason": null
+          },
+          {
+            "id": "deny-reset",
+            "status": "applied",
+            "variant": "light-reset",
+            "reason": null
+          },
+          {
+            "id": "uhd-native",
+            "status": "applied",
+            "variant": "explicit-class",
+            "reason": null
+          },
+          {
+            "id": "hrl",
+            "status": "applied",
+            "variant": "shared-revoke",
+            "reason": null
+          },
+          {
+            "id": "bd-native",
+            "status": "applied",
+            "variant": "Explicit",
+            "reason": null
+          },
+          {
+            "id": "auth-cell",
+            "status": "applied",
+            "variant": "R0StateR4",
+            "reason": null
+          }
+        ]
+      },
+      {
+        "id": "DowngradeEnable",
+        "label": "Downgrade (DE)",
+        "outcome": "AlreadyPresent",
+        "facts": {
+          "de_off": 2015318
+        },
+        "hooks": []
+      },
+      {
+        "id": "BootSettings",
+        "label": "Boot settings",
+        "outcome": "Applied",
+        "facts": {},
+        "hooks": []
+      }
+    ],
+    "native_regions": [
+      {
+        "area": "DiscInformation",
+        "site": 921122,
+        "length": 46,
+        "unchanged_by_freemkv": true
+      },
+      {
+        "area": "ControlBit",
+        "site": 167572,
+        "length": 40,
+        "unchanged_by_freemkv": true
+      },
+      {
+        "area": "ControlField",
+        "site": 217978,
+        "length": 30,
+        "unchanged_by_freemkv": true
+      },
+      {
+        "area": "ForwardCalculation",
+        "site": 887074,
+        "length": 36,
+        "unchanged_by_freemkv": true
+      },
+      {
+        "area": "ReverseCalculation",
+        "site": 887302,
+        "length": 40,
+        "unchanged_by_freemkv": true
+      },
+      {
+        "area": "ParameterNibble",
+        "site": 888624,
+        "length": 78,
+        "unchanged_by_freemkv": true
+      },
+      {
+        "area": "HardwareDefaults",
+        "site": 896512,
+        "length": 62,
+        "unchanged_by_freemkv": true
+      }
+    ],
+    "full_U_identifier_format_branch": {
+      "start": 921122,
+      "end": 921194,
+      "unchanged_by_freemkv": true,
+      "U_flag_address": 33557273
+    },
+    "report_path": "/Users/matthew/Developer/tmp/mt1939-uhd-references-20261030/bu40n-modify.json"
+  }
+}

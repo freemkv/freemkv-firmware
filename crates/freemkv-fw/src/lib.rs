@@ -29,3 +29,6 @@ pub mod boot;
 
 #[cfg(test)]
 mod mt1939_modify_tests;
+
+#[cfg(test)]
+mod mt1939_detection_tests;

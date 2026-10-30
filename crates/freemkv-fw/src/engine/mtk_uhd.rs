@@ -1047,6 +1047,29 @@ pub struct UhdDiCandidate {
 /// Recognize U/5 with two or three layers, then reuse the native format and
 /// layer handlers. OEM/Off/unknown flags replay native prevalidation exactly.
 pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandidate> {
+    build_di_prevalidation_candidate(image, flags, false, false)
+}
+
+/// Isolated detection experiment: also recognize the native-UHD format-one path.
+/// Kept out of production conversion until physical detection/read validation.
+#[cfg(test)]
+pub(crate) fn di_detection_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandidate> {
+    build_di_prevalidation_candidate(image, flags, true, false)
+}
+
+/// Research port of BU40N's state-dependent DI attribute validation.
+/// The full reading group must accompany this recognizer on hardware.
+#[cfg(test)]
+pub(crate) fn di_bu40n_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandidate> {
+    build_di_prevalidation_candidate(image, flags, true, true)
+}
+
+fn build_di_prevalidation_candidate(
+    image: &[u8],
+    flags: u32,
+    format_one: bool,
+    native_attributes: bool,
+) -> Result<UhdDiCandidate> {
     let contract = mediatek_optical::image::analysis::ClassicDi::detect(image)?;
     let caller =
         mediatek_optical::image::analysis::SavedLink::detect(image, contract.prevalidation)?;
@@ -1063,6 +1086,7 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
     let replay = a.label();
     let attribute_ok = a.label();
     let two = a.label();
+    let standard = a.label();
     let assign = a.label();
     a.mov_reg(3, 13); // r3 = native caller SP, before any local push.
     a.push(0x12f); // r0-r3,r5,lr; save every scratch and the incoming V flag.
@@ -1079,19 +1103,65 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
     a.ldr_lit(0, contract.state);
     a.cmp_reg(4, 0);
     a.bne(oem);
-    for (offset, expected) in [(12, b'B'), (13, b'D'), (16, b'U'), (19, 5)] {
+    for (offset, expected) in [(12, b'B'), (13, b'D'), (16, b'U')] {
         a.ldrb_imm(0, 3, offset);
         a.cmp_imm(0, expected);
+        a.bne(oem);
+    }
+    if !format_one {
+        a.ldrb_imm(0, 3, 19);
+        a.cmp_imm(0, 5);
         a.bne(oem);
     }
     a.ldrb_imm(0, 3, 17);
     a.lsls_imm(0, 0, 26);
     a.lsrs_imm(0, 0, 30);
-    a.cmp_imm(0, 0);
-    a.beq(attribute_ok);
-    a.cmp_imm(0, 3);
-    a.bne(oem);
+    if native_attributes {
+        // BU40N OEM 1.00 0xe0d86..0xe0dde, after BD prefix validation.
+        // C7/C8..CB accept 0 or 3. E8..EF/F8..FF require 1.
+        // Other C8-mask states accept any class; remaining states require 0.
+        let dense = a.label();
+        let one = a.label();
+        a.ldrb_imm(1, 4, 0);
+        a.lsrs_imm(2, 1, 2);
+        a.cmp_imm(2, 0x32);
+        a.beq(dense);
+        a.cmp_imm(1, 0xc7);
+        a.beq(dense);
+        a.lsrs_imm(2, 1, 3);
+        a.cmp_imm(2, 0x1d);
+        a.beq(one);
+        a.cmp_imm(2, 0x1f);
+        a.beq(one);
+        a.movs_imm(2, 0xc8);
+        a.bics(2, 1);
+        a.beq(attribute_ok);
+        a.cmp_imm(0, 0);
+        a.beq(attribute_ok);
+        a.b(oem);
+        a.bind(dense);
+        a.cmp_imm(0, 3);
+        a.beq(attribute_ok);
+        a.cmp_imm(0, 0);
+        a.beq(attribute_ok);
+        a.b(oem);
+        a.bind(one);
+        a.cmp_imm(0, 1);
+        a.bne(oem);
+    } else {
+        a.cmp_imm(0, 0);
+        a.beq(attribute_ok);
+        a.cmp_imm(0, 3);
+        a.bne(oem);
+    }
     a.bind(attribute_ok);
+    if format_one {
+        a.ldrb_imm(0, 3, 19);
+        a.cmp_imm(0, 1);
+        a.beq(standard);
+        a.cmp_imm(0, 5);
+        a.bne(oem);
+    }
     a.ldrb_imm(0, 3, 18);
     a.lsrs_imm(0, 0, 4);
     a.cmp_imm(0, 2);
@@ -1102,6 +1172,13 @@ pub fn di_prevalidation_candidate(image: &[u8], flags: u32) -> Result<UhdDiCandi
     a.b(assign);
     a.bind(two);
     a.movs_imm(0, 0xc7);
+    if format_one {
+        a.b(assign);
+        a.bind(standard);
+        a.movs_imm(0, 0xc0);
+    } else {
+        a.bind(standard);
+    }
     a.bind(assign);
     a.strb_imm(0, 4, 0);
     a.pop(0x2f);
