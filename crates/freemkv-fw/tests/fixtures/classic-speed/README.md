@@ -1,0 +1,1 @@
+Native classic read-speed selector excerpts. sources.json records original SHA-256, original offsets, and excerpt hashes. Sparse assembly is analysis only, never a flash image. Four compiler/policy forms share one evidence-selected detector and one emitted stub. OEM read/write maximum initializers are not patched.

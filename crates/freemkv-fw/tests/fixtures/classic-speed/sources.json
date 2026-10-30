@@ -1,0 +1,138 @@
+[
+  {
+    "source_sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+    "entry": 690738,
+    "site": 690774,
+    "maximum_cell": 33529302,
+    "optimum_cell": 33557260,
+    "consumer": 675660,
+    "segments": [
+      {
+        "file": "classic-speed-0-setters.bin",
+        "source_offset": 421524,
+        "bytes": 120,
+        "excerpt_sha256": "38d5de0380aa618d6195d9899ecb04fb1475606150ab5325ea053d813b074e5f"
+      },
+      {
+        "file": "classic-speed-0-selector.bin",
+        "source_offset": 690738,
+        "bytes": 544,
+        "excerpt_sha256": "eb5b1de40ec8799d85e99fd879075488d36f7b6f64a50a05398d8b7828348510"
+      },
+      {
+        "file": "classic-speed-0-consumer.bin",
+        "source_offset": 675660,
+        "bytes": 8,
+        "excerpt_sha256": "b51dafb6c3ad518fa37560d93ab300cec62fe1d49ee62b2b6f713522ae88d94e"
+      },
+      {
+        "file": "classic-speed-0-consumer-pool.bin",
+        "source_offset": 676436,
+        "bytes": 4,
+        "excerpt_sha256": "d6e7e731d44ce7e1caa5bd21148dbe2f34195fb95e96ed0eed04011efc377c3b"
+      }
+    ]
+  },
+  {
+    "source_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+    "entry": 691716,
+    "site": 691770,
+    "maximum_cell": 33529301,
+    "optimum_cell": 33557260,
+    "consumer": 676680,
+    "segments": [
+      {
+        "file": "classic-speed-1-setters.bin",
+        "source_offset": 422976,
+        "bytes": 120,
+        "excerpt_sha256": "9ec89b964a347f495d0ef087f5a91e55ad5ed4de21a2691cd0dc89258b7054a9"
+      },
+      {
+        "file": "classic-speed-1-selector.bin",
+        "source_offset": 691716,
+        "bytes": 544,
+        "excerpt_sha256": "e2c0604f5b44ce749a2d0651681011fa07c5cd5980e3e232f9d4b1f2b767669f"
+      },
+      {
+        "file": "classic-speed-1-consumer.bin",
+        "source_offset": 676680,
+        "bytes": 8,
+        "excerpt_sha256": "7bc3bfdb44bec0d651387b45fbf3f4e63b544cec0141bd02301d12082881180a"
+      },
+      {
+        "file": "classic-speed-1-consumer-pool.bin",
+        "source_offset": 677672,
+        "bytes": 4,
+        "excerpt_sha256": "d6e7e731d44ce7e1caa5bd21148dbe2f34195fb95e96ed0eed04011efc377c3b"
+      }
+    ]
+  },
+  {
+    "source_sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+    "entry": 693006,
+    "site": 693054,
+    "maximum_cell": 33529301,
+    "optimum_cell": 33557260,
+    "consumer": 677728,
+    "segments": [
+      {
+        "file": "classic-speed-2-setters.bin",
+        "source_offset": 422880,
+        "bytes": 120,
+        "excerpt_sha256": "d16dde6fa5cd1cb91f2fcea4da879b086bc4a7684e22ca0d5eec983d4cf4bd1d"
+      },
+      {
+        "file": "classic-speed-2-selector.bin",
+        "source_offset": 693006,
+        "bytes": 544,
+        "excerpt_sha256": "aa31a70000bf5e15e11fb5c9ea531a80b9d1c408fceb0985e655f09b7eac9584"
+      },
+      {
+        "file": "classic-speed-2-consumer.bin",
+        "source_offset": 677728,
+        "bytes": 8,
+        "excerpt_sha256": "7e90e15815b956444ecd7eb6f5d45340b40a88fefe77d04fbab5c5d18fab6596"
+      },
+      {
+        "file": "classic-speed-2-consumer-pool.bin",
+        "source_offset": 678504,
+        "bytes": 4,
+        "excerpt_sha256": "d6e7e731d44ce7e1caa5bd21148dbe2f34195fb95e96ed0eed04011efc377c3b"
+      }
+    ]
+  },
+  {
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "entry": 694186,
+    "site": 694254,
+    "maximum_cell": 33529301,
+    "optimum_cell": 33557260,
+    "consumer": 678900,
+    "segments": [
+      {
+        "file": "classic-speed-3-setters.bin",
+        "source_offset": 423300,
+        "bytes": 120,
+        "excerpt_sha256": "e4ef324298d6fc9e56b8cf3840e3ee076fbb05643ac4a92d0d11e147e1734c38"
+      },
+      {
+        "file": "classic-speed-3-selector.bin",
+        "source_offset": 694186,
+        "bytes": 544,
+        "excerpt_sha256": "1520ca73f7e28241b66d7021545f8ac5e8fee4d3d82481cd0b150ee42344b705"
+      },
+      {
+        "file": "classic-speed-3-consumer.bin",
+        "source_offset": 678900,
+        "bytes": 8,
+        "excerpt_sha256": "ee76958f8b02fe8abab5044fa1fda1cdb062b26f9245440362f60adbc1be1569"
+      },
+      {
+        "file": "classic-speed-3-consumer-pool.bin",
+        "source_offset": 679668,
+        "bytes": 4,
+        "excerpt_sha256": "d6e7e731d44ce7e1caa5bd21148dbe2f34195fb95e96ed0eed04011efc377c3b"
+      }
+    ]
+  }
+]

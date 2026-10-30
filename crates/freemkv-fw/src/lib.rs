@@ -17,6 +17,7 @@ pub mod scheme;
 pub mod install_guard;
 
 pub mod api;
+pub mod capabilities;
 
 /// Shared automatic diagnostics for firmware authoring operations.
 pub mod diagnostics;
@@ -25,3 +26,6 @@ pub mod artifact;
 
 /// Shared boot settings for authoring and desktop controls.
 pub mod boot;
+
+#[cfg(test)]
+mod mt1939_modify_tests;

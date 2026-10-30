@@ -20,8 +20,8 @@ use thumb_asm::CommandRecord;
 
 pub mod audit;
 mod code_space;
-pub(crate) use code_space::validate_metadata;
 pub use code_space::NoCodeSpace;
+pub(crate) use code_space::{coverage_retry, validate_metadata};
 pub mod core;
 pub mod lever;
 pub mod mt1939;
@@ -83,6 +83,8 @@ pub struct CreateReport {
     /// Speed (0x02) ramp-ceiling gate anchor (the `ldr r1,[pc]` of the ramp
     /// self-ceiling test); the detour replaces the `cmp/bhi` at `gate+4`.
     pub speed_gate: u32,
+    /// Classic pure read-speed selector normalization tail (wide branch).
+    pub speed_tail_site: u32,
     /// Injection address of the Speed (0x02) flag-gated ceiling trampoline.
     pub speed_stub_va: u32,
     /// OEM RPC-state emitter anchor for Region-free (0x03); the detour replaces
@@ -126,18 +128,15 @@ pub struct CreateReport {
     pub bd_gate_site: u32,
     /// Injection address of the `Feature::Bd` BD-refuse trampoline. `0` when not wired.
     pub bd_stub_va: u32,
-    /// `Feature::Unrestricted` auth-cell state-band widen detour site — the OEM
-    /// `cmp r0,#0xC; bne <deny>` at `AUTH_CELL_SIG` `anchor+10` (`0x00136826` on
-    /// BU40N 1.00). The stub widens the accepted top-nibble set when the flag is
-    /// armed (non-`STATE_OFF`), letting the drive engage on state-byte values in
-    /// the `0xEx` band that some triple-layer UHDs land on; when the flag is
-    /// `STATE_OFF` the stub replays OEM exactly (accept `0xC`, else jump to the
-    /// OEM `6F/02 Incompatible medium` emitter). `0` when not wired (image does
-    /// not carry the known `ldr r4, [pc, ...] = 0x01FF9E04` prefix).
+    /// Role-validated auth-cell CMP/BNE detour. On selects acceptance, OEM
+    /// replays the original comparison, and Off selects native refusal where
+    /// `auth_cell_refusal` is true. Zero means no auth hook was installed.
     pub auth_cell_site: u32,
     /// Injection address of the `Feature::Unrestricted` auth-cell widen trampoline.
     /// `0` when not wired.
     pub auth_cell_stub_va: u32,
+    /// The emitted auth hook implements a proven native refusal for Off.
+    pub auth_cell_refusal: bool,
     /// The three HRL-skip cert-path detour sites (`flag[Feature::Hrl]==STATE_ON`):
     /// each a `cmp r0,#0; bne <6F/00>` replaced by a `bl` to the shared HRL-skip
     /// stub. Empty when the HRL cert path is not the known shape (lever MISS).
@@ -146,12 +145,11 @@ pub struct CreateReport {
     pub hrl_stub_va: u32,
     /// File offset of the downgrade-enable (DE) byte written unconditionally.
     pub de_off: u32,
-    /// SRAM flag-table base actually used by this build (currently the provisional
-    /// placeholder; see `FLAG_BASE_PLACEHOLDER`).
+    /// SRAM flag-table base actually used by this build.
     pub flag_base: u32,
-    /// The provably-free SRAM cell the build-time scanner independently derived
-    /// from THIS image (for audit / eventual placeholder swap). Not yet consumed
-    /// as the flag base — reported so the swap is a one-liner once validated.
+    /// Statically unreferenced SRAM candidate derived from this image. This is
+    /// also the selected classic base; modern builds use their separate fixed
+    /// cell. Neither static absence nor this field proves runtime ownership.
     pub free_sram_cell: u32,
 }
 

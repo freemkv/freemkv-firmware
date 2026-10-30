@@ -215,14 +215,14 @@ fn check_branch_impl(
 pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
     let img = &report.image;
     let mut checks = Vec::new();
-    // Re-signing may change digests, never the table's geometry or erased
-    // sentinel records. A self-consistent MAC alone cannot prove this.
+    // Re-signing may change digests. Geometry may change only according to the
+    // independently re-derived coverage plan; erased records remain untouched.
     let descriptors_preserved = super::code_space::metadata_preserved(original, img);
     checks.push(AuditCheck {
         lever: "integrity",
-        what: "integrity table descriptors and unused slots preserved".into(),
+        what: "integrity metadata matches original or proven coverage plan".into(),
         ok: descriptors_preserved,
-        detail: "Only active stored digests may change during signing".into(),
+        detail: "Unused records and unplanned descriptor changes are forbidden".into(),
     });
 
     for l in &report.levers {
@@ -313,7 +313,32 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
             }
             LeverId::Speed => {
-                if let (Some(gate), Some(stub)) = (fact(l, "speed_gate"), fact(l, "speed_stub_va"))
+                if let (Some(site), Some(stub)) =
+                    (fact(l, "speed_tail_site"), fact(l, "speed_stub_va"))
+                {
+                    let mut entry = thumb::Asm::new();
+                    entry.push(0x100);
+                    let entry = entry.finish().expect("PUSH LR is encodable");
+                    checks.push(AuditCheck {
+                        lever: name,
+                        what: "classic speed saved return".into(),
+                        ok: img.get(site as usize..site as usize + 2) == Some(&entry[..2]),
+                        detail: format!("PUSH LR before the classic speed call at 0x{site:08x}"),
+                    });
+                    check_branch_impl(
+                        &mut checks,
+                        name,
+                        "classic speed tail",
+                        img,
+                        BranchInstall {
+                            site: site + 2,
+                            stub,
+                            expected: thumb::encode_bl(site as usize + 2, stub),
+                            kind: "bl",
+                        },
+                    );
+                } else if let (Some(gate), Some(stub)) =
+                    (fact(l, "speed_gate"), fact(l, "speed_stub_va"))
                 {
                     check_bl(&mut checks, name, "speed detour bl", img, gate + 4, stub);
                 } else {

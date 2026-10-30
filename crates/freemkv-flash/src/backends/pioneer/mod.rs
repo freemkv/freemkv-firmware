@@ -625,9 +625,11 @@ fn authorize_installed_inner(
     // other gates must also pass before advertising it as such. No Prepared
     // write grant is produced for that candidate.
     if let Err(error) = &prepared {
-        if crate::crossflash::refusal_status(error)
-            != crate::crossflash::CompatibilityStatus::SoftNo
-        {
+        if !matches!(
+            crate::crossflash::refusal_status(error),
+            crate::crossflash::CompatibilityStatus::SoftNo
+                | crate::crossflash::CompatibilityStatus::Conditional
+        ) {
             let source = preparation_error(error.clone());
             if matches!(
                 error,
@@ -723,30 +725,6 @@ pub(crate) fn verify_preflash_backup(backup: &[u8], input: &[u8]) -> Result<()> 
 /// raw dump, Recovery, inspection, and a gated live OEM package update.
 #[derive(Default)]
 pub struct Pioneer;
-
-/// Raw capture for Pioneer identities without an OEM backup/update backend.
-pub(crate) struct DumpOnly;
-
-static DUMP_DESCRIPTOR: Descriptor = Descriptor {
-    id: BackendId("pioneer-dump"),
-    display_name: "Pioneer",
-    flash_summary: None,
-    formats: &[],
-};
-
-impl Backend for DumpOnly {
-    fn descriptor(&self) -> &'static Descriptor {
-        &DUMP_DESCRIPTOR
-    }
-
-    fn probe(&self, dev: &mut ReadDevice<'_>, _identity: &Identity) -> Result<Option<Match>> {
-        crate::backend::registry::probe_backend(dev, DUMP_DESCRIPTOR.id)
-    }
-
-    fn dump(&self) -> Option<&dyn DumpFacet> {
-        Some(&Pioneer)
-    }
-}
 
 impl Pioneer {
     /// Create a fresh Pioneer family handle with no cached session state.

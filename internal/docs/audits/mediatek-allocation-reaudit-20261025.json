@@ -1,0 +1,4121 @@
+{
+  "schema": 1,
+  "producer_sha256": "aa501f23d2d433d3446d7c7469b9454db63f00f749846cb1642107fcc8879c67",
+  "flasher_sha256": "93a5d69bb9f3dcb380c8418cef3eb910c9a890f476fb7a7b26a5209a70eba47c",
+  "images": [
+    {
+      "sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE BP55EB40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP55EB40_NB50/GENERAL/1.03/main/0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1382080
+        ],
+        [
+          1409024,
+          1743648
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1365584,
+          "end": 1365626,
+          "bytes": 42
+        },
+        {
+          "start": 1365700,
+          "end": 1365706,
+          "bytes": 6
+        },
+        {
+          "start": 1369636,
+          "end": 1369640,
+          "bytes": 4
+        },
+        {
+          "start": 1370896,
+          "end": 1370907,
+          "bytes": 11
+        },
+        {
+          "start": 1374828,
+          "end": 1374832,
+          "bytes": 4
+        },
+        {
+          "start": 1375244,
+          "end": 1375248,
+          "bytes": 4
+        },
+        {
+          "start": 1381100,
+          "end": 1381104,
+          "bytes": 4
+        },
+        {
+          "start": 1743644,
+          "end": 1743648,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 943,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP55EB40",
+          "revision": "1.03",
+          "variant": "NM09800"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP55EB40",
+          "rev": "1.03",
+          "vendor_specific": "NM09800",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110752,
+                "handler_len": 758,
+                "record_off": 1366660,
+                "boot_init_site": 1289998,
+                "boot_stub_va": 111512,
+                "boot_function_entry": 1289982
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113586,
+                "speed_stub_va": 111560
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "db94b5641a9bd402a01cae29761f608856133444a1cdd2d12c0512f9b47026ad"
+      }
+    },
+    {
+      "sha256": "1227f133eb1c5315d955bb9d9cfcaf84381772a1edfef56b39ad3439b92ca4c0",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE BP60NB10",
+      "revision": "1.02",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP60NB10_NB12/GENERAL/1.02/main/1227f133eb1c5315d955bb9d9cfcaf84381772a1edfef56b39ad3439b92ca4c0.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1382080
+        ],
+        [
+          1409024,
+          1743648
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1376980,
+          "end": 1377022,
+          "bytes": 42
+        },
+        {
+          "start": 1377096,
+          "end": 1377102,
+          "bytes": 6
+        },
+        {
+          "start": 1381032,
+          "end": 1381036,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 916,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "1227f133eb1c5315d955bb9d9cfcaf84381772a1edfef56b39ad3439b92ca4c0",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP60NB10",
+          "revision": "1.02",
+          "variant": "NM00300"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP60NB10",
+          "rev": "1.02",
+          "vendor_specific": "NM00300",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110752,
+                "handler_len": 758,
+                "record_off": 1378056,
+                "boot_init_site": 1301018,
+                "boot_stub_va": 111512,
+                "boot_function_entry": 1301002
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113584,
+                "speed_stub_va": 111560
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "b0af096129aabecb997192e0f161ac1e3bb88b22c6c5c71fb2ce9911dd4fdbc8"
+      }
+    },
+    {
+      "sha256": "243a7b0bb237724ab0831ba0d0775f281259cc29643c0617df738856875db6ba",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BDDVDRW UH12NS40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_UH12NS40_NS40/GENERAL/1.03/main/243a7b0bb237724ab0831ba0d0775f281259cc29643c0617df738856875db6ba.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          98416
+        ],
+        [
+          99328,
+          1635536
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 914768,
+          "end": 914776,
+          "bytes": 8
+        },
+        {
+          "start": 1617848,
+          "end": 1617890,
+          "bytes": 42
+        },
+        {
+          "start": 1617964,
+          "end": 1617970,
+          "bytes": 6
+        },
+        {
+          "start": 1622776,
+          "end": 1622782,
+          "bytes": 6
+        },
+        {
+          "start": 1624952,
+          "end": 1624965,
+          "bytes": 13
+        },
+        {
+          "start": 1628660,
+          "end": 1628664,
+          "bytes": 4
+        },
+        {
+          "start": 1629380,
+          "end": 1629384,
+          "bytes": 4
+        },
+        {
+          "start": 1629796,
+          "end": 1629800,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 87,
+      "largest_hole": 42,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "243a7b0bb237724ab0831ba0d0775f281259cc29643c0617df738856875db6ba",
+        "producer_version": "0.15.4",
+        "status": "unsupported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS40",
+          "revision": "1.03",
+          "variant": "NM01800"
+        },
+        "report": null,
+        "reason": "errors.firmware_no_code_space",
+        "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 758 bytes outside reserved firmware regions",
+        "output_sha256": null
+      }
+    },
+    {
+      "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+      "category": "oem",
+      "bytes": "2097152",
+      "model": "BD-RE WP50NB40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.03/main/263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1382080
+        ],
+        [
+          1409024,
+          1743648
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1365584,
+          "end": 1365626,
+          "bytes": 42
+        },
+        {
+          "start": 1365700,
+          "end": 1365706,
+          "bytes": 6
+        },
+        {
+          "start": 1369636,
+          "end": 1369640,
+          "bytes": 4
+        },
+        {
+          "start": 1370896,
+          "end": 1370907,
+          "bytes": 11
+        },
+        {
+          "start": 1374828,
+          "end": 1374832,
+          "bytes": 4
+        },
+        {
+          "start": 1375244,
+          "end": 1375248,
+          "bytes": 4
+        },
+        {
+          "start": 1381100,
+          "end": 1381104,
+          "bytes": 4
+        },
+        {
+          "start": 1743624,
+          "end": 1743648,
+          "bytes": 24
+        }
+      ],
+      "total_eligible_bytes": 963,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE WP50NB40",
+          "revision": "1.03",
+          "variant": "N009800"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE WP50NB40",
+          "rev": "1.03",
+          "vendor_specific": "N009800",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1382156,
+                "handler_len": 758,
+                "record_off": 1366660,
+                "boot_init_site": 1289998,
+                "boot_stub_va": 1382916,
+                "boot_function_entry": 1289982,
+                "coverage_entry": 1,
+                "coverage_original_end": 1382079,
+                "coverage_new_end": 1409023
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113586,
+                "speed_stub_va": 1382964
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1146090,
+                "region_stub_va": 1383012
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1262714,
+                "ake_site": 1262726,
+                "ake_stub_va": 1383120,
+                "gatea_gate": 1263082,
+                "gatea_stub_va": 1383160,
+                "deny_site": 1263156,
+                "deny_stub_va": 1383220,
+                "vid_producer": 1263004,
+                "hrl_stub_va": 1383236,
+                "hrl_site": 1262424,
+                "auth_cell_site": 1263196,
+                "auth_cell_stub_va": 1383268,
+                "auth_cell_refusal": 1
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "Notebook",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR4",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "a3b7b156bbc06bc7a29c6a95fca261415f458b06d06936452777376b34af9957"
+      },
+      "build_validation": {
+        "output_sha256": "a3b7b156bbc06bc7a29c6a95fca261415f458b06d06936452777376b34af9957",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
+      }
+    },
+    {
+      "sha256": "38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1",
+      "category": "oem",
+      "bytes": "2097152",
+      "model": "BD-RE  WH14NS40",
+      "revision": "1.05",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.05/main/38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          1404544
+        ],
+        [
+          1425408,
+          1781536
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 98420,
+          "end": 99328,
+          "bytes": 908
+        },
+        {
+          "start": 1388144,
+          "end": 1388186,
+          "bytes": 42
+        },
+        {
+          "start": 1388260,
+          "end": 1388266,
+          "bytes": 6
+        },
+        {
+          "start": 1392108,
+          "end": 1392114,
+          "bytes": 6
+        },
+        {
+          "start": 1393728,
+          "end": 1393741,
+          "bytes": 13
+        },
+        {
+          "start": 1397100,
+          "end": 1397104,
+          "bytes": 4
+        },
+        {
+          "start": 1397820,
+          "end": 1397824,
+          "bytes": 4
+        },
+        {
+          "start": 1398236,
+          "end": 1398240,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 987,
+      "largest_hole": 908,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "revision": "1.05",
+          "variant": "N003900"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "rev": "1.05",
+          "vendor_specific": "N003900",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1404892,
+                "handler_len": 758,
+                "record_off": 1389208,
+                "boot_init_site": 1312146,
+                "boot_stub_va": 1405652,
+                "boot_function_entry": 1312130,
+                "coverage_entry": 1,
+                "coverage_original_end": 1404543,
+                "coverage_new_end": 1425407
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101122,
+                "speed_stub_va": 1405700
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1167672,
+                "region_stub_va": 1405748
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1284530,
+                "ake_site": 1284542,
+                "ake_stub_va": 1405856,
+                "gatea_gate": 1284874,
+                "gatea_stub_va": 1405896,
+                "deny_site": 1284948,
+                "deny_stub_va": 1405956,
+                "vid_producer": 1284790,
+                "hrl_stub_va": 1405972,
+                "hrl_site": 1284236,
+                "auth_cell_site": 1284990,
+                "auth_cell_stub_va": 1406004,
+                "auth_cell_refusal": 1
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "f6495f5e6ace51167049e433b2cfb7c9cca0c259df15c27e6228a3b4ec9be5d8"
+      },
+      "build_validation": {
+        "output_sha256": "f6495f5e6ace51167049e433b2cfb7c9cca0c259df15c27e6228a3b4ec9be5d8",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
+      }
+    },
+    {
+      "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+      "category": "oem",
+      "bytes": "2097152",
+      "model": "BD-RE BP50NB40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.03/main/3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1382080
+        ],
+        [
+          1409024,
+          1743648
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1365584,
+          "end": 1365626,
+          "bytes": 42
+        },
+        {
+          "start": 1365700,
+          "end": 1365706,
+          "bytes": 6
+        },
+        {
+          "start": 1369636,
+          "end": 1369640,
+          "bytes": 4
+        },
+        {
+          "start": 1370896,
+          "end": 1370907,
+          "bytes": 11
+        },
+        {
+          "start": 1374828,
+          "end": 1374832,
+          "bytes": 4
+        },
+        {
+          "start": 1375244,
+          "end": 1375248,
+          "bytes": 4
+        },
+        {
+          "start": 1381100,
+          "end": 1381104,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 939,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP50NB40",
+          "revision": "1.03",
+          "variant": "N009800"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP50NB40",
+          "rev": "1.03",
+          "vendor_specific": "N009800",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1382156,
+                "handler_len": 758,
+                "record_off": 1366660,
+                "boot_init_site": 1289998,
+                "boot_stub_va": 1382916,
+                "boot_function_entry": 1289982,
+                "coverage_entry": 1,
+                "coverage_original_end": 1382079,
+                "coverage_new_end": 1409023
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113586,
+                "speed_stub_va": 1382964
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1146090,
+                "region_stub_va": 1383012
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1262714,
+                "ake_site": 1262726,
+                "ake_stub_va": 1383120,
+                "gatea_gate": 1263082,
+                "gatea_stub_va": 1383160,
+                "deny_site": 1263156,
+                "deny_stub_va": 1383220,
+                "vid_producer": 1263004,
+                "hrl_stub_va": 1383236,
+                "hrl_site": 1262424,
+                "auth_cell_site": 1263196,
+                "auth_cell_stub_va": 1383268,
+                "auth_cell_refusal": 1
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "Notebook",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR4",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "02b77c73683887cab61d82a8a86a421a65ee4cec649ae5a6491fec2506d57513"
+      },
+      "build_validation": {
+        "output_sha256": "02b77c73683887cab61d82a8a86a421a65ee4cec649ae5a6491fec2506d57513",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
+      }
+    },
+    {
+      "sha256": "592e8d22d98aea9c1162c9f010fe2df29b31f6320d539336a699a78ea3af9191",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE WP50NB40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.03/main/592e8d22d98aea9c1162c9f010fe2df29b31f6320d539336a699a78ea3af9191.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1382080
+        ],
+        [
+          1409024,
+          1743648
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1365584,
+          "end": 1365626,
+          "bytes": 42
+        },
+        {
+          "start": 1365700,
+          "end": 1365706,
+          "bytes": 6
+        },
+        {
+          "start": 1369636,
+          "end": 1369640,
+          "bytes": 4
+        },
+        {
+          "start": 1370896,
+          "end": 1370907,
+          "bytes": 11
+        },
+        {
+          "start": 1374828,
+          "end": 1374832,
+          "bytes": 4
+        },
+        {
+          "start": 1375244,
+          "end": 1375248,
+          "bytes": 4
+        },
+        {
+          "start": 1381100,
+          "end": 1381104,
+          "bytes": 4
+        },
+        {
+          "start": 1743624,
+          "end": 1743648,
+          "bytes": 24
+        }
+      ],
+      "total_eligible_bytes": 963,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "592e8d22d98aea9c1162c9f010fe2df29b31f6320d539336a699a78ea3af9191",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE WP50NB40",
+          "revision": "1.03",
+          "variant": "NM09800"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE WP50NB40",
+          "rev": "1.03",
+          "vendor_specific": "NM09800",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110752,
+                "handler_len": 758,
+                "record_off": 1366660,
+                "boot_init_site": 1289998,
+                "boot_stub_va": 111512,
+                "boot_function_entry": 1289982
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113586,
+                "speed_stub_va": 111560
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "6f31e3ab30df118ef920c3f015de9ddf97b4aa59a441e1b4047f3122057babfb"
+      }
+    },
+    {
+      "sha256": "60a66592d50180119feda3246543c923c8b4cb4e1bdf09f17a6a14f9ae070373",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE  WH14NS40",
+      "revision": "1.05",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.05/main/60a66592d50180119feda3246543c923c8b4cb4e1bdf09f17a6a14f9ae070373.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          1404544
+        ],
+        [
+          1425408,
+          1781536
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 98420,
+          "end": 99328,
+          "bytes": 908
+        },
+        {
+          "start": 1388144,
+          "end": 1388186,
+          "bytes": 42
+        },
+        {
+          "start": 1388260,
+          "end": 1388266,
+          "bytes": 6
+        },
+        {
+          "start": 1392108,
+          "end": 1392114,
+          "bytes": 6
+        },
+        {
+          "start": 1393728,
+          "end": 1393741,
+          "bytes": 13
+        },
+        {
+          "start": 1397100,
+          "end": 1397104,
+          "bytes": 4
+        },
+        {
+          "start": 1397820,
+          "end": 1397824,
+          "bytes": 4
+        },
+        {
+          "start": 1398236,
+          "end": 1398240,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 987,
+      "largest_hole": 908,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "60a66592d50180119feda3246543c923c8b4cb4e1bdf09f17a6a14f9ae070373",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "revision": "1.05",
+          "variant": "NM03900"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH14NS40",
+          "rev": "1.05",
+          "vendor_specific": "NM03900",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 98420,
+                "handler_len": 758,
+                "record_off": 1389208,
+                "boot_init_site": 1312146,
+                "boot_stub_va": 99180,
+                "boot_function_entry": 1312130
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101122,
+                "speed_stub_va": 99228
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "64f8336e66ee9d3f9624222f5fe0c78f35349b25d1a6b977a3822d96c515c542"
+      }
+    },
+    {
+      "sha256": "66f277bcad34dfbaf483fc27a7fb03fcb4dfb6e85bad5e38add3c41ad150c087",
+      "category": "omni",
+      "bytes": "2097152",
+      "model": "BW-16D1HT",
+      "revision": "3.10",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "omni/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.10/main/66f277bcad34dfbaf483fc27a7fb03fcb4dfb6e85bad5e38add3c41ad150c087.bin",
+      "coverage": [
+        [
+          66656,
+          66672
+        ],
+        [
+          66656,
+          66672
+        ],
+        [
+          66656,
+          66672
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [],
+      "total_eligible_bytes": 0,
+      "largest_hole": 0,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "66f277bcad34dfbaf483fc27a7fb03fcb4dfb6e85bad5e38add3c41ad150c087",
+        "producer_version": "0.15.4",
+        "status": "unsupported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "ASUS",
+          "model": "BW-16D1HT",
+          "revision": "3.10",
+          "variant": "WM02601"
+        },
+        "report": null,
+        "reason": "errors.firmware_no_code_space",
+        "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 758 bytes outside reserved firmware regions",
+        "output_sha256": null
+      }
+    },
+    {
+      "sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+      "category": "oem",
+      "bytes": "2097152",
+      "model": "BD-RE BU40N",
+      "revision": "A103",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/D_/A103/main/7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1394000
+        ],
+        [
+          1409024,
+          1726928
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1378184,
+          "end": 1378226,
+          "bytes": 42
+        },
+        {
+          "start": 1378300,
+          "end": 1378306,
+          "bytes": 6
+        },
+        {
+          "start": 1382252,
+          "end": 1382256,
+          "bytes": 4
+        },
+        {
+          "start": 1383588,
+          "end": 1383599,
+          "bytes": 11
+        },
+        {
+          "start": 1386756,
+          "end": 1386760,
+          "bytes": 4
+        },
+        {
+          "start": 1387476,
+          "end": 1387480,
+          "bytes": 4
+        },
+        {
+          "start": 1387892,
+          "end": 1387896,
+          "bytes": 4
+        },
+        {
+          "start": 1393508,
+          "end": 1393512,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 943,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BU40N",
+          "revision": "A103",
+          "variant": "D003600"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BU40N",
+          "rev": "A103",
+          "vendor_specific": "D003600",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110752,
+                "handler_len": 758,
+                "record_off": 1379288,
+                "boot_init_site": 1303482,
+                "boot_stub_va": 111512,
+                "boot_function_entry": 1303466,
+                "coverage_entry": 2,
+                "coverage_original_end": 1726927,
+                "coverage_new_end": 1769503
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113442,
+                "speed_stub_va": 111560
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1155514,
+                "region_stub_va": 1726932
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1274032,
+                "ake_site": 1274044,
+                "ake_stub_va": 1378184,
+                "gatea_gate": 1274592,
+                "gatea_stub_va": 1727040,
+                "deny_site": 1274666,
+                "deny_stub_va": 1727100,
+                "vid_producer": 1274510,
+                "uhd_site": 1274146,
+                "uhd_stub_va": 1727116,
+                "hrl_stub_va": 1727140,
+                "hrl_site": 1273394,
+                "hrl_site2": 1273462,
+                "hrl_site3": 1273512,
+                "bd_site": 1274158,
+                "bd_stub_va": 1727172,
+                "auth_cell_site": 1274710,
+                "auth_cell_stub_va": 1727196,
+                "auth_cell_refusal": 1
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "reject-tail-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "Direct",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "applied",
+                  "variant": "explicit-class",
+                  "reason": null
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "applied",
+                  "variant": "Explicit",
+                  "reason": null
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR4",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "e8d96c4c94727bb819ebd89dbd1bc0a04a5f8319a95da7d68f42df3951a83b1e"
+      },
+      "build_validation": {
+        "output_sha256": "e8d96c4c94727bb819ebd89dbd1bc0a04a5f8319a95da7d68f42df3951a83b1e",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
+      }
+    },
+    {
+      "sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+      "category": "oem",
+      "bytes": "2097152",
+      "model": "BD-RE  BE16NU50",
+      "revision": "1.04",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.04/main/7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          1405360
+        ],
+        [
+          1425408,
+          1782080
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 98420,
+          "end": 99328,
+          "bytes": 908
+        },
+        {
+          "start": 1388728,
+          "end": 1388770,
+          "bytes": 42
+        },
+        {
+          "start": 1388844,
+          "end": 1388850,
+          "bytes": 6
+        },
+        {
+          "start": 1392700,
+          "end": 1392706,
+          "bytes": 6
+        },
+        {
+          "start": 1394320,
+          "end": 1394333,
+          "bytes": 13
+        },
+        {
+          "start": 1397716,
+          "end": 1397720,
+          "bytes": 4
+        },
+        {
+          "start": 1398436,
+          "end": 1398440,
+          "bytes": 4
+        },
+        {
+          "start": 1398852,
+          "end": 1398856,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 987,
+      "largest_hole": 908,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE16NU50",
+          "revision": "1.04",
+          "variant": "N006300"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE16NU50",
+          "rev": "1.04",
+          "vendor_specific": "N006300",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 98420,
+                "handler_len": 758,
+                "record_off": 1389792,
+                "boot_init_site": 1312730,
+                "boot_stub_va": 99180,
+                "boot_function_entry": 1312714,
+                "coverage_entry": 2,
+                "coverage_original_end": 1782079,
+                "coverage_new_end": 1802271
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101122,
+                "speed_stub_va": 99228
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1168256,
+                "region_stub_va": 1782220
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1285114,
+                "ake_site": 1285126,
+                "ake_stub_va": 99276,
+                "gatea_gate": 1285458,
+                "gatea_stub_va": 1782328,
+                "deny_site": 1285532,
+                "deny_stub_va": 1388728,
+                "vid_producer": 1285374,
+                "hrl_stub_va": 1782388,
+                "hrl_site": 1284820,
+                "auth_cell_site": 1285574,
+                "auth_cell_stub_va": 1782420,
+                "auth_cell_refusal": 1
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "1f5948237d9f6139455f367d6b981f1381b9639704e8503fa7f080ebf55f5af5"
+      },
+      "build_validation": {
+        "output_sha256": "1f5948237d9f6139455f367d6b981f1381b9639704e8503fa7f080ebf55f5af5",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
+      }
+    },
+    {
+      "sha256": "b3892226d89d0459666f67ceb870d2a0a9a948e472792d748e8ef69bbf826f63",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BDDVDRW CH12NS40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_CH12NS40_NS40/GENERAL/1.03/main/b3892226d89d0459666f67ceb870d2a0a9a948e472792d748e8ef69bbf826f63.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          98416
+        ],
+        [
+          99328,
+          1635536
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 914768,
+          "end": 914776,
+          "bytes": 8
+        },
+        {
+          "start": 1617848,
+          "end": 1617890,
+          "bytes": 42
+        },
+        {
+          "start": 1617964,
+          "end": 1617970,
+          "bytes": 6
+        },
+        {
+          "start": 1622776,
+          "end": 1622782,
+          "bytes": 6
+        },
+        {
+          "start": 1624952,
+          "end": 1624965,
+          "bytes": 13
+        },
+        {
+          "start": 1628660,
+          "end": 1628664,
+          "bytes": 4
+        },
+        {
+          "start": 1629380,
+          "end": 1629384,
+          "bytes": 4
+        },
+        {
+          "start": 1629796,
+          "end": 1629800,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 87,
+      "largest_hole": 42,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "b3892226d89d0459666f67ceb870d2a0a9a948e472792d748e8ef69bbf826f63",
+        "producer_version": "0.15.4",
+        "status": "unsupported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW CH12NS40",
+          "revision": "1.03",
+          "variant": "NM01800"
+        },
+        "report": null,
+        "reason": "errors.firmware_no_code_space",
+        "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 758 bytes outside reserved firmware regions",
+        "output_sha256": null
+      }
+    },
+    {
+      "sha256": "cd10fc7396a2cdc77f3b49df6fa553dabc48ac5261584fc5d62cf8a866310fce",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE BP60NB10",
+      "revision": "1.02",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP60NB10_NB10/GENERAL/1.02/main/cd10fc7396a2cdc77f3b49df6fa553dabc48ac5261584fc5d62cf8a866310fce.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1382080
+        ],
+        [
+          1409024,
+          1743648
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1376968,
+          "end": 1377010,
+          "bytes": 42
+        },
+        {
+          "start": 1377084,
+          "end": 1377090,
+          "bytes": 6
+        },
+        {
+          "start": 1381020,
+          "end": 1381024,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 916,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "cd10fc7396a2cdc77f3b49df6fa553dabc48ac5261584fc5d62cf8a866310fce",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP60NB10",
+          "revision": "1.02",
+          "variant": "NM09800"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP60NB10",
+          "rev": "1.02",
+          "vendor_specific": "NM09800",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110752,
+                "handler_len": 758,
+                "record_off": 1378044,
+                "boot_init_site": 1301006,
+                "boot_stub_va": 111512,
+                "boot_function_entry": 1300990
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113584,
+                "speed_stub_va": 111560
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "4506d66deb792b8b41bbaf806025335df767cd7fb432b7f0564172dacd1dd97c"
+      }
+    },
+    {
+      "sha256": "d59b5da7424ea11816232b587b92992a2685ee3c691ae632d9825c2036e75782",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE  BE16NU50",
+      "revision": "1.04",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.04/main/d59b5da7424ea11816232b587b92992a2685ee3c691ae632d9825c2036e75782.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          1405360
+        ],
+        [
+          1425408,
+          1782080
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 98420,
+          "end": 99328,
+          "bytes": 908
+        },
+        {
+          "start": 1388728,
+          "end": 1388770,
+          "bytes": 42
+        },
+        {
+          "start": 1388844,
+          "end": 1388850,
+          "bytes": 6
+        },
+        {
+          "start": 1392700,
+          "end": 1392706,
+          "bytes": 6
+        },
+        {
+          "start": 1394320,
+          "end": 1394333,
+          "bytes": 13
+        },
+        {
+          "start": 1397716,
+          "end": 1397720,
+          "bytes": 4
+        },
+        {
+          "start": 1398436,
+          "end": 1398440,
+          "bytes": 4
+        },
+        {
+          "start": 1398852,
+          "end": 1398856,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 987,
+      "largest_hole": 908,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "d59b5da7424ea11816232b587b92992a2685ee3c691ae632d9825c2036e75782",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE16NU50",
+          "revision": "1.04",
+          "variant": "NM06300"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  BE16NU50",
+          "rev": "1.04",
+          "vendor_specific": "NM06300",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 98420,
+                "handler_len": 758,
+                "record_off": 1389792,
+                "boot_init_site": 1312730,
+                "boot_stub_va": 99180,
+                "boot_function_entry": 1312714
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101122,
+                "speed_stub_va": 99228
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "b6cb0aeeff56bc181ad31736abdd2d014b39a94daac789ed8c866903511ab844"
+      }
+    },
+    {
+      "sha256": "e04aaf44157fbbec5e3c0cbf1a9ba99c81d2aeba7d420c7ece654dc515d503ff",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE BP50NB40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.03/main/e04aaf44157fbbec5e3c0cbf1a9ba99c81d2aeba7d420c7ece654dc515d503ff.bin",
+      "coverage": [
+        [
+          69632,
+          106496
+        ],
+        [
+          106496,
+          1382080
+        ],
+        [
+          1409024,
+          1743648
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 110752,
+          "end": 111616,
+          "bytes": 864
+        },
+        {
+          "start": 1365584,
+          "end": 1365626,
+          "bytes": 42
+        },
+        {
+          "start": 1365700,
+          "end": 1365706,
+          "bytes": 6
+        },
+        {
+          "start": 1369636,
+          "end": 1369640,
+          "bytes": 4
+        },
+        {
+          "start": 1370896,
+          "end": 1370907,
+          "bytes": 11
+        },
+        {
+          "start": 1374828,
+          "end": 1374832,
+          "bytes": 4
+        },
+        {
+          "start": 1375244,
+          "end": 1375248,
+          "bytes": 4
+        },
+        {
+          "start": 1381100,
+          "end": 1381104,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 939,
+      "largest_hole": 864,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "e04aaf44157fbbec5e3c0cbf1a9ba99c81d2aeba7d420c7ece654dc515d503ff",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP50NB40",
+          "revision": "1.03",
+          "variant": "NM09800"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE BP50NB40",
+          "rev": "1.03",
+          "vendor_specific": "NM09800",
+          "media": "BD/UHD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD/UHD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 110752,
+                "handler_len": 758,
+                "record_off": 1366660,
+                "boot_init_site": 1289998,
+                "boot_stub_va": 111512,
+                "boot_function_entry": 1289982
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 113586,
+                "speed_stub_va": 111560
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "aa253287dffd1f12764515657b4a1b9f74049d25c3fd35b67d700b926c60e6ee"
+      }
+    },
+    {
+      "sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+      "category": "oem",
+      "bytes": "2097152",
+      "model": "BDDVDRW UH12NS40",
+      "revision": "1.03",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_UH12NS40_NS40/GENERAL/1.03/main/eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          98416
+        ],
+        [
+          99328,
+          1635536
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 914768,
+          "end": 914776,
+          "bytes": 8
+        },
+        {
+          "start": 1617848,
+          "end": 1617890,
+          "bytes": 42
+        },
+        {
+          "start": 1617964,
+          "end": 1617970,
+          "bytes": 6
+        },
+        {
+          "start": 1622776,
+          "end": 1622782,
+          "bytes": 6
+        },
+        {
+          "start": 1624952,
+          "end": 1624965,
+          "bytes": 13
+        },
+        {
+          "start": 1628660,
+          "end": 1628664,
+          "bytes": 4
+        },
+        {
+          "start": 1629380,
+          "end": 1629384,
+          "bytes": 4
+        },
+        {
+          "start": 1629796,
+          "end": 1629800,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 87,
+      "largest_hole": 42,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS40",
+          "revision": "1.03",
+          "variant": "N001800"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BDDVDRW UH12NS40",
+          "rev": "1.03",
+          "vendor_specific": "N001800",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1636068,
+                "handler_len": 758,
+                "record_off": 1618912,
+                "boot_init_site": 1556052,
+                "boot_stub_va": 1636828,
+                "boot_function_entry": 1556036,
+                "coverage_entry": 2,
+                "coverage_original_end": 1635535,
+                "coverage_new_end": 1802271
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101090,
+                "speed_stub_va": 1636876
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1335996,
+                "region_stub_va": 1636924
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1491606,
+                "ake_site": 1491618,
+                "ake_stub_va": 1617848,
+                "gatea_gate": 1491996,
+                "gatea_stub_va": 1637032,
+                "deny_site": 1492070,
+                "deny_stub_va": 1637092,
+                "vid_producer": 1491912,
+                "hrl_stub_va": 1637108,
+                "hrl_site": 1491374,
+                "auth_cell_site": 1492112,
+                "auth_cell_stub_va": 1637140,
+                "auth_cell_refusal": 1
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "00574add82b0dacf39b1d1f430d93e9471e46d6d0dd5abb2e7326f52ce043aa1"
+      },
+      "build_validation": {
+        "output_sha256": "00574add82b0dacf39b1d1f430d93e9471e46d6d0dd5abb2e7326f52ce043aa1",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
+      }
+    },
+    {
+      "sha256": "f37fc1b8f61cc24affd1d319259de3bcb1440cab438843d9be6f49df1a3c8467",
+      "category": "mk",
+      "bytes": "2097152",
+      "model": "BD-RE  WH16NS40",
+      "revision": "1.05",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_WH16NS40_NS50/GENERAL/1.05/main/f37fc1b8f61cc24affd1d319259de3bcb1440cab438843d9be6f49df1a3c8467.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          1404544
+        ],
+        [
+          1425408,
+          1781536
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 98420,
+          "end": 99328,
+          "bytes": 908
+        },
+        {
+          "start": 1388008,
+          "end": 1388050,
+          "bytes": 42
+        },
+        {
+          "start": 1388124,
+          "end": 1388130,
+          "bytes": 6
+        },
+        {
+          "start": 1391972,
+          "end": 1391978,
+          "bytes": 6
+        },
+        {
+          "start": 1393592,
+          "end": 1393605,
+          "bytes": 13
+        },
+        {
+          "start": 1396964,
+          "end": 1396968,
+          "bytes": 4
+        },
+        {
+          "start": 1397684,
+          "end": 1397688,
+          "bytes": 4
+        },
+        {
+          "start": 1398100,
+          "end": 1398104,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 987,
+      "largest_hole": 908,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "f37fc1b8f61cc24affd1d319259de3bcb1440cab438843d9be6f49df1a3c8467",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "revision": "1.05",
+          "variant": "NM03900"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "rev": "1.05",
+          "vendor_specific": "NM03900",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD \u2014 Identity + Speed + Boot settings applied \u00b7 Downgrade (DE) already set \u00b7 Region Free + Raw read skipped",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 98420,
+                "handler_len": 758,
+                "record_off": 1389072,
+                "boot_init_site": 1312010,
+                "boot_stub_va": 99180,
+                "boot_function_entry": 1311994
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101122,
+                "speed_stub_va": 99228
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 107 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": {
+                "SignatureNotFound": {
+                  "detail": "errors.firmware_no_code_space: no CMAC-covered free space of 60 bytes outside reserved firmware regions"
+                }
+              },
+              "facts": {},
+              "hooks": []
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": false,
+              "choices": []
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": false,
+              "choices": []
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "fc77eb7b6bedcacfe9d9980ce5a633fc541ddb74f05eba74083507afde17e086"
+      }
+    },
+    {
+      "sha256": "ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f",
+      "category": "oem",
+      "bytes": "2097152",
+      "model": "BD-RE  WH16NS40",
+      "revision": "1.05",
+      "result": "insufficient-safe-space",
+      "engine": "",
+      "bd_shape": "",
+      "structural_audit": "",
+      "boot_stub_va": "",
+      "speed_stub_va": "",
+      "region_stub_va": "",
+      "ake_stub_va": "",
+      "gatea_stub_va": "",
+      "deny_stub_va": "",
+      "hrl_stub_va": "",
+      "bd_stub_va": "",
+      "uhd_stub_va": "",
+      "auth_cell_stub_va": "",
+      "boot_unrestricted": "",
+      "boot_hrl": "",
+      "boot_encryption": "",
+      "boot_speed": "",
+      "boot_region": "",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WH16NS40_NS50/GENERAL/1.05/main/ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f.bin",
+      "coverage": [
+        [
+          69632,
+          90112
+        ],
+        [
+          94208,
+          1404544
+        ],
+        [
+          1425408,
+          1781536
+        ],
+        [
+          67008,
+          67024
+        ],
+        [
+          66560,
+          66992
+        ]
+      ],
+      "eligible_holes": [
+        {
+          "start": 98420,
+          "end": 99328,
+          "bytes": 908
+        },
+        {
+          "start": 1388008,
+          "end": 1388050,
+          "bytes": 42
+        },
+        {
+          "start": 1388124,
+          "end": 1388130,
+          "bytes": 6
+        },
+        {
+          "start": 1391972,
+          "end": 1391978,
+          "bytes": 6
+        },
+        {
+          "start": 1393592,
+          "end": 1393605,
+          "bytes": 13
+        },
+        {
+          "start": 1396964,
+          "end": 1396968,
+          "bytes": 4
+        },
+        {
+          "start": 1397684,
+          "end": 1397688,
+          "bytes": 4
+        },
+        {
+          "start": 1398100,
+          "end": 1398104,
+          "bytes": 4
+        }
+      ],
+      "total_eligible_bytes": 987,
+      "largest_hole": 908,
+      "capability": {
+        "schema": 1,
+        "input_sha256": "ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f",
+        "producer_version": "0.15.4",
+        "status": "supported",
+        "identity": {
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "revision": "1.05",
+          "variant": "N003900"
+        },
+        "report": {
+          "engine": "MT1959",
+          "family": "MT1959",
+          "chip": "MT1959",
+          "vendor": "HL-DT-ST",
+          "model": "BD-RE  WH16NS40",
+          "rev": "1.05",
+          "vendor_specific": "N003900",
+          "media": "BD",
+          "validation": "static-only",
+          "modified": true,
+          "summary": "MT1959 BD \u2014 Identity + Speed + Region Free + Raw read + Boot settings applied \u00b7 Downgrade (DE) already set",
+          "levers": [
+            {
+              "id": "Identity",
+              "label": "Identity",
+              "outcome": "Applied",
+              "facts": {
+                "handler_va": 1404756,
+                "handler_len": 758,
+                "record_off": 1389072,
+                "boot_init_site": 1312010,
+                "boot_stub_va": 1405516,
+                "boot_function_entry": 1311994,
+                "coverage_entry": 1,
+                "coverage_original_end": 1404543,
+                "coverage_new_end": 1425407
+              },
+              "hooks": []
+            },
+            {
+              "id": "Speed",
+              "label": "Speed",
+              "outcome": "Applied",
+              "facts": {
+                "speed_gate": 101122,
+                "speed_stub_va": 1405564
+              },
+              "hooks": []
+            },
+            {
+              "id": "RegionFree",
+              "label": "Region Free",
+              "outcome": "Applied",
+              "facts": {
+                "region_emitter": 1167536,
+                "region_stub_va": 1405612
+              },
+              "hooks": []
+            },
+            {
+              "id": "RawRead",
+              "label": "Raw read",
+              "outcome": "Applied",
+              "facts": {
+                "ake_gate": 1284394,
+                "ake_site": 1284406,
+                "ake_stub_va": 1405720,
+                "gatea_gate": 1284738,
+                "gatea_stub_va": 1405760,
+                "deny_site": 1284812,
+                "deny_stub_va": 1405820,
+                "vid_producer": 1284654,
+                "hrl_stub_va": 1405836,
+                "hrl_site": 1284100,
+                "auth_cell_site": 1284854,
+                "auth_cell_stub_va": 1405868,
+                "auth_cell_refusal": 1
+              },
+              "hooks": [
+                {
+                  "id": "ake",
+                  "status": "applied",
+                  "variant": "shared-call",
+                  "reason": null
+                },
+                {
+                  "id": "vid",
+                  "status": "applied",
+                  "variant": "TwoRound",
+                  "reason": null
+                },
+                {
+                  "id": "deny-reset",
+                  "status": "applied",
+                  "variant": "light-reset",
+                  "reason": null
+                },
+                {
+                  "id": "uhd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "no role-validated native UHD discriminator in this instruction layout"
+                },
+                {
+                  "id": "hrl",
+                  "status": "applied",
+                  "variant": "shared-revoke",
+                  "reason": null
+                },
+                {
+                  "id": "bd-native",
+                  "status": "unavailable",
+                  "variant": null,
+                  "reason": "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
+                },
+                {
+                  "id": "auth-cell",
+                  "status": "applied",
+                  "variant": "R1StateR1",
+                  "reason": null
+                }
+              ]
+            },
+            {
+              "id": "DowngradeEnable",
+              "label": "Downgrade (DE)",
+              "outcome": "AlreadyPresent",
+              "facts": {
+                "de_off": 2015318
+              },
+              "hooks": []
+            },
+            {
+              "id": "BootSettings",
+              "label": "Boot settings",
+              "outcome": "Applied",
+              "facts": {},
+              "hooks": []
+            }
+          ],
+          "boot_settings": {
+            "unrestricted": {
+              "value": "on",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "hrl": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "encryption": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "on",
+                "off"
+              ]
+            },
+            "speed": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "uncapped"
+              ]
+            },
+            "region": {
+              "value": "oem",
+              "supported": true,
+              "choices": [
+                "oem",
+                "free"
+              ]
+            }
+          },
+          "boot_settings_applied": true
+        },
+        "reason": null,
+        "detail": null,
+        "output_sha256": "4731356322e93c533c00b80a4c32e7ec03a53ea3455b610873079a2e44b0c459"
+      },
+      "build_validation": {
+        "output_sha256": "4731356322e93c533c00b80a4c32e7ec03a53ea3455b610873079a2e44b0c459",
+        "preview_matches_build": true,
+        "structural_audit": "passed",
+        "flasher_gate": "admitted",
+        "levers": {
+          "Identity": "Applied",
+          "Speed": "Applied",
+          "RegionFree": "Applied",
+          "RawRead": "Applied",
+          "DowngradeEnable": "AlreadyPresent",
+          "BootSettings": "Applied"
+        }
+      }
+    }
+  ]
+}

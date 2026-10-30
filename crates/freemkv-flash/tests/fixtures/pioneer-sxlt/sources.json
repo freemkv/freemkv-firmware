@@ -1,0 +1,16 @@
+{
+  "source": "owner-supplied diagnostic capture",
+  "report": "freemkv-report-210d1387-11cc-45e1-9502-3db3339c64d8.zip",
+  "dump_sha256": "8247fde9397d5a315da050a2a2edd66b350ea537a44953b75fc2bd51aeec41c4",
+  "kernel": {
+    "offset": 4194304,
+    "bytes": 65536,
+    "sha256": "ad05c0f18c4634d2fa207a9b420c328ed1bedf0822d38aee8be8f6f63b0236ef"
+  },
+  "normal_header": {
+    "offset": 4259840,
+    "bytes": 24,
+    "sha256": "f75424c383212fbea6bc232919d1e58abaffd827a907b8824cb34957c054b3d7"
+  },
+  "normal_image_length": 1800960
+}

@@ -16,3 +16,23 @@ firmware hoard, SHA-256
 `7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567`. It
 regresses classic MT1939 CREATE/MODIFY parity when the independent HRL detour
 resolves but the RawRead helper does not.
+
+BU40N 1.05 is a 2 MiB OEM image from the read-only hoard, SHA-256
+`fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d`.
+It regresses exact-size boot-record allocation after all newly resolved hooks.
+
+UH12NS40 1.03 is the unchanged 2 MiB OEM hoard object, SHA-256
+`eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba`.
+It regresses the 758-byte handler allocation refusal and checks a bounded,
+receiver-derived integrity-coverage retry through the normal Modify API.
+
+WH14NS40 1.05 (MT1959) is the unchanged 2 MiB OEM hoard object, SHA-256
+`38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1`.
+It checks that explicit boot settings still reach the coverage retry when the
+first attempt builds only a partial set of features.
+
+BW-16D1HT 3.03 is the unchanged 2 MiB OEM hoard object, SHA-256
+`1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764`.
+It anchors native response writer/committer selection where the old local
+scanner selected a different writer. `native-response-inputs.json` pins the
+selected role addresses and DMA cells for four distinct native layouts.

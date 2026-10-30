@@ -3,6 +3,40 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.15.4] - 2026-10-30
+
+### freemkv Modify
+
+- Expand compatible MediaTek MT1959 firmware modification, including additional
+  WH register layouts and tight code-space images such as BU40N 1.05. Report
+  features and boot-setting choices supported by each exact firmware.
+- Fix Unrestricted On/OEM/Off behavior where native acceptance and refusal are
+  proven. Keep BD, UHD and authentication hooks on the same runtime setting.
+- Preserve native arguments, registers and return behavior in boot, VID and
+  revocation hooks. Strengthen generated-firmware integrity and layout checks.
+- Fix legacy MediaTek DVD/BD read-speed hooks to use Thumb instructions supported
+  by their processors while retaining native hardware and media limits.
+- Improve allocation of injected code and editable boot settings, recovering
+  otherwise compatible images without overwriting firmware metadata or live RAM.
+- Reject raw diagnostic drive dumps as modification sources when Flash cannot
+  install the result; request an OEM update image or valid backup instead.
+- Keep experimental MT1939 UHD conversion off the release path. Existing DVD/BD
+  controls remain available where supported.
+
+### freemkv Flash
+
+- Adapt the tested original UD02 mechanism to the exact UD04 1.14 firmware and
+  support return to its original UD02 1.00 firmware. Require matching firmware,
+  original factory hardware and live calibration prerequisites; other UD02/UD04
+  combinations are not newly supported.
+- Recognize complete legacy Pioneer factory records without a production tag
+  when the product code and factory-test structure independently validate.
+- Improve OEM-branded/SXLT and REC Pioneer backups using native descriptors and
+  protocol evidence. Preserve captured firmware and explain when a raw dump is
+  available but a flashable backup cannot be reconstructed.
+- Keep MediaTek read restrictions and Pioneer capture limitations distinct from
+  connection errors, with clearer guidance before any firmware write.
+
 ## [0.15.3] - 2026-10-25
 
 ### freemkv Flash

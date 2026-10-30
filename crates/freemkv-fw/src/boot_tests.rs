@@ -1,4 +1,91 @@
 use super::*;
+
+#[test]
+fn classic_emitted_boot_and_region_hrl_controls_are_reported() {
+    let image = include_bytes!("../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let (_, support) = api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
+    assert!(
+        support.has_boot(),
+        "classic emission must report the boot hook it installed"
+    );
+    assert!(support.supports(BootFeature::Region));
+    assert!(support.supports(BootFeature::Hrl));
+    assert!(support.supports(BootFeature::Speed));
+    assert!(!support.supports(BootFeature::Unrestricted));
+}
+
+#[test]
+fn wh_auth_hook_exposes_and_roundtrips_all_three_proven_choices() {
+    let image = include_bytes!("../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let (report, support) =
+        crate::api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
+    assert!(
+        support.supports(BootFeature::Unrestricted),
+        "the emitted widening hook is a usable On setting"
+    );
+    assert!(support.supports_value(BootFeature::Unrestricted, 1));
+    assert!(support.supports_value(BootFeature::Unrestricted, 255));
+    assert!(support.supports_value(BootFeature::Unrestricted, 0));
+    assert!(!support.supports_value(BootFeature::Unrestricted, 17));
+    let (_, restored) = inspect(&report.image).unwrap().unwrap();
+    assert!(restored.supports_value(BootFeature::Unrestricted, 0));
+    let off = settings(&["unrestricted=off"]);
+    assert!(off.validate(&restored).is_ok());
+    let (off_image, _) = update(&report.image, &off).unwrap().unwrap();
+    assert_eq!(
+        inspect(&off_image)
+            .unwrap()
+            .unwrap()
+            .0
+            .value(BootFeature::Unrestricted),
+        "off"
+    );
+    let oem = settings(&["unrestricted=oem"]);
+    let (changed, _) = update(&report.image, &oem).unwrap().unwrap();
+    assert_eq!(
+        inspect(&changed)
+            .unwrap()
+            .unwrap()
+            .0
+            .value(BootFeature::Unrestricted),
+        "oem"
+    );
+    assert!(BootSettings::standard()
+        .report_json(&support, "{}")
+        .contains("\"choices\":[\"oem\",\"on\",\"off\"]"));
+}
+
+#[test]
+fn existing_partial_capability_records_do_not_gain_off_from_new_engine_support() {
+    let image = include_bytes!("../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let (report, _) = api::modify_with_defaults(image, &BootSettings::standard()).unwrap();
+    let mut legacy = report.image;
+    let record = legacy
+        .windows(16)
+        .position(|w| w == RECORD_MAGIC_V3)
+        .unwrap();
+    legacy[record + 23] |= LIMITED_UNRESTRICTED;
+    let legacy = freemkv_flash::cmac::resign(&legacy).unwrap();
+    let (_, support) = inspect(&legacy).unwrap().unwrap();
+    assert!(support.supports_value(BootFeature::Unrestricted, 1));
+    assert!(support.supports_value(BootFeature::Unrestricted, 255));
+    assert!(!support.supports_value(BootFeature::Unrestricted, 0));
+    assert!(update(&legacy, &settings(&["unrestricted=off"])).is_err());
+}
+
+#[test]
+fn tight_bu40n_v105_has_room_for_exact_boot_metadata_after_all_hooks() {
+    let image = include_bytes!("../tests/fixtures/BU40N_OEM_1.05.bin");
+    let (report, support) = crate::api::modify_with_defaults(image, &BootSettings::standard())
+        .expect("the fixed boot record must not request unused assembler headroom");
+    assert!(support.has_boot());
+    assert!(report.levers.iter().any(|l| l
+        .facts
+        .iter()
+        .any(|(k, v)| *k == "auth_cell_stub_va" && *v != 0)));
+    assert!(crate::engine::validate_metadata(image, &report.image).is_ok());
+    assert!(freemkv_flash::cmac::verify(&report.image));
+}
 use crate::{
     api,
     engine::{self, mt1959::Mt1959Engine},
@@ -99,25 +186,39 @@ fn saved_settings_cannot_override_boot_but_runtime_reset_uses_same_defaults() {
     for initial in [0u8, 1, 255] {
         ram.fill(initial);
         for pc in (0..bytes.len()).step_by(2) {
-            let op = u16::from_le_bytes(bytes[pc..pc + 2].try_into().unwrap());
-            if op == 0xbc0f {
-                break;
-            }
-            match op {
-                0xb51f => {} // preserve registers on stack
-                op if op & 0xf800 == 0x4800 => {
-                    let at = ((pc + 4) & !3) + usize::from(op & 255) * 4;
-                    regs[usize::from((op >> 8) & 7)] =
-                        u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+            use thumb_asm::isa::Operand;
+            let ins = thumb_asm::isa::decode_at(&bytes, pc).expect("decoded boot instruction");
+            match ins.mnemonic {
+                "push" => {}
+                "pop" => break, // argument restore ends the initialization prefix
+                "ldr" => {
+                    let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
+                        panic!("LDR destination");
+                    };
+                    regs[usize::from(dest.num())] = thumb_asm::analysis::literal_value(&bytes, pc)
+                        .expect("initialization prefix loads only literals");
                 }
-                op if op & 0xf800 == 0x2000 => {
-                    regs[usize::from((op >> 8) & 7)] = u32::from(op & 255)
+                "mov" => {
+                    let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
+                        panic!("MOV destination");
+                    };
+                    regs[usize::from(dest.num())] = match ins.operands.get(1) {
+                        Some(Operand::Imm(value)) => value as u32,
+                        Some(Operand::Reg(source)) => regs[usize::from(source.num())],
+                        _ => panic!("MOV source"),
+                    };
                 }
-                op if op & 0xf800 == 0x7000 => {
-                    let address = regs[usize::from((op >> 3) & 7)] + u32::from((op >> 6) & 31);
-                    ram[(address - base) as usize] = regs[usize::from(op & 7)] as u8;
+                "strb" => {
+                    let (Some(Operand::Reg(source)), Some(Operand::Mem(memory))) =
+                        (ins.operands.get(0), ins.operands.get(1))
+                    else {
+                        panic!("STRB operands");
+                    };
+                    assert!(memory.index.is_none() && memory.add);
+                    let address = regs[usize::from(memory.base.num())] + memory.offset;
+                    ram[(address - base) as usize] = regs[usize::from(source.num())] as u8;
                 }
-                _ => panic!("unexpected boot instruction {op:04x}; review startup behavior"),
+                _ => panic!("unexpected boot instruction {ins:?}; review startup behavior"),
             }
         }
         assert_eq!(ram, defaults.flags());
@@ -126,6 +227,10 @@ fn saved_settings_cannot_override_boot_but_runtime_reset_uses_same_defaults() {
     assert!(BootFeature::ALL.into_iter().all(|f| support.supports(f)));
     let record = read_record(&report.image).unwrap().unwrap();
     for (i, site) in record.sites.iter().enumerate() {
+        if record.shared_reset && i == 2 {
+            assert_eq!(*site, 0);
+            continue;
+        }
         assert_eq!(
             &report.image[*site..*site + 28],
             stores(&defaults.flags(), if i == 2 { 6 } else { 0 })
@@ -141,6 +246,9 @@ fn new_images_can_be_reconfigured_and_reset_without_reinjecting_hooks() {
     assert!(support.has_boot());
     let custom = settings(&["hrl=off", "encryption=off"]);
     let (second, _) = api::modify_with_defaults(&first.image, &custom).unwrap();
+    let record = read_record(&second.image).unwrap().unwrap();
+    assert!(record.shared_reset);
+    assert_eq!(record.sites[2], 0);
     let (loaded, _) = inspect(&second.image).unwrap().unwrap();
     assert_eq!(loaded.flags(), custom.flags());
     let (reset, _) = api::modify_with_defaults(&second.image, &BootSettings::standard()).unwrap();
@@ -242,5 +350,34 @@ fn paired_tar_modification_preserves_intermediate_and_source_evidence() {
     assert_eq!(
         inspect(edited.firmware()).unwrap().unwrap().0.flags(),
         defaults.flags()
+    );
+}
+
+#[test]
+fn shared_reset_records_refuse_a_forged_third_instruction_site() {
+    let (report, _) = api::modify_with_defaults(&fixture(), &BootSettings::standard()).unwrap();
+    let record = read_record(&report.image).unwrap().unwrap();
+    assert!(record.shared_reset);
+    let mut corrupt = report.image;
+    corrupt[record.offset + 32..record.offset + 36]
+        .copy_from_slice(&(record.sites[1] as u32).to_le_bytes());
+    let corrupt = freemkv_flash::cmac::resign(&corrupt).unwrap();
+    assert!(inspect(&corrupt)
+        .unwrap_err()
+        .to_string()
+        .contains("empty third site"));
+}
+
+#[test]
+fn normal_modify_refuses_a_raw_drive_dump_before_creating_unflashable_output() {
+    let mut image = fixture();
+    let mirror = image[0x10000..0x10400].to_vec();
+    image[..0x400].copy_from_slice(&mirror);
+    assert!(mediatek_optical::image::is_drive_read(&image));
+    let error = crate::api::modify_with_defaults(&image, &BootSettings::standard()).unwrap_err();
+    assert!(format!("{error:#}").contains("raw MediaTek drive dump"));
+    assert_eq!(
+        error.downcast_ref::<freemkv_flash::user_error::IssueCode>(),
+        Some(&freemkv_flash::user_error::IssueCode::UnsupportedFirmware)
     );
 }

@@ -1,0 +1,205 @@
+[
+  {
+    "file": "wh14-vid.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1570006,
+    "padding": 2,
+    "excerpt_sha256": "f1f1c0b8e68996bc17b7cc54786937381e058bca9edc2f05b94ec3cc03d3e623"
+  },
+  {
+    "file": "wh14-bd-structure.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 747482,
+    "padding": 2,
+    "excerpt_sha256": "fef0d25ee190ce92405b5b90702f932421cb7f879012ae1cf8ef62a315035cb3"
+  },
+  {
+    "file": "wh14-classic-type.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1081900,
+    "padding": 0,
+    "excerpt_sha256": "45b3a30d5d611b6843cffbd94611bfbf162a5f6ab5c687c60d0f15661227546c"
+  },
+  {
+    "file": "wh14-modern-type.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 911284,
+    "padding": 0,
+    "excerpt_sha256": "da17a2c38fd27b82817f382a843deebd4f439170085eb2fb0bda954e193cbd92"
+  },
+  {
+    "file": "wh14-classic-read-entry.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 739348,
+    "padding": 0,
+    "excerpt_sha256": "b303da13282c35029b516fa9821216bf0e07fa4fc07347998e81b210e41f4db4"
+  },
+  {
+    "file": "wh14-modern-read-entry.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 714556,
+    "padding": 0,
+    "excerpt_sha256": "8e570c309a9ff6872884a636798a28e3d7759ceb6433c366dc2c0e2bb738d645"
+  },
+  {
+    "file": "wh14-classic-class-metric.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1264662,
+    "padding": 0,
+    "excerpt_sha256": "1c987518b4bb941141f0b1a454e93c8ee9494426ce9281212d19534363861e36"
+  },
+  {
+    "file": "wh14-classic-class-math.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1707616,
+    "padding": 0,
+    "excerpt_sha256": "982839d496833541bb19509677523ec6cb74a2fdc869a3e3f1b916f577bb3e96"
+  },
+  {
+    "file": "wh14-modern-class-metric.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1034014,
+    "padding": 0,
+    "excerpt_sha256": "e21b4e01e6e515469b91fbf5c0226dd6bd5ef9139cc29fce18ef82330f2313cc"
+  },
+  {
+    "file": "wh14-modern-class-math.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1370028,
+    "padding": 0,
+    "excerpt_sha256": "489682dd17f443eda1c53c8dde9d07bbf19faf28a73a6a7c2075ad13f42a34b2"
+  },
+  {
+    "file": "wh14-classic-di-parser.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1090730,
+    "padding": 0,
+    "excerpt_sha256": "3764a2e0a7c0d6849fde9c302d5819f80e51a4507c8fe1a21edbe9f56a35d996"
+  },
+  {
+    "file": "wh14-modern-di-parser.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 919792,
+    "padding": 0,
+    "excerpt_sha256": "3a750bc7d21e94c57fc784fa0e8e4fd25d09d9935fd6d1bc21a1c32e5f5b9f5a"
+  },
+  {
+    "file": "wh14-classic-switch.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1646772,
+    "padding": 0,
+    "excerpt_sha256": "0c5dc176978dab2405038d99d3ecca79fba4ae057fe0f296be21ff50309efc0c"
+  },
+  {
+    "file": "wh14-modern-switch.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1293316,
+    "padding": 0,
+    "excerpt_sha256": "0c5dc176978dab2405038d99d3ecca79fba4ae057fe0f296be21ff50309efc0c"
+  },
+  {
+    "file": "wh14-classic-control-bit.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 222322,
+    "padding": 0,
+    "excerpt_sha256": "1caaf645df2eb88ccd2d66d5d25a90c7c7ed4b7d1758588c2ba18880be842c21"
+  },
+  {
+    "file": "wh14-modern-control-bit.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 157446,
+    "padding": 0,
+    "excerpt_sha256": "18158120e9363ac400109e86f5d577f2b91a56c56e9706a00a6db0206b0e092f"
+  },
+  {
+    "file": "wh14-classic-control-field.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 205120,
+    "padding": 0,
+    "excerpt_sha256": "310b6f47c0442f2129e9bc202062b0992fac29046001f9a6e5b004d7f7418442"
+  },
+  {
+    "file": "wh14-modern-control-field.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 208490,
+    "padding": 0,
+    "excerpt_sha256": "791b024aeedc419981f877728e3a197ce1a908fe215d349c4e30e12c13a35394"
+  },
+  {
+    "file": "wh14-classic-speed-state.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 424132,
+    "padding": 0,
+    "excerpt_sha256": "50734aa3c03acb348d869ed35c9770671a3409513e297b2b89705a160bd6922c"
+  },
+  {
+    "file": "wh14-modern-speed-state.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 427866,
+    "padding": 0,
+    "excerpt_sha256": "9d13894117d60a5e6ad17f1ca32702de5aa10a5b63768496106527db6c1d3edb"
+  },
+  {
+    "file": "wh14-classic-calculation.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1036634,
+    "padding": 0,
+    "excerpt_sha256": "875d094579ddbd7a25efdc5299bc913b524ebec8e69539aea0a5688057b40d4c"
+  },
+  {
+    "file": "wh14-modern-calculation.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 888418,
+    "padding": 0,
+    "excerpt_sha256": "8abbd8ac714c7dfb6ac6783fbde01102684bdf6175859dfebf20c2f171c44a12"
+  },
+  {
+    "file": "wh14-classic-division-entry.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1656476,
+    "padding": 0,
+    "excerpt_sha256": "9e6d2d1b421fb3932b77bcc9b690c355411f4446be38a6315327de41569445d1"
+  },
+  {
+    "file": "wh14-modern-division-entry.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1306972,
+    "padding": 0,
+    "excerpt_sha256": "7b8b0eaa93c7a4d0a0ca6e3283fed2faa5129bc6ed1b8e70b828f8e577fdbc18"
+  },
+  {
+    "file": "wh14-classic-division-body.bin",
+    "source_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+    "source_offset": 1646376,
+    "padding": 0,
+    "excerpt_sha256": "966138759feffe772a8ebe8664f8e92fb44a968e9939efc340d91036d0597ddc"
+  },
+  {
+    "file": "wh14-modern-division-body.bin",
+    "source_sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "source_offset": 1292920,
+    "padding": 0,
+    "excerpt_sha256": "b598c7e77da1714fd7e5b553f555e0bfe46a780a7bee7878480d96dadd08473c"
+  },
+  {
+    "file": "bh40-defaults.bin",
+    "source_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+    "source_offset": 423808,
+    "padding": 0,
+    "excerpt_sha256": "7820151232182deced93b2b36546d7468bf1ff28a702adb3ad83c5a0e4ddb157"
+  },
+  {
+    "file": "bu40-defaults.bin",
+    "source_sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+    "source_offset": 895860,
+    "padding": 0,
+    "excerpt_sha256": "1e7d8686246ef8b20255158ba94d12532f5c3ba59d64ba554d03d32b10ec0387"
+  },
+  {
+    "file": "ns60-defaults.bin",
+    "source_sha256": "5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073",
+    "source_offset": 897992,
+    "padding": 0,
+    "excerpt_sha256": "1fdd88ef29ee469a6137b5c2375cdbd52d1974c0cb135f14060ae33363fd81a7"
+  }
+]

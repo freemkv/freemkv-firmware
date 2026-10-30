@@ -157,16 +157,17 @@ fn pioneer_capture_device(hardware: &[u8]) -> MockScsiDevice {
 }
 
 #[test]
-fn rec_and_new_pioneer_identities_offer_dump_without_oem_write_facets() {
+fn cdb_protocol_selects_one_backend_independent_of_hardware_label() {
     for hardware in [b"REC 8301", b"REC 8800", b"REC 8C00", b"NEW 1234"] {
         let mut dev = pioneer_capture_device(hardware);
         let resolved = resolve(&mut dev).unwrap().expect("Pioneer dump route");
         let caps = crate::backend::Capabilities::of(resolved.backend);
         assert!(caps.dump);
-        assert!(!caps.backup && !caps.flash && !caps.recovery && !caps.flash_current);
-        assert!(resolved.backend.files().is_none());
+        assert!(caps.backup);
+        assert_eq!(caps, crate::backend::Capabilities::of(&pioneer::Pioneer));
+        assert!(resolved.backend.files().is_some());
         assert!(dev.writes.is_empty());
-        assert!(crate::workflow::classify_gated(&mut dev).is_err());
+        assert!(crate::workflow::classify_gated(&mut dev).is_ok());
         assert!(dev.writes.is_empty());
     }
 }
@@ -196,7 +197,10 @@ fn rec_dump_reaches_existing_memory_capture_and_saves_raw_bytes() {
         let reads = dev.reads.len();
         assert!(crate::engine::backup(&mut dev, resolved.backend, &out, false).is_err());
         assert!(!out.exists());
-        assert_eq!(dev.reads.len(), reads);
+        assert!(
+            dev.reads.len() > reads,
+            "backup must attempt a firmware read"
+        );
     }
 }
 

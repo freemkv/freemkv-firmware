@@ -1,0 +1,475 @@
+{
+  "schema": 1,
+  "producer_sha256": "2edd31bdbae4db2884c19368640766e5a1d85ece3435fe9cd426923cd7adb223",
+  "scope": "native loop evidence; no caller/integrity/wrapper authorization",
+  "images": [
+    {
+      "sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP55EB40_NB50/GENERAL/1.03/main/0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557708,
+          "destination_cell": 33557668,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557680,
+          "source_offset_cell": 33557676,
+          "staging_cell": 33557624,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "1227f133eb1c5315d955bb9d9cfcaf84381772a1edfef56b39ad3439b92ca4c0",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP60NB10_NB12/GENERAL/1.02/main/1227f133eb1c5315d955bb9d9cfcaf84381772a1edfef56b39ad3439b92ca4c0.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557708,
+          "destination_cell": 33557668,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557680,
+          "source_offset_cell": 33557676,
+          "staging_cell": 33557624,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "243a7b0bb237724ab0831ba0d0775f281259cc29643c0617df738856875db6ba",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_UH12NS40_NS40/GENERAL/1.03/main/243a7b0bb237724ab0831ba0d0775f281259cc29643c0617df738856875db6ba.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557632,
+          "destination_cell": 33557592,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557604,
+          "source_offset_cell": 33557600,
+          "staging_cell": 33557548,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.03/main/263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557708,
+          "destination_cell": 33557668,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557680,
+          "source_offset_cell": 33557676,
+          "staging_cell": 33557624,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.05/main/38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557640,
+          "destination_cell": 33557600,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557612,
+          "source_offset_cell": 33557608,
+          "staging_cell": 33557556,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.03/main/3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557708,
+          "destination_cell": 33557668,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557680,
+          "source_offset_cell": 33557676,
+          "staging_cell": 33557624,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "592e8d22d98aea9c1162c9f010fe2df29b31f6320d539336a699a78ea3af9191",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.03/main/592e8d22d98aea9c1162c9f010fe2df29b31f6320d539336a699a78ea3af9191.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557708,
+          "destination_cell": 33557668,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557680,
+          "source_offset_cell": 33557676,
+          "staging_cell": 33557624,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "60a66592d50180119feda3246543c923c8b4cb4e1bdf09f17a6a14f9ae070373",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_WH14NS40_NS50/GENERAL/1.05/main/60a66592d50180119feda3246543c923c8b4cb4e1bdf09f17a6a14f9ae070373.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557640,
+          "destination_cell": 33557600,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557612,
+          "source_offset_cell": 33557608,
+          "staging_cell": 33557556,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "66f277bcad34dfbaf483fc27a7fb03fcb4dfb6e85bad5e38add3c41ad150c087",
+      "path": "omni/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.10/main/66f277bcad34dfbaf483fc27a7fb03fcb4dfb6e85bad5e38add3c41ad150c087.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557640,
+          "destination_cell": 33557600,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557612,
+          "source_offset_cell": 33557608,
+          "staging_cell": 33557556,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/D_/A103/main/7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557712,
+          "destination_cell": 33557672,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557684,
+          "source_offset_cell": 33557680,
+          "staging_cell": 33557628,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.04/main/7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557640,
+          "destination_cell": 33557600,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557612,
+          "source_offset_cell": 33557608,
+          "staging_cell": 33557556,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "b3892226d89d0459666f67ceb870d2a0a9a948e472792d748e8ef69bbf826f63",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_CH12NS40_NS40/GENERAL/1.03/main/b3892226d89d0459666f67ceb870d2a0a9a948e472792d748e8ef69bbf826f63.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557632,
+          "destination_cell": 33557592,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557604,
+          "source_offset_cell": 33557600,
+          "staging_cell": 33557548,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "cd10fc7396a2cdc77f3b49df6fa553dabc48ac5261584fc5d62cf8a866310fce",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP60NB10_NB10/GENERAL/1.02/main/cd10fc7396a2cdc77f3b49df6fa553dabc48ac5261584fc5d62cf8a866310fce.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557708,
+          "destination_cell": 33557668,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557680,
+          "source_offset_cell": 33557676,
+          "staging_cell": 33557624,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "d59b5da7424ea11816232b587b92992a2685ee3c691ae632d9825c2036e75782",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.04/main/d59b5da7424ea11816232b587b92992a2685ee3c691ae632d9825c2036e75782.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557640,
+          "destination_cell": 33557600,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557612,
+          "source_offset_cell": 33557608,
+          "staging_cell": 33557556,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "e04aaf44157fbbec5e3c0cbf1a9ba99c81d2aeba7d420c7ece654dc515d503ff",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.03/main/e04aaf44157fbbec5e3c0cbf1a9ba99c81d2aeba7d420c7ece654dc515d503ff.bin",
+      "candidates": [
+        {
+          "address": 106496,
+          "copy_pointer_cell": 33557708,
+          "destination_cell": 33557668,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1867776
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557680,
+          "source_offset_cell": 33557676,
+          "staging_cell": 33557624,
+          "variant": "Wide"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_UH12NS40_NS40/GENERAL/1.03/main/eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557632,
+          "destination_cell": 33557592,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557604,
+          "source_offset_cell": 33557600,
+          "staging_cell": 33557548,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "f37fc1b8f61cc24affd1d319259de3bcb1440cab438843d9be6f49df1a3c8467",
+      "path": "mk/mediatek/MT1959/HL-DT-ST_WH16NS40_NS50/GENERAL/1.05/main/f37fc1b8f61cc24affd1d319259de3bcb1440cab438843d9be6f49df1a3c8467.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557640,
+          "destination_cell": 33557600,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557612,
+          "source_offset_cell": 33557608,
+          "staging_cell": 33557556,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    },
+    {
+      "sha256": "ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WH16NS40_NS50/GENERAL/1.05/main/ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f.bin",
+      "candidates": [
+        {
+          "address": 94208,
+          "copy_pointer_cell": 33557640,
+          "destination_cell": 33557600,
+          "preserving_boot_spans": [
+            [
+              65536,
+              1900544
+            ],
+            [
+              2015232,
+              2031616
+            ]
+          ],
+          "remaining_cell": 33557612,
+          "source_offset_cell": 33557608,
+          "staging_cell": 33557556,
+          "variant": "Compact"
+        }
+      ],
+      "policy": "loop evidence only; caller, integrity and wrapper binding required"
+    }
+  ]
+}

@@ -58,6 +58,7 @@ fn run() -> Result<()> {
         .context(freemkv_flash::user_error::IssueCode::CommandOptions));
     };
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut conditional: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut future: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (dir, ext, platform) in [
         ("pioneer", "tar", Platform::Pioneer),
@@ -68,10 +69,11 @@ fn run() -> Result<()> {
         let found = classified_links(platform, &refs);
         eprintln!("{dir}: {} packages, {} links", ids.len(), found.len());
         for (i, j, status) in found {
-            let graph = if status == CompatibilityStatus::Yes {
-                &mut out
-            } else {
-                &mut future
+            let graph = match status {
+                CompatibilityStatus::Yes => &mut out,
+                CompatibilityStatus::Conditional => &mut conditional,
+                CompatibilityStatus::SoftNo => &mut future,
+                CompatibilityStatus::HardNo => continue,
             };
             graph
                 .entry(ids[i].clone())
@@ -85,6 +87,7 @@ fn run() -> Result<()> {
         "freemkv_flash": env!("CARGO_PKG_VERSION"),
         "links": out,
         "future": future,
+        "conditional": conditional,
     });
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())

@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "producer_sha256": "97422de2fa7999ad9b9fbdc46d02b8ef15d74e5be89cf8cb85313557c47e8683",
+  "flasher_sha256": "f25b55919f10822ef4dc8a7f5b22c04c4eac45d6fc12a542c25676990f7b191b",
+  "counting": "six labels: Speed, Region, HRL, AKE, Bus, combined BD/UHD; Encryption supplies AKE and Bus",
+  "published_hashes": 114,
+  "published_coverage": {
+    "6": 84,
+    "5": 24,
+    "4": 0,
+    "3": 0,
+    "2": 0,
+    "1": 1,
+    "0": 5
+  },
+  "held_buildable_coverage": {
+    "6": 157,
+    "5": 24,
+    "4": 0,
+    "3": 0,
+    "2": 0,
+    "1": 11,
+    "0": 5
+  },
+  "held_total": 1085,
+  "gates": {
+    "admitted": 193,
+    "refused": 3
+  },
+  "physical_validation": false
+}

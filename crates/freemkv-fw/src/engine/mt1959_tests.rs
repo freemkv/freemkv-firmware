@@ -12,12 +12,124 @@ use super::*;
 use crate::engine::lever::{LeverOutcome, LeverReport};
 use crate::family::MediaClass;
 
+#[test]
+fn uh12_oem_allocation_failure_builds_through_the_normal_modify_api() {
+    use sha2::{Digest, Sha256};
+    let original = include_bytes!("../../tests/fixtures/UH12NS40_OEM_1.03.bin");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(original)),
+        "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba"
+    );
+    assert!(
+        Mt1959Engine.modify(original).is_err(),
+        "original covered holes cannot fit the handler"
+    );
+    let (report, support) =
+        crate::api::modify_with_defaults(original, &crate::boot::BootSettings::standard()).unwrap();
+    for id in [
+        LeverId::Identity,
+        LeverId::Speed,
+        LeverId::RegionFree,
+        LeverId::RawRead,
+        LeverId::BootSettings,
+    ] {
+        assert!(
+            report
+                .levers
+                .iter()
+                .any(|p| p.id == id && p.outcome == LeverOutcome::Applied),
+            "{id:?}"
+        );
+    }
+    assert!(crate::boot::BootFeature::ALL
+        .iter()
+        .all(|f| support.supports(*f)));
+    assert!(
+        support.supports_value(crate::boot::BootFeature::Unrestricted, 0),
+        "the emitted three-way auth hook must expose native refusal"
+    );
+    assert!(freemkv_flash::cmac::verify(&report.image));
+    assert!(crate::engine::code_space::metadata_preserved(
+        original,
+        &report.image
+    ));
+    let audit = crate::engine::audit::audit_image(original, &report);
+    assert!(audit.ok(), "{audit:#?}");
+    let old = freemkv_flash::cmac::parse_table(original).unwrap();
+    let new = freemkv_flash::cmac::parse_table(&report.image).unwrap();
+    for (before, after) in old.iter().zip(&new) {
+        assert_eq!(before.enabled, after.enabled);
+        assert_eq!(before.start, after.start);
+        assert_eq!(
+            after.end,
+            if before.index == 2 {
+                0x1b801f
+            } else {
+                before.end
+            }
+        );
+    }
+    let mut unplanned = report.image.clone();
+    unplanned[freemkv_flash::cmac::TABLE_OFFSET + 4] ^= 0x10;
+    let unplanned = freemkv_flash::cmac::resign(&unplanned).unwrap();
+    assert!(freemkv_flash::cmac::verify(&unplanned));
+    assert!(!crate::engine::code_space::metadata_preserved(
+        original, &unplanned
+    ));
+}
+
+#[test]
+fn uh12_coverage_retry_refuses_changed_receiver_contracts_even_when_resigned() {
+    let original = include_bytes!("../../tests/fixtures/UH12NS40_OEM_1.03.bin");
+    for address in [
+        0xa7942, 0x17c576, 0x1746e, 0x17c0f0, 0x17c308, 0x17fa8, 0x18070,
+    ] {
+        let mut changed = original.to_vec();
+        changed[address] ^= 1;
+        let changed = freemkv_flash::cmac::resign(&changed).unwrap();
+        assert!(freemkv_flash::cmac::verify(&changed));
+        assert!(
+            crate::engine::code_space::coverage_retry(&changed).is_none(),
+            "{address:#x}"
+        );
+    }
+}
+
+#[test]
+fn allocation_retry_honors_explicit_settings_after_partial_first_pass() {
+    let original = include_bytes!("../../tests/fixtures/WH14NS40_OEM_1.05.bin");
+    let defaults = crate::boot::BootSettings::parse(&[
+        "region=free".into(),
+        "speed=uncapped".into(),
+        "hrl=off".into(),
+        "encryption=off".into(),
+    ])
+    .unwrap();
+    let (report, _) = crate::api::modify_with_defaults(original, &defaults).unwrap();
+    let (saved, _) = crate::boot::inspect(&report.image).unwrap().unwrap();
+    for feature in crate::boot::BootFeature::ALL {
+        assert_eq!(saved.value(feature), defaults.value(feature));
+    }
+    assert!(crate::engine::audit::audit_image(original, &report).ok());
+    assert!(freemkv_flash::cmac::verify(&report.image));
+}
+
 fn fixture() -> Vec<u8> {
     let p = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/BU40N_OEM_1.00.bin"
     );
     std::fs::read(p).expect("committed BU40N OEM fixture")
+}
+
+#[test]
+fn wh_descriptor_auth_cell_is_selected_from_vid_success_not_the_later_state_check() {
+    let image = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let (site, _) = Mt1959Engine
+        .auth_cell_widen_detour(image, FLAG_TABLE_BASE)
+        .expect("WH VID preparation has a supported state-band contract");
+    assert_eq!(site, 0x13aa96);
+    assert_ne!(site, 0x13ac68, "the later check has a different role");
 }
 
 /// The fixture's own detected chip identity (so `build_modify` sees the real
@@ -166,7 +278,7 @@ fn rawread_reports_the_uhd_hrl_bd_and_auth_cell_facts_whenever_those_detours_are
 }
 
 // ---------------------------------------------------------------------------
-// Injection-space allocation: every blob is placed with 16 bytes of headroom.
+// Finalized byte arrays allocate their exact size within protected geometry.
 // ---------------------------------------------------------------------------
 
 /// The erased (`0xFF`) runs `free_space` will consider: 4-aligned, and
@@ -219,7 +331,11 @@ fn only_free_space(buf: &mut [u8], window: usize) -> u32 {
         "asked for a {window}-byte window but the base's largest covered run is only {len}"
     );
     for (a, l) in runs {
-        buf[a..a + l].fill(0x00);
+        // Short FF fragments include the native 0xffff length sentinel.
+        // They cannot hold any word-aligned finalized allocation and must survive.
+        if l >= 4 {
+            buf[a..a + l].fill(0x00);
+        }
     }
     buf[base..base + window].fill(0xFF);
     base as u32
@@ -268,43 +384,47 @@ fn gatea_stub_bytes(image: &[u8]) -> Vec<u8> {
     .expect("gate-A stub")
 }
 
-/// Every blob the Speed lever injects must be allocated with 16 bytes of
-/// headroom past its own length: the run is re-scanned for the *next* blob, and
-/// an allocation that fits with nothing to spare leaves the following blob (and
-/// its 4-byte alignment) nowhere to go. One byte short of that must refuse
-/// rather than place the stub — the alternative is an image that flashes with a
-/// trampoline butted against live flash.
+/// A finalized stub fits exactly. The next allocation independently checks its
+/// own capacity and alignment; no unchecked writes depend on spare tail bytes.
 #[test]
-fn speed_stub_is_allocated_with_sixteen_bytes_of_headroom() {
+fn speed_stub_is_allocated_with_exact_capacity() {
     let e = Mt1959Engine;
     let img = fixture();
     let blob = speed_stub_bytes(&img).len();
 
     let mut cramped = img.clone();
-    only_free_space(&mut cramped, blob + 15);
+    only_free_space(&mut cramped, blob - 1);
+    let before = cramped.clone();
     let msg = refusal(
         e.emit_speed(&img, &mut cramped, FLAG_TABLE_BASE),
-        "a free run one byte short of blob+slack must not be used",
+        "a free run one byte short of the finalized blob must not be used",
     );
     assert!(
-        msg.contains(&out_of_space(blob + 16)),
-        "Speed must ask for its {blob}-byte stub plus 16 bytes of headroom; got: {msg}"
+        msg.contains(&out_of_space(blob)),
+        "Speed must ask for its {blob}-byte stub without unneeded extra headroom; got: {msg}"
     );
 
+    assert_eq!(cramped, before, "failed installation changed output");
     let mut exact = img.clone();
-    let base = only_free_space(&mut exact, blob + 16);
+    let base = only_free_space(&mut exact, blob);
+    let next_byte = exact[base as usize + blob];
     let (_, va) = e
         .emit_speed(&img, &mut exact, FLAG_TABLE_BASE)
-        .expect("blob + 16 bytes of covered free space is enough to place the Speed stub");
+        .expect("blob bytes of covered free space is enough to place the Speed stub");
     assert_eq!(
         va, base,
         "the stub must land in the one window we left free"
+    );
+    assert_eq!(
+        exact[base as usize + blob],
+        next_byte,
+        "stub overran its allocation"
     );
 }
 
 /// Same contract for the Region-free stub.
 #[test]
-fn region_stub_is_allocated_with_sixteen_bytes_of_headroom() {
+fn region_stub_is_allocated_with_exact_capacity() {
     let e = Mt1959Engine;
     let img = fixture();
     let blob = e
@@ -313,35 +433,43 @@ fn region_stub_is_allocated_with_sixteen_bytes_of_headroom() {
         .len();
 
     let mut cramped = img.clone();
-    only_free_space(&mut cramped, blob + 15);
+    only_free_space(&mut cramped, blob - 1);
+    let before = cramped.clone();
     let msg = refusal(
         e.emit_region(&img, &mut cramped, FLAG_TABLE_BASE),
-        "a free run one byte short of blob+slack must not be used",
+        "a free run one byte short of the finalized blob must not be used",
     );
     assert!(
-        msg.contains(&out_of_space(blob + 16)),
-        "Region must ask for its {blob}-byte stub plus 16 bytes of headroom; got: {msg}"
+        msg.contains(&out_of_space(blob)),
+        "Region must ask for its {blob}-byte stub without unneeded extra headroom; got: {msg}"
     );
 
+    assert_eq!(cramped, before, "failed installation changed output");
     let mut exact = img.clone();
-    let base = only_free_space(&mut exact, blob + 16);
+    let base = only_free_space(&mut exact, blob);
+    let next_byte = exact[base as usize + blob];
     let (_, va) = e
         .emit_region(&img, &mut exact, FLAG_TABLE_BASE)
-        .expect("blob + 16 bytes of covered free space is enough to place the Region stub");
+        .expect("blob bytes of covered free space is enough to place the Region stub");
     assert_eq!(
         va, base,
         "the stub must land in the one window we left free"
+    );
+    assert_eq!(
+        exact[base as usize + blob],
+        next_byte,
+        "stub overran its allocation"
     );
 }
 
 /// The Raw-read lever injects six blobs back-to-back out of the same run
 /// (ake → gate-A → deny → uhd → hrl → bd). Each allocation gets its own
-/// headroom check: this walks every one of them, leaves exactly one byte less
+/// capacity check: this walks every one of them, leaves exactly one byte less
 /// free space than that blob needs, and requires the refusal to name that
-/// blob's size plus the 16-byte headroom — i.e. the allocation that ran short is
+/// blob's size without extra headroom — i.e. the allocation that ran short is
 /// the one we aimed at, and it refused instead of squeezing the stub in.
 #[test]
-fn every_rawread_stub_is_allocated_with_sixteen_bytes_of_headroom() {
+fn every_rawread_stub_is_allocated_with_exact_capacity() {
     let e = Mt1959Engine;
     let img = fixture();
     let base = only_free_space(&mut img.clone(), 16); // the allocator's window
@@ -389,25 +517,25 @@ fn every_rawread_stub_is_allocated_with_sixteen_bytes_of_headroom() {
     for (name, va, blob) in sites {
         assert!(va >= base, "{name} stub is not in the allocator's window");
         // Free space for every preceding blob, and one byte short for this one.
-        let window = (va - base) as usize + blob + 15;
+        let window = (va - base) as usize + blob - 1;
         let mut cramped = img.clone();
         assert_eq!(only_free_space(&mut cramped, window), base);
         let msg = refusal(
             e.emit_rawread(&img, &mut cramped, FLAG_TABLE_BASE),
-            "a free run one byte short of blob+slack must not be used",
+            "a free run one byte short of the finalized blob must not be used",
         );
         assert!(
-            msg.contains(&out_of_space(blob + 16)),
-            "the {name} stub ({blob} bytes) must be allocated with 16 bytes of headroom; got: {msg}"
+            msg.contains(&out_of_space(blob)),
+            "the {name} stub ({blob} bytes) must request its finalized size; got: {msg}"
         );
     }
 }
 
 /// The injected handler is the one allocation the base cannot do without, on
-/// both build paths — same headroom contract, and a refusal (never a cramped
+/// both build paths — same exact-capacity contract, and a refusal (never a cramped
 /// placement) when the covered free space is one byte short.
 #[test]
-fn handler_is_allocated_with_sixteen_bytes_of_headroom_on_both_paths() {
+fn handler_is_allocated_with_exact_capacity_on_both_paths() {
     let e = Mt1959Engine;
     let img = fixture();
     let blob = e
@@ -417,7 +545,7 @@ fn handler_is_allocated_with_sixteen_bytes_of_headroom_on_both_paths() {
         .len();
 
     let mut cramped = img.clone();
-    only_free_space(&mut cramped, blob + 15);
+    only_free_space(&mut cramped, blob - 1);
     for msg in [
         refusal(e.build_report(&cramped), "create must refuse"),
         refusal(
@@ -426,8 +554,8 @@ fn handler_is_allocated_with_sixteen_bytes_of_headroom_on_both_paths() {
         ),
     ] {
         assert!(
-            msg.contains(&out_of_space(blob + 16)),
-            "the {blob}-byte handler must be allocated with 16 bytes of headroom; got: {msg}"
+            msg.contains(&out_of_space(blob)),
+            "the {blob}-byte handler must request its finalized size; got: {msg}"
         );
     }
 }
@@ -692,32 +820,23 @@ fn deny_sense_setup_refuses_when_either_halfword_is_not_the_known_pair() {
 fn deny_site_running_past_the_image_end_is_refused_before_it_is_read() {
     let site = deny_site_of(&fixture()) + 0x20;
     let doctored = rawread_image_with_deny_at_the_tail(site);
-    // Two bytes short of the pair: the 4-byte read would run off the end.
-    let msg = refusal(
-        Mt1959Engine.emit_rawread(&doctored[..site + 2], &mut fixture(), FLAG_TABLE_BASE),
-        "a deny site whose 4-byte read runs off the end must be refused",
-    );
-    assert!(
-        msg.contains("past the end of the image"),
-        "expected the past-the-end refusal, got: {msg}"
-    );
+    assert!(Mt1959Engine
+        .emit_rawread(&doctored[..site + 2], &mut fixture(), FLAG_TABLE_BASE)
+        .is_err());
 }
 
-/// ...and that bound is inclusive: an image that ends on the *last byte* of the
-/// deny pair carries the whole pair, so it must still be patched. A `>=` bound
-/// (or an `==` one) turns a complete image into a false refusal and loses the
-/// Raw-read lever on it.
+/// A complete deny pair does not make a truncated producer valid: its native
+/// branches and literal loads must also be present before operand binding passes.
 #[test]
-fn deny_site_ending_exactly_at_the_image_end_is_still_patched() {
+fn complete_deny_pair_cannot_authorize_a_truncated_native_producer() {
     let site = deny_site_of(&fixture()) + 0x20;
     let doctored = rawread_image_with_deny_at_the_tail(site);
-    let facts = Mt1959Engine
-        .emit_rawread(&doctored[..site + 4], &mut fixture(), FLAG_TABLE_BASE)
-        .expect("the deny pair is entirely inside this image — nothing to refuse");
-    assert_eq!(
-        facts.deny_site as usize, site,
-        "the deny-reset detour must land on the pair at the very end of the image"
-    );
+    let mut out = fixture();
+    let before = out.clone();
+    assert!(Mt1959Engine
+        .emit_rawread(&doctored[..site + 4], &mut out, FLAG_TABLE_BASE)
+        .is_err());
+    assert_eq!(out, before);
 }
 
 // ---------------------------------------------------------------------------
@@ -956,13 +1075,29 @@ fn reported_wh16ns58_v9_build_installs_raw_read_inside_signed_flash() {
     let raw = lever(&report, LeverId::RawRead);
     assert_eq!(raw.outcome, LeverOutcome::Applied);
     assert!(support.has_boot());
-    let boundary_stub = fact(raw, "bd_stub_va").unwrap();
+    assert!(
+        fact(raw, "bd_stub_va").is_none(),
+        "unproven descriptor role must not be installed"
+    );
+    assert!(raw
+        .hooks
+        .iter()
+        .any(|hook| hook.id == "bd-native" && hook.reason.is_some()));
+    let boundary_stub = fact(raw, "auth_cell_stub_va").unwrap();
+    let contract = mediatek_optical::image::analysis::AuthCell::detect(original).unwrap();
+    let bytes = Mt1959Engine
+        .build_authcell_widen_value_stub(FLAG_TABLE_BASE, contract.deny() as u32, 1)
+        .unwrap();
+    assert_eq!(
+        &report.image[boundary_stub as usize..boundary_stub as usize + bytes.len()],
+        bytes
+    );
     assert_ne!(boundary_stub, 0);
     assert!(boundary_stub as usize >= cmac::TABLE_OFFSET + cmac::ENTRY_COUNT * cmac::ENTRY_SIZE);
     let table = cmac::parse_table(&report.image).unwrap();
     assert!(table.iter().any(|entry| entry.is_active()
         && entry.start <= boundary_stub
-        && boundary_stub + 36 <= entry.end));
+        && boundary_stub + bytes.len() as u32 - 1 <= entry.end));
     assert!(cmac::verify_detailed(&report.image)
         .unwrap()
         .iter()
@@ -1002,4 +1137,373 @@ fn wh16ns58_v9_modification_preserves_every_integrity_table_descriptor() {
         }
     }
     assert!(cmac::verify(&report.image));
+}
+
+#[test]
+fn boot_stub_fits_exact_finalized_capacity_and_refuses_short_without_writes() {
+    let engine = Mt1959Engine;
+    let original = fixture();
+    let pair = engine.resolve_boot_init_pair(&original).unwrap();
+    let defaults = crate::boot::BootSettings::standard();
+    let bytes = engine
+        .build_boot_init_with_defaults(FLAG_TABLE_BASE, pair.1, &defaults)
+        .unwrap();
+    let mut short = original.clone();
+    only_free_space(&mut short, bytes.len() - 1);
+    let before = short.clone();
+    assert!(engine
+        .emit_boot_init(&original, &mut short, FLAG_TABLE_BASE, pair, &defaults)
+        .is_err());
+    assert_eq!(short, before);
+    let mut exact = original.clone();
+    let base = only_free_space(&mut exact, bytes.len());
+    let (_, installed) = engine
+        .emit_boot_init(&original, &mut exact, FLAG_TABLE_BASE, pair, &defaults)
+        .unwrap();
+    assert_eq!(installed, base);
+    assert_eq!(&exact[base as usize..base as usize + bytes.len()], bytes);
+}
+
+#[test]
+fn descriptor_match_does_not_install_a_role_unproven_bd_refusal() {
+    let image = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let engine = Mt1959Engine;
+    assert!(
+        engine.find_bd_gate(image).is_ok(),
+        "the descriptor candidate remains identifiable"
+    );
+    let result = engine.bd_detour(image, FLAG_TABLE_BASE);
+    assert!(
+        result.is_err(),
+        "a descriptor signature alone must not authorize a native BD hook"
+    );
+}
+
+#[test]
+fn agid_binding_uses_the_pointer_read_by_native_code() {
+    let engine = Mt1959Engine;
+    let bu = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let wh = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    assert_eq!(engine.find_vid_agid_struct(bu).unwrap(), 0x02000d38);
+    assert_eq!(engine.find_vid_agid_struct(wh).unwrap(), 0x02000cf4);
+    let mut clobbered = wh.to_vec();
+    clobbered[0x13a9ec..0x13a9ee].copy_from_slice(&0x2500u16.to_le_bytes());
+    assert!(engine.find_vid_agid_struct(&clobbered).is_err());
+}
+
+#[test]
+fn response_io_binds_inquiry_before_selecting_a_writer() {
+    use mediatek_optical::image::analysis::ResponseIo;
+    for image in [
+        include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin").as_slice(),
+        include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin").as_slice(),
+        include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin").as_slice(),
+    ] {
+        let scanner = mediatek_optical::image::analysis::CommandScanner::inspect(image).unwrap();
+        assert_eq!(
+            scanner.entry() as u32,
+            Mt1959Engine.find_scanner_entry(image).unwrap()
+        );
+        assert!(!scanner.table_roots(image).unwrap().is_empty());
+        assert_eq!(scanner.cdb(), Mt1959Engine.find_cdb_base(image).unwrap());
+        let io = ResponseIo::inspect(image).unwrap();
+        assert_eq!(
+            Mt1959Engine.find_response_writer(image).unwrap(),
+            (io.writer() as u32, io.buffer_offset())
+        );
+        assert_eq!(
+            Mt1959Engine.find_response_commit(image).unwrap(),
+            (io.commit().entry() as u32, io.commit().length_cell())
+        );
+    }
+}
+
+#[test]
+fn scanner_requires_connected_record_and_command_semantics() {
+    use mediatek_optical::image::analysis::CommandScanner;
+    use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
+    let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let entry = CommandScanner::inspect(original).unwrap().entry();
+    for (offset, replacement) in [
+        (22, Operand::Reg(Reg(1))),
+        (36, Operand::Imm(0x3d)),
+        (70, Operand::Imm(3)),
+    ] {
+        let at = entry + offset;
+        let mut ins = decode_at(original, at).unwrap();
+        let index = if offset == 22 { 0 } else { 1 };
+        ins.operands = ins
+            .operands
+            .as_slice()
+            .enumerate()
+            .map(|(i, op)| if i == index { replacement } else { op })
+            .collect();
+        let bytes = encode_bytes(&ins).unwrap();
+        let mut changed = original.to_vec();
+        changed[at..at + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            CommandScanner::inspect(&changed).is_err(),
+            "accepted disconnected scanner operand at {at:x}"
+        );
+    }
+    let at = entry + 44;
+    let mut ins = decode_at(original, at).unwrap();
+    ins.cond = Some(thumb_asm::Cond::Ne);
+    let bytes = encode_bytes(&ins).unwrap();
+    let mut changed = original.to_vec();
+    changed[at..at + bytes.len()].copy_from_slice(&bytes);
+    assert!(CommandScanner::inspect(&changed).is_err());
+}
+
+#[test]
+fn native_dispatch_ignores_orphans_and_rejects_cycles() {
+    use mediatek_optical::image::analysis::{CommandDispatch, CommandScanner, ResponseIo};
+    let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let commands = CommandDispatch::inspect(original).unwrap();
+    let native = *commands.record(0x3c, 1).unwrap();
+    let mut orphan = original.to_vec();
+    let start = 0x140000;
+    for index in 0..9 {
+        let at = start + index * 8;
+        orphan[at..at + 8].fill(0);
+        orphan[at] = if index == 4 { 0x3c } else { 0xa0 + index as u8 };
+        orphan[at + 1] = if index == 8 {
+            3
+        } else if index == 4 {
+            1
+        } else {
+            7
+        };
+        if index != 8 {
+            orphan[at + 4..at + 8].copy_from_slice(&native.handler.to_le_bytes());
+        }
+    }
+    assert_eq!(
+        CommandDispatch::inspect(&orphan)
+            .unwrap()
+            .record(0x3c, 1)
+            .unwrap()
+            .off,
+        native.off
+    );
+    assert_eq!(
+        ResponseIo::inspect(&orphan).unwrap().writer(),
+        ResponseIo::inspect(original).unwrap().writer()
+    );
+    assert!(CommandScanner::inspect(original)
+        .unwrap()
+        .table_roots(&orphan)
+        .is_err());
+    let mut cycle = original.to_vec();
+    let root = *commands.roots().first().unwrap();
+    cycle[root + 1] = 4;
+    cycle[root + 4..root + 8].copy_from_slice(&(root as u32).to_le_bytes());
+    assert!(CommandDispatch::inspect(&cycle).is_err());
+}
+
+#[test]
+fn native_response_contract_corpus() {
+    let Ok(path) = std::env::var("FREEMKV_BASE_ROLE_CORPUS") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(std::env::var("FREEMKV_BASE_ROLE_HOARD").unwrap());
+    let rows: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let mut records = Vec::new();
+    for row in rows.as_array().unwrap() {
+        let image = std::fs::read(root.join(row["path"].as_str().unwrap())).unwrap();
+        use sha2::Digest;
+        assert_eq!(
+            format!("{:x}", sha2::Sha256::digest(&image)),
+            row["sha256"].as_str().unwrap()
+        );
+        let new = mediatek_optical::image::analysis::ResponseIo::inspect(&image);
+        let result = match new {
+            Ok(io) => {
+                let scanner = mediatek_optical::image::analysis::CommandScanner::inspect(&image)
+                    .unwrap_or_else(|e| panic!("{} scanner: {e}", row["sha256"]));
+                assert_eq!(
+                    scanner.entry() as u32,
+                    Mt1959Engine.find_scanner_entry(&image).unwrap()
+                );
+                let roots = scanner
+                    .table_roots(&image)
+                    .unwrap_or_else(|e| panic!("{} table roots: {e}", row["sha256"]));
+                assert!(!roots.is_empty());
+                let prior = row["hits"][0]["site"]
+                    .as_u64()
+                    .zip(row["hits"][0]["values"][0].as_u64())
+                    .map(|(writer, buffer)| (writer as u32, buffer as u32));
+                serde_json::json!({"sha256":row["sha256"],"status":"matched","writer":io.writer(),"buffer":io.buffer_offset(),"commit":io.commit().entry(),"source_cell":io.commit().source_cell(),"length_cell":io.commit().length_cell(),"ready_cell":io.commit().ready_cell(),"old_writer":prior.map(|v|v.0),"old_buffer":prior.map(|v|v.1),"selection_changed":prior.is_some_and(|v|v!=(io.writer() as u32,io.buffer_offset())),"legacy_writer_missing":prior.is_none()})
+            }
+            Err(e) => {
+                serde_json::json!({"sha256":row["sha256"],"status":"unavailable","reason":e.to_string()})
+            }
+        };
+        records.push(result);
+    }
+    if let Ok(path) = std::env::var("FREEMKV_BASE_ROLE_OUTPUT") {
+        std::fs::write(path, serde_json::to_vec_pretty(&records).unwrap()).unwrap();
+    }
+}
+
+fn writer_decoy(image: &[u8], bad_offset: bool) -> Vec<u8> {
+    let mut output = image.to_vec();
+    let native = 0xa2074;
+    let decoy = 0x90000;
+    output[decoy..decoy + 24].copy_from_slice(&image[native..native + 24]);
+    for offset in [0, 4, 10] {
+        let old = native + offset;
+        let new = decoy + offset;
+        let op = u16::from_le_bytes(output[new..new + 2].try_into().unwrap());
+        let original = ((old + 4) & !3) + usize::from(op & 255) * 4;
+        let copied = ((new + 4) & !3) + usize::from(op & 255) * 4;
+        output[copied..copied + 4].copy_from_slice(&image[original..original + 4]);
+        if bad_offset && offset == 0 {
+            output[copied..copied + 4].copy_from_slice(&0xdeadbeefu32.to_le_bytes());
+        }
+    }
+    output
+}
+#[test]
+fn response_writer_ignores_unrelated_buffer_and_refuses_duplicate_role() {
+    let image = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    assert_eq!(
+        Mt1959Engine
+            .find_response_writer(&writer_decoy(image, true))
+            .unwrap(),
+        (0xa2074, 0xaf90)
+    );
+    assert!(Mt1959Engine
+        .find_response_writer(&writer_decoy(image, false))
+        .is_err());
+}
+
+#[test]
+fn response_committer_requires_length_queue_and_balanced_return() {
+    use mediatek_optical::image::analysis::ResponseCommit;
+    use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
+    let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
+    let contract = ResponseCommit::at(original, 0x98180).unwrap();
+    assert!(!contract.length_writes().is_empty());
+    assert!(!contract.returns().is_empty());
+    for (site, replacement) in [(0x981a6, 1u8), (0x981aa, 1), (0x981b0, 2)] {
+        let mut changed = original.to_vec();
+        let mut ins = decode_at(original, site).unwrap();
+        if replacement == 2 {
+            ins.mnemonic = "strh";
+        } else {
+            ins.operands = ins
+                .operands
+                .as_slice()
+                .enumerate()
+                .map(|(index, operand)| {
+                    if index == 0 {
+                        Operand::Reg(Reg(replacement))
+                    } else {
+                        operand
+                    }
+                })
+                .collect();
+        }
+        let bytes = encode_bytes(&ins).unwrap();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x98180).is_err(),
+            "accepted broken suffix at {site:x}"
+        );
+    }
+    for site in [0x98192, 0x98196, 0x9819c, 0x9819e, 0x981a2] {
+        let mut changed = original.to_vec();
+        let mut ins = decode_at(original, site).unwrap();
+        match ins.mnemonic {
+            "sub" => ins.mnemonic = "add",
+            "add" => ins.mnemonic = "sub",
+            "b" => {
+                ins.cond = Some(if ins.cond == Some(thumb_asm::Cond::Eq) {
+                    thumb_asm::Cond::Ne
+                } else {
+                    thumb_asm::Cond::Eq
+                })
+            }
+            "lsl" => {
+                ins.operands = ins
+                    .operands
+                    .as_slice()
+                    .enumerate()
+                    .map(|(i, op)| if i == 2 { Operand::Imm(30) } else { op })
+                    .collect()
+            }
+            other => panic!("unexpected normalization instruction {other}"),
+        }
+        let bytes = encode_bytes(&ins).unwrap();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x98180).is_err(),
+            "accepted wrong length normalization at {site:x}"
+        );
+    }
+    let mut premature = original.to_vec();
+    let mut asm = thumb_asm::Asm::new();
+    asm.bx(14);
+    premature[0x981aa..0x981ac].copy_from_slice(&asm.finish().unwrap()[..2]);
+    assert!(ResponseCommit::at(&premature, 0x98180).is_err());
+    let wh = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    let mut unbalanced = wh.to_vec();
+    let mut asm = thumb_asm::Asm::new();
+    asm.push((1 << 5) | (1 << 8));
+    unbalanced[0x985fe..0x98600].copy_from_slice(&asm.finish().unwrap()[..2]);
+    assert!(ResponseCommit::at(&unbalanced, 0x985fc).is_err());
+}
+
+#[test]
+fn response_committer_preserves_pointer_and_count_relationships() {
+    use mediatek_optical::image::analysis::ResponseCommit;
+    use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
+    let original = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
+    assert!(ResponseCommit::at(original, 0x985fc).is_ok());
+    for (site, index, replacement) in [
+        (0x9862e, 1, Operand::Reg(Reg(3))),
+        (0x98630, 2, Operand::Reg(Reg(0))),
+        (0x98632, 0, Operand::Reg(Reg(0))),
+        (0x98638, 0, Operand::Reg(Reg(0))),
+        (0x98644, 1, Operand::Reg(Reg(1))),
+        (0x98648, 0, Operand::Reg(Reg(0))),
+    ] {
+        let mut ins = decode_at(original, site).unwrap();
+        ins.operands = ins
+            .operands
+            .as_slice()
+            .enumerate()
+            .map(|(i, op)| if i == index { replacement } else { op })
+            .collect();
+        let bytes = encode_bytes(&ins).unwrap();
+        let mut changed = original.to_vec();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x985fc).is_err(),
+            "accepted wrong expression at {site:x}"
+        );
+    }
+    for site in [0x98634, 0x9863a, 0x98640] {
+        let mut ins = decode_at(original, site).unwrap();
+        ins.cond = ins.cond.map(|cond| cond.invert());
+        let bytes = encode_bytes(&ins).unwrap();
+        let mut changed = original.to_vec();
+        changed[site..site + bytes.len()].copy_from_slice(&bytes);
+        assert!(
+            ResponseCommit::at(&changed, 0x985fc).is_err(),
+            "accepted reversed clamp guard at {site:x}"
+        );
+    }
+}
+
+#[test]
+fn response_writer_supports_immediate_shift_buffer_offsets() {
+    let image = include_bytes!("../../tests/fixtures/BW16D1HT_OEM_3.03.bin");
+    let io = mediatek_optical::image::analysis::ResponseIo::inspect(image).unwrap();
+    assert_eq!((io.writer(), io.buffer_offset()), (0xa192c, 0xda00));
+    assert_eq!(
+        Mt1959Engine.find_response_writer(image).unwrap(),
+        (0xa192c, 0xda00)
+    );
 }

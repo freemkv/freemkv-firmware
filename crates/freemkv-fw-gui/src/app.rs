@@ -428,7 +428,8 @@ impl FwApp {
                                 self.boot_settings.label(feature)
                             }))
                             .show_ui(ui, |ui| {
-                                for &(key, label, _) in feature.choices() {
+                                for &(key, label, encoded) in feature.choices() {
+                                    if !self.boot_support.as_ref().is_some_and(|s| s.supports_value(feature, encoded)) {continue;}
                                     ui.selectable_value(&mut selected, key, localization::render(self.language, label));
                                 }
                             })
