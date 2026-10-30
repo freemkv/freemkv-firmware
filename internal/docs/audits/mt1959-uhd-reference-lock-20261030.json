@@ -1,0 +1,2159 @@
+{
+  "schema": "mt1959-uhd-operational-reference-lock-v1",
+  "scope": "Hash-pinned stock comparison references; six firmware images across four marketed products, not six independent hardware designs. Manufacturer UHD support does not establish a local physical test of each exact image. No signature or patch is selected by these hashes.",
+  "locked_references": [
+    {
+      "identity": {
+        "confidence": "exact",
+        "destination": "GENERAL",
+        "family": "mediatek",
+        "hardware": "HL-DT-ST WH16NS60 NS60",
+        "hardware_basis": "record",
+        "platform": "MT1959",
+        "revision": "1.01",
+        "revision_basis": "record",
+        "role": "main"
+      },
+      "sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.01/main/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/198c01224a0ad29baca6b532aec928989d60db4caed765a29988c165940449a0/mediatek-81ff38130af0b31174e730e4458d0ef566825377a113d62b02814a814fe890d6.firmware.tar",
+          "candidate": "WH16NS60.zip::WH16NS60.exe::rsrc49::decoded",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "198c01224a0ad29baca6b532aec928989d60db4caed765a29988c165940449a0"
+        },
+        {
+          "bundle": "bundles/546daa60c625e91cb82ebedaa0b5ce2991bdb45466bec2cb75393de938e5e03f/mediatek-3c7958f6b5b4006a3c51b30f5990ecf53990578c81a318e5ca6c5eb94e7fbd9e.firmware.tar",
+          "candidate": "LG_WH16NS60_1.01_17327061143.bin::decoded",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "546daa60c625e91cb82ebedaa0b5ce2991bdb45466bec2cb75393de938e5e03f"
+        },
+        {
+          "bundle": "bundles/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2/mediatek-9103c6f3a1b83a77c41215b0bad3d7c14b00a23f38b4335285867d8346f3f79f.firmware.tar",
+          "candidate": "WH16NS60_1.01_aea98763.bin",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2"
+        },
+        {
+          "bundle": "bundles/e99cf91b88295954bd43a65901d2d1ae471036fc7455723c5d4fe48142641814/mediatek-117a1a8f8f336799622d6ced207e2fc5439b52b928023390842de585daad4289.firmware.tar",
+          "candidate": "17327061143_N1.01_WH16NS60_171120_only_NOBJ.exe::rsrc49::decoded",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "e99cf91b88295954bd43a65901d2d1ae471036fc7455723c5d4fe48142641814"
+        }
+      ],
+      "manufacturer_support_url": "https://www.lg.com/us/burners-drives/lg-wh16ns60-internal-blu-ray-dvd-drive",
+      "evidence_status": "manufacturer-supported OEM reference, not locally hardware-tested",
+      "local_physical_detection": null,
+      "local_sector_read": null,
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 927170,
+                "target": 927210
+              },
+              {
+                "instruction": 927182,
+                "target": 927232
+              },
+              {
+                "instruction": 927186,
+                "target": 927276
+              },
+              {
+                "instruction": 927194,
+                "target": 927202
+              },
+              {
+                "instruction": 927200,
+                "target": 927276
+              },
+              {
+                "instruction": 927204,
+                "target": 927276
+              },
+              {
+                "instruction": 927208,
+                "target": 927232
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 927172,
+                "value": 33557491
+              }
+            ],
+            "role": "DiscInformation",
+            "site": 927162,
+            "variant": "modern_u_flag_store_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167074,
+                "target": 167082
+              },
+              {
+                "instruction": 167080,
+                "target": 167092
+              },
+              {
+                "instruction": 167090,
+                "target": 167098
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167060,
+                "value": 33529344
+              },
+              {
+                "instruction": 167068,
+                "value": 69243008
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167060,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 217318,
+                "target": 217334
+              },
+              {
+                "instruction": 217326,
+                "target": 217334
+              },
+              {
+                "instruction": 217332,
+                "target": 217518
+              },
+              {
+                "instruction": 217338,
+                "target": 217514
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 217310,
+                "value": 33529344
+              }
+            ],
+            "role": "ControlField",
+            "site": 217310,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 890800,
+                "target": 890840
+              },
+              {
+                "instruction": 890806,
+                "target": 890844
+              },
+              {
+                "instruction": 890812,
+                "target": 1290836
+              },
+              {
+                "instruction": 890822,
+                "target": 890858
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 890788,
+                "value": 33529344
+              },
+              {
+                "instruction": 890820,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 890788,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 890924,
+                "target": 890998
+              },
+              {
+                "instruction": 890932,
+                "target": 890966
+              },
+              {
+                "instruction": 890938,
+                "target": 1290836
+              },
+              {
+                "instruction": 890948,
+                "target": 890994
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 890912,
+                "value": 33529344
+              },
+              {
+                "instruction": 890922,
+                "value": 33557271
+              },
+              {
+                "instruction": 890946,
+                "value": 20913
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 890910,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 892272,
+                "target": 892404
+              },
+              {
+                "instruction": 892280,
+                "target": 892284
+              },
+              {
+                "instruction": 892294,
+                "target": 892302
+              },
+              {
+                "instruction": 892300,
+                "target": 892320
+              },
+              {
+                "instruction": 892308,
+                "target": 892320
+              },
+              {
+                "instruction": 892318,
+                "target": 892336
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 892260,
+                "value": 33529344
+              },
+              {
+                "instruction": 892290,
+                "value": 69251456
+              },
+              {
+                "instruction": 892302,
+                "value": 33557264
+              },
+              {
+                "instruction": 892322,
+                "value": 1363321
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 892260,
+            "variant": "modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 897462,
+                "target": 897618
+              },
+              {
+                "instruction": 897470,
+                "target": 897478
+              },
+              {
+                "instruction": 897476,
+                "target": 897542
+              },
+              {
+                "instruction": 897486,
+                "target": 897566
+              },
+              {
+                "instruction": 897492,
+                "target": 897532
+              },
+              {
+                "instruction": 897500,
+                "target": 897532
+              },
+              {
+                "instruction": 897508,
+                "target": 897532
+              },
+              {
+                "instruction": 897510,
+                "target": 1102344
+              },
+              {
+                "instruction": 897516,
+                "target": 897536
+              },
+              {
+                "instruction": 897524,
+                "target": 897532
+              },
+              {
+                "instruction": 897530,
+                "target": 897536
+              },
+              {
+                "instruction": 897534,
+                "target": 897538
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 102,
+            "literals": [
+              {
+                "instruction": 897442,
+                "value": 33529344
+              },
+              {
+                "instruction": 897452,
+                "value": 33529282
+              },
+              {
+                "instruction": 897454,
+                "value": 33530737
+              },
+              {
+                "instruction": 897456,
+                "value": 33557259
+              },
+              {
+                "instruction": 897458,
+                "value": 33529346
+              },
+              {
+                "instruction": 897464,
+                "value": 33529348
+              },
+              {
+                "instruction": 897478,
+                "value": 33529344
+              },
+              {
+                "instruction": 897518,
+                "value": 33529377
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 897440,
+            "variant": "desktop_default8_c7_aware"
+          }
+        ],
+        "classification": "native_uhd_code_in_reviewed_roles",
+        "di_recognition": "explicit_u_or_c7",
+        "explicit_roles": 6,
+        "legacy_roles": 0,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529344,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "identity": {
+        "confidence": "exact",
+        "destination": "GENERAL",
+        "family": "mediatek",
+        "hardware": "HL-DT-ST WH16NS60 NS60",
+        "hardware_basis": "record",
+        "platform": "MT1959",
+        "revision": "1.03",
+        "revision_basis": "record",
+        "role": "main"
+      },
+      "sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.03/main/f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814.bin",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/15b4c454f706d09e6ad9ab5eb62fe3c138fc193d0d310c1df24d79004d365e59/mediatek-a4f7d528496ff07e7436e07e7e84e13a6b43c48cd3b39324283255685916e9ae.firmware.tar",
+          "candidate": "LG_WH16NS60_1.03_Original_Flasher(2).zip::WH16NS60_1.03/WH16NS60_1.03.exe::rsrc49::decoded::decoded",
+          "member": "images/f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "15b4c454f706d09e6ad9ab5eb62fe3c138fc193d0d310c1df24d79004d365e59"
+        },
+        {
+          "bundle": "bundles/b75e1bd9f54c98458ab343f1c34044d1309f9217c47a9e383e0252edd3135035/mediatek-be154d7fceb0b40ee2b65321709de7772e3ad753bff322d08d15801f952d65f2.firmware.tar",
+          "candidate": "LG_WH16NS60_1.03_Original_Flasher(2).exe::rsrc49::decoded::decoded",
+          "member": "images/f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "b75e1bd9f54c98458ab343f1c34044d1309f9217c47a9e383e0252edd3135035"
+        }
+      ],
+      "manufacturer_support_url": "https://www.lg.com/us/burners-drives/lg-wh16ns60-internal-blu-ray-dvd-drive",
+      "evidence_status": "manufacturer-supported OEM reference, not locally hardware-tested",
+      "local_physical_detection": null,
+      "local_sector_read": null,
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 928082,
+                "target": 928122
+              },
+              {
+                "instruction": 928094,
+                "target": 928144
+              },
+              {
+                "instruction": 928098,
+                "target": 928188
+              },
+              {
+                "instruction": 928106,
+                "target": 928114
+              },
+              {
+                "instruction": 928112,
+                "target": 928188
+              },
+              {
+                "instruction": 928116,
+                "target": 928188
+              },
+              {
+                "instruction": 928120,
+                "target": 928144
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 928084,
+                "value": 33557495
+              }
+            ],
+            "role": "DiscInformation",
+            "site": 928074,
+            "variant": "modern_u_flag_store_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167074,
+                "target": 167082
+              },
+              {
+                "instruction": 167080,
+                "target": 167092
+              },
+              {
+                "instruction": 167090,
+                "target": 167098
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167060,
+                "value": 33529344
+              },
+              {
+                "instruction": 167068,
+                "value": 69243008
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167060,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 217318,
+                "target": 217334
+              },
+              {
+                "instruction": 217326,
+                "target": 217334
+              },
+              {
+                "instruction": 217332,
+                "target": 217518
+              },
+              {
+                "instruction": 217338,
+                "target": 217514
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 217310,
+                "value": 33529344
+              }
+            ],
+            "role": "ControlField",
+            "site": 217310,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 891712,
+                "target": 891752
+              },
+              {
+                "instruction": 891718,
+                "target": 891756
+              },
+              {
+                "instruction": 891724,
+                "target": 1291808
+              },
+              {
+                "instruction": 891734,
+                "target": 891770
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 891700,
+                "value": 33529344
+              },
+              {
+                "instruction": 891732,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 891700,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 891836,
+                "target": 891910
+              },
+              {
+                "instruction": 891844,
+                "target": 891878
+              },
+              {
+                "instruction": 891850,
+                "target": 1291808
+              },
+              {
+                "instruction": 891860,
+                "target": 891906
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 891824,
+                "value": 33529344
+              },
+              {
+                "instruction": 891834,
+                "value": 33557271
+              },
+              {
+                "instruction": 891858,
+                "value": 20913
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 891822,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 893184,
+                "target": 893316
+              },
+              {
+                "instruction": 893192,
+                "target": 893196
+              },
+              {
+                "instruction": 893206,
+                "target": 893214
+              },
+              {
+                "instruction": 893212,
+                "target": 893232
+              },
+              {
+                "instruction": 893220,
+                "target": 893232
+              },
+              {
+                "instruction": 893230,
+                "target": 893248
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 893172,
+                "value": 33529344
+              },
+              {
+                "instruction": 893202,
+                "value": 69251456
+              },
+              {
+                "instruction": 893214,
+                "value": 33557264
+              },
+              {
+                "instruction": 893234,
+                "value": 1364309
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 893172,
+            "variant": "modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 898374,
+                "target": 898530
+              },
+              {
+                "instruction": 898382,
+                "target": 898390
+              },
+              {
+                "instruction": 898388,
+                "target": 898454
+              },
+              {
+                "instruction": 898398,
+                "target": 898478
+              },
+              {
+                "instruction": 898404,
+                "target": 898444
+              },
+              {
+                "instruction": 898412,
+                "target": 898444
+              },
+              {
+                "instruction": 898420,
+                "target": 898444
+              },
+              {
+                "instruction": 898422,
+                "target": 1103316
+              },
+              {
+                "instruction": 898428,
+                "target": 898448
+              },
+              {
+                "instruction": 898436,
+                "target": 898444
+              },
+              {
+                "instruction": 898442,
+                "target": 898448
+              },
+              {
+                "instruction": 898446,
+                "target": 898450
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 102,
+            "literals": [
+              {
+                "instruction": 898354,
+                "value": 33529344
+              },
+              {
+                "instruction": 898364,
+                "value": 33529282
+              },
+              {
+                "instruction": 898366,
+                "value": 33530737
+              },
+              {
+                "instruction": 898368,
+                "value": 33557259
+              },
+              {
+                "instruction": 898370,
+                "value": 33529346
+              },
+              {
+                "instruction": 898376,
+                "value": 33529348
+              },
+              {
+                "instruction": 898390,
+                "value": 33529344
+              },
+              {
+                "instruction": 898430,
+                "value": 33529377
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 898352,
+            "variant": "desktop_default8_c7_aware"
+          }
+        ],
+        "classification": "native_uhd_code_in_reviewed_roles",
+        "di_recognition": "explicit_u_or_c7",
+        "explicit_roles": 6,
+        "legacy_roles": 0,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529344,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "identity": {
+        "confidence": "exact",
+        "destination": "GENERAL",
+        "family": "mediatek",
+        "hardware": "HL-DT-ST BU40N BU40",
+        "hardware_basis": "record",
+        "platform": "MT1959",
+        "revision": "1.02",
+        "revision_basis": "record",
+        "role": "main"
+      },
+      "sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.02/main/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/076a4d5415199b944748e9823f007a4a765f4657a0bf78f670e037991f7e45dc/mediatek-3cd470c575398dc4412b2cbcfcdfc16f2fe8c560b9628d0a1921e91352a3cd7a.firmware.tar",
+          "candidate": "17327060418_N1.02_U40N_171120_only_NOBJ.exe::rsrc48::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "076a4d5415199b944748e9823f007a4a765f4657a0bf78f670e037991f7e45dc"
+        },
+        {
+          "bundle": "bundles/2bcef5df48529b6de60a5e24ff3c6e4ec44acd425f4f627d20072c3232af60df/mediatek-65f8c8a3ea506a91045d3a2c9e73906ad25a15543a9e5e3902cf676dfef7b06e.firmware.tar",
+          "candidate": "lg_BU40N_N1.02.zip::BU40N.exe::rsrc48::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "2bcef5df48529b6de60a5e24ff3c6e4ec44acd425f4f627d20072c3232af60df"
+        },
+        {
+          "bundle": "bundles/881ca32eb9dd3a7f1c7edc2cf7cd52074de13667aa26b18cd5282c410a843118/mediatek-c49e17bf4f2263b97f9555146903e27f1697a9675de09db8e8ff155322aca54c.firmware.tar",
+          "candidate": "LG_BU40N_1.02_17327060418.bin::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "881ca32eb9dd3a7f1c7edc2cf7cd52074de13667aa26b18cd5282c410a843118"
+        },
+        {
+          "bundle": "bundles/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263/mediatek-7dfac90c2a70325c21f622598ecf3dbea40f87f8ee694026e16584d00bbee326.firmware.tar",
+          "candidate": "BU40N_1.02_97bee5c5.bin",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263"
+        },
+        {
+          "bundle": "bundles/a3dc7160e57af629b8019859d5fbcbd23b42e3c7401c88fb3b588f7394bb84b4/mediatek-3620a0e61f36dcd25a1045cd15285e14de6d309f67414e864ecb9ee2bc505acc.firmware.tar",
+          "candidate": "Asus SBW-06D5H-U.zip::Asus SBW-06D5H-U/Crossflash_firmware/other-DO-NOT-USE/BU40N_1.02.zip::BU40N.exe::rsrc48::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "a3dc7160e57af629b8019859d5fbcbd23b42e3c7401c88fb3b588f7394bb84b4"
+        }
+      ],
+      "manufacturer_support_url": "https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf",
+      "evidence_status": "manufacturer-supported OEM reference, not locally hardware-tested",
+      "local_physical_detection": null,
+      "local_sector_read": null,
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 920666,
+                "target": 920704
+              },
+              {
+                "instruction": 920678,
+                "target": 920726
+              },
+              {
+                "instruction": 920682,
+                "target": 920770
+              },
+              {
+                "instruction": 920690,
+                "target": 920696
+              },
+              {
+                "instruction": 920694,
+                "target": 920726
+              },
+              {
+                "instruction": 920698,
+                "target": 920770
+              },
+              {
+                "instruction": 920702,
+                "target": 920726
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 46,
+            "literals": [
+              {
+                "instruction": 920668,
+                "value": 33557273
+              }
+            ],
+            "role": "DiscInformation",
+            "site": 920658,
+            "variant": "modern_u_flag_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167786,
+                "target": 167794
+              },
+              {
+                "instruction": 167792,
+                "target": 167804
+              },
+              {
+                "instruction": 167802,
+                "target": 167810
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167772,
+                "value": 33529348
+              },
+              {
+                "instruction": 167780,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167772,
+            "variant": "modern_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218186,
+                "target": 218202
+              },
+              {
+                "instruction": 218194,
+                "target": 218202
+              },
+              {
+                "instruction": 218200,
+                "target": 218386
+              },
+              {
+                "instruction": 218206,
+                "target": 218382
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218178,
+                "value": 33529348
+              }
+            ],
+            "role": "ControlField",
+            "site": 218178,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 886542,
+                "target": 886582
+              },
+              {
+                "instruction": 886548,
+                "target": 886586
+              },
+              {
+                "instruction": 886554,
+                "target": 1295556
+              },
+              {
+                "instruction": 886564,
+                "target": 886600
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 886530,
+                "value": 33529348
+              },
+              {
+                "instruction": 886562,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 886530,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 886772,
+                "target": 886848
+              },
+              {
+                "instruction": 886780,
+                "target": 886816
+              },
+              {
+                "instruction": 886786,
+                "target": 1295556
+              },
+              {
+                "instruction": 886796,
+                "target": 886844
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 886760,
+                "value": 33529348
+              },
+              {
+                "instruction": 886770,
+                "value": 33557274
+              },
+              {
+                "instruction": 886794,
+                "value": 20913
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 886758,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 888092,
+                "target": 888224
+              },
+              {
+                "instruction": 888100,
+                "target": 888104
+              },
+              {
+                "instruction": 888114,
+                "target": 888122
+              },
+              {
+                "instruction": 888120,
+                "target": 888140
+              },
+              {
+                "instruction": 888128,
+                "target": 888140
+              },
+              {
+                "instruction": 888138,
+                "target": 888156
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 888080,
+                "value": 33529348
+              },
+              {
+                "instruction": 888110,
+                "value": 69251456
+              },
+              {
+                "instruction": 888122,
+                "value": 33557265
+              },
+              {
+                "instruction": 888142,
+                "value": 1366547
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 888080,
+            "variant": "modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 895988,
+                "target": 896244
+              },
+              {
+                "instruction": 896000,
+                "target": 896170
+              },
+              {
+                "instruction": 896008,
+                "target": 896030
+              },
+              {
+                "instruction": 896014,
+                "target": 896170
+              },
+              {
+                "instruction": 896022,
+                "target": 896170
+              },
+              {
+                "instruction": 896028,
+                "target": 896170
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 62,
+            "literals": [
+              {
+                "instruction": 895970,
+                "value": 33529348
+              },
+              {
+                "instruction": 895978,
+                "value": 33529286
+              },
+              {
+                "instruction": 895980,
+                "value": 33557260
+              },
+              {
+                "instruction": 895982,
+                "value": 33529350
+              },
+              {
+                "instruction": 895984,
+                "value": 33530773
+              },
+              {
+                "instruction": 895990,
+                "value": 33529352
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 895968,
+            "variant": "slim_fixed6_c7_aware"
+          }
+        ],
+        "classification": "native_uhd_code_in_reviewed_roles",
+        "di_recognition": "explicit_u_or_c7",
+        "explicit_roles": 6,
+        "legacy_roles": 0,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529348,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "identity": {
+        "confidence": "exact",
+        "destination": "GENERAL",
+        "family": "mediatek",
+        "hardware": "HL-DT-ST BU40N BU40",
+        "hardware_basis": "record",
+        "platform": "MT1959",
+        "revision": "1.04",
+        "revision_basis": "record",
+        "role": "main"
+      },
+      "sha256": "5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.04/main/5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69.bin",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/b4151d560fc43975a686b1fcd775a0e558fe139764f8708282511f92c2827855/mediatek-32be7679e8973b38f0bc80e8410cdbd7aee926f35e3f3b33f4c65300cfb4e7a7.firmware.tar",
+          "candidate": "LG_BU40N_1.04_Original_Flasher.zip::BU40N_1.04/BU40N_1.04.exe::rsrc49::decoded::decoded",
+          "member": "images/5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "b4151d560fc43975a686b1fcd775a0e558fe139764f8708282511f92c2827855"
+        },
+        {
+          "bundle": "bundles/bd655b799491c67ccc7789ed4aaa4e9fabd30017103118f0b88a07e0d88b192c/mediatek-2c241cacf2fb365d84762895d65f4a8420dacdc696e39b220ee524811b843d41.firmware.tar",
+          "candidate": "LG_BU40N_1.04_Original_Flasher.exe::rsrc49::decoded::decoded",
+          "member": "images/5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "bd655b799491c67ccc7789ed4aaa4e9fabd30017103118f0b88a07e0d88b192c"
+        }
+      ],
+      "manufacturer_support_url": "https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf",
+      "evidence_status": "manufacturer-supported OEM reference, not locally hardware-tested",
+      "local_physical_detection": null,
+      "local_sector_read": null,
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 921806,
+                "target": 921844
+              },
+              {
+                "instruction": 921818,
+                "target": 921866
+              },
+              {
+                "instruction": 921822,
+                "target": 921910
+              },
+              {
+                "instruction": 921830,
+                "target": 921836
+              },
+              {
+                "instruction": 921834,
+                "target": 921866
+              },
+              {
+                "instruction": 921838,
+                "target": 921910
+              },
+              {
+                "instruction": 921842,
+                "target": 921866
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 46,
+            "literals": [
+              {
+                "instruction": 921808,
+                "value": 33557273
+              }
+            ],
+            "role": "DiscInformation",
+            "site": 921798,
+            "variant": "modern_u_flag_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167786,
+                "target": 167794
+              },
+              {
+                "instruction": 167792,
+                "target": 167804
+              },
+              {
+                "instruction": 167802,
+                "target": 167810
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167772,
+                "value": 33529348
+              },
+              {
+                "instruction": 167780,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167772,
+            "variant": "modern_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218186,
+                "target": 218202
+              },
+              {
+                "instruction": 218194,
+                "target": 218202
+              },
+              {
+                "instruction": 218200,
+                "target": 218386
+              },
+              {
+                "instruction": 218206,
+                "target": 218382
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218178,
+                "value": 33529348
+              }
+            ],
+            "role": "ControlField",
+            "site": 218178,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 887682,
+                "target": 887722
+              },
+              {
+                "instruction": 887688,
+                "target": 887726
+              },
+              {
+                "instruction": 887694,
+                "target": 1296704
+              },
+              {
+                "instruction": 887704,
+                "target": 887740
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 887670,
+                "value": 33529348
+              },
+              {
+                "instruction": 887702,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 887670,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 887912,
+                "target": 887988
+              },
+              {
+                "instruction": 887920,
+                "target": 887956
+              },
+              {
+                "instruction": 887926,
+                "target": 1296704
+              },
+              {
+                "instruction": 887936,
+                "target": 887984
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 887900,
+                "value": 33529348
+              },
+              {
+                "instruction": 887910,
+                "value": 33557274
+              },
+              {
+                "instruction": 887934,
+                "value": 20913
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 887898,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 889232,
+                "target": 889364
+              },
+              {
+                "instruction": 889240,
+                "target": 889244
+              },
+              {
+                "instruction": 889254,
+                "target": 889262
+              },
+              {
+                "instruction": 889260,
+                "target": 889280
+              },
+              {
+                "instruction": 889268,
+                "target": 889280
+              },
+              {
+                "instruction": 889278,
+                "target": 889296
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 889220,
+                "value": 33529348
+              },
+              {
+                "instruction": 889250,
+                "value": 69251456
+              },
+              {
+                "instruction": 889262,
+                "value": 33557265
+              },
+              {
+                "instruction": 889282,
+                "value": 1367707
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 889220,
+            "variant": "modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 897128,
+                "target": 897384
+              },
+              {
+                "instruction": 897140,
+                "target": 897310
+              },
+              {
+                "instruction": 897148,
+                "target": 897170
+              },
+              {
+                "instruction": 897154,
+                "target": 897310
+              },
+              {
+                "instruction": 897162,
+                "target": 897310
+              },
+              {
+                "instruction": 897168,
+                "target": 897310
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 62,
+            "literals": [
+              {
+                "instruction": 897110,
+                "value": 33529348
+              },
+              {
+                "instruction": 897118,
+                "value": 33529286
+              },
+              {
+                "instruction": 897120,
+                "value": 33557260
+              },
+              {
+                "instruction": 897122,
+                "value": 33529350
+              },
+              {
+                "instruction": 897124,
+                "value": 33530773
+              },
+              {
+                "instruction": 897130,
+                "value": 33529352
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 897108,
+            "variant": "slim_fixed6_c7_aware"
+          }
+        ],
+        "classification": "native_uhd_code_in_reviewed_roles",
+        "di_recognition": "explicit_u_or_c7",
+        "explicit_roles": 6,
+        "legacy_roles": 0,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529348,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "identity": {
+        "confidence": "exact",
+        "destination": "GENERAL",
+        "family": "mediatek",
+        "hardware": "HL-DT-ST BP60NB10 NB10",
+        "hardware_basis": "record",
+        "platform": "MT1959",
+        "revision": "1.00",
+        "revision_basis": "record",
+        "role": "main"
+      },
+      "sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP60NB10_NB10/GENERAL/1.00/main/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/256e718763ff02351277dec65e90409131a4d1bc210785aad52e03254d6afb51/mediatek-3014cd4dce907913d794fc538fc5d2f730b7e9362a3151f44c40b3aabbc06ee4.firmware.tar",
+          "candidate": "17327060256_N1.00_P60NB10_171121_only_NOBJ.exe::rsrc49::decoded",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "256e718763ff02351277dec65e90409131a4d1bc210785aad52e03254d6afb51"
+        },
+        {
+          "bundle": "bundles/29901d7771f6f1f9346fab82d9b6fb9449b49fc41f0480f17528079e2e6f6058/mediatek-a8beef71ee1669cdcce4094daacca84b73ee609f0764ab4c0fa9d5bc45a6313d.firmware.tar",
+          "candidate": "LG_BP60NB10_1.00_17327060256.bin::decoded",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "29901d7771f6f1f9346fab82d9b6fb9449b49fc41f0480f17528079e2e6f6058"
+        },
+        {
+          "bundle": "bundles/bbe3e1cc28a48c2d43918fd60a8e04164cb34cbdefb75400cffc50f18e97ac2a/mediatek-f3592c5eb0b51673ace669ec917b85db5901daf1fc40629219ba652a031cc697.firmware.tar",
+          "candidate": "LG_BP60NB10_1.00_Official_Flasher.zip::LG_BP60NB10_1.00_Official_Flasher/BP60NB10_1.00.exe::rsrc49::decoded",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "bbe3e1cc28a48c2d43918fd60a8e04164cb34cbdefb75400cffc50f18e97ac2a"
+        },
+        {
+          "bundle": "bundles/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8/mediatek-2a019241d354d6aa3d9ec05ede49217871b1a4489ab1b70aa29f49fd3fc2619c.firmware.tar",
+          "candidate": "BP60NB10_1.00_f60b037f.bin",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8"
+        }
+      ],
+      "manufacturer_support_url": "https://media.us.lg.com/m/23735db0ce507a13/original/BP60NB10-Spec-Sheet.PDF",
+      "evidence_status": "manufacturer-supported OEM reference, not locally hardware-tested",
+      "local_physical_detection": null,
+      "local_sector_read": null,
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 920414,
+                "target": 920452
+              },
+              {
+                "instruction": 920426,
+                "target": 920474
+              },
+              {
+                "instruction": 920430,
+                "target": 920518
+              },
+              {
+                "instruction": 920438,
+                "target": 920444
+              },
+              {
+                "instruction": 920442,
+                "target": 920474
+              },
+              {
+                "instruction": 920446,
+                "target": 920518
+              },
+              {
+                "instruction": 920450,
+                "target": 920474
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 46,
+            "literals": [
+              {
+                "instruction": 920416,
+                "value": 33557273
+              }
+            ],
+            "role": "DiscInformation",
+            "site": 920406,
+            "variant": "modern_u_flag_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 168038,
+                "target": 168046
+              },
+              {
+                "instruction": 168044,
+                "target": 168056
+              },
+              {
+                "instruction": 168054,
+                "target": 168062
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 168024,
+                "value": 33529349
+              },
+              {
+                "instruction": 168032,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 168024,
+            "variant": "modern_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218438,
+                "target": 218454
+              },
+              {
+                "instruction": 218446,
+                "target": 218454
+              },
+              {
+                "instruction": 218452,
+                "target": 218638
+              },
+              {
+                "instruction": 218458,
+                "target": 218634
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218430,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 218430,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 885864,
+                "target": 885904
+              },
+              {
+                "instruction": 885870,
+                "target": 885908
+              },
+              {
+                "instruction": 885876,
+                "target": 1295580
+              },
+              {
+                "instruction": 885886,
+                "target": 885922
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 885852,
+                "value": 33529349
+              },
+              {
+                "instruction": 885884,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 885852,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 886092,
+                "target": 886168
+              },
+              {
+                "instruction": 886100,
+                "target": 886136
+              },
+              {
+                "instruction": 886106,
+                "target": 1295580
+              },
+              {
+                "instruction": 886116,
+                "target": 886164
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 886080,
+                "value": 33529349
+              },
+              {
+                "instruction": 886090,
+                "value": 33557274
+              },
+              {
+                "instruction": 886114,
+                "value": 20913
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 886078,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 887412,
+                "target": 887544
+              },
+              {
+                "instruction": 887420,
+                "target": 887424
+              },
+              {
+                "instruction": 887434,
+                "target": 887442
+              },
+              {
+                "instruction": 887440,
+                "target": 887460
+              },
+              {
+                "instruction": 887448,
+                "target": 887460
+              },
+              {
+                "instruction": 887458,
+                "target": 887476
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 887400,
+                "value": 33529349
+              },
+              {
+                "instruction": 887430,
+                "value": 69251456
+              },
+              {
+                "instruction": 887442,
+                "value": 33557265
+              },
+              {
+                "instruction": 887462,
+                "value": 1367011
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 887400,
+            "variant": "modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 895682,
+                "target": 895938
+              },
+              {
+                "instruction": 895694,
+                "target": 895864
+              },
+              {
+                "instruction": 895702,
+                "target": 895724
+              },
+              {
+                "instruction": 895708,
+                "target": 895864
+              },
+              {
+                "instruction": 895716,
+                "target": 895864
+              },
+              {
+                "instruction": 895722,
+                "target": 895864
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 62,
+            "literals": [
+              {
+                "instruction": 895664,
+                "value": 33529349
+              },
+              {
+                "instruction": 895672,
+                "value": 33529286
+              },
+              {
+                "instruction": 895674,
+                "value": 33557260
+              },
+              {
+                "instruction": 895676,
+                "value": 33529351
+              },
+              {
+                "instruction": 895678,
+                "value": 33530777
+              },
+              {
+                "instruction": 895684,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 895662,
+            "variant": "slim_fixed6_c7_aware"
+          }
+        ],
+        "classification": "native_uhd_code_in_reviewed_roles",
+        "di_recognition": "explicit_u_or_c7",
+        "explicit_roles": 6,
+        "legacy_roles": 0,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "identity": {
+        "confidence": "exact",
+        "destination": "BUFFALO",
+        "family": "mediatek",
+        "hardware": "HL-DT-ST BU40N MT1959 BU5/BU3",
+        "hardware_basis": "banner",
+        "platform": "MT1959",
+        "revision": "BU11",
+        "revision_basis": "record",
+        "role": "main"
+      },
+      "sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/BUFFALO/BU11/main/08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a.bin",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399/mediatek-dba9fe0184fa2488210d95d9356fa4fd492aa1657fea6112bf9c8ee994da38d0.firmware.tar",
+          "candidate": "brdrive_fwupdater_100.exe::brdrive_fwupdater_100/DATA/Buffalo_Special_FW_Updater_1.00.exe::rsrc0",
+          "member": "images/08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399"
+        },
+        {
+          "bundle": "bundles/89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399/mediatek-dba9fe0184fa2488210d95d9356fa4fd492aa1657fea6112bf9c8ee994da38d0.firmware.tar",
+          "candidate": "brdrive_fwupdater_100.exe::overlay::brdrive_fwupdater_100/DATA/Buffalo_Special_FW_Updater_1.00.exe::rsrc0",
+          "member": "images/08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399"
+        }
+      ],
+      "manufacturer_support_url": "https://www.buffalo.jp/product/detail/bruhd-pu3-bk.html",
+      "evidence_status": "manufacturer-supported OEM reference, not locally hardware-tested",
+      "local_physical_detection": null,
+      "local_sector_read": null,
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 920486,
+                "target": 920524
+              },
+              {
+                "instruction": 920498,
+                "target": 920546
+              },
+              {
+                "instruction": 920502,
+                "target": 920590
+              },
+              {
+                "instruction": 920510,
+                "target": 920516
+              },
+              {
+                "instruction": 920514,
+                "target": 920546
+              },
+              {
+                "instruction": 920518,
+                "target": 920590
+              },
+              {
+                "instruction": 920522,
+                "target": 920546
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 46,
+            "literals": [
+              {
+                "instruction": 920488,
+                "value": 33557273
+              }
+            ],
+            "role": "DiscInformation",
+            "site": 920478,
+            "variant": "modern_u_flag_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167786,
+                "target": 167794
+              },
+              {
+                "instruction": 167792,
+                "target": 167804
+              },
+              {
+                "instruction": 167802,
+                "target": 167810
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 167772,
+                "value": 33529348
+              },
+              {
+                "instruction": 167780,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167772,
+            "variant": "modern_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218186,
+                "target": 218202
+              },
+              {
+                "instruction": 218194,
+                "target": 218202
+              },
+              {
+                "instruction": 218200,
+                "target": 218386
+              },
+              {
+                "instruction": 218206,
+                "target": 218382
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218178,
+                "value": 33529348
+              }
+            ],
+            "role": "ControlField",
+            "site": 218178,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 886434,
+                "target": 886474
+              },
+              {
+                "instruction": 886440,
+                "target": 886478
+              },
+              {
+                "instruction": 886446,
+                "target": 1297492
+              },
+              {
+                "instruction": 886456,
+                "target": 886492
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 36,
+            "literals": [
+              {
+                "instruction": 886422,
+                "value": 33529348
+              },
+              {
+                "instruction": 886454,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 886422,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 886664,
+                "target": 886740
+              },
+              {
+                "instruction": 886672,
+                "target": 886708
+              },
+              {
+                "instruction": 886678,
+                "target": 1297492
+              },
+              {
+                "instruction": 886688,
+                "target": 886736
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 40,
+            "literals": [
+              {
+                "instruction": 886652,
+                "value": 33529348
+              },
+              {
+                "instruction": 886662,
+                "value": 33557274
+              },
+              {
+                "instruction": 886686,
+                "value": 20913
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 886650,
+            "variant": "modern"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 887984,
+                "target": 888116
+              },
+              {
+                "instruction": 887992,
+                "target": 887996
+              },
+              {
+                "instruction": 888006,
+                "target": 888014
+              },
+              {
+                "instruction": 888012,
+                "target": 888032
+              },
+              {
+                "instruction": 888020,
+                "target": 888032
+              },
+              {
+                "instruction": 888030,
+                "target": 888048
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 78,
+            "literals": [
+              {
+                "instruction": 887972,
+                "value": 33529348
+              },
+              {
+                "instruction": 888002,
+                "value": 69251456
+              },
+              {
+                "instruction": 888014,
+                "value": 33557265
+              },
+              {
+                "instruction": 888034,
+                "value": 1368491
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 887972,
+            "variant": "modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 895880,
+                "target": 896136
+              },
+              {
+                "instruction": 895892,
+                "target": 896062
+              },
+              {
+                "instruction": 895900,
+                "target": 895922
+              },
+              {
+                "instruction": 895906,
+                "target": 896062
+              },
+              {
+                "instruction": 895914,
+                "target": 896062
+              },
+              {
+                "instruction": 895920,
+                "target": 896062
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 62,
+            "literals": [
+              {
+                "instruction": 895862,
+                "value": 33529348
+              },
+              {
+                "instruction": 895870,
+                "value": 33529286
+              },
+              {
+                "instruction": 895872,
+                "value": 33557260
+              },
+              {
+                "instruction": 895874,
+                "value": 33529350
+              },
+              {
+                "instruction": 895876,
+                "value": 33530773
+              },
+              {
+                "instruction": 895882,
+                "value": 33529352
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 895860,
+            "variant": "slim_fixed6_c7_aware"
+          }
+        ],
+        "classification": "native_uhd_code_in_reviewed_roles",
+        "di_recognition": "explicit_u_or_c7",
+        "explicit_roles": 6,
+        "legacy_roles": 0,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529348,
+        "unknown_roles": 0
+      }
+    }
+  ],
+  "product_candidates_without_exact_stock_reference_lock": [
+    {
+      "model": "Verbatim 43888",
+      "manufacturer_support_url": "https://www.verbatim-europe.com/en/product/43888",
+      "reason": "Official UHD product; exact mechanism/firmware provenance not bound here."
+    },
+    {
+      "model": "BU50N",
+      "reason": "Native-code and OEM updater evidence held; separate manufacturer UHD specification still needed for this operational lock."
+    }
+  ],
+  "mt1959_oem_inventory": {
+    "total_images": 93,
+    "native_reviewed_media_roles": 59,
+    "legacy_or_mixed_reviewed_media_roles": 10,
+    "unknown_or_partial": 24,
+    "physically_tested_by_this_investigation": 0
+  }
+}
