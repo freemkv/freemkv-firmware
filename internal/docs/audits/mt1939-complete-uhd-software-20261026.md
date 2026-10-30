@@ -1,3 +1,10 @@
+# Release separation, 2026-10-30
+
+MT1939 UHD research is retained on `research/mt1939-uhd-detection` at `7bcab5f`.
+It is removed from the 0.15.4 production authoring path. The detection-only
+hardware trial still failed; the historical software checks below do not prove
+physical UHD detection or reading. Ordinary DVD/BD fixes remain on `dev`.
+
 # MT1939 experimental UHD software completion
 
 The known software-contract group is complete for all 24 held classic conversion

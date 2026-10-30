@@ -5,13 +5,10 @@ use sha2::{Digest, Sha256};
 
 fn checked_modify(image: &[u8], settings: &BootSettings) -> engine::ModifyReport {
     let (report, support) = crate::api::modify_with_defaults(image, settings).unwrap();
-    for feature in BootFeature::ALL {
-        assert!(support.supports(feature), "{feature:?}");
-    }
     let (stored, stored_support) = crate::boot::inspect(&report.image).unwrap().unwrap();
     for feature in BootFeature::ALL {
         assert_eq!(stored.value(feature), settings.value(feature));
-        assert!(stored_support.supports(feature));
+        assert_eq!(stored_support.supports(feature), support.supports(feature));
     }
     // Reconfigure the already-built image through the same API used by the app.
     // Only assert advertised choices: Speed and Region intentionally use fewer.
@@ -64,22 +61,23 @@ fn checked_modify(image: &[u8], settings: &BootSettings) -> engine::ModifyReport
 }
 
 #[test]
-fn normal_classic_modify_installs_the_complete_group_and_roundtrips_settings() {
+fn normal_classic_modify_preserves_native_detection_and_refuses_uhd_settings() {
     let original = include_bytes!("../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
-    for setting in ["oem", "on", "off"] {
+    let report = checked_modify(original, &BootSettings::standard());
+    assert!(!crate::boot::BootSupport::from_modify(&report).supports(BootFeature::Unrestricted));
+    assert!(!report
+        .levers
+        .iter()
+        .flat_map(|l| &l.hooks)
+        .any(|h| h.id == "uhd-conversion"));
+    let di = mediatek_optical::image::analysis::ClassicDi::detect(original).unwrap();
+    assert_eq!(
+        &report.image[di.prevalidation..di.layer_store + 2],
+        &original[di.prevalidation..di.layer_store + 2]
+    );
+    for setting in ["on", "off"] {
         let settings = BootSettings::parse(&[format!("unrestricted={setting}")]).unwrap();
-        let report = checked_modify(original, &settings);
-        assert!(report
-            .levers
-            .iter()
-            .flat_map(|l| &l.hooks)
-            .any(|h| h.id == "uhd-conversion"));
-        let signed = crate::api::sign(&report.image, None).unwrap().image;
-        assert!(crate::boot::inspect(&signed)
-            .unwrap()
-            .unwrap()
-            .1
-            .supports(BootFeature::Unrestricted));
+        assert!(crate::api::modify_with_defaults(original, &settings).is_err());
     }
 }
 

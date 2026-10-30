@@ -1222,7 +1222,7 @@ fn structural_audit_passes_over_corpus() {
 }
 
 #[test]
-fn classic_speed_tail_requires_wide_branch_and_preserves_caller_lr() {
+fn classic_speed_tail_requires_saved_lr_and_thumb1_call() {
     let original = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
     let engine = engine::detect(original).unwrap();
     let mut report = engine.modify(original).unwrap();
@@ -1235,10 +1235,19 @@ fn classic_speed_tail_requires_wide_branch_and_preserves_caller_lr() {
     let value = |key| facts.iter().find(|(k, _)| *k == key).unwrap().1;
     let (site, stub) = (value("speed_tail_site"), value("speed_stub_va"));
     assert!(audit_image(original, &report).ok());
-    let branch = thumb_asm::encode_bl(site as usize, stub).unwrap();
+    let good = report.image.clone();
+    let branch = thumb_asm::encode_b_wide(site as usize, stub).unwrap();
     report.image[site as usize..site as usize + 4].copy_from_slice(&branch);
     report.image = cmac::resign(&report.image).unwrap();
     assert!(audit_image(original, &report)
         .failures()
         .any(|c| c.what == "classic speed tail"));
+    report.image = good;
+    let mut nop = thumb_asm::Asm::new();
+    nop.mov_reg(8, 8);
+    report.image[site as usize..site as usize + 2].copy_from_slice(&nop.finish().unwrap()[..2]);
+    report.image = cmac::resign(&report.image).unwrap();
+    assert!(audit_image(original, &report)
+        .failures()
+        .any(|c| c.what == "classic speed saved return"));
 }

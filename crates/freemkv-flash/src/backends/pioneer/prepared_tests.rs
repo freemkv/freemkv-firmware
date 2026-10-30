@@ -3,6 +3,102 @@ use pioneer_optical::receiver::PreparedUpdate;
 
 const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 
+#[test]
+fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() {
+    let Ok(root) = std::env::var("PIONEER_SETTINGS_HOARD") else {
+        return;
+    };
+    let root = std::path::Path::new(&root);
+    let component = |kind: &str, sha: &str, directory: &str| {
+        std::fs::read(root.join(directory).join(kind).join(format!("{sha}.enc"))).unwrap()
+    };
+    let source_dir = "dump/pioneer/sat/8410/ID84/1.00";
+    let kernel = component(
+        "kernel",
+        "7e1104a2843825aea6d03bde6359d94254f3cea192e576450f3f94c4afcee824",
+        source_dir,
+    );
+    let normal = component(
+        "normal",
+        "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
+        source_dir,
+    );
+    let mut archive = tar::Builder::new(Vec::new());
+    for (name, data) in [("kernel.enc", kernel), ("normal.enc", normal)] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, name, data.as_slice())
+            .unwrap();
+    }
+    let installed = archive.into_inner().unwrap();
+    let target_kernel = component(
+        "kernel",
+        "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83",
+        "oem/pioneer/sat/8A10/GENERAL/1.00",
+    );
+    let target_normal = component(
+        "normal",
+        "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
+        "oem/pioneer/sat/8A10/GENERAL/1.14",
+    );
+    struct Factory(Vec<u8>);
+    impl ScsiDevice for Factory {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            assert_eq!(cdb, pioneer_optical::production::parameters());
+            assert_eq!(len, pioneer_optical::production::PARAMETERS_LEN);
+            Ok(self.0.clone())
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            panic!("authorization must not write");
+        }
+        fn describe(&self) -> String {
+            "factory evidence only".into()
+        }
+    }
+    let mut parameters = vec![0xff; pioneer_optical::production::PARAMETERS_LEN];
+    parameters[0x90..0x9f].fill(b' ');
+    parameters[0x90..0x9b].copy_from_slice(b"BDR-UD02TBD");
+    parameters[0xc0..0xc0 + 90].fill(b'0');
+    parameters[0xc0 + 76..0xc0 + 82].copy_from_slice(b"130525");
+    let mut device = Factory(parameters);
+    let plan = || {
+        FlashPlan::new(ExecutePlan {
+            kernel: Some(target_kernel.clone()),
+            normal: target_normal.clone(),
+            selection: FlashSelection::KernelAndNormal,
+        })
+    };
+    let refusal = authorize_installed(plan(), Some(&installed))
+        .err()
+        .expect("offline route needs original hardware");
+    assert_eq!(
+        crate::crossflash::refusal_status(refusal.as_ref()),
+        crate::crossflash::CompatibilityStatus::SoftNo
+    );
+    let authorized = authorize_installed_inner(
+        plan(),
+        Some(&installed),
+        Some(&mut ReadDevice::without_unlocks(&mut device)),
+    )
+    .unwrap();
+    let prepared: &Prepared = authorized.state().unwrap();
+    let complete = prepared.complete.as_ref().unwrap();
+    assert_eq!(
+        complete.settings().adaptation_id(),
+        Some("pioneer.ud02-to-ud04-1.14")
+    );
+    let kernel = Envelope::load(&target_kernel).unwrap();
+    let normal = Envelope::load_with_kernel(complete.normal_transfer(), &kernel).unwrap();
+    use sha2::{Digest, Sha256};
+    assert_eq!(
+        format!("{:x}", Sha256::digest(normal.image.as_slice())),
+        "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815"
+    );
+}
+
 fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
     crate::backends::pioneer::flash::execute_with_sleep(
         &mut crate::engine::gates::ungated_for_tests(dev),

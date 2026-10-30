@@ -28,7 +28,6 @@ pub mod mt1939;
 pub mod mt1939_classic;
 pub mod mt1939_modern;
 pub mod mt1959;
-pub mod mtk_uhd;
 pub mod pioneer;
 pub mod profile;
 

@@ -13,6 +13,8 @@ from unicorn import arm_const as reg
 
 def execute(image, plan, media, maximum, mode, setting, patched):
     cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    # Exercise the legacy instruction set; Unicorn's default accepts Thumb-2.
+    cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0, image)
     cpu.mem_map(0x01ff0000, 0x20000)

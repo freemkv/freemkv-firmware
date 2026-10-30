@@ -20,13 +20,20 @@ use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
 impl Mt1959Engine {
-    /// Pure selector tail detour: choose the native maximum only when enabled.
+    /// Thumb-1 selector detour: choose the native maximum only when enabled.
     /// The library proves every leaf path reaches this tail and binds RMAX to
     /// its native setter and the selector consumer to OPTM. No write speed or
     /// hardware/media maximum initializer is changed.
     pub fn build_speed_stub_classic(&self, flag_base: u32, maximum_cell: u32) -> Result<Vec<u8>> {
         let mut a = Asm::new();
         let oem = a.label();
+        // The Thumb-1 entry saves the native LR before BL overwrites it.
+        a.push(8);
+        a.mov_reg(3, 13);
+        a.ldr_imm(3, 3, 4);
+        a.mov_reg(14, 3);
+        a.pop(8);
+        a.add_sp(4);
         a.push(2);
         a.ldr_lit(1, flag_base + abi::Feature::Speed as u32);
         a.ldrb_imm(1, 1, 0);
@@ -57,15 +64,20 @@ impl Mt1959Engine {
             .map_err(|e| anyhow!("native read-speed selector: {e}"))?;
         let bytes = self.build_speed_stub_classic(flag_base, role.maximum_cell())?;
         let va = self.free_space(out, bytes.len())?;
-        let branch = thumb::encode_b_wide(role.site(), va)
+        let branch = thumb::encode_bl(role.site() + 2, va)
             .ok_or_else(|| anyhow!("classic Speed tail branch out of range"))?;
+        let mut entry = Asm::new();
+        entry.push(0x100);
+        let mut entry = entry.finish()?;
+        entry.truncate(2); // finish pads the instruction-only fragment to four bytes.
+        entry.extend_from_slice(&branch);
         let mut candidate = out.to_vec();
         thumb::write(&mut candidate, va as usize, &bytes);
-        thumb::write(&mut candidate, role.site(), &branch);
+        thumb::write(&mut candidate, role.site(), &entry);
         crate::install_guard::verify_branch(
             &candidate,
-            role.site(),
-            thumb::BranchKind::BWide,
+            role.site() + 2,
+            thumb::BranchKind::Bl,
             va,
             "classic Speed",
         )?;
@@ -337,27 +349,6 @@ impl Mt1959Engine {
             }
         }
 
-        let conversion_facts = match super::mtk_uhd::UhdConversionPlan::inspect(image) {
-            Ok(plan)
-                if plan.require_complete_conversion().is_ok()
-                    && plan
-                        .action(mediatek_optical::image::analysis::UhdArea::DiscInformation)?
-                        == super::mtk_uhd::UhdAction::AddRecognition
-                    && gatea_stub_va != 0
-                    && ake_stub_va != 0 =>
-            {
-                super::mtk_uhd::install_conversion(image, &mut out, flag_base, &plan)?
-            }
-            _ => Vec::new(),
-        };
-        let conversion_fact = |key| {
-            conversion_facts
-                .iter()
-                .find(|(k, _)| *k == key)
-                .map(|(_, v)| *v)
-                .unwrap_or(0)
-        };
-
         // Downgrade-enable (DE) byte: a fixed base identity-page byte, NOT a
         // tri-state feature flag, so it is always safe and does not depend on the
         // boot 0xFF-fill (written regardless of the boot-hook outcome, exactly as
@@ -414,10 +405,10 @@ impl Mt1959Engine {
             uhd_stub_va,
             bd_gate_site,
             bd_stub_va,
-            // Facts reflect the same source-bound group installed by Modify.
-            auth_cell_site: conversion_fact("auth_cell_site"),
-            auth_cell_stub_va: conversion_fact("auth_cell_stub_va"),
-            auth_cell_refusal: conversion_fact("auth_cell_refusal") != 0,
+            // Experimental classic UHD conversion stays on the research branch.
+            auth_cell_site: 0,
+            auth_cell_stub_va: 0,
+            auth_cell_refusal: false,
             hrl_sites,
             hrl_stub_va,
             de_off: de_off.unwrap_or(0),
@@ -647,44 +638,6 @@ impl Mt1959Engine {
         } else {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
         });
-
-        // A complete group is installed by normal Modify, never a separate builder.
-        if let Some(raw) = levers.iter_mut().find(|lever| lever.id == LeverId::RawRead) {
-            let plan = super::mtk_uhd::UhdConversionPlan::inspect(image).and_then(|plan| {
-                plan.require_complete_conversion()?;
-                anyhow::ensure!(
-                    plan.action(mediatek_optical::image::analysis::UhdArea::DiscInformation)?
-                        == super::mtk_uhd::UhdAction::AddRecognition,
-                    "native UHD recognition needs no conversion"
-                );
-                Ok(plan)
-            });
-            match plan {
-                Ok(plan)
-                    if ["gatea_stub_va", "ake_stub_va"].iter().all(|required| {
-                        raw.facts
-                            .iter()
-                            .any(|(name, value)| name == required && *value != 0)
-                    }) =>
-                {
-                    let facts =
-                        super::mtk_uhd::install_conversion(image, &mut out, flag_base, &plan)?;
-                    raw.facts.extend(facts);
-                    raw.hooks.push(super::lever::HookReport::applied(
-                        "uhd-conversion",
-                        "complete-source-bound",
-                    ));
-                }
-                Ok(_) => raw.hooks.push(super::lever::HookReport::unavailable(
-                    "uhd-conversion",
-                    "raw-read control is unavailable",
-                )),
-                Err(error) => raw.hooks.push(super::lever::HookReport::unavailable(
-                    "uhd-conversion",
-                    format!("{error:#}"),
-                )),
-            }
-        }
 
         // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));

@@ -7,97 +7,35 @@ Versions are independent of the freemkv ripping applications.
 
 ### freemkv Modify
 
-- Preserve all VID Gate-A arguments, including the native writer source pointer
-  and transfer length, through both continuations and the session-reset call.
-
-- Make Unrestricted Off refuse every explicit media class, including the reserved
-  `0xFF` value, without using a sentinel that can accidentally compare equal.
-
-- Preserve R3 on the HRL rejection continuation as well as the clean path.
-  Check native registers, stack, flags and each advertised HRL setting on an
-  independent CPU against actual Modify outputs.
-
-- Preserve the shared native calculation rejection path when both MT1939 UHD
-  selectors are installed; never return into the middle of the other detour.
-  Exercise both selectors together in the CPU regression matrix.
-
-- Refuse raw MediaTek drive dumps before authoring an output that Flash cannot
-  install. Explain that an OEM update image or valid backup is required.
-
-- Preserve all four native boot-initialization arguments, callee-saved registers,
-  aligned stack, native return value and flags through the boot detour.
-- Resolve READ BUFFER records through the native registered command-table graph,
-  rejecting disconnected tables and cycles. Bind response writers and committers
-  to their callers, exact buffer, DMA counts and balanced return paths.
-- Expand SRAM-reference analysis to decoded aliases and bounded copy/clear loops.
-  Reserve guards and the complete flag/scratch footprint below the conservative
-  placement ceiling on classic builds too; static absence remains separate from
-  runtime storage ownership.
-
-- Install complete MT1939 UHD conversion through normal Modify. Require the
-  source-bound recognition, routing, controller, position, completion, calibration
-  and speed contracts together; commit the whole group atomically. Store the
-  installed Unrestricted control in editable boot metadata. OEM/On retain native
-  class-C authentication; Off uses its validated refusal path. Physical UHD
-  reading remains subject to hardware testing.
-- Bind AGID session pointers to the actual native byte read and its live register,
-  correcting WH16NS58 1.V9 pointer selection. Reject clobbered recovery pointers,
-  writeback changes, ambiguous instruction variants and incomplete inputs.
-- Validate normal Modify and every advertised settings update across the eligible
-  published corpus, including integrity and offline flash admission.
-
-- Add classic MediaTek read-speed control using the native default selector and
-  native read maximum. Preserve OEM behavior and hardware/media limits; refuse
-  disconnected, ambiguous or impure selector paths. Validate four native forms
-  with independent CPU execution and require a caller-preserving tail branch.
-
-- Make native BD hooks read the shared Unrestricted runtime flag, matching UHD
-  and auth hooks. The retired BD storage slot no longer changes new hook behavior.
-
-- Implement all three auth-hook choices where native refusal is proven: OEM
-  replays its decision, On allows access, and Off takes its refusal path.
-  Preserve registers, stack and comparison flags; keep older partial records
-  restricted to their original choices.
-
-- Distinguish decoded constant-success checks from helper calls in receiver
-  analysis, preserving explicit bypass evidence and rejecting unknown effects.
-
-- Recover allocation-limited OEM builds using erased space only when native
-  receiver, programming and integrity contracts prove a safe coverage extension.
-  Preserve integrity descriptors outside that plan and honor explicit settings
-  after retry; retain refusals for unproven receiver contracts.
-
-- Select media, VID and auth-cell implementations from shared OEM code-layout
-  evidence. Add the WH register contract and preserve unavailable-hook reasons.
-- Offer only boot values implemented by the generated hooks. Widening can offer
-  On/OEM without advertising an unimplemented native-media refusal mode.
-- Report classic boot hooks already emitted by the engine, exposing the actual
-  editable controls instead of silently hiding them.
-- Allocate finalized code and settings records at their exact size, retaining
-  alignment, protected-region and integrity-coverage checks. Add exact-fit,
-  one-byte-short and atomic-refusal regressions, including tight BU40N 1.05.
-- Share the CDB handler's reset-defaults body with erased-NV fallback to recover
-  28 bytes without removing commands. Preserve older settings records; new
-  compact records remain editable and are checked by independent CPU tests.
-- Query hash-bound capabilities through the real Modify preview and structural
-  audit, including explicit unsupported results for publication tooling.
-- Execute hook state/register/stack contracts on an independent ARM CPU in CI.
-- Keep descriptor-pattern candidates separate from proven BD controls, avoiding
-  a refusal detour on an unrelated structure-response path.
+- Expand compatible MediaTek MT1959 firmware modification, including additional
+  WH register layouts and tight code-space images such as BU40N 1.05. Report
+  features and boot-setting choices supported by each exact firmware.
+- Fix Unrestricted On/OEM/Off behavior where native acceptance and refusal are
+  proven. Keep BD, UHD and authentication hooks on the same runtime setting.
+- Preserve native arguments, registers and return behavior in boot, VID and
+  revocation hooks. Strengthen generated-firmware integrity and layout checks.
+- Fix legacy MediaTek DVD/BD read-speed hooks to use Thumb instructions supported
+  by their processors while retaining native hardware and media limits.
+- Improve allocation of injected code and editable boot settings, recovering
+  otherwise compatible images without overwriting firmware metadata or live RAM.
+- Reject raw diagnostic drive dumps as modification sources when Flash cannot
+  install the result; request an OEM update image or valid backup instead.
+- Keep experimental MT1939 UHD conversion off the release path. Existing DVD/BD
+  controls remain available where supported.
 
 ### freemkv Flash
 
-- Support SXLT/OEM-branded Pioneer captures through native descriptor and receiver contracts, fixed-width INQUIRY identity recovery, and the existing ungated finalizer’s alternate register allocation. Preserve captured Kernel/Normal bytes and exact live-descriptor checks.
-- Explain unrecognized Pioneer backup layouts as a support limitation after a successful read. Offer a raw dump for investigation; generic backup failures no longer imply a connection fault.
-
-- Standardize Pioneer CDB response parsing in the optical library and select
-  one backend from protocol evidence. Remove duplicated SAT/REC support lists
-  from backup and envelope reconstruction. Preserve captured firmware without
-  OEM seeds/signatures and label reconstructed metadata honestly; receiver and
-  compatibility checks still authorize each particular flash.
-
-- Update the shared MediaTek dependency to the source-pinned analysis release;
-  firmware hook analysis remains an opt-in image feature.
+- Adapt the tested original UD02 mechanism to the exact UD04 1.14 firmware and
+  support return to its original UD02 1.00 firmware. Require matching firmware,
+  original factory hardware and live calibration prerequisites; other UD02/UD04
+  combinations are not newly supported.
+- Recognize complete legacy Pioneer factory records without a production tag
+  when the product code and factory-test structure independently validate.
+- Improve OEM-branded/SXLT and REC Pioneer backups using native descriptors and
+  protocol evidence. Preserve captured firmware and explain when a raw dump is
+  available but a flashable backup cannot be reconstructed.
+- Keep MediaTek read restrictions and Pioneer capture limitations distinct from
+  connection errors, with clearer guidance before any firmware write.
 
 ## [0.15.3] - 2026-10-25
 

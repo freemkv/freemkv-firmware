@@ -1,19 +1,6 @@
 //! Read-only receiver evidence for allocation research; never authorizes changes.
 use mediatek_optical::receiver::analysis::ApplicationAnalysis;
 
-fn routing_evidence<R: std::fmt::Debug>(
-    c: &freemkv_fw::engine::mtk_uhd::UhdRoutingCandidate<R>,
-    bypass: Option<usize>,
-) -> serde_json::Value {
-    serde_json::json!({
-        "area":format!("{:?}",c.area),"site":c.site,"original":c.original,
-        "accept":c.accept,"reject":c.reject,"stub":c.bytes,
-        "region_start":c.region_start,"calculation_end":c.calculation_end,
-        "caller":{"entry":c.caller.entry(),"stack_bytes":c.caller.stack_bytes(),"returns":c.caller.returns()},
-        "bypass":bypass,
-    })
-}
-
 fn main() -> anyhow::Result<()> {
     let path = std::env::args()
         .nth(1)
@@ -192,120 +179,6 @@ fn main() -> anyhow::Result<()> {
             );
             return Ok(());
         }
-        if offset == "uhd-conversion" {
-            use freemkv_fw::engine::mtk_uhd::{
-                emit_di_layers, emit_di_recognition, UhdConversionPlan,
-            };
-            use mediatek_optical::image::analysis::UhdArea;
-            let plan = UhdConversionPlan::inspect(&image)?;
-            let flags = 0x0200f000;
-            let candidates = plan.routing_candidates(&image, flags)?;
-            // Install both arithmetic selectors together in CPU tests. Their
-            // native rejection paths share a branch, so isolated tests cannot
-            // establish that the final pair has valid continuations.
-            let calculation_group: Vec<_> = candidates.iter()
-                .filter(|c| c.calculation_end.is_some()).enumerate()
-                .map(|(index, c)| {
-                    let stub_va = 0x1fc000 + index as u32 * 0x800;
-                    Ok(serde_json::json!({"site":c.site,"stub_va":stub_va,
-                        "branch":thumb_asm::encode_bl(c.site, stub_va)
-                            .ok_or_else(|| anyhow::anyhow!("calculation test branch out of range"))?,
-                        "stub":c.bytes}))
-                }).collect::<anyhow::Result<_>>()?;
-            let mut records: Vec<_> = candidates
-                .iter()
-                .map(|c| {
-                    routing_evidence(
-                        c,
-                        if c.area == UhdArea::ParameterNibble {
-                            Some(plan.areas().area(c.area).unwrap().edges()[0].target)
-                        } else {
-                            None
-                        },
-                    )
-                })
-                .collect();
-            records.extend(
-                plan.auxiliary_candidates(&image, flags)?
-                    .iter()
-                    .map(|c| routing_evidence(c, None)),
-            );
-            records.extend(
-                plan.position_candidates(&image, flags)?
-                    .iter()
-                    .map(|c| routing_evidence(c, None)),
-            );
-            let parameter = plan.parameter_candidate(&image, flags)?;
-            if let Some(hook) = &parameter.hook {
-                let mut record = routing_evidence(hook, Some(parameter.contract.lookup));
-                record["area"] = serde_json::json!("ParameterTable");
-                records.push(record);
-            }
-            records.extend(
-                plan.position_setup_candidates(&image, flags)?
-                    .iter()
-                    .map(|c| routing_evidence(c, None)),
-            );
-            let (read_position, range_candidates) = plan.read_position_candidates(&image, flags)?;
-            records.extend(range_candidates.iter().map(|c| routing_evidence(c, None)));
-            records.extend(
-                plan.completion_candidates(&image, flags)?
-                    .iter()
-                    .map(|c| routing_evidence(c, None)),
-            );
-            let completion = mediatek_optical::image::analysis::ClassicReadCompletion::inspect(
-                &image,
-                plan.state_address(),
-            )?;
-            let calibration = plan.calibration_candidate(&image, flags)?;
-            let di = freemkv_fw::engine::mtk_uhd::di_prevalidation_candidate(&image, flags).ok();
-            println!(
-                "{}",
-                serde_json::json!({
-                    "policy":"research component emission only; no image is written or UHD capability enabled",
-                    "state":plan.state_address(), "flag_base":flags,
-                    "calculation_group":calculation_group,
-                    "pending":plan.remaining_contracts(),
-                    "read_position":{"entry":read_position.contract.entry,"site":read_position.contract.decode.site(),
-                        "position":read_position.contract.position,"layer":read_position.contract.layer,
-                        "cached_layer":read_position.contract.cached_layer,"status":read_position.contract.status,
-                        "stub":read_position.bytes,"original":read_position.original},
-                    "calibration":calibration.as_ref().map(|c|serde_json::json!({
-                        "entry":c.contract.caller.entry(),"site":c.contract.site,"resume":c.contract.site+6,
-                        "original_base":c.contract.original_base,"coefficients":c.contract.c7_coefficients,
-                        "original":c.original,"stub":c.bytes,
-                        "caller":{"entry":c.contract.caller.entry(),"stack_bytes":c.contract.caller.stack_bytes(),"returns":c.contract.caller.returns()}
-                    })),
-                    "completion":{"recovery_region":completion.recovery_region,"recovery_end":completion.recovery_end,
-                        "recovery_state_load":completion.recovery_state_load,"recovery_state_register":completion.recovery_state_register,
-                        "recovery_request_register":completion.recovery_request_register,"recovery_flag_register":completion.recovery_flag_register,"recovery_caller":{"entry":completion.recovery_caller.entry(),"returns":completion.recovery_caller.returns()},"controller_region":completion.controller_region,"controller_end":completion.controller_region+0x6c,
-                        "boundary_region":completion.boundary_region,"boundary_end":completion.boundary_end,"boundaries":completion.boundaries},
-                    "parameter_profile":{
-                        "variant":format!("{:?}",parameter.contract.variant),
-                        "entry":parameter.contract.entry,"lookup":parameter.contract.lookup,
-                        "rates":parameter.contract.rates,"coefficients":parameter.contract.coefficients,
-                        "oem_coefficients":parameter.contract.oem_coefficients,
-                        "patch_required":parameter.hook.is_some(),
-                    },
-                    "di_recognition":emit_di_recognition(flags)?, "di_layers":emit_di_layers(flags)?,
-                    "di_entry":di.as_ref().map(|d| serde_json::json!({
-                        "entry":d.contract.entry,"epilogue":d.contract.epilogue,
-                        "site":d.contract.prevalidation,"resume":d.contract.replay_continuation,
-                        "format":d.contract.format,"format_flag":d.contract.format_flag,"layers":d.contract.layers,
-                        "layer_store":d.contract.layer_store,"one_register":d.contract.one_register,
-                        "stub":d.bytes,"original":d.original,
-                        "caller":{"entry":d.caller.entry(),"stack_bytes":d.caller.stack_bytes(),"returns":d.caller.returns()},
-                    })),
-                    "areas":UhdArea::ALL.iter().map(|&area| {
-                        let contract = plan.areas().area(area).unwrap();
-                        serde_json::json!({"area":format!("{area:?}"),"variant":contract.variant(),
-                            "site":contract.site(),"action":format!("{:?}",plan.action(area).unwrap())})
-                    }).collect::<Vec<_>>(),
-                    "candidates":records,
-                })
-            );
-            return Ok(());
-        }
         if offset == "classic-speed-candidate" {
             let role = mediatek_optical::image::analysis::ClassicSpeed::detect(&image)?;
             let stub = freemkv_fw::engine::mt1959::Mt1959Engine
@@ -315,7 +188,7 @@ fn main() -> anyhow::Result<()> {
                 serde_json::json!({"entry":role.entry(),"site":role.site(),
                 "maximum_cell":role.maximum_cell(),"optimum_cell":role.optimum_cell(),
                 "media_cell":role.media_cell(),"consumer":role.consumer(),"flag_base":0x0200f000u32,
-                "stub":stub,"branch":thumb_asm::encode_b_wide(role.site(), 0x1ff000)})
+                "stub":stub,"branch":([0x00u8,0xb5].into_iter().chain(thumb_asm::encode_bl(role.site() + 2, 0x1ff000).expect("test branch in range")).collect::<Vec<_>>())})
             );
             return Ok(());
         }

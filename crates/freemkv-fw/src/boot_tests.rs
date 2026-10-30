@@ -11,7 +11,7 @@ fn classic_emitted_boot_and_region_hrl_controls_are_reported() {
     assert!(support.supports(BootFeature::Region));
     assert!(support.supports(BootFeature::Hrl));
     assert!(support.supports(BootFeature::Speed));
-    assert!(support.supports(BootFeature::Unrestricted));
+    assert!(!support.supports(BootFeature::Unrestricted));
 }
 
 #[test]
