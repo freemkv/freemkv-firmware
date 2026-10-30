@@ -59,14 +59,34 @@ def locate(data, mode):
         elif not (pc<zero<pc+256 and zero+4<=len(data) and
                   [half(data,zero),half(data,zero+2)]==[0x2000,0x7068]):continue
         found.append({'entry':at,'end':pc+12,'zero_branch':zero,'invalid_header_exit':reject,
+            'variant':'header_nibble','invalid_header_policy':'clear_first' if clear_first else 'preserve_supplied',
             'clears_mode_before_validation':clear_first,'excluded_auxiliary_calls':excluded})
+    # Older implementations compare two specific type words after dropping the
+    # high byte. They keep the header on the stack and carry the struct base in
+    # R5 across the preceding header-read call, rather than reloading it here.
+    for at in range(64,len(data)-24,2):
+        if literal(data,at,1)!=0x14100300 or literal(data,at+10,1)!=0x15100300:continue
+        if [half(data,at+i) for i in (2,4,6,12,16,18)] != [0x9000,0x0200,0x4288,0x4288,0x2001,0x7068]:continue
+        if half(data,at+8)&0xff00!=0xd000 or half(data,at+14)&0xff00!=0xd100:continue
+        if conditional(data,at+8,0xd000)!=at+16:continue
+        zero=conditional(data,at+14,0xd100)
+        if not (at+20<=zero<at+256 and [half(data,zero),half(data,zero+2)]==[0x2000,0x7068]):continue
+        roots=[p for p in range(at-64,at,2) if literal(data,p,5)==mode-1]
+        if len(roots)!=1:continue
+        found.append({'entry':at,'end':at+20,'zero_branch':zero,'invalid_header_exit':zero,
+            'variant':'exact_header_types','accepted_low24_types':[0x141003,0x151003],
+            'invalid_header_policy':'clear_on_other_type','mode_base_literal_site':roots[0],
+            'initial_registers':{'5':mode-1},'clears_mode_before_validation':False,'excluded_auxiliary_calls':[]})
     return found
 
 
 def execute(data,binding,mode,word,initial):
     c=Uc(UC_ARCH_ARM,UC_MODE_THUMB);c.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
-    c.mem_map(0,0x200000);c.mem_map(0x01ff0000,0x40000)
+    c.mem_map(0,0x200000);c.mem_map(0x01ff0000,0x40000);c.mem_map(0x03000000,0x10000)
     c.mem_write(0,data);c.mem_write(mode,bytes([initial]));c.reg_write(reg.UC_ARM_REG_R0,word)
+    c.reg_write(reg.UC_ARM_REG_SP,0x03008000)
+    for register,value in binding.get('initial_registers',{}).items():
+        c.reg_write(getattr(reg,f'UC_ARM_REG_R{register}'),value)
     result={'status':'instruction_limit','mode_writes':[]}
     excluded={x['site'] for x in binding['excluded_auxiliary_calls']}
 
@@ -88,7 +108,10 @@ def execute(data,binding,mode,word,initial):
     c.emu_start(binding['entry']|1,0x200000,count=100)
     assert result['status']=='selector_exit',result
     final=c.mem_read(mode,1)[0]
-    expected=int(bool((word>>20)&15)) if word&0xffff==0x1003 else (0 if binding['clears_mode_before_validation'] else initial)
+    if binding['variant']=='exact_header_types':
+        expected=int(word&0xffffff in binding['accepted_low24_types'])
+    else:
+        expected=int(bool((word>>20)&15)) if word&0xffff==0x1003 else (0 if binding['clears_mode_before_validation'] else initial)
     assert final==expected,(word,initial,result,final,expected)
     result['mode']=final
     return result
@@ -100,7 +123,8 @@ def main():
     p.add_argument('--hoard',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     a=p.parse_args();sources={r['sha256']:r for r in json.loads(a.scan.read_text())['images']}
     rows=[];total=0;bound=0
-    words=[(n<<20)|0x1003 for n in range(16)]+[0x00031003,0x48141003,0x48151003,0x00031002,0x48141002,0]
+    words=[(n<<20)|0x1003 for n in range(16)]+[0x00031003,0x48141003,0x48151003,0x00031002,0x48141002,0,
+        0x00141003,0x00151003,0xff141003,0xff151003,0x48161003,0x48041003]
     for worker in json.loads(a.workers.read_text())['images']:
         mode=worker['mode_cell']
         if mode is None:

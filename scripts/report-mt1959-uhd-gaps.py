@@ -165,9 +165,12 @@ def classify(source, scan, di, keys, references, alias=None, consumers=None, wor
         'C7_consumer_observations': json.dumps(consumer_observations, separators=(',', ':')),
         'key_worker_response': worker_response, 'key_worker_format39': worker_format39,
         'key_mode_initialization': (mode_init or {}).get('status', 'unresolved_incomplete_source'),
-        'key_mode_invalid_header': ('clear before validation' if mode_init.get('clears_mode_before_validation') else
-                                   'preserve supplied prior mode in isolated selector')
-                                  if mode_init and mode_init['status'] == 'bound_header_selector' else 'unresolved',
+        'key_mode_selector_variant': (mode_init or {}).get('variant', 'unresolved'),
+        'key_mode_invalid_header': {
+            'clear_first': 'clear before validation',
+            'preserve_supplied': 'preserve supplied prior mode in isolated selector',
+            'clear_on_other_type': 'clear unless low24 header is 0x141003 or 0x151003',
+        }.get((mode_init or {}).get('invalid_header_policy'), 'unresolved'),
         'media_pipeline_gaps': ','.join(g for g in gaps if g in ('G01','G02','G03','G04','G05','G06')),
         'OEM_authentication_gaps': ','.join(g for g in gaps if g in ('G07','G08')),
         'proven_gaps': ','.join(gaps), 'structural_differences_to_resolve': ','.join(differences),
@@ -268,8 +271,8 @@ def main():
         'Worker dispatch begins after any recorded setup call, whose effects are not assumed. Allocation execution begins after assumed valid AGID/session validation and stops at the response-length store. It neither generates nor verifies a certificate or nonce. These are source-bound protocol-stage differences, not a complete AACS2 exchange or proof that no other AACS2 code exists elsewhere.', '',
         'The [AACS common specification, section 4.14.2.2](https://aacsla.com/wp-content/uploads/2019/02/AACS_Spec_Common_Final_0953.pdf) describes the older 20-byte nonce and 92-byte certificate response. Primary reverse-engineering research [SGX.Fail, appendix D.2](https://sgx.fail/files/sgx.fail.pdf) describes AACS2 using 32-byte nonces and 256-bit ECC with SHA256. This explains why the older response width cannot simply be treated as complete OEM UHD authentication. Format 0x39 is recorded as another reference difference; its necessity is not inferred from its presence alone.', '',
         '## Native mode initialization', '',
-        'The selector survey executes 3,168 cases across 48 bound selectors, including all 21 extended-worker images in the full OEM bucket and all nine OEM UHD references. Eleven other dump/modified images have extended workers but an unresolved selector layout. The 112 single-mode worker images have no mode cell bound by that worker contract; that alone is not an absence claim about every other routine.', '',
-        'For matched selectors, a header word with low 16 bits 0x1003 selects mode 1 when bits 23:20 are nonzero and mode 0 otherwise. This links the reviewed protocol mode to header data. Header acquisition and device/crypto services remain outside the executed region, so it does not prove hardware support. The caller supplies an already-read word; any intermediate auxiliary call is explicitly excluded; its side effects are not assumed.', '',
+        'The selector survey executes 4,956 cases across all 59 extended-worker images, including all 21 in the full OEM bucket and all nine OEM UHD references. The eleven previously unresolved dump/modified layouts are now positively bound to an older exact-type selector. The 112 single-mode worker images have no mode cell bound by that worker contract; that alone is not an absence claim about every other routine.', '',
+        'The 48 newer selectors validate low 16 bits 0x1003 and select mode 1 when bits 23:20 are nonzero. The eleven older selectors select mode 1 only when the low 24 bits equal 0x141003 or 0x151003, clearing mode otherwise. Both layouts select mode 1 for supplied words 0x48141003 and 0x48151003; they differ for other header types. High-byte invariance and both accepted older types are executed explicitly. These differences are recorded without assuming which other header types are required. This links the reviewed protocol mode to header data. Header acquisition and device/crypto services remain outside the executed region, so it does not prove hardware support. The caller supplies an already-read word; any intermediate auxiliary call is explicitly excluded; its side effects are not assumed.', '',
         'OEM references themselves differ on invalid-header cleanup: some selectors clear the mode before validating the word, while others preserve the supplied previous value in this isolated stage. This revision difference is recorded, not declared another UHD gap. Full caller cleanup is not inferred from the isolated selector.', '',
         '## All firmware entries', '',
         'Full SHA-256, exact source path, provenance, comparison baseline and unresolved checks are in the adjacent CSV/JSON. G IDs are demonstrated stage-level gaps; execution assumptions and remaining validation are stated above. The CSV retains exact observed C7 consumer outputs.', '',
