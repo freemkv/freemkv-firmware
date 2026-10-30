@@ -22,7 +22,36 @@ fn collect(path: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
+fn has_tar_header(bytes: &[u8]) -> bool {
+    let Some(header) = bytes.get(..512) else {
+        return false;
+    };
+    let octal = |field: &[u8]| {
+        std::str::from_utf8(field)
+            .ok()
+            .and_then(|s| usize::from_str_radix(s.trim_matches(['\0', ' ']), 8).ok())
+    };
+    let checksum: usize = header
+        .iter()
+        .enumerate()
+        .map(|(i, &b)| usize::from(if (148..156).contains(&i) { b' ' } else { b }))
+        .sum();
+    header[0] != 0
+        && octal(&header[148..156]) == Some(checksum)
+        && octal(&header[124..136]).is_some_and(|size| size <= bytes.len() - 512)
+}
+
 fn scan(bytes: &[u8]) -> Value {
+    // A tar member's relative branches can still resemble firmware while its
+    // absolute literals address the wrong load base. Never classify that source
+    // as executable firmware. V7 headers may have no ustar magic.
+    if has_tar_header(bytes) {
+        return json!({"classification":"non_firmware_container", "di_recognition":"unknown",
+            "explicit_roles":0, "legacy_roles":0, "unknown_roles":7, "state_cell":null,
+            "areas":UhdArea::ALL.iter().map(|role|json!({"role":format!("{role:?}"),
+                "evidence":"unknown", "error":"normalize_archive_member_first"})).collect::<Vec<_>>(),
+            "access_policy":"not_determined_by_this_scan", "physical_reading":"not_determined_by_this_scan"});
+    }
     let analysis = UhdAreas::inspect(bytes);
     let mut areas = Vec::new();
     let mut native = 0;
@@ -250,5 +279,23 @@ mod tests {
         assert_eq!(result["classification"], "unknown_or_partial");
         assert_eq!(result["di_recognition"], "unknown");
         assert_eq!(result["unknown_roles"], 7);
+    }
+
+    #[test]
+    fn v7_tar_wrapped_firmware_requires_payload_normalization() {
+        let payload = include_bytes!("../tests/fixtures/BU40N_OEM_1.00.bin");
+        let mut archive = vec![0_u8; 512 + payload.len()];
+        archive[..12].copy_from_slice(b"firmware.bin");
+        let size = format!("{:011o}\0", payload.len());
+        archive[124..136].copy_from_slice(size.as_bytes());
+        archive[148..156].fill(b' ');
+        let sum: usize = archive[..512].iter().map(|&b| usize::from(b)).sum();
+        archive[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+        archive[512..].copy_from_slice(payload);
+        assert_eq!(scan(&archive)["classification"], "non_firmware_container");
+        assert_eq!(
+            scan(payload)["classification"],
+            "native_uhd_code_in_reviewed_roles"
+        );
     }
 }

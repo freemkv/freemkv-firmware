@@ -2,24 +2,24 @@
 
 OEM UHD means stock firmware tied to a manufacturer-advertised UHD product. Everything else is classified 1959 non UHD for this comparison, including unqualified variants, modified images and incomplete sources. That classification alone does not prove physical inability.
 
-199 catalogue entries: 173 full-sized sources and 26 fragments. The stock-source comparison has 69 full-sized OEM entries plus 24 OEM fragments. Two full sources have a 2,560-byte suffix. Counts are source hashes, not independent drives or tested successes.
+199 catalogue entries: 171 distinct full firmware payloads, 26 incomplete sources and two tar-archive duplicates of existing dumps. The OEM bucket has 67 full images, 24 incomplete sources and those two misbucketed dump archives. The archives are not firmware with a suffix: their actual payload starts at byte 1,536. All 24 incomplete OEM-bucket entries are metadata/partial-dump archives. Counts are source hashes, not independent drives or tested successes.
 
 Manufacturer support establishes the OEM references. No image has a local physical detection/sector-read receipt in this investigation. Matching the reviewed paths does not establish complete OEM equivalence. Unknown is not absent. No firmware patch or new BIN is produced by this report.
 
 DI execution begins after prefix/attribute validation and stops at the first state write or outgoing gate edge. Key execution supplies success only to the recorded wrapper guard and stops at a key worker, except the positively matched CSS refusal worker is followed to the role-bound sense setter. Crypto, acquisition and sector reads are not simulated as successful.
 
-## Summary of the 69 full stock sources
+## Summary of the 67 full OEM-bucket images
 
 | Status | Images |
 | --- | --- |
 | G07 | 38 |
-| key routing unresolved | 2 |
 | no proven gap in reviewed paths; full equivalence unresolved | 10 |
-| G01,G07 | 8 |
+| G01,G02,G03,G04,G05,G06,G07 | 1 |
+| G01,G02,G04,G05,G06,G07 | 7 |
 | OEM UHD reference | 9 |
-| G01 | 2 |
+| G01,G02,G04,G05,G06 | 2 |
 
-G01 is DI rejection; G07 is key-class routing. No-proven-gap rows are not promoted to OEM UHD. These results do not establish 100% functional coverage.
+G01 is DI rejection; G02–G06 are executed C7 consumer mismatches; G07 is key-class routing. No-proven-gap rows are not promoted to OEM UHD. These results do not establish 100% functional coverage.
 
 ## Manufacturer-backed stock references
 
@@ -35,104 +35,124 @@ G01 is DI rejection; G07 is key-class routing. No-proven-gap rows are not promot
 | HLDS BU40N general retail | 1.05 | `fbfed0cc2d55` | [Specification](https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf) |
 | Buffalo BRUHD-PU3 / BU40N BU12 | BU12 | `920a89f98b69` | [Specification](https://www.buffalo.jp/product/detail/bruhd-pu3-bk.html) |
 
+## Stock-source variants with no proven gap in the reviewed paths
+
+These ten images are still 1959 non UHD under the requested definition. None is promoted by its code matches. Their qualification and full behavioral equivalence remain unresolved.
+
+| Hardware / revision | SHA prefix | OEM qualification still needed |
+| --- | --- | --- |
+| HL-DT-ST BH16NS60 MT1959 JB8/JB8 / INTM | `1baed51d34e0` | Intermediate updater payload; not a locked shipping-production firmware reference. |
+| HL-DT-ST BU40N MT1959 BU5/BU3 / 1.01 | `103b9da94c91` | Regional R/M firmware variant; exact advertised UHD retail SKU mapping remains unverified. |
+| HL-DT-ST BU40N MT1959 BU5/BU3 / A103 | `7d7f2465feaf` | Dell A103 updater is identified; no exact Dell SKU UHD-playback advertising locked. |
+| HL-DT-ST BU40N MT1959 BU5/BU3 / INTM | `29ad30264714` | Intermediate updater payload; not a locked shipping-production firmware reference. |
+| HL-DT-ST BU40N MT1959 BU5/BU3 / TK03 | `c328b6561228` | Dynabook-specific updater; exact host/drive SKU UHD advertising not locked. |
+| HL-DT-ST BU40N MT1959 BU5/BU3 / U101 | `5f9abd3f7169` | Regional R/M firmware variant; exact advertised UHD retail SKU mapping remains unverified. |
+| HL-DT-ST BU50N MT1959 BU51/BU3 / 1.00 | `20425a8ade6b` | Stock updater exists, but manufacturer UHD advertising tied to this exact variant has not been established. |
+| hp HLDS BU40N MT1959 BU5/BU3 / BW41 | `3b9dd9b4c9bd` | HP-specific firmware; no exact OEM SKU UHD advertising locked. Generic retail BU40N support does not qualify this variant. |
+| hp HLDS BU40N MT1959 BU5/BU3 / BW42 | `c68cd76b6ca9` | HP-specific firmware; no exact OEM SKU UHD advertising locked. Generic retail BU40N support does not qualify this variant. |
+| hp HLDS BU50N MT1959 BU51/BU3 / BW51 | `d1e4d3d704c6` | HP-specific firmware; no exact OEM SKU UHD advertising locked. Generic retail BU40N support does not qualify this variant. |
+
+Dell identifies [A103 and its exact updater filename](https://www.dell.com/support/home/en-us/drivers/driversdetails?driverid=hn7y6), but that source does not establish UHD-playback qualification. A [firsthand HP BU40N BW40 report](https://h30434.www3.hp.com/t5/Desktop-Hardware-and-Upgrade-Questions/Upgrade-firmware-for-Blu-ray-Burner-HP-BU40N/td-p/7039865) describes failed UHD playback on a reportedly compliant host; BW40 is not our BW41/BW42 sample, so that failure is not assigned to either of our hashes.
+
+
 ## Gap-to-patch contracts
 
-These are patch designs, not implemented conversions. Proven gaps and structural differences are kept separate. One logical patch may edit coordinated sites. Address/hash/model tables must never select a patch.
+These are patch designs, not implemented conversions. G IDs have executed stage-level differences versus the OEM UHD references. One logical patch may edit coordinated sites. Address/hash/model tables must never select a patch.
 
 | ID | Detection | Focused patch design | Verification required |
 | --- | --- | --- | --- |
 | G01 — DI rejection (proven) | Bind the DI identifier/density gate and its native state cell; execute U/5 with two/three layers and observe no state assignment. | Add OEM-equivalent U/5 admission and C7/C8 assignment while retaining existing exits and stack/register contracts. | CPU cases for supported/invalid layers and identifiers; unchanged BD/DVD/CD behavior; then actual acquisition. |
-| S02 — control-bit difference | Positively match legacy ControlBit semantics and state binding; absence of a native signature alone is insufficient. | Resolve whether C7/C8 need the reference control-bit path; edit only if equivalent behavior is missing. | Execute both variants with native state/MMIO contracts before declaring a functional gap. |
-| S03 — control-field difference | Positively match legacy ControlField semantics. | Resolve and add the missing C7/C8 field selection if required. | Verify actual selected field and downstream use; preserve other states. |
-| S04 — forward-calculation difference | Positively match legacy ForwardCalculation semantics. | Resolve and supply the UHD forward mapping if required. | Boundary/layer address vectors against the reference; no invented hardware constants. |
-| S05 — reverse-calculation difference | Positively match legacy ReverseCalculation semantics. | Resolve and supply the UHD reverse mapping if required. | Round-trip address/layer vectors plus reference parity. |
-| S06 — parameter difference | Positively match legacy ParameterNibble semantics. | Resolve which UHD parameter selection is required; retain native hardware policy. | Trace selected values into their consumers; optical settings are not copied between mechanisms. |
+| G02 — control-bit mismatch | Bound ControlBit execution clears bit31 for C7; OEM UHD sets it. | Extend the selector so C7 uses the native bit-set path, preserving other states and native register address. | CPU output/preservation checks for all states; actual optical initialization remains separate. |
+| G03 — control-field mismatch | Bound ControlField execution selects field value3 for C7; OEM UHD selects0. Observed in early BP50NB40 1.00 only. | Add C7 to the native field-clear path. | Verify the supplied register-bank output and preserve every other state; then trace the full caller. |
+| G04 — forward-calculation admission | C7 takes the restoration path without calling the calculation worker; OEM UHD calls its native worker. | Admit C7 to the appropriate native calculation continuation. | Verify admission and existing-state preservation, then full numerical boundary vectors. No worker math is inferred from admission alone. |
+| G05 — reverse-calculation admission | C7 takes the restoration path without calling the calculation worker; OEM UHD calls its native worker. | Add OEM-equivalent C7 admission and native mode-flag selection; bind the flag before implementation. | Verify branch/flag selection, then complete reverse and round-trip calculations. |
+| G06 — conditional parameter mismatch | With native flag bit5 supplied set, C7 uses a lookup table while OEM UHD selects nibble2. Tested all13 input indices and two initial words. | Include C7 in the existing special-case selector, retaining its native flag and table for other paths. | Verify both flag values, all indices and preserved upper bits; establish caller/flag reachability. Register meaning is not assumed. |
 | G07 — key-class routing (proven) | Bind registered A3/A4 handlers, CDB buffer, media state and native workers; execute classes 2/3. REPORT KEY class3 reaches matched sense 05/30/02 and SEND KEY selects a different worker. | Extend both native wrappers to route class3 to their own AACS workers with the OEM guards preserved; separately audit those workers for AACS2 behavior. | Repeat 30 class-pair cases, invalid classes/formats and guard failures; then complete AACS2 exchange on hardware. Wrapper parity alone is insufficient. |
 
 Hardware defaults are a separate native policy, not an automatic patch gap. Unresolved acquisition, initialization, crypto/keys, hardware and reading requirements cannot honestly be assigned a successful patch yet. Complete coverage requires all of those to be resolved for each supported firmware/hardware family.
 
 ## All firmware entries
 
-Full SHA-256, exact source path, provenance, comparison baseline and unresolved checks are in the adjacent CSV/JSON. S IDs are structural differences awaiting semantic validation; G IDs are demonstrated functional gaps.
+Full SHA-256, exact source path, provenance, comparison baseline and unresolved checks are in the adjacent CSV/JSON. G IDs are demonstrated stage-level gaps; execution assumptions and remaining validation are stated above. The CSV retains exact observed C7 consumer outputs.
 
-| Source | Hardware / revision / destination | SHA prefix | OEM UHD? | DI gate | Key routing | Proven gaps | Structural differences |
+| Source | Hardware / revision / destination | SHA prefix | OEM UHD? | DI gate | Key routing | Proven gaps | C7 consumer comparison |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| oem / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.01 / ASUS | `8961b80b005c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.11 / ASUS | `ae0c03138570` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.01 / ASUS | `93ea068da225` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.11 / ASUS | `9f5bc0036740` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A203 / ASUS | `e9d8bcddf85a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.01 / ASUS | `f79ccf0bc90e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | unresolved key routing | none established | none in reviewed roles |
-| oem / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `784e017fbacd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.03 / ASUS | `1d57260bf091` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.10 / ASUS | `37a32bfd708b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BE16NU50 NU50 / 1.01 / GENERAL | `7d5aa8bc43f3` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | unresolved key routing | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BE16NU50 NU50 / 1.02 / GENERAL | `2b3ea41f8776` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BE16NU50 NU50 / 1.04 / GENERAL | `7dcc99d27600` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BE16NU50 NU50 / INTM / GENERAL | `215488b5ac20` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH14NS50 NS50 / 1.01 / GENERAL | `4ef56002dd39` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH14NS58 NS50 / 1.00 / GENERAL | `53d2cdc32a2a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH14NS58 NS50 / 1.01 / GENERAL | `eb0e2e727544` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS40 NS50 / 1.02 / GENERAL | `acbe782ebc3c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS40 NS50 / 1.03 / GENERAL | `a5bb75b8dbec` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS40 NS50 / 1.05 / GENERAL | `dd27dc3901ea` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS40 NS50 / INTM / GENERAL | `c3a18eed1725` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS50 NS50 / 1.01 / GENERAL | `b7a368da0fcb` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS55 NS50 / 1.03 / GENERAL | `0bfdd3009ed1` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS55 NS50 / 1.05 / GENERAL | `5f3fa17d6111` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS55 NS50 / 1.05 / GENERAL | `ca7e8db8576a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS58 NS50 / 1.00 / GENERAL | `6d9fdb2bd658` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS58 NS50 / 1.01 / GENERAL | `ccc97e4f92e4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS58 NS50 / 1.02 / GENERAL | `4f4e63cd5988` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST BH16NS60 MT1959 JB8/JB8 / INTM / GENERAL | `1baed51d34e0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BP50NB40 MT1959 BUP1/BU1 / 1.00 / GENERAL | `c88a69013d55` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S03,S04,S05,S06 |
-| oem / full source | HL-DT-ST BP50NB40 NB50 / 1.01 / GENERAL | `961acab180c9` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST BP50NB40 NB50 / 1.03 / GENERAL | `3cdbdacace5c` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST BP50NB40 NB50 / INTM / GENERAL | `92bb22b2c899` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST BP55EB40 NB50 / 1.01 / GENERAL | `e60a4ce02a58` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST BP60NB10 NB10 / 1.00 / GENERAL | `f60b037fb29e` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N BU40 / 1.02 / GENERAL | `1bbeb5351dc0` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N BU40 / 1.02 / GENERAL | `97bee5c51fbe` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N BU40 / 1.04 / GENERAL | `5c1a47392976` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N BU40 / 1.05 / GENERAL | `fbfed0cc2d55` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / 1.01 / R? | `103b9da94c91` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / A103 / D? | `7d7f2465feaf` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN11 / 0? | `5c01c1fda59f` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN12 / 0? | `3d3badd67d47` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU11 / BUFFALO | `08d14869e553` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU12 / BUFFALO | `920a89f98b69` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / CB04 / CB04 | `78f75561d474` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / INTM / GENERAL | `29ad30264714` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / TK03 / X? | `c328b6561228` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / U101 / U101 | `5f9abd3f7169` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST BU50N MT1959 BU51/BU3 / 1.00 / GENERAL | `20425a8ade6b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST CH12NS40 NS40 / 1.01 / GENERAL | `731bcf7aa48d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST CH12NS40 NS40 / INTM / GENERAL | `fc98fda6431f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST UH12NS40 NS40 / 1.01 / GENERAL | `fbe641e5e808` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST UH12NS40 NS40 / 1.03 / GENERAL | `eeb1c948f1ed` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH14NS40 NS50 / 1.03 / GENERAL | `de13d8d0fd56` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH14NS40 NS50 / 1.05 / GENERAL | `38a70ac234a1` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS40 NS50 / 1.03 / GENERAL | `3e3b227e1338` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS40 NS50 / 1.05 / GENERAL | `ffde0e55aed6` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V1 / GENERAL | `4041c0f122a9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V2 / GENERAL | `3018997b63cc` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V5 / GENERAL | `e24060184915` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V7 / GENERAL | `569cea9bb8ad` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V9 / GENERAL | `97b287072e20` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS60 NS60 / 1.01 / GENERAL | `aea98763cad7` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST WH16NS60 NS60 / 1.03 / GENERAL | `f1cd257b8c4b` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | HL-DT-ST WP50NB40 NB50 / 1.01 / GENERAL | `bea3a823370a` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| oem / full source | HL-DT-ST WP50NB40 NB50 / 1.03 / GENERAL | `263994abefb0` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| oem / full source | hp HLDS BU40N MT1959 BU5/BU3 / BW41 / HP | `3b9dd9b4c9bd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | hp HLDS BU40N MT1959 BU5/BU3 / BW42 / HP | `c68cd76b6ca9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| oem / full source | hp HLDS BU50N MT1959 BU51/BU3 / BW51 / HP | `d1e4d3d704c6` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
+| oem / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.01 / ASUS | `8961b80b005c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.11 / ASUS | `ae0c03138570` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.01 / ASUS | `93ea068da225` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.11 / ASUS | `9f5bc0036740` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A203 / ASUS | `e9d8bcddf85a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `784e017fbacd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.03 / ASUS | `1d57260bf091` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.10 / ASUS | `37a32bfd708b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BE16NU50 NU50 / 1.02 / GENERAL | `2b3ea41f8776` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BE16NU50 NU50 / 1.04 / GENERAL | `7dcc99d27600` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BE16NU50 NU50 / INTM / GENERAL | `215488b5ac20` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH14NS50 NS50 / 1.01 / GENERAL | `4ef56002dd39` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH14NS58 NS50 / 1.00 / GENERAL | `53d2cdc32a2a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH14NS58 NS50 / 1.01 / GENERAL | `eb0e2e727544` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS40 NS50 / 1.02 / GENERAL | `acbe782ebc3c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS40 NS50 / 1.03 / GENERAL | `a5bb75b8dbec` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS40 NS50 / 1.05 / GENERAL | `dd27dc3901ea` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS40 NS50 / INTM / GENERAL | `c3a18eed1725` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS50 NS50 / 1.01 / GENERAL | `b7a368da0fcb` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS55 NS50 / 1.03 / GENERAL | `0bfdd3009ed1` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS55 NS50 / 1.05 / GENERAL | `5f3fa17d6111` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS55 NS50 / 1.05 / GENERAL | `ca7e8db8576a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS58 NS50 / 1.00 / GENERAL | `6d9fdb2bd658` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS58 NS50 / 1.01 / GENERAL | `ccc97e4f92e4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS58 NS50 / 1.02 / GENERAL | `4f4e63cd5988` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BH16NS60 MT1959 JB8/JB8 / INTM / GENERAL | `1baed51d34e0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BP50NB40 MT1959 BUP1/BU1 / 1.00 / GENERAL | `c88a69013d55` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G03,G04,G05,G06,G07 | differences: G02,G03,G04,G05,G06 |
+| oem / full source | HL-DT-ST BP50NB40 NB50 / 1.01 / GENERAL | `961acab180c9` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST BP50NB40 NB50 / 1.03 / GENERAL | `3cdbdacace5c` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST BP50NB40 NB50 / INTM / GENERAL | `92bb22b2c899` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST BP55EB40 NB50 / 1.01 / GENERAL | `e60a4ce02a58` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST BP60NB10 NB10 / 1.00 / GENERAL | `f60b037fb29e` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N BU40 / 1.02 / GENERAL | `1bbeb5351dc0` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N BU40 / 1.02 / GENERAL | `97bee5c51fbe` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N BU40 / 1.04 / GENERAL | `5c1a47392976` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N BU40 / 1.05 / GENERAL | `fbfed0cc2d55` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / 1.01 / R? | `103b9da94c91` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / A103 / D? | `7d7f2465feaf` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN11 / 0? | `5c01c1fda59f` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01,G02,G04,G05,G06 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN12 / 0? | `3d3badd67d47` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01,G02,G04,G05,G06 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU11 / BUFFALO | `08d14869e553` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU12 / BUFFALO | `920a89f98b69` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / CB04 / CB04 | `78f75561d474` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / INTM / GENERAL | `29ad30264714` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / TK03 / X? | `c328b6561228` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / U101 / U101 | `5f9abd3f7169` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST BU50N MT1959 BU51/BU3 / 1.00 / GENERAL | `20425a8ade6b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST CH12NS40 NS40 / 1.01 / GENERAL | `731bcf7aa48d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST CH12NS40 NS40 / INTM / GENERAL | `fc98fda6431f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST UH12NS40 NS40 / 1.01 / GENERAL | `fbe641e5e808` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST UH12NS40 NS40 / 1.03 / GENERAL | `eeb1c948f1ed` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH14NS40 NS50 / 1.03 / GENERAL | `de13d8d0fd56` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH14NS40 NS50 / 1.05 / GENERAL | `38a70ac234a1` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS40 NS50 / 1.03 / GENERAL | `3e3b227e1338` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS40 NS50 / 1.05 / GENERAL | `ffde0e55aed6` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V1 / GENERAL | `4041c0f122a9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V2 / GENERAL | `3018997b63cc` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V5 / GENERAL | `e24060184915` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V7 / GENERAL | `569cea9bb8ad` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V9 / GENERAL | `97b287072e20` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS60 NS60 / 1.01 / GENERAL | `aea98763cad7` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WH16NS60 NS60 / 1.03 / GENERAL | `f1cd257b8c4b` | OEM UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | HL-DT-ST WP50NB40 NB50 / 1.01 / GENERAL | `bea3a823370a` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| oem / full source | HL-DT-ST WP50NB40 NB50 / 1.03 / GENERAL | `263994abefb0` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| oem / full source | hp HLDS BU40N MT1959 BU5/BU3 / BW41 / HP | `3b9dd9b4c9bd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | hp HLDS BU40N MT1959 BU5/BU3 / BW42 / HP | `c68cd76b6ca9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| oem / full source | hp HLDS BU50N MT1959 BU51/BU3 / BW51 / HP | `d1e4d3d704c6` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
 | oem / fragment | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.12 / ASUS | `e81220df9664` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
+| oem / archive duplicate | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.01 / ASUS | `f79ccf0bc90e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
 | oem / fragment | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.11 / ASUS | `187259f63ee1` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.11 / ASUS | `4003430a126a` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.11 / ASUS | `c8e1b169907f` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.11 / ASUS | `e4eeb0eccf0d` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | ASUS BW-16D1X-U MT1959 JB8/JB8 / A105 / ASUS | `8ed898bf603f` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | ASUS SBW-06D2X-U MT1959 BU51/BU3 / A102 / ASUS | `b191765d053e` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
+| oem / archive duplicate | HL-DT-ST BE16NU50 NU50 / 1.01 / GENERAL | `7d5aa8bc43f3` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
 | oem / fragment | HL-DT-ST BH-A10AME MT1959 JB8/JB8 / 1.02 / 7? | `1431278f12f6` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | HL-DT-ST BH-A10AME MT1959 JB8/JB8 / 1.03 / 7? | `ae167a4b9bf9` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | HL-DT-ST BH-A10AME MT1959 JB8/JB8 / T.24 / 7? | `d426b7308933` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
@@ -150,110 +170,110 @@ Full SHA-256, exact source path, provenance, comparison baseline and unresolved 
 | oem / fragment | HL-DT-ST WH16NS40 NS50 / 1.04 / GENERAL | `6d664bccfa61` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | HL-DT-ST WP50NB40 NB52 / 1.03 / GENERAL | `52c257459dc0` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | oem / fragment | hp HLDS BU40N MT1959 BU5/BU3 / BW43 / HP | `bf7201bec6d9` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
-| mk / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.01 / ASUS | `69e5c2b5f7ca` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.11 / ASUS | `11c8657aa75e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.00 / ASUS | `dd03cdae194d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.01 / ASUS | `dc88b3e4d44a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.11 / ASUS | `6c003aa1e751` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A203 / ASUS | `df4452bbbd06` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A204 / ASUS | `223e7e38b85f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A204 / ASUS | `714faf5c4cea` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.01 / ASUS | `2e243a167739` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.01 / ASUS | `40118f8171da` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `0d085b4c854b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `21e1f77e0ea0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `663c1b55e479` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `83ea24bb07b8` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `afeab3e66cbd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `d00191537a8f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.03 / ASUS | `48c7b55faf30` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.10 / ASUS | `66f277bcad34` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.10 / ASUS | `e04ed8f38ce9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BE16NU50 NU50 / 1.01 / GENERAL | `9c46e6972b79` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BE16NU50 NU50 / 1.01 / GENERAL | `d286c5a7ea4a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BE16NU50 NU50 / 1.02 / GENERAL | `f5eb16235209` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BE16NU50 NU50 / 1.04 / GENERAL | `d59b5da7424e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH14NS50 NS50 / 1.01 / GENERAL | `0a12a6ebf0b4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH14NS50 NS50 / 1.03 / GENERAL | `cfe1f92182b4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH14NS58 NS50 / 1.00 / GENERAL | `aaeea1ba97d0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH14NS58 NS50 / 1.01 / GENERAL | `b65c63e53960` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH16NS40 NS50 / 1.02 / GENERAL | `beb8330e79d0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS40 NS50 / 1.03 / GENERAL | `547cff99467c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS40 NS50 / 1.04 / GENERAL | `86a46340da93` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH16NS40 NS50 / 1.04 / GENERAL | `bc4e6126b880` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS40 NS50 / 1.05 / GENERAL | `a9127d5bc310` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS50 NS50 / 1.01 / GENERAL | `2de9ddd7b9d6` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS50 NS50 / 1.03 / GENERAL | `e6ae082bba5f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.01 / GENERAL | `ce732330b3ca` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.02 / GENERAL | `64cff02c3db3` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.02 / GENERAL | `bdfd6f290ba8` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS55 NS50 / 1.03 / GENERAL | `e086fbe75d4c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS55 NS50 / 1.04 / GENERAL | `06ac3d3a5037` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.04 / GENERAL | `394e6f8d6319` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS55 NS50 / 1.05 / GENERAL | `8299344e146a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS58 NS50 / 1.01 / GENERAL | `fccfc7bd4b70` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS58 NS50 / 1.02 / GENERAL | `9ecb2b6bc379` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST BH16NS60 NS60 / 1.00 / GENERAL | `580d867cee3d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS60 NS60 / 1.00 / GENERAL | `93868c4ea14b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BH16NS60 NS60 / 1.02 / GENERAL | `dc6579b6880c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BP50NB40 NB50 / 1.01 / GENERAL | `148d89cc6ea4` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| dump / full source | HL-DT-ST BP50NB40 NB50 / 1.02 / GENERAL | `a344e289e0b1` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BP50NB40 NB50 / 1.02 / GENERAL | `cc7182ac0e56` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BP50NB40 NB50 / 1.03 / GENERAL | `e04aaf44157f` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BP55EB40 NB50 / 1.01 / GENERAL | `4ed5cdc974eb` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BP55EB40 NB50 / 1.02 / GENERAL | `88761a31edd5` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| dump / full source | HL-DT-ST BP55EB40 NB50 / 1.02 / GENERAL | `e64c4ca52445` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BP55EB40 NB50 / 1.03 / GENERAL | `0f7b3d34cbf5` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BP60NB10 NB10 / 1.00 / GENERAL | `04f879f0bf67` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BP60NB10 NB10 / 1.01 / GENERAL | `a0dcfbe49365` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST BP60NB10 NB10 / 1.01 / GENERAL | `fb9174aa2615` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BP60NB10 NB10 / 1.02 / GENERAL | `cd10fc7396a2` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BP60NB10 NB12 / 1.02 / GENERAL | `1227f133eb1c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `0bd77fed4ec9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `221ad35b7edd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `22edcf493f22` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `4c2e0b2d87ba` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `734ccb11f0b4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `79e8df06c776` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `b2139fd99d7c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N BU40 / 1.02 / GENERAL | `6d8b000f7bff` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST BU40N BU40 / 1.03 / GENERAL | `64688690a287` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N BU40 / 1.03 / GENERAL | `64900e8d6921` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N BU40 / 1.04 / GENERAL | `d5113bd8ad97` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / 1.01 / R? | `5846f3daeac5` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / 1.01 / R? | `ce1c0acf1678` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN11 / 0? | `c0b346b0e2a7` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN12 / 0? | `3559077e3c03` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01 | S02,S04,S05,S06 |
-| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN12 / 0? | `c4d995f031fe` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01 | S02,S04,S05,S06 |
-| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU10 / BUFFALO | `14d86e9949d9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU10 / BUFFALO | `58203b539de0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU12 / BUFFALO | `f98acee01998` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / FR07 / LG-DVD | `4af842c0acf4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / FR07 / LG-DVD | `71fef6641146` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / U100 / 3? | `de24b0003fb0` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / U101 / U101 | `7bf0db2cee29` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST BU50N MT1959 BU51/BU3 / 1.00 / GENERAL | `e98152fe2a7b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST CH12NS40 NS40 / 1.01 / GENERAL | `2e3433314276` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST CH12NS40 NS40 / 1.03 / GENERAL | `b3892226d89d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST UH12NS40 NS40 / 1.01 / GENERAL | `2bb0b5833c83` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST UH12NS40 NS40 / 1.03 / GENERAL | `243a7b0bb237` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST WH14NS40 NS50 / 1.02 / GENERAL | `648a16d024ee` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST WH14NS40 NS50 / 1.03 / GENERAL | `44945dad6c56` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST WH14NS40 NS50 / 1.04 / GENERAL | `0e41ef05cf2e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST WH14NS40 NS50 / 1.04 / GENERAL | `164e2475aea2` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST WH14NS40 NS50 / 1.05 / GENERAL | `60a66592d501` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST WH16NS40 NS50 / 1.02 / GENERAL | `87790f053877` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST WH16NS40 NS50 / 1.03 / GENERAL | `a5c1ee575135` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST WH16NS40 NS50 / 1.05 / GENERAL | `f37fc1b8f61c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| mk / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V5 / GENERAL | `bed2ef00714d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | none in reviewed roles |
-| dump / full source | HL-DT-ST WH16NS60 NS60 / 1.00 / GENERAL | `5e2ec51fb355` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST WH16NS60 NS60 / 1.00 / GENERAL | `d13389320939` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST WH16NS60 NS60 / 1.01 / GENERAL | `29b7f24c55f4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| dump / full source | HL-DT-ST WH16NS60 NS60 / 1.02 / GENERAL | `12c4ee6fb88d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST WH16NS60 NS60 / 1.02 / GENERAL | `c5e351d25f64` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST WH16NS60 NS60 / 1.03 / GENERAL | `3d9011427337` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | none in reviewed roles |
-| mk / full source | HL-DT-ST WP50NB40 NB50 / 1.01 / GENERAL | `ed8f1c8414fa` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
-| mk / full source | HL-DT-ST WP50NB40 NB50 / 1.03 / GENERAL | `592e8d22d98a` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G07 | S02,S04,S05,S06 |
+| mk / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.01 / ASUS | `69e5c2b5f7ca` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | ASUS BC-12B1ST MT1959 JBC6/JB8 / 3.11 / ASUS | `11c8657aa75e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.00 / ASUS | `dd03cdae194d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.01 / ASUS | `dc88b3e4d44a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | ASUS BC-12D2HT MT1959 JBC6/JB8 / 3.11 / ASUS | `6c003aa1e751` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A203 / ASUS | `df4452bbbd06` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A204 / ASUS | `223e7e38b85f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | ASUS BW-16D1H-U MT1959 JB8/JB8 / A204 / ASUS | `714faf5c4cea` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.01 / ASUS | `2e243a167739` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.01 / ASUS | `40118f8171da` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `0d085b4c854b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `21e1f77e0ea0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `663c1b55e479` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `83ea24bb07b8` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `afeab3e66cbd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.02 / ASUS | `d00191537a8f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.03 / ASUS | `48c7b55faf30` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| omni / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.10 / ASUS | `66f277bcad34` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | ASUS BW-16D1HT MT1959 JB8/JB8 / 3.10 / ASUS | `e04ed8f38ce9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BE16NU50 NU50 / 1.01 / GENERAL | `9c46e6972b79` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BE16NU50 NU50 / 1.01 / GENERAL | `d286c5a7ea4a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BE16NU50 NU50 / 1.02 / GENERAL | `f5eb16235209` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BE16NU50 NU50 / 1.04 / GENERAL | `d59b5da7424e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH14NS50 NS50 / 1.01 / GENERAL | `0a12a6ebf0b4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH14NS50 NS50 / 1.03 / GENERAL | `cfe1f92182b4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH14NS58 NS50 / 1.00 / GENERAL | `aaeea1ba97d0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH14NS58 NS50 / 1.01 / GENERAL | `b65c63e53960` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH16NS40 NS50 / 1.02 / GENERAL | `beb8330e79d0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS40 NS50 / 1.03 / GENERAL | `547cff99467c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS40 NS50 / 1.04 / GENERAL | `86a46340da93` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH16NS40 NS50 / 1.04 / GENERAL | `bc4e6126b880` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS40 NS50 / 1.05 / GENERAL | `a9127d5bc310` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS50 NS50 / 1.01 / GENERAL | `2de9ddd7b9d6` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS50 NS50 / 1.03 / GENERAL | `e6ae082bba5f` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.01 / GENERAL | `ce732330b3ca` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.02 / GENERAL | `64cff02c3db3` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.02 / GENERAL | `bdfd6f290ba8` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS55 NS50 / 1.03 / GENERAL | `e086fbe75d4c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS55 NS50 / 1.04 / GENERAL | `06ac3d3a5037` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH16NS55 NS50 / 1.04 / GENERAL | `394e6f8d6319` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS55 NS50 / 1.05 / GENERAL | `8299344e146a` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS58 NS50 / 1.01 / GENERAL | `fccfc7bd4b70` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS58 NS50 / 1.02 / GENERAL | `9ecb2b6bc379` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BH16NS60 NS60 / 1.00 / GENERAL | `580d867cee3d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS60 NS60 / 1.00 / GENERAL | `93868c4ea14b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BH16NS60 NS60 / 1.02 / GENERAL | `dc6579b6880c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BP50NB40 NB50 / 1.01 / GENERAL | `148d89cc6ea4` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| dump / full source | HL-DT-ST BP50NB40 NB50 / 1.02 / GENERAL | `a344e289e0b1` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BP50NB40 NB50 / 1.02 / GENERAL | `cc7182ac0e56` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BP50NB40 NB50 / 1.03 / GENERAL | `e04aaf44157f` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BP55EB40 NB50 / 1.01 / GENERAL | `4ed5cdc974eb` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BP55EB40 NB50 / 1.02 / GENERAL | `88761a31edd5` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| dump / full source | HL-DT-ST BP55EB40 NB50 / 1.02 / GENERAL | `e64c4ca52445` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BP55EB40 NB50 / 1.03 / GENERAL | `0f7b3d34cbf5` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BP60NB10 NB10 / 1.00 / GENERAL | `04f879f0bf67` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BP60NB10 NB10 / 1.01 / GENERAL | `a0dcfbe49365` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BP60NB10 NB10 / 1.01 / GENERAL | `fb9174aa2615` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BP60NB10 NB10 / 1.02 / GENERAL | `cd10fc7396a2` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BP60NB10 NB12 / 1.02 / GENERAL | `1227f133eb1c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `0bd77fed4ec9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `221ad35b7edd` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `22edcf493f22` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `4c2e0b2d87ba` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `734ccb11f0b4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `79e8df06c776` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| omni / full source | HL-DT-ST BU40N BU40 / 1.00 / GENERAL | `b2139fd99d7c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N BU40 / 1.02 / GENERAL | `6d8b000f7bff` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BU40N BU40 / 1.03 / GENERAL | `64688690a287` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N BU40 / 1.03 / GENERAL | `64900e8d6921` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N BU40 / 1.04 / GENERAL | `d5113bd8ad97` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / 1.01 / R? | `5846f3daeac5` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / 1.01 / R? | `ce1c0acf1678` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN11 / 0? | `c0b346b0e2a7` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01,G02,G04,G05,G06 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN12 / 0? | `3559077e3c03` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01,G02,G04,G05,G06 | differences: G02,G04,G05,G06 |
+| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BN12 / 0? | `c4d995f031fe` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01,G02,G04,G05,G06 | differences: G02,G04,G05,G06 |
+| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU10 / BUFFALO | `14d86e9949d9` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU10 / BUFFALO | `58203b539de0` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / BU12 / BUFFALO | `f98acee01998` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / FR07 / LG-DVD | `4af842c0acf4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / FR07 / LG-DVD | `71fef6641146` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / U100 / 3? | `de24b0003fb0` | 1959 non UHD | rejects tested U/5 at DI gate | same workers for classes 2/3: 30/30 cases | G01,G02,G04,G05,G06 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST BU40N MT1959 BU5/BU3 / U101 / U101 | `7bf0db2cee29` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST BU50N MT1959 BU51/BU3 / 1.00 / GENERAL | `e98152fe2a7b` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST CH12NS40 NS40 / 1.01 / GENERAL | `2e3433314276` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST CH12NS40 NS40 / 1.03 / GENERAL | `b3892226d89d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST UH12NS40 NS40 / 1.01 / GENERAL | `2bb0b5833c83` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST UH12NS40 NS40 / 1.03 / GENERAL | `243a7b0bb237` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST WH14NS40 NS50 / 1.02 / GENERAL | `648a16d024ee` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH14NS40 NS50 / 1.03 / GENERAL | `44945dad6c56` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH14NS40 NS50 / 1.04 / GENERAL | `0e41ef05cf2e` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST WH14NS40 NS50 / 1.04 / GENERAL | `164e2475aea2` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH14NS40 NS50 / 1.05 / GENERAL | `60a66592d501` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST WH16NS40 NS50 / 1.02 / GENERAL | `87790f053877` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH16NS40 NS50 / 1.03 / GENERAL | `a5c1ee575135` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH16NS40 NS50 / 1.05 / GENERAL | `f37fc1b8f61c` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH16NS58 MT1959 JB8/JB8 / 1.V5 / GENERAL | `bed2ef00714d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G07 | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST WH16NS60 NS60 / 1.00 / GENERAL | `5e2ec51fb355` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST WH16NS60 NS60 / 1.00 / GENERAL | `d13389320939` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH16NS60 NS60 / 1.01 / GENERAL | `29b7f24c55f4` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| dump / full source | HL-DT-ST WH16NS60 NS60 / 1.02 / GENERAL | `12c4ee6fb88d` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH16NS60 NS60 / 1.02 / GENERAL | `c5e351d25f64` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WH16NS60 NS60 / 1.03 / GENERAL | `3d9011427337` | 1959 non UHD | U/5: 2L=C7; 3L=C8 | same workers for classes 2/3: 30/30 cases | none established | 5 reviewed C7 outputs match |
+| mk / full source | HL-DT-ST WP50NB40 NB50 / 1.01 / GENERAL | `ed8f1c8414fa` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
+| mk / full source | HL-DT-ST WP50NB40 NB50 / 1.03 / GENERAL | `592e8d22d98a` | 1959 non UHD | rejects tested U/5 at DI gate | class3 REPORT KEY -> 05/30/02; SEND KEY worker differs | G01,G02,G04,G05,G06,G07 | differences: G02,G04,G05,G06 |
 | mk / fragment | HL-DT-ST BU40N BU40 / 1.03 / GENERAL | `f367b4d312e7` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 | omni / fragment | hardware-unknown / revision-unknown / GENERAL | `0db02a9cfba9` | 1959 non UHD | unresolved: fragment only | unresolved: fragment only | none established | unresolved: fragment |
 
@@ -264,7 +284,8 @@ Use the pinned firmware dependency and Python with Unicorn/Capstone. The scanner
 ```sh
 python3 scripts/audit-mtk-uhd-di-gates.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-di.json
 python3 scripts/audit-mtk-key-class-routing.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-keys.json
-python3 scripts/report-mt1959-uhd-gaps.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --di /tmp/mt1959-di.json --keys /tmp/mt1959-keys.json --out /tmp/mt1959-report
+python3 scripts/audit-mtk-uhd-consumers.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-consumers.json
+python3 scripts/report-mt1959-uhd-gaps.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --di /tmp/mt1959-di.json --keys /tmp/mt1959-keys.json --consumers /tmp/mt1959-consumers.json --out /tmp/mt1959-report
 ```
 
-Validation: all 173 full sources scanned, 1,038 DI-gate executions, 5,130 class-pair checks (two sources have unresolved dispatch contracts). The scanner fixture tests, formatting and Clippy checks pass. No live AACS or disc-reading test was run.
+Validation: 46,512 consumer-region executions (passive register bank; workers not executed). All 199 source hashes checked; archive members hash-bound to existing dump payloads. All 171 distinct full payloads have DI/key receipts: 1,026 DI-gate executions and 5,130 class-pair checks. The earlier executions against two archive containers are withdrawn. The scanner fixture tests, formatting and Clippy checks pass. No live AACS or disc-reading test was run.

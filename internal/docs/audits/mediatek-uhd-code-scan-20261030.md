@@ -2,7 +2,11 @@
 
 The current manufacturer-qualified inventory and per-image gap results are in
 [the MT1959 gap table](mt1959-uhd-gap-table-20261030.md). Historical "native" and
-"positive" labels below mean reviewed code evidence only, never OEM UHD.
+"positive" labels below mean reviewed code evidence only, never OEM UHD. Two
+earlier unidentified native results were tar-wrapped dumps scanned at the
+wrong load base; those results are withdrawn, and their normalized members
+are already present as separate dump hashes. The current table has 171 distinct
+full payloads, not 173, and 67 full OEM-bucket images, not 69.
 
 This is a research instrument on the MT1939 branch, not a production hardware
 capability flag. It answers which reviewed instruction paths are present and
@@ -85,10 +89,12 @@ it is not an unsupported-UHD verdict. Full per-image evidence is retained in
 `mediatek-uhd-five-pairs-20261030.json`.
 
 The first inventory of 200 positively identified MT19xx images found 147 native,
-28 legacy, 23 mixed and two partial/unknown. Removing the identification gate
-additionally found reviewed native code in two unidentified inputs catalogued
-as ASUS BW-16D1HT 3.01 and BE16NU50 1.01. This is why identification is now a
-report label and never a condition for running the code scan.
+28 legacy, 23 mixed and two partial/unknown. Removing the identification gate initially appeared to find two more native
+inputs labelled ASUS BW-16D1HT 3.01 and BE16NU50 1.01. Container validation later
+proved these are tar archives of dumps already held under separate payload
+hashes, not additional firmware. Their raw-container execution receipts are
+withdrawn. The scanner now rejects checksum-valid tar headers, including V7
+headers without ustar magic. Normalize the archive member before code analysis.
 Of that initial subset, 24 MT1959 images have legacy/mixed media roles and are
 compared with their own modified output independently of the five OEM positive
 examples. Twenty-one builds succeed and preserve all seven reviewed regions;
@@ -100,10 +106,11 @@ explicitly categorized in the broad scan.
 ## MT1959 comparison before implementation
 
 The user prioritizes actual MT1959 UHD operation before further MT1939 trials.
-The OEM-only MT1959 inventory has 69 full-sized source images and 24 fragments.
-The full-sized sources have 59 native reviewed media implementations and ten
-legacy/mixed implementations. The 24 unknown/partial entries are fragments,
-not another 24 unknown complete firmwares. These are code-evidence counts.
+The OEM MT1959 bucket contains 67 full images, 24 metadata/partial-dump
+archives and two tar-wrapped duplicates of existing dumps. The full images have
+57 native reviewed media implementations and ten legacy/mixed implementations.
+The current consumer receipts execute those differences directly; see the new
+gap table rather than treating structural evidence as a complete capability flag.
 
 `mt1959-uhd-reference-lock-20261030.json` pins WH16NS60 1.01/1.03, BU40N
 1.02/1.04, BP60NB10 1.00 and Buffalo BU40N BU11. They represent six firmware

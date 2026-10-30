@@ -2155,8 +2155,10 @@
     "legacy_or_mixed_reviewed_media_roles": 10,
     "unknown_or_partial": 24,
     "physically_tested_by_this_investigation": 0,
-    "full_sized_sources": 69,
+    "full_sized_sources": 67,
     "fragments": 24,
-    "unknown_or_partial_note": "All 24 entries are fragments, not unknown complete firmware images."
+    "unknown_or_partial_note": "24 metadata/partial-dump archives; two other entries previously counted as full OEM images are tar-wrapped duplicate dumps. Earlier total93 is bucket entries, not93 firmware payloads. Native reviewed paths in actual full OEM-bucket firmware:57; legacy/mixed:10.",
+    "full_firmware_payloads": 67,
+    "archive_duplicates_of_dumps": 2
   }
 }
