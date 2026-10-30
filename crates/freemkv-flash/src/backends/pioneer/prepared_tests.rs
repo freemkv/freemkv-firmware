@@ -44,6 +44,38 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
         "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
         "oem/pioneer/sat/8A10/GENERAL/1.14",
     );
+    let mut target_archive = tar::Builder::new(Vec::new());
+    for (name, data) in [
+        ("kernel.enc", &target_kernel),
+        ("normal.enc", &target_normal),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        target_archive
+            .append_data(&mut header, name, data.as_slice())
+            .unwrap();
+    }
+    let native_ud04 = target_archive.into_inner().unwrap();
+    assert_eq!(
+        crate::crossflash::decide(
+            crate::crossflash::Platform::Pioneer,
+            &installed,
+            &native_ud04
+        )
+        .status,
+        crate::crossflash::CompatibilityStatus::Conditional
+    );
+    assert_eq!(
+        crate::crossflash::decide(
+            crate::crossflash::Platform::Pioneer,
+            &native_ud04,
+            &installed
+        )
+        .status,
+        crate::crossflash::CompatibilityStatus::HardNo
+    );
     struct Factory(Vec<u8>);
     impl ScsiDevice for Factory {
         fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
@@ -76,7 +108,7 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
         .expect("offline route needs original hardware");
     assert_eq!(
         crate::crossflash::refusal_status(refusal.as_ref()),
-        crate::crossflash::CompatibilityStatus::SoftNo
+        crate::crossflash::CompatibilityStatus::Conditional
     );
     let authorized = authorize_installed_inner(
         plan(),

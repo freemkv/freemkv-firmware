@@ -12,6 +12,8 @@ use anyhow::Result;
 pub enum CompatibilityStatus {
     /// The existing flash path admits the transfer.
     Yes,
+    /// Implemented transition requiring live original-hardware evidence.
+    Conditional,
     /// Known same-hardware transition requiring an unimplemented adapter.
     SoftNo,
     /// Incompatible, invalid, or insufficiently understood transition.
@@ -21,7 +23,7 @@ pub enum CompatibilityStatus {
 /// Offline decision returned to catalogue and diagnostic consumers.
 #[derive(Debug, serde::Serialize)]
 pub struct Decision {
-    /// Yes, soft_no or hard_no.
+    /// Yes, conditional, soft_no or hard_no.
     pub status: CompatibilityStatus,
     /// Explanation for a refusal; absent for an admitted transfer.
     pub reason: Option<String>,
@@ -40,7 +42,7 @@ pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> C
             error.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
             Some(pioneer_optical::settings::adaptation::Error::OriginalRequired)
         ) {
-            return CompatibilityStatus::SoftNo;
+            return CompatibilityStatus::Conditional;
         }
         match error.source() {
             Some(source) => error = source,
@@ -224,7 +226,7 @@ mod adaptation_tests {
         use pioneer_optical::settings::adaptation::Error;
         assert_eq!(
             refusal_status(&Error::OriginalRequired),
-            CompatibilityStatus::SoftNo
+            CompatibilityStatus::Conditional
         );
         for error in [Error::OriginalMismatch, Error::Guard, Error::Registry] {
             assert_eq!(refusal_status(&error), CompatibilityStatus::HardNo);

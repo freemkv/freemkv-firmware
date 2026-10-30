@@ -625,9 +625,11 @@ fn authorize_installed_inner(
     // other gates must also pass before advertising it as such. No Prepared
     // write grant is produced for that candidate.
     if let Err(error) = &prepared {
-        if crate::crossflash::refusal_status(error)
-            != crate::crossflash::CompatibilityStatus::SoftNo
-        {
+        if !matches!(
+            crate::crossflash::refusal_status(error),
+            crate::crossflash::CompatibilityStatus::SoftNo
+                | crate::crossflash::CompatibilityStatus::Conditional
+        ) {
             let source = preparation_error(error.clone());
             if matches!(
                 error,
