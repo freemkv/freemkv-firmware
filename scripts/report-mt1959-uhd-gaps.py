@@ -69,13 +69,27 @@ def qualification_gap(source, alias):
     if 'BU40N' in hardware and revision == 'A103':
         return 'Dell A103 updater is identified; no exact Dell SKU UHD-playback advertising locked.'
     if 'BU40N' in hardware and revision == 'TK03':
-        return 'Dynabook-specific updater; exact host/drive SKU UHD advertising not locked.'
+        return 'Official Dynabook TK03 updater hash verified; exact host/drive SKU UHD advertising not locked.'
     if 'BU40N' in hardware and revision in ('1.01', 'U101'):
         return 'Regional R/M firmware variant; exact advertised UHD retail SKU mapping remains unverified.'
     return 'Not locked to a manufacturer-advertised stock UHD product; see executed gaps and unresolved requirements.'
 
 
-def classify(source, scan, di, keys, references, alias=None, consumers=None):
+def worker_observations(receipt):
+    if receipt is None:
+        return [], 'unresolved', 'unresolved'
+    cases = receipt['certificate_allocation_cases']
+    cap = next(c['value'] for c in cases if c['mode'] == 1 and c['allocation'] == 1024)
+    assert cap in (116, 180)
+    route39 = next(c['status'] for c in receipt['cases'] if c['mode'] == 1 and c['key_class'] == 3 and c['format'] == 0x39)
+    if cap == 116:
+        assert receipt['mode_cell'] is None and route39 == 'native_return'
+        return ['G08'], 'fixed 116-byte certificate/nonce response cap', '0x39 takes invalid-format return'
+    assert receipt['mode_cell'] is not None and route39 == 'worker_call'
+    return [], 'native mode selects 116/180-byte certificate/nonce response cap', '0x39 reaches a worker'
+
+
+def classify(source, scan, di, keys, references, alias=None, consumers=None, workers=None):
     sha = source['sha256']
     full = source['bytes'] == 2097152
     code = (scan or source)['uhd_code']
@@ -108,6 +122,8 @@ def classify(source, scan, di, keys, references, alias=None, consumers=None):
         key_result = 'same workers for classes 2/3: 30/30 cases'
     else:
         key_result = 'unresolved key routing'
+    worker_gaps, worker_response, worker_format39 = worker_observations(workers)
+    gaps.extend(worker_gaps)
     if not full and alias is None:
         gaps, differences = [], []
         di_result = key_result = 'unresolved: fragment only'
@@ -144,9 +160,12 @@ def classify(source, scan, di, keys, references, alias=None, consumers=None):
                ('G01', 'disc_information_admission'), ('G02', 'C7_control_bit'),
                ('G03', 'C7_control_field'), ('G04', 'C7_forward_calculation_admission'),
                ('G05', 'C7_reverse_calculation_admission'), ('G06', 'C7_conditional_parameter'),
-               ('G07', 'class3_key_routing'))},
+               ('G07', 'class3_key_routing'), ('G08', 'extended_key_response_path'))},
         'di_gate': di_result, 'key_routing': key_result,
         'C7_consumer_observations': json.dumps(consumer_observations, separators=(',', ':')),
+        'key_worker_response': worker_response, 'key_worker_format39': worker_format39,
+        'media_pipeline_gaps': ','.join(g for g in gaps if g in ('G01','G02','G03','G04','G05','G06')),
+        'OEM_authentication_gaps': ','.join(g for g in gaps if g in ('G07','G08')),
         'proven_gaps': ','.join(gaps), 'structural_differences_to_resolve': ','.join(differences),
         'unresolved': '; '.join(unresolved), 'path': source['path'],
         'stock_provenance': json.dumps((scan or {}).get('provenance', {}).get('sources', []), separators=(',', ':')),
@@ -159,6 +178,7 @@ def main():
     p.add_argument('--di', type=Path, required=True)
     p.add_argument('--keys', type=Path, required=True)
     p.add_argument('--consumers', type=Path, default=Path('internal/docs/audits/mt1959-uhd-consumer-receipts-20261030.json'))
+    p.add_argument('--workers', type=Path, default=Path('internal/docs/audits/mt1959-uhd-key-worker-receipts-20261030.json'))
     p.add_argument('--out', type=Path, required=True)
     a = p.parse_args()
     audit = Path('internal/docs/audits')
@@ -168,6 +188,7 @@ def main():
     dis = {r['source_sha256']: r for r in json.loads(a.di.read_text())['images']}
     keys = {r['sha256']: r for r in json.loads(a.keys.read_text())['images']}
     consumers = {r['sha256']: r for r in json.loads(a.consumers.read_text())['images']}
+    workers = {r['sha256']: r for r in json.loads(a.workers.read_text())['images']}
     refs = json.loads((audit / 'mt1959-oem-uhd-references-20261030.json').read_text())['references']
     references = {r['sha256']: r for r in refs}
     aliases = {r['source_sha256']: r for r in json.loads((audit / 'mt1959-source-containers-20261030.json').read_text())['aliases']}
@@ -175,7 +196,7 @@ def main():
     for s in sources:
         alias = aliases.get(s['sha256'])
         payload_sha = alias['payload_sha256'] if alias else s['sha256']
-        rows.append(classify(s, scans.get(payload_sha), dis.get(payload_sha), keys.get(payload_sha), references, alias, consumers.get(payload_sha)))
+        rows.append(classify(s, scans.get(payload_sha), dis.get(payload_sha), keys.get(payload_sha), references, alias, consumers.get(payload_sha), workers.get(payload_sha)))
     rows.sort(key=lambda r: (r['category'] != 'oem', r['payload'] != 'full source', r['hardware'], r['revision'], r['sha256']))
     assert len(rows) == len({r['sha256'] for r in rows}) == 199
     assert sum(r['payload'] == 'full source' for r in rows) == 171
@@ -183,8 +204,10 @@ def main():
     assert sum(r['payload'] == 'archive duplicate' for r in rows) == 2
     assert sum(r['classification'] == 'OEM UHD' for r in rows) == len(references)
     v9 = next(r for r in rows if r['sha256'].startswith('97b28707'))
-    assert v9['classification'] == '1959 non UHD' and v9['proven_gaps'] == 'G07'
-    assert len(scans) == len(dis) == len(keys) == len(consumers) == 171
+    assert v9['classification'] == '1959 non UHD' and v9['proven_gaps'] == 'G07,G08'
+    assert len(scans) == len(dis) == len(keys) == len(consumers) == len(workers) == 171
+    assert set(scans) == set(dis) == set(keys) == set(consumers) == set(workers)
+    assert set(scans) == {s['sha256'] for s in sources if s['bytes'] == 2097152}
     a.out.mkdir(parents=True, exist_ok=True)
     with (a.out / 'mt1959-uhd-gap-table-20261030.csv').open('w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]), lineterminator='\n')
@@ -207,7 +230,7 @@ def main():
         '## Summary of the 67 full OEM-bucket images', '',
         '| Status | Images |', '| --- | --- |',
         *[f'| {status} | {count} |' for status, count in summary.items()], '',
-        'G01 is DI rejection; G02–G06 are executed C7 consumer mismatches; G07 is key-class routing. No-proven-gap rows are not promoted to OEM UHD. These results do not establish 100% functional coverage.', '',
+        'G01 is DI rejection; G02–G06 are executed C7 consumer mismatches; G07 is key-class routing; G08 is the extended key-response worker path. G01–G06 concern the media pipeline; G07/G08 concern OEM authentication and are not established causes of failed physical detection. No-proven-gap rows are not promoted to OEM UHD. These results do not establish 100% functional coverage.', '',
     ]
     for ref in refs:
         r = next(r for r in rows if r['sha256'] == ref['sha256'])
@@ -219,6 +242,7 @@ def main():
         if r['category'] == 'oem' and r['payload'] == 'full source' and r['classification'] != 'OEM UHD' and not r['proven_gaps']:
             md.append(f"| {r['hardware']} / {r['revision']} | `{r['sha256'][:12]}` | {r['oem_qualification_gap']} |")
     md += ['', 'Dell identifies [A103 and its exact updater filename](https://www.dell.com/support/home/en-us/drivers/driversdetails?driverid=hn7y6), but that source does not establish UHD-playback qualification. A [firsthand HP BU40N BW40 report](https://h30434.www3.hp.com/t5/Desktop-Hardware-and-Upgrade-Questions/Upgrade-firmware-for-Blu-ray-Burner-HP-BU40N/td-p/7039865) describes failed UHD playback on a reportedly compliant host; BW40 is not our BW41/BW42 sample, so that failure is not assigned to either of our hashes.', '']
+    md += ['', 'The held TK03 source also matches the current [official Dynabook updater](https://dynabook.com/assistpc/download/modify/dynabook/t85/xxc/oddfw/index_j.htm) byte for byte (source SHA-256 starts 3e72a0e0c814). That proves updater provenance, while UHD product qualification remains unresolved; see mt1959-oem-variant-evidence-20261030.json.', '']
     md += ['', '## Gap-to-patch contracts', '',
         'These are patch designs, not implemented conversions. G IDs have executed stage-level differences versus the OEM UHD references. One logical patch may edit coordinated sites. Address/hash/model tables must never select a patch.', '',
         '| ID | Detection | Focused patch design | Verification required |',
@@ -229,23 +253,29 @@ def main():
         '| G04 — forward-calculation admission | C7 takes the restoration path without calling the calculation worker; OEM UHD calls its native worker. | Admit C7 to the appropriate native calculation continuation. | Verify admission and existing-state preservation, then full numerical boundary vectors. No worker math is inferred from admission alone. |',
         '| G05 — reverse-calculation admission | C7 takes the restoration path without calling the calculation worker; OEM UHD calls its native worker. | Add OEM-equivalent C7 admission and native mode-flag selection; bind the flag before implementation. | Verify branch/flag selection, then complete reverse and round-trip calculations. |',
         '| G06 — conditional parameter mismatch | With native flag bit5 supplied set, C7 uses a lookup table while OEM UHD selects nibble2. Tested all13 input indices and two initial words. | Include C7 in the existing special-case selector, retaining its native flag and table for other paths. | Verify both flag values, all indices and preserved upper bits; establish caller/flag reachability. Register meaning is not assumed. |',
-        '| G07 — key-class routing (proven) | Bind registered A3/A4 handlers, CDB buffer, media state and native workers; execute classes 2/3. REPORT KEY class3 reaches matched sense 05/30/02 and SEND KEY selects a different worker. | Extend both native wrappers to route class3 to their own AACS workers with the OEM guards preserved; separately audit those workers for AACS2 behavior. | Repeat 30 class-pair cases, invalid classes/formats and guard failures; then complete AACS2 exchange on hardware. Wrapper parity alone is insufficient. |', '',
+        '| G07 — key-class routing (proven) | Bind registered A3/A4 handlers, CDB buffer, media state and native workers; execute classes 2/3. REPORT KEY class3 reaches matched sense 05/30/02 and SEND KEY selects a different worker. | Extend both native wrappers to route class3 to their own AACS workers with the OEM guards preserved; separately audit those workers for AACS2 behavior. | Repeat 30 class-pair cases, invalid classes/formats and guard failures; then complete AACS2 exchange on hardware. Wrapper parity alone is insufficient. |',
+        '| G08 — extended key-response worker path | The source-bound REPORT KEY format 1 worker caps the response at 116 bytes for every tested allocation/mode. OEM UHD references select 180 in their extended native mode; their dispatcher also has a 0x39 branch absent in the older worker. | Bind and adapt the complete extended-mode worker/session path and its buffer/crypto-service contracts. Increasing the length constant alone does not create the missing response contents. | Repeat allocation boundaries and dispatch vectors, then verify actual nonce/certificate contents, SEND KEY/crypto/session behavior and available device credentials/services. |', '',
         'Hardware defaults are a separate native policy, not an automatic patch gap. Unresolved acquisition, initialization, crypto/keys, hardware and reading requirements cannot honestly be assigned a successful patch yet. Complete coverage requires all of those to be resolved for each supported firmware/hardware family.', '',
+        '## Key-worker comparison and its limits', '',
+        'The additional worker survey executes 6,156 REPORT KEY dispatch cases and 3,078 certificate-response allocation cases over all 171 full payloads. Of these, 112 have a fixed 116-byte path and 59 have a native mode-selected 116/180-byte path; within the full OEM bucket the counts are 46 and 21. All nine locked OEM UHD references have the extended path. 1.V9 has both G07 and G08, superseding the earlier routing-only gap statement.', '',
+        'Worker dispatch begins after any recorded setup call, whose effects are not assumed. Allocation execution begins after assumed valid AGID/session validation and stops at the response-length store. It neither generates nor verifies a certificate or nonce. These are source-bound protocol-stage differences, not a complete AACS2 exchange or proof that no other AACS2 code exists elsewhere.', '',
+        'The [AACS common specification, section 4.14.2.2](https://aacsla.com/wp-content/uploads/2019/02/AACS_Spec_Common_Final_0953.pdf) describes the older 20-byte nonce and 92-byte certificate response. Primary reverse-engineering research [SGX.Fail, appendix D.2](https://sgx.fail/files/sgx.fail.pdf) describes AACS2 using 32-byte nonces and 256-bit ECC with SHA256. This explains why the older response width cannot simply be treated as complete OEM UHD authentication. Format 0x39 is recorded as another reference difference; its necessity is not inferred from its presence alone.', '',
         '## All firmware entries', '',
         'Full SHA-256, exact source path, provenance, comparison baseline and unresolved checks are in the adjacent CSV/JSON. G IDs are demonstrated stage-level gaps; execution assumptions and remaining validation are stated above. The CSV retains exact observed C7 consumer outputs.', '',
-        '| Source | Hardware / revision / destination | SHA prefix | OEM UHD? | DI gate | Key routing | Proven gaps | C7 consumer comparison |',
-        '| --- | --- | --- | --- | --- | --- | --- | --- |']
+        '| Source | Hardware / revision / destination | SHA prefix | OEM UHD? | DI gate | Key routing | Key-response worker | Proven gaps | C7 consumer comparison |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- |']
     for r in rows:
         vals = [r['category'] + ' / ' + r['payload'], r['hardware'] + ' / ' + r['revision'] + ' / ' + r['destination'],
-                '`' + r['sha256'][:12] + '`', r['classification'], r['di_gate'], r['key_routing'], r['proven_gaps'] or 'none established', ('unresolved: fragment' if r['payload'] == 'fragment' else 'differences: ' + ','.join(g for g in r['proven_gaps'].split(',') if g in ('G02','G03','G04','G05','G06')) if any(g in r['proven_gaps'] for g in ('G02','G03','G04','G05','G06')) else '5 reviewed C7 outputs match')]
+                '`' + r['sha256'][:12] + '`', r['classification'], r['di_gate'], r['key_routing'], r['key_worker_response'], r['proven_gaps'] or 'none established', ('unresolved: fragment' if r['payload'] == 'fragment' else 'differences: ' + ','.join(g for g in r['proven_gaps'].split(',') if g in ('G02','G03','G04','G05','G06')) if any(g in r['proven_gaps'] for g in ('G02','G03','G04','G05','G06')) else '5 reviewed C7 outputs match')]
         md.append('| ' + ' | '.join(v.replace('|', '/') for v in vals) + ' |')
     md += ['', '## Reproduce the evidence', '',
-        'Use the pinned firmware dependency and Python with Unicorn/Capstone. The scanner and both CPU harnesses read firmware only. The protocol receipts retain relative hoard paths and full source hashes.', '',
+        'Use the pinned firmware dependency and Python with Unicorn/Capstone. The scanner and CPU harnesses read firmware only. The protocol receipts retain relative hoard paths and full source hashes.', '',
         '```sh',
         'python3 scripts/audit-mtk-uhd-di-gates.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-di.json',
         'python3 scripts/audit-mtk-key-class-routing.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-keys.json',
         'python3 scripts/audit-mtk-uhd-consumers.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --hoard /path/to/hoard --output /tmp/mt1959-consumers.json',
-        'python3 scripts/report-mt1959-uhd-gaps.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --di /tmp/mt1959-di.json --keys /tmp/mt1959-keys.json --consumers /tmp/mt1959-consumers.json --out /tmp/mt1959-report',
+        'python3 scripts/audit-mtk-key-workers.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --routing /tmp/mt1959-keys.json --hoard /path/to/hoard --output /tmp/mt1959-workers.json',
+        'python3 scripts/report-mt1959-uhd-gaps.py --scan internal/docs/audits/mt1959-uhd-protocol-receipts-20261030.json --di /tmp/mt1959-di.json --keys /tmp/mt1959-keys.json --consumers /tmp/mt1959-consumers.json --workers /tmp/mt1959-workers.json --out /tmp/mt1959-report',
         '```', '',
         'Validation: 46,512 consumer-region executions (passive register bank; workers not executed). All 199 source hashes checked; archive members hash-bound to existing dump payloads. All 171 distinct full payloads have DI/key receipts: 1,026 DI-gate executions and 5,130 class-pair checks. The earlier executions against two archive containers are withdrawn. The scanner fixture tests, formatting and Clippy checks pass. No live AACS or disc-reading test was run.',
     ]
