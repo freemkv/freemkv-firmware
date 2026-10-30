@@ -173,24 +173,11 @@ def main():
         result = subprocess.run([str(args.fw.resolve()), 'modify', str(original_path), str(output), '--json'], capture_output=True, text=True, check=True)
         report = json.loads(result.stdout)
         facts = {key: value for lever in report['levers'] for key, value in lever['facts'].items()}
-        site = facts['auth_cell_site']
-        assert site == 0x180818
-        comparison = int.from_bytes(original[site:site+2], 'little')
-        assert comparison == 0x280c
-        branch = int.from_bytes(original[site+2:site+4], 'little')
-        assert branch & 0xff00 == 0xd100
-        deny = site + 6 + int.from_bytes(bytes([branch & 255]), 'little', signed=True)*2
-        refusal = facts['auth_cell_native_refusal']
+        assert 'auth_cell_site' not in facts, 'classic authentication conversion is research-only'
         modified = output.read_bytes()
-        for setting in (0, 1, 255):
-            for value in range(256):
-                old_target, old_flags = execute(original, site, deny, value, setting, 0, facts['flag_base'])
-                target, flags = execute(modified, site, deny, value, setting, 0, facts['flag_base'], refusal)
-                expected = refusal if setting == 0 and value == 12 else old_target
-                assert target == expected, (value, setting, target, expected)
-                assert flags == old_flags, (value, setting, 'classic CMP flags changed')
-                cases += 1
-    print(f'PASS: {cases} modern/classic authentication and BD cases; runtime flag, continuations, registers, SP and CMP flags')
+        site = 0x180818
+        assert modified[site:site + 4] == original[site:site + 4], 'classic native authentication check changed'
+    print(f'PASS: {cases} modern authentication and BD cases plus unchanged classic check; runtime flag, continuations, registers, SP and CMP flags')
 
 
 if __name__ == '__main__':
