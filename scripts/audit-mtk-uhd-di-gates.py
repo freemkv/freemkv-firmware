@@ -25,7 +25,7 @@ def execute(data, area, state_cell, identifier, density, layers):
     identity_offset = (load >> 6) & 31
     cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
     cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
-    for base, size in ((0, 0x200000), (0x01ff0000, 0x30000), (0x03000000, 0x10000)):
+    for base, size in ((0, (len(data) + 4095) & ~4095), (0x01ff0000, 0x30000), (0x03000000, 0x10000)):
         cpu.mem_map(base, size)
     cpu.mem_write(0, data)
     cpu.mem_write(state_cell, b'\xc0')
@@ -70,13 +70,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scan', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--hoard', type=Path, default=Path('.'), help='Root for relative source paths')
     args = parser.parse_args()
     rows = []
     for row in json.loads(args.scan.read_text())['images']:
         area = next(a for a in row['uhd_code']['areas'] if a['role'] == 'DiscInformation')
         if area['evidence'] == 'unknown':
             continue
-        data = Path(row['path']).read_bytes()
+        data = (args.hoard / row['path']).read_bytes()
         assert hashlib.sha256(data).hexdigest() == row['sha256']
         cases = []
         for identity, density, layers in ((ord('U'),5,2),(ord('U'),5,3),

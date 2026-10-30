@@ -1,5 +1,9 @@
 # MediaTek UHD code evidence survey
 
+The current manufacturer-qualified inventory and per-image gap results are in
+[the MT1959 gap table](mt1959-uhd-gap-table-20261030.md). Historical "native" and
+"positive" labels below mean reviewed code evidence only, never OEM UHD.
+
 This is a research instrument on the MT1939 branch, not a production hardware
 capability flag. It answers which reviewed instruction paths are present and
 what our own modifier changes. It does not establish physical detection,
@@ -37,7 +41,7 @@ build is retained as a refusal. Modified code that no longer matches an OEM
 grammar is unknown in its independent scan, not automatically unsupported.
 No BIN is exported and no hardware operation occurs.
 
-## Five OEM references and paired builds
+## Five stock source samples and paired builds
 
 These are five distinct marketed drive families, not five independent hardware
 designs. Their hoard sidecars classify them as OEM/unpatched and retain updater
@@ -93,12 +97,13 @@ reviewed legacy/mixed media handling into the positive native pattern. These
 are authoring results, not physical success/failure tests. MK images remain
 explicitly categorized in the broad scan.
 
-## MT1959 is now the first implementation target
+## MT1959 comparison before implementation
 
 The user prioritizes actual MT1959 UHD operation before further MT1939 trials.
-The OEM-only MT1959 inventory has 93 distinct images: 59 native reviewed media
-implementations, ten legacy/mixed and 24 unknown/partial. These totals describe
-code evidence, not 59 operationally proven firmware versions.
+The OEM-only MT1959 inventory has 69 full-sized source images and 24 fragments.
+The full-sized sources have 59 native reviewed media implementations and ten
+legacy/mixed implementations. The 24 unknown/partial entries are fragments,
+not another 24 unknown complete firmwares. These are code-evidence counts.
 
 `mt1959-uhd-reference-lock-20261030.json` pins WH16NS60 1.01/1.03, BU40N
 1.02/1.04, BP60NB10 1.00 and Buffalo BU40N BU11. They represent six firmware

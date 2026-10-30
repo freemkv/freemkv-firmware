@@ -2154,6 +2154,9 @@
     "native_reviewed_media_roles": 59,
     "legacy_or_mixed_reviewed_media_roles": 10,
     "unknown_or_partial": 24,
-    "physically_tested_by_this_investigation": 0
+    "physically_tested_by_this_investigation": 0,
+    "full_sized_sources": 69,
+    "fragments": 24,
+    "unknown_or_partial_note": "All 24 entries are fragments, not unknown complete firmware images."
   }
 }

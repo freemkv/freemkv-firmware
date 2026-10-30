@@ -2,8 +2,9 @@
 //! Usage: cargo run -p freemkv-fw --example mtk_uhd_scan -- OUTPUT.json [--modify-pairs] ROOT ...
 use anyhow::{bail, Context, Result};
 use mediatek_optical::image::analysis::{
-    ClassicCalibration, ClassicConsumer, ClassicDi, ClassicParameter, ClassicPosition,
-    ClassicPositionSetup, ClassicReadCompletion, ClassicReadPosition, UhdArea, UhdAreas,
+    AuthCell, ClassicCalibration, ClassicConsumer, ClassicDi, ClassicParameter, ClassicPosition,
+    ClassicPositionSetup, ClassicReadCompletion, ClassicReadPosition, CommandDispatch, MediaGate,
+    UhdArea, UhdAreas,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -113,10 +114,23 @@ fn scan(bytes: &[u8]) -> Value {
     } else {
         "mixed_reviewed_roles"
     };
+    let protocol = CommandDispatch::inspect(bytes).map(|dispatch| {
+        dispatch.records().iter().filter(|record| matches!(record.opcode,0x00|0x03|0x28|0x46|0xa3|0xa4|0xa8|0xad))
+            .map(|record|json!({"opcode":record.opcode,"record":record.off,"flags":record.flags,"handler":record.handler}))
+            .collect::<Vec<_>>()
+    });
+    let media_gate = MediaGate::inspect(bytes).map(|gate|json!({"variant":format!("{:?}",gate.variant()),
+        "anchor":gate.anchor(),"uhd_site":gate.uhd_site(),"bd_site":gate.bd_site(),"deny":gate.deny()}));
+    let auth_cell = AuthCell::detect(bytes).map(|gate| format!("{gate:?}"));
+    let sense_setter = freemkv_fw::engine::mt1959::Mt1959Engine.sense_setter(bytes);
     json!({"classification":classification,"di_recognition":recognition,
         "explicit_roles":native,"legacy_roles":legacy,"unknown_roles":missing,
         "state_cell":state.as_ref().ok(), "state_binding_error":state.err().map(|e|format!("{e:?}")),
         "areas":areas,"legacy_dependencies":legacy_dependencies,
+        "native_commands":protocol.as_ref().ok(),"native_commands_error":protocol.err().map(|e|format!("{e:?}")),
+        "media_gate":media_gate.as_ref().ok(),"media_gate_error":media_gate.err().map(|e|format!("{e:?}")),
+        "auth_cell":auth_cell.as_ref().ok(),"auth_cell_error":auth_cell.err().map(|e|format!("{e:?}")),
+        "sense_setter":sense_setter.ok(),
         "access_policy":"not_determined_by_this_scan", "physical_reading":"not_determined_by_this_scan"})
 }
 
