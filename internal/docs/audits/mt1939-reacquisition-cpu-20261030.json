@@ -1,0 +1,8 @@
+{
+  "scope": "Execute the installed DI parent on ARM926 to verify profile preservation.\n\nDI data and hardware readiness are supplied, so this proves software behavior\nand OEM preservation, not physical acquisition or successful disc detection.\n",
+  "cases": 4096,
+  "changed_cases": 4,
+  "baseline_sha256": "618ebd55cd109ba37188ab0d4e294c66d73d51f3eb5ee43fb64a1b972616285a",
+  "candidate_sha256": "7d40e5cc7286d53e36f2247c5b4d5f68468ee1627d2eb1f2ce35f0ca4fc8dc53",
+  "cpu": "ARM926"
+}

@@ -8,7 +8,11 @@ fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn build(image: &[u8], initialize_mode: bool) -> (Vec<u8>, serde_json::Value) {
+fn build(
+    image: &[u8],
+    initialize_mode: bool,
+    reacquisition_mode: bool,
+) -> (Vec<u8>, serde_json::Value) {
     let chip = crate::family::detect_chip(image).unwrap();
     let cap = crate::family::capability_for(&chip.model, chip.family);
     // Explicit test-only authoring: the production API still refuses this default.
@@ -48,8 +52,16 @@ fn build(image: &[u8], initialize_mode: bool) -> (Vec<u8>, serde_json::Value) {
         "one source-bound post-DI mode role required"
     );
     let mut installed = Vec::new();
-    if initialize_mode {
-        let part = mode_candidates[0];
+    let selected = |area| {
+        (initialize_mode && area == ClassicConsumerKind::MediaDefaults)
+            || (reacquisition_mode && area == ClassicConsumerKind::DiMode)
+    };
+    assert_eq!(
+        candidates.iter().filter(|part| selected(part.area)).count(),
+        usize::from(initialize_mode) + usize::from(reacquisition_mode),
+        "each requested initialization role must bind exactly once"
+    );
+    for part in candidates.iter().filter(|part| selected(part.area)) {
         assert_eq!(
             &report.image[part.site..part.site + part.original.len()],
             part.original
@@ -57,23 +69,23 @@ fn build(image: &[u8], initialize_mode: bool) -> (Vec<u8>, serde_json::Value) {
         let stub = Mt1959Engine
             .free_space(&report.image, part.bytes.len())
             .unwrap();
-        assert_eq!(part.original.len(), 4);
-        thumb_asm::write(
-            &mut report.image,
-            part.site,
-            &thumb_asm::encode_bl(part.site, stub).unwrap(),
-        );
+        assert!(matches!(part.original.len(), 4 | 6));
+        let mut redirect = thumb_asm::encode_bl(part.site, stub).unwrap().to_vec();
+        if part.original.len() == 6 {
+            redirect.extend_from_slice(&[0xc0, 0x46]);
+        }
+        thumb_asm::write(&mut report.image, part.site, &redirect);
         thumb_asm::write(&mut report.image, stub as usize, &part.bytes);
         crate::install_guard::verify_branch(
             &report.image,
             part.site,
             thumb_asm::BranchKind::Bl,
             stub,
-            "post-DI mode research",
+            "initialization mode research",
         )
         .unwrap();
         installed.push(serde_json::json!({
-            "role":"MediaDefaults", "site":part.site, "entry":part.caller.entry(),
+            "role":format!("{:?}", part.area), "site":part.site, "entry":part.caller.entry(),
             "stub_va":stub, "stub":part.bytes, "original":part.original,
         }));
     }
@@ -104,7 +116,7 @@ fn build(image: &[u8], initialize_mode: bool) -> (Vec<u8>, serde_json::Value) {
         .chain(
             candidates
                 .iter()
-                .filter(|p| !initialize_mode || p.area != ClassicConsumerKind::MediaDefaults)
+                .filter(|p| !selected(p.area))
                 .map(|p| (p.site, &p.original)),
         )
     {
@@ -138,6 +150,7 @@ fn build(image: &[u8], initialize_mode: bool) -> (Vec<u8>, serde_json::Value) {
         "format":di.contract.format, "format_flag":di.contract.format_flag,
         "layer_store":di.contract.layer_store, "epilogue":di.contract.epilogue,
         "formats":[1,5], "read_path":false, "initialization_mode":initialize_mode,
+        "reacquisition_mode":reacquisition_mode,
         "mode_entry":mode_candidates[0].caller.entry(),
         "installed_initialization_components":installed,
     });
@@ -148,6 +161,7 @@ fn build(image: &[u8], initialize_mode: bool) -> (Vec<u8>, serde_json::Value) {
 fn mode_comparison_keeps_read_and_acquisition_components_native() {
     build(
         include_bytes!("../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin"),
+        true,
         true,
     );
 }
@@ -163,9 +177,12 @@ fn build_selected_initialization_comparison() {
         std::env::var("FREEMKV_MT1939_RESEARCH_SHA256").unwrap()
     );
     let output = std::path::PathBuf::from(std::env::var("FREEMKV_MT1939_RESEARCH_OUTPUT").unwrap());
-    for initialize_mode in [false, true] {
-        let (image, receipt) = build(&image, initialize_mode);
-        let suffix = if initialize_mode { "mode" } else { "baseline" };
+    for (initialize_mode, reacquisition_mode, suffix) in [
+        (false, false, "baseline"),
+        (true, false, "mode"),
+        (true, true, "reacquisition"),
+    ] {
+        let (image, receipt) = build(&image, initialize_mode, reacquisition_mode);
         std::fs::write(output.with_extension(format!("{suffix}.bin")), image).unwrap();
         std::fs::write(
             output.with_extension(format!("{suffix}.json")),

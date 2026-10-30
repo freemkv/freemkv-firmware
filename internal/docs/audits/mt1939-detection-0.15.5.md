@@ -1,9 +1,14 @@
 # MT1939 detection investigation for 0.15.5
 
+Current priority: hold further MT1939 hardware candidates while MT1959 OEM
+operation and missing-media conversion are investigated first. The internal
+reacquisition comparison below is retained evidence, not a ready tester BIN.
+
 Branch starts from validated 0.15.4 dev 620b05f. The full prior research is
 retained on research/mt1939-uhd-detection (7bcab5f), including unsuccessful
 format-1/5 detection candidate 8a7ffc47. Production UHD conversion remains
-unavailable; no new tester image has been built for 0.15.5.
+unavailable. The first 0.15.5 initialization experiment below failed physical
+detection; subsequent work remains an isolated research comparison.
 
 ## Milestones and constraints
 
@@ -92,3 +97,72 @@ application scatter tables do not map/copy any of these target bodies. This
 narrows the available evidence; it does not prove that they are immutable mask
 ROM or rule out another runtime loader. Do not subtract an assumed flash base
 and treat unrelated bytes as the missing acquisition implementation.
+
+## Failed physical trial and downstream audit
+
+The tester reported "Same 🙂 It tries hard but still not working" for candidate
+618ebd55. Detection is therefore still unachieved. Preserve the Desktop image
+unchanged for attribution; do not present its CPU checks as hardware success.
+
+`scripts/audit-mt1939-mode-consumers.py` executes the held original, failed
+candidate and native BU40N position and setup functions (192 executions). Controller busy bits
+are supplied idle and arithmetic results are synthetic. It proves differences
+in operand programming and result scaling, not controller mathematics.
+
+The mode byte is an offset into seven-byte records: 0x1c selects the fifth row.
+It is not a literal laser-power or speed setting. At C7 the failed candidate
+retains classic position scaling, while native BU40N explicitly treats C7 like
+C8. The classic C8 path quarters the coefficient and shifted input, then doubles
+the controller result before final scaling. Selecting the dense row alone does
+not reproduce this behavior. Secondary-bank consumers and their caller guards
+still require tracing; not every table bank has five meaningful records.
+
+The complete setup function independently confirms the same missing C7 branch:
+BU40N C7 and C8 program identical values, while classic C7 leaves the input and
+coefficient unquartered and supplies 10 where its dense path supplies 20 to a
+later controller operation. Controller operation semantics remain unproven.
+
+Executing the actual DI parent on re-entry supplies another concrete mismatch:
+with initial C7 and profile 0x1c, the native pre-acquisition selector stores 7;
+C8 preserves 0x1c. Native BU40N explicitly recognizes C7 at this stage. This is
+a software incompatibility, not evidence the physical trial reached re-entry.
+Two recovery stores of 7 also exist in BU40N and must not be indiscriminately
+removed.
+
+The research builder now separately emits a `reacquisition` comparison using
+the source-bound DiMode role alongside MediaDefaults. The original baseline
+and mode-only outputs remain reproducible. Read, position and acquisition
+components remain native. `scripts/test-mt1939-reacquisition.py` exercises the
+complete installed parent to check the intended C7/On profile change and
+preservation of other states, flags, registers and stack.
+Both research builder tests pass. ARM926 execution passes 4,096 complete-parent
+comparisons across all 256 starting states, four settings and four incoming NZCV
+patterns. Only C7/On changes the profile from 7 to 28; other observed RAM and
+return values match the mode-only baseline. Hardware readiness remains supplied.
+
+Next: validate the reacquisition fix, trace position setup and the remaining
+initialization/readiness consumers against native BU40N, then produce one
+coherent detection experiment. Sector reading remains the second milestone.
+
+## Hardware-versus-logic evidence gate
+
+An explicit C7 branch in BU40N is not sufficient evidence that BH16 must take
+that branch: controller design, optical mechanism and parameter interpretation
+may differ. The existing native BH16 C8 path makes reuse a hypothesis worth
+testing, not a demonstrated hardware mapping. The reacquisition build remains
+internal while this distinction is investigated; no new tester image is ready.
+
+First build a read-only scanner over the held MediaTek corpus, then compare five
+OEM MT1959 families and our own modifications of the same source bytes. Keep MK
+and OmniDrive categorized separately and out of the five OEM references. The
+scanner example `mtk_uhd_scan` uses existing library instruction contracts for
+DI recognition, control-bit/field selectors, forward/reverse calculations,
+parameter selection and read-only hardware defaults. Unknown/ambiguous layouts
+remain unknown, never evidence of absent support. Neither a six-role native
+classification nor an authoring success establishes complete acquisition,
+physical reading or permission to read protected content.
+
+`--modify-pairs` additionally builds unrestricted-On images offline and reports
+which original reviewed regions remain byte-identical, each emitted hook and
+the modified image's separate scan. This distinguishes existing native media
+logic from what our unlock actually changes, with no device or flash access.
