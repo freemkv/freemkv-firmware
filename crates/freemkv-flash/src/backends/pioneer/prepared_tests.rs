@@ -65,7 +65,7 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             &native_ud04
         )
         .status,
-        crate::crossflash::CompatibilityStatus::Conditional
+        crate::crossflash::CompatibilityStatus::Yes
     );
     assert_eq!(
         crate::crossflash::decide(
@@ -76,96 +76,41 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
         .status,
         crate::crossflash::CompatibilityStatus::HardNo
     );
-    struct Factory(Vec<u8>);
-    impl ScsiDevice for Factory {
-        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-            assert_eq!(cdb, pioneer_optical::production::parameters());
-            assert_eq!(len, pioneer_optical::production::PARAMETERS_LEN);
-            Ok(self.0.clone())
-        }
-        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
-            panic!("authorization must not write");
-        }
-        fn describe(&self) -> String {
-            "factory evidence only".into()
-        }
-    }
-    for code in [b"BDR-UD02TBD", b"BDR-UD02FAN"] {
-        let mut parameters = vec![0xff; pioneer_optical::production::PARAMETERS_LEN];
-        parameters[0x90..0x9f].fill(b' ');
-        parameters[0x90..0x9b].copy_from_slice(code);
-        parameters[0xc0..0xc0 + 90].fill(b'0');
-        parameters[0xc0 + 76..0xc0 + 82].copy_from_slice(b"130525");
-        parameters[0x51e..0x520].copy_from_slice(&1u16.to_be_bytes());
-        let current = recovery::Current::load(&installed).unwrap();
-        let refusal = recovery::Target::load(&native_ud04)
-            .unwrap()
-            .bind(&current, false)
-            .err()
-            .expect("recovery requires factory evidence");
-        assert!(refusal.chain().any(|cause| matches!(
-            cause.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
-            Some(pioneer_optical::settings::adaptation::Error::OriginalRequired)
-        )));
-        recovery::Target::load(&native_ud04)
-            .unwrap()
-            .bind_with_original(&current, false, Some(&parameters))
-            .unwrap();
-        let mut wrong = parameters.clone();
-        wrong[0x90..0x9f].fill(b' ');
-        wrong[0x90..0x98].copy_from_slice(b"BDR-UD04");
-        let refusal = recovery::Target::load(&native_ud04)
-            .unwrap()
-            .bind_with_original(&current, false, Some(&wrong))
-            .err()
-            .expect("native UD04 hardware must remain excluded");
-        assert!(refusal.chain().any(|cause| matches!(
-            cause.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
-            Some(pioneer_optical::settings::adaptation::Error::OriginalMismatch)
-        )));
-        let mut device = Factory(parameters);
-        recovery::Target::load(&native_ud04)
-            .unwrap()
-            .bind_live(
-                &current,
-                false,
-                &mut ReadDevice::without_unlocks(&mut device),
-            )
-            .unwrap();
-        let plan = || {
-            FlashPlan::new(ExecutePlan {
-                kernel: Some(target_kernel.clone()),
-                normal: target_normal.clone(),
-                selection: FlashSelection::KernelAndNormal,
-            })
-        };
-        let refusal = authorize_installed(plan(), Some(&installed))
-            .err()
-            .expect("offline route needs original hardware");
-        assert_eq!(
-            crate::crossflash::refusal_status(refusal.as_ref()),
-            crate::crossflash::CompatibilityStatus::Conditional
-        );
-        let authorized = authorize_installed_inner(
-            plan(),
-            Some(&installed),
-            Some(&mut ReadDevice::without_unlocks(&mut device)),
-        )
+    // Both paths prepare the same certified pair without any factory-SKU read.
+    let current = recovery::Current::load(&installed).unwrap();
+    recovery::Target::load(&native_ud04)
+        .unwrap()
+        .bind(&current, false)
         .unwrap();
-        let prepared: &Prepared = authorized.state().unwrap();
-        let complete = prepared.complete.as_ref().unwrap();
-        assert_eq!(
-            complete.settings().adaptation_id(),
-            Some("pioneer.ud02-to-ud04-1.14")
-        );
-        let kernel = Envelope::load(&target_kernel).unwrap();
-        let normal = Envelope::load_with_kernel(complete.normal_transfer(), &kernel).unwrap();
-        use sha2::{Digest, Sha256};
-        assert_eq!(
-            format!("{:x}", Sha256::digest(normal.image.as_slice())),
-            "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815"
-        );
-    }
+    let authorized = authorize_installed(
+        FlashPlan::new(ExecutePlan {
+            kernel: Some(target_kernel.clone()),
+            normal: target_normal.clone(),
+            selection: FlashSelection::KernelAndNormal,
+        }),
+        Some(&installed),
+    )
+    .unwrap();
+    let prepared: &Prepared = authorized.state().unwrap();
+    let complete = prepared.complete.as_ref().unwrap();
+    assert_eq!(
+        complete.settings().adaptation_id(),
+        Some("pioneer.ud02-to-ud04-1.14")
+    );
+    assert_eq!(
+        complete.settings().requirements(),
+        &[pioneer_optical::settings::adaptation::Requirement {
+            parameter: 0x28f,
+            value: 1
+        }]
+    );
+    let kernel = Envelope::load(&target_kernel).unwrap();
+    let normal = Envelope::load_with_kernel(complete.normal_transfer(), &kernel).unwrap();
+    use sha2::{Digest, Sha256};
+    assert_eq!(
+        format!("{:x}", Sha256::digest(normal.image.as_slice())),
+        "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815"
+    );
 }
 
 fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {

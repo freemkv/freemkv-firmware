@@ -26,7 +26,6 @@ pub(crate) struct Current {
 }
 
 /// Validated target bytes retained while Current is acquired.
-#[derive(Clone)]
 pub(crate) struct Target {
     update: Update,
     reencoded: bool,
@@ -44,45 +43,12 @@ impl Target {
     }
 
     pub(crate) fn bind(self, current: &Current, bypass_family_check: bool) -> Result<Plan> {
-        self.bind_with_original(current, bypass_family_check, None)
-    }
-
-    /// Match normal Flash: request factory evidence only for a configured
-    /// transition that positively requires it. Preparation remains read-only.
-    pub(crate) fn bind_live(
-        self,
-        current: &Current,
-        bypass_family_check: bool,
-        dev: &mut crate::backend::ReadDevice<'_>,
-    ) -> Result<Plan> {
-        let plan = self.clone().bind(current, bypass_family_check);
-        if plan.as_ref().err().is_some_and(|error| {
-            error.chain().any(|cause| {
-                matches!(
-                    cause.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
-                    Some(pioneer_optical::settings::adaptation::Error::OriginalRequired)
-                )
-            })
-        }) {
-            let parameters = super::read_original_parameters(dev)?;
-            return self.bind_with_original(current, bypass_family_check, Some(&parameters));
-        }
-        plan
-    }
-
-    pub(crate) fn bind_with_original(
-        self,
-        current: &Current,
-        bypass_family_check: bool,
-        parameters: Option<&[u8]>,
-    ) -> Result<Plan> {
         Plan::assemble_policy(
             &current.kernel,
             &current.normal,
             self.update,
             self.reencoded,
             bypass_family_check,
-            parameters,
         )
     }
 }
@@ -184,7 +150,7 @@ impl Plan {
         target: Update,
         reencoded: bool,
     ) -> Result<Self> {
-        Self::assemble_policy(kernel, normal, target, reencoded, false, None)
+        Self::assemble_policy(kernel, normal, target, reencoded, false)
     }
 
     fn assemble_policy(
@@ -193,13 +159,9 @@ impl Plan {
         target: Update,
         reencoded: bool,
         bypass_family_check: bool,
-        parameters: Option<&[u8]>,
     ) -> Result<Self> {
-        let mut receiver = Receiver::detect_with_kernel(normal, kernel)
+        let receiver = Receiver::detect_with_kernel(normal, kernel)
             .context("Current firmware receiver requirements are unsupported")?;
-        if let Some(parameters) = parameters {
-            receiver = receiver.with_original_parameters(parameters);
-        }
         #[cfg(test)]
         let control = receiver.entry_control(&normal.image[..16])?;
         let target_model = target.normal().info().model.clone();
