@@ -1,26 +1,14 @@
 //! MediaTek MT1939 engine.
 //!
-//! MT1939 is **two code generations** (proven across 42 real images,
-//! `research/hoard-campaign-2026-09-03/reports/mt1939-engine-scope.md`):
+//! Classic firmware carries an MT1939 boot banner and uses its own command,
+//! boot, speed and media contracts. The other MT1939 code generation delegates
+//! to the MT1959 machinery while retaining the MT1939 family label.
 //!
-//! * **JB8 / JBP6 / JBC6** (banner `"MT1959 Boot …"`, marker `+0x50 = 0x18`, 28
-//!   images) — MT1959-lineage silicon. The MT1959 scanner / CDB-base / dispatch
-//!   table / VID / AKE / Speed / Region signatures **transfer unchanged**, so these
-//!   images run the **full** MT1959 lever machinery ([`Mt1959Engine::build_modify`])
-//!   verbatim — only the family label differs. Empirically verified: a JB8 image
-//!   yields `Identity + Speed + Region + Raw read` applied + `DE`.
-//! * **Classic** (banner `"MT1939 Boot Code"`, marker `+0x50 = 0x58`, 14 images) —
-//!   its own scanner (`0x182e8`, CDB base in **r5** not r3), its own dispatch table
-//!   (`~0x1a4000`), and its own VID/AKE code shapes. `create` now ships the classic
-//!   **base** ([`Mt1959Engine::build_report_classic`]): the injected 0x3C-0E handler
-//!   (Identity/SET/GET/SAVE/RESET/DumpAll) + record repoint + CMAC re-sign, proven
-//!   17/17. The always-on boot hook and feature stubs stay gated behind the on-silicon
-//!   boot blessing (`CLASSIC_BOOT_BLESSED`); until then `modify` still applies only the
-//!   **family-agnostic downgrade-enable (DE)** lever and reports the rest as pending —
-//!   never an opaque refusal.
-//!
-//! Integrity: `freemkv_flash::cmac` re-signs **both** generations unchanged
-//! (proven zero-change, table `0x10400`), so `MtkCmac` auto-accepts MT1939.
+//! Both paths install only source-qualified hooks and derive advertised settings
+//! from installed facts. If the base cannot be built, `modify` can fall back to
+//! downgrade-enable alone. Complete media conversion requires its whole group;
+//! bounded software validation does not establish physical reading behavior.
+//! Both generations use the shared MediaTek CMAC implementation.
 
 use crate::boot::BootSettings;
 use anyhow::{anyhow, bail, Result};
@@ -228,11 +216,8 @@ impl Engine for Mt1939Engine {
             // fails on a non-classic image (degrade, never refuse).
         }
 
-        // Classic generation: produce the full classic emit (Identity + Region-free
-        // + DE) — structurally valid, self-verifies, passes the structural audit, so
-        // it ships unconditionally (Raw-read stays withheld inside as unsafe). If the
-        // classic base can't be located on this specific image, degrade to the
-        // DE-only fallback below (never refuse).
+        // Classic generation uses its own source-qualified feature and conversion
+        // builders. A missing base falls back to downgrade-enable below.
         if is_classic(image) {
             if let Ok(report) =
                 Mt1959Engine.build_modify_classic_with_defaults(image, &chip, &cap, defaults)
@@ -241,9 +226,8 @@ impl Engine for Mt1939Engine {
             }
         }
 
-        // DE-only fallback: family-agnostic downgrade-enable when the classic base
-        // isn't locatable. The classic VID/AKE gate signatures are reversed + proven
-        // unique (consts above) but need the classic Identity base to emit.
+        // Family-agnostic downgrade-enable remains available when the base fails.
+        // No absent feature hook becomes an advertised setting.
         let mut out = image.to_vec();
         let mut levers = Vec::new();
 

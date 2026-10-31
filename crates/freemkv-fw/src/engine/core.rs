@@ -159,15 +159,11 @@ pub(crate) const BOOT_INIT_SIG: &[(u16, u16)] = &[
 /// The hook site is `anchor+4` (index 2, the `ldr r0,[r0,#0x18]`), exactly as for
 /// [`BOOT_INIT_SIG`]. Capability base `0x0400_2040`, boot-mode word `@0x0400_2058`.
 ///
-/// SAFETY: this classic site is a CALLED LEAF helper, not `main()`'s prologue, so
-/// its runtime power-on call-order is HARDWARE-UNCONFIRMED. The finder therefore
-/// tags a classic resolution [`BootInitSite::ClassicUnconfirmed`] and
-/// [`Mt1959Engine::emit_boot_init`] FAILS CLOSED on it (see the gate there): the
-/// signature resolves and is unit-tested, but production emit for classic images
-/// stays a deliberate one-line flip pending on-silicon verification. This helper
-/// ALSO matches inside 157 modern images, so [`Mt1959Engine::find_boot_init`] must
-/// try [`BOOT_INIT_SIG`] FIRST and only consult this when the modern shape returns
-/// zero — a merged scan would make modern images ambiguous.
+/// This classic site is a called leaf helper. Production emission requires its
+/// unique caller, resolved by [`classic_boot_init_caller`]. Hardware call-order
+/// remains unconfirmed. The helper also matches modern images, so
+/// [`Mt1959Engine::find_boot_init`] tries the modern shape first and uses this
+/// fallback only when the modern shape has no matches.
 pub(crate) const BOOT_INIT_SIG_CLASSIC: &[(u16, u16)] = &[
     (0x4800, 0xFF00), // ldr  r0,[pc,#imm]   (boot-status base; imm varies → masked)
     (0x38C0, 0xFFFF), // subs r0,#0xc0       (classic discriminator)
@@ -439,37 +435,6 @@ pub(crate) const HRL_LOOKUP_SIG: &[(u16, u16)] = &[
     (0x1D20, 0xFFFF), // adds r0,r4,#4
 ];
 
-/// EXTRA CONFIRMATION GATE for the destructive one-time HRL flash wipe
-/// ([`Feature::Hrl`] `HRL_WIPE_ONCE`). The wipe permanently rewrites the flash HRL
-/// regions and is NOT undone by [`abi::Verb::Reset`], so it is wired into a build
-/// ONLY when this is `true`. Default `false`: the record codegen
-/// ([`Mt1959Engine::hrl_valid_empty_record`]) exists and is unit-tested, but no
-/// image ships the wipe detour (the feature is inert / a lever MISS) until a
-/// hardware-validated confirmation flips this.
-///
-/// [`Feature::Hrl`]: crate::abi::Feature::Hrl
-pub(crate) const HRL_WIPE_ARMED: bool = false;
-
-/// Bless-gate for the MT1939-**classic** boot-init hook. The classic reload site is
-/// a called leaf helper whose power-on call-order is hardware-unconfirmed: installing
-/// a power-on `0xFF`-fill stub there could brick a classic drive if on-chip SRAM
-/// isn't up yet when the leaf runs. The detour rule resolves statically and uniquely
-/// 17/17 ([`classic_boot_init_caller`]), but [`Mt1959Engine::emit_boot_init`] only
-/// ships it when this is `true`. Default `false` = fail-closed (classic base ships
-/// handler-only, no boot hook — safe, see [`Mt1959Engine::build_report_classic`]).
-///
-/// **Now `true` — blessed on emulation evidence** (Unicorn ARM boot
-/// emulation): on all 17 classic images the OEM C-runtime scatterload writes the
-/// flag-cell SRAM span at icount ~1285, while the detoured leaf caller is not reached
-/// until ~128k — SRAM is provably initialised ~127k instructions before our detour. Since
-/// the OEM's own write to that cell succeeds on every real-silicon boot, the SRAM
-/// controller is provably enabled long before the leaf, so the boot stub's fill cannot
-/// fault (a fault there would require the OEM's earlier write to the same cell to fault
-/// first — the drive would not boot). This is stronger than the modern hook's ordering
-/// bless. Tier: **emulation-verified** (a single reversible on-silicon read-back, doc §5,
-/// remains the final belt-and-braces check if a classic drive becomes available).
-pub(crate) const CLASSIC_BOOT_BLESSED: bool = true;
-
 /// The [`abi::Verb::Identity`] reply lead-in: `"freemkv <version>"` (magic +
 /// crate version). The live feature-state table (6 bytes, `flag[0x01..=0x06]`)
 /// is appended after this by the handler at runtime.
@@ -495,6 +460,7 @@ pub(crate) fn pc_literal(image: &[u8], at: usize) -> Option<u32> {
 /// Observed SRAM references, including direct data/ARM literals and decoded
 /// Thumb aliases across local control flow. A clean static footprint alone is
 /// not evidence of runtime ownership or writability.
+#[cfg(test)]
 pub(crate) fn referenced_sram(image: &[u8]) -> std::collections::BTreeSet<u32> {
     mediatek_optical::image::analysis::RamReferences::inspect(image)
         .bytes()
@@ -680,19 +646,14 @@ pub(crate) fn emit_flash_write(
 
 /// The resolved boot-init hook site, tagged by which prologue shape matched.
 ///
-/// The distinction is load-bearing for safety: a [`Self::Modern`] site is the
-/// MT1959 main-task prologue whose power-on boot hook is HARDWARE-CONFIRMED, so
-/// `Mt1959Engine::emit_boot_init` ships it. A [`Self::ClassicUnconfirmed`] site
-/// is the MT1939-classic leaf helper (matched by `BOOT_INIT_SIG_CLASSIC`) whose
-/// runtime power-on call-order has NOT been verified on silicon, so `emit_boot_init`
-/// FAILS CLOSED on it — the classic images degrade to DE-only exactly as before,
-/// while the site now resolves and is unit-tested.
+/// Modern sites resolve through the cold/warm convergence call; classic sites
+/// require a unique caller of the leaf helper. Neither tag alone qualifies a detour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootInitSite {
-    /// MT1959 modern prologue site (blessed; shipped by `emit_boot_init`).
+    /// MT1959 modern prologue site.
     Modern(u32),
-    /// MT1939-classic leaf-helper site (hardware-unconfirmed; `emit_boot_init`
-    /// fails closed pending on-silicon call-order verification).
+    /// MT1939-classic leaf-helper site. The legacy variant name records that
+    /// hardware call-order remains unconfirmed; source-qualified emission is supported.
     ClassicUnconfirmed(u32),
 }
 
@@ -726,6 +687,10 @@ impl Mt1959Engine {
     /// movs r0` immediate triple inside the scanner body.
     pub fn sense_setter(&self, image: &[u8]) -> Result<u32> {
         let entry = self.find_scanner_entry(image)? as usize;
+        Self::sense_setter_at(image, entry)
+    }
+
+    pub(super) fn sense_setter_at(image: &[u8], entry: usize) -> Result<u32> {
         let end = (entry + 0x120).min(image.len().saturating_sub(4));
         let is_movs = |off: usize, rt: u16| {
             let hw = u16::from_le_bytes([image[off], image[off + 1]]);
@@ -750,6 +715,14 @@ impl Mt1959Engine {
     pub fn find_live_record(&self, image: &[u8], opcode: u8) -> Result<CommandRecord> {
         let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(image)
             .context("native command ownership")?;
+        Self::live_record_from(&commands, opcode)
+    }
+
+    pub(super) fn live_record_from(
+        commands: &mediatek_optical::image::analysis::CommandDispatch<'_>,
+        opcode: u8,
+    ) -> Result<CommandRecord> {
+        let image = commands.image();
         let record = commands
             .record(opcode, LIVE_FLAGS)
             .context("live command record")?;
@@ -1447,10 +1420,7 @@ impl Mt1959Engine {
         Ok(de as u32)
     }
 
-    /// Reject overlap with observed static references, including a four-byte
-    /// guard on each side, and reject storage beyond the conservative RAM ceiling.
-    /// Passing this check does not establish runtime ownership or cover arbitrary
-    /// indirect code. The modern fixed cell also has model-specific capture evidence.
+    /// Reject overlap with source references and the conservative SRAM boundary.
     pub(crate) fn assert_sram_cell_free(
         &self,
         image: &[u8],
@@ -1458,59 +1428,13 @@ impl Mt1959Engine {
         len: u32,
         what: &str,
     ) -> Result<()> {
-        let lo = base
-            .checked_sub(4)
-            .ok_or_else(|| anyhow!("{what}: SRAM lower guard underflows"))?;
-        let hi = base
-            .checked_add(len)
-            .and_then(|end| end.checked_add(4))
-            .ok_or_else(|| anyhow!("{what}: SRAM upper guard overflows"))?;
-        if lo < SRAM_LO || hi > SRAM_END {
-            return Err(anyhow!(
-                "{what} cell {base:#010x}..{:#010x} is outside the supported SRAM placement range \
-                 [{SRAM_LO:#010x}, {SRAM_END:#010x})",
-                base + len
-            )
-            .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
-        }
-        let used = referenced_sram(image);
-        for a in lo..hi {
-            if used.contains(&a) {
-                return Err(anyhow!(
-                    "{what} cell {base:#010x}..{:#010x} overlaps a code-referenced SRAM \
-                     address {a:#010x} (+guard) — refusing to clobber live state",
-                    base + len
-                )
-                .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
-            }
-        }
-        Ok(())
+        super::sram::SramPlacement::inspect(image).assert_free(base, len, what)
     }
 
-    /// Select a statically unreferenced candidate within the conservative RAM
-    /// ceiling, reserving guards and the complete flag/scratch footprint.
-    /// This is a placement candidate, not proof of runtime memory ownership.
+    /// Select a statically unreferenced candidate, including flag/scratch guards.
+    /// This does not establish runtime ownership of the selected memory.
     pub fn find_free_sram_cell(&self, image: &[u8]) -> Result<u32> {
-        let used = referenced_sram(image);
-        let footprint = (FLASHWRITE_SCRATCH_OFF + 1).max(u32::from(NUM_FEATURES) + 1);
-        let mut best: Option<(u32, u32)> = None;
-        let mut start = SRAM_LO;
-        for end in (SRAM_LO..=SRAM_END).filter(|a| *a == SRAM_END || used.contains(a)) {
-            let candidate = (start + 4 + 3) & !3; // leading guard, then word alignment
-            if candidate + footprint + 4 <= end {
-                let usable = end - candidate - 4;
-                if best.is_none_or(|(_, previous)| usable > previous) {
-                    best = Some((candidate, usable));
-                }
-            }
-            start = end + 1;
-        }
-        best.map(|(base, _)| base).ok_or_else(|| {
-            anyhow!(
-                "no statically unreferenced SRAM candidate fits the complete {footprint}-byte \
-             flag/scratch footprint and guards below {SRAM_END:#010x}"
-            )
-        })
+        super::sram::SramPlacement::inspect(image).candidate()
     }
 
     /// Assemble the freemkv `0x3C 0E` handler for the `verb [feature] [state]`
@@ -1562,24 +1486,6 @@ impl Mt1959Engine {
         )
     }
 
-    pub(crate) fn build_handler_with_defaults(
-        &self,
-        image: &[u8],
-        oem_handler: u32,
-        flag_base: u32,
-        boot_function_entry: u32,
-        defaults: &BootSettings,
-    ) -> Result<Vec<u8>> {
-        self.build_handler_with_identity(
-            image,
-            oem_handler,
-            flag_base,
-            boot_function_entry,
-            identity_blob(),
-            defaults,
-        )
-    }
-
     /// Explicit identity input keeps the golden build independent of release versions.
     pub(super) fn build_handler_with_identity(
         &self,
@@ -1591,6 +1497,27 @@ impl Mt1959Engine {
         defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
         let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        self.build_handler_from_analysis(
+            &analysis,
+            oem_handler,
+            flag_base,
+            boot_function_entry,
+            identity,
+            defaults,
+        )
+    }
+
+    /// Reuse source-bound native command/response facts from the enclosing build.
+    pub(super) fn build_handler_from_analysis(
+        &self,
+        analysis: &mediatek_optical::image::analysis::ImageAnalysis<'_>,
+        oem_handler: u32,
+        flag_base: u32,
+        boot_function_entry: u32,
+        identity: Vec<u8>,
+        defaults: &BootSettings,
+    ) -> Result<Vec<u8>> {
+        let image = analysis.image();
         let cdb = analysis
             .commands()
             .context("native command ownership")?
@@ -2815,40 +2742,6 @@ impl Mt1959Engine {
         Ok((sites, revoke, bytes))
     }
 
-    /// **HRL wipe-once codegen (destructive; gated).** The valid-empty AACS Host
-    /// Revocation List record this would program into both flash HRL regions
-    /// (`0x1e0000` BD/mode0 and `0x1d8000` UHD/mode1, `0x8000` bytes each) for
-    /// `flag[Feature::Hrl]==HRL_WIPE_ONCE`. Writing a *valid-empty* record — NOT
-    /// erasing to `0xFF` — is load-bearing: a blank region reads as the `0xFFFF`
-    /// count sentinel, so [`Self::find_hrl_lookup`]'s routine returns `2` (blank) and
-    /// the cert path still emits `6F/00`. Layout (multi-byte big-endian):
-    /// ```text
-    ///   [0]     record type   = 0x21   (Host Revocation List record)
-    ///   [1..4]  record length = 0x00000C (12-byte header, zero entries)
-    ///   [4..6]  total entries = 0x0000  ← the load-bearing field: NOT 0xFFFF,
-    ///                                     so the OEM lookup reads the list as CLEAN
-    ///   [6..8]  reserved      = 0x0000
-    /// ```
-    /// The actual on-drive flash program (routine `0x1354a0`, controller regs
-    /// `0x04002240`, mailbox `0x02001200` magic `5A A5 46 4C`, commit `0x13d9b2`
-    /// toggling `0x04020000` bit0) is **NOT** synthesized into a shipping image: the
-    /// wipe is permanent, not undone by RESET, and the exact record/signature the
-    /// lookup accepts is not re-proven on-silicon. It is therefore gated behind
-    /// [`HRL_WIPE_ARMED`] (default `false`) — the feature is inert / a lever MISS
-    /// until a hardware-validated confirmation flips that constant. The record
-    /// bytes here are the documented codegen the eventual programmer emits.
-    #[allow(dead_code)]
-    pub(crate) fn hrl_valid_empty_record(&self) -> [u8; 8] {
-        [0x21, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00]
-    }
-
-    // (Retired 0.8.9: `busenc_detour` + `debus_detour` — the `Feature::Bus`
-    // datapath lever was proved inert on hardware, so both detours plus their
-    // supporting sigs and stubs were removed together.)
-
-    // (BranchKind comes from thumb_asm — see the enum there at the
-    // end of this file so the type is namable from `crate::engine::core::`.)
-
     /// Resolve the AKE detour site + stub for whichever gate variant this image
     /// carries. Returns `(detour_site, stub_bytes, anchor, install_shape)`.
     /// Every supported shape uses Thumb-1 BL: NB replaces a native call, while
@@ -3190,7 +3083,7 @@ impl Mt1959Engine {
     ///
     /// Fail-closed rules:
     /// modern → follow the anchor's `bmi` to the cold/warm convergence `bl`;
-    /// classic → the helper's unique caller `bl`, gated behind [`CLASSIC_BOOT_BLESSED`].
+    /// classic → the helper's unique caller `bl`.
     /// A [`None`] boot-init prologue bails: tri-state OFF is unsafe without the
     /// always-on 0xFF fill.
     pub(crate) fn resolve_boot_init_pair(&self, image: &[u8]) -> Result<(usize, u32)> {
@@ -3205,14 +3098,6 @@ impl Mt1959Engine {
                 })
             }
             Some(BootInitSite::ClassicUnconfirmed(s)) => {
-                if !CLASSIC_BOOT_BLESSED {
-                    bail!(
-                        "boot-init site 0x{s:x} resolved via the MT1939-classic signature is a \
-                         called leaf helper whose power-on call-order is hardware-unconfirmed. \
-                         Refusing to ship an unblessed classic boot hook (could brick the drive) \
-                         — CLASSIC_BOOT_BLESSED is false until the site is verified on silicon."
-                    );
-                }
                 classic_boot_init_caller(image, s as usize).ok_or_else(|| {
                     anyhow!(
                         "classic boot-init: the helper at anchor 0x{:x} does not have exactly one \
@@ -3237,8 +3122,7 @@ impl Mt1959Engine {
     ///
     /// A missing boot site refuses emission. Modern sites follow the validated
     /// cold/warm convergence call; classic sites use the uniquely resolved helper
-    /// caller when `CLASSIC_BOOT_BLESSED` permits it. The resolver checks that
-    /// policy before this emitter consumes the resolved pair.
+    /// caller. The resolver qualifies the pair before this emitter consumes it.
     pub(crate) fn emit_boot_init(
         &self,
         _image: &[u8],

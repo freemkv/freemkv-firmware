@@ -142,14 +142,16 @@ impl Mt1959Engine {
 
         // ---- BASE (mandatory) — the verb handler + boot hook + save/reset need these;
         // a miss means this image cannot carry a freemkv base, so refuse.
-        let scanner_entry = self.find_scanner_entry(image)?;
-        let cdb_base = self.find_cdb_base(image)?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis.commands().context("native command ownership")?;
+        let scanner_entry = commands.scanner().entry() as u32;
+        let cdb_base = commands.scanner().cdb();
         // sense_setter is a REPORT anchor only — build_handler never uses it, and the
         // classic scanner raises sense inline (no movs r2/r1/r0 + bl triple), so its
         // modern shape legitimately misses on classic. Best-effort (0 when absent) so
         // it never blocks the base; byte-identical on every path (emit ignores it).
-        let sense_setter = self.sense_setter(image).unwrap_or(0);
-        let record = self.find_live_record(image, abi::READ_BUFFER_OPCODE)?;
+        let sense_setter = Self::sense_setter_at(image, commands.scanner().entry()).unwrap_or(0);
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)?;
         // ---- FEATURE facts (best-effort) — these are per-feature report anchors, NOT
         // required by the base handler. A miss = that feature is unavailable on this
         // image (0/None), advertised as such; it must never fail the base build.
@@ -160,25 +162,21 @@ impl Mt1959Engine {
         let setdiscmode = self.find_setdiscmode(image).unwrap_or(0);
         let de_off = self.find_de_byte(image).ok(); // DowngradeEnable feature (optional)
                                                     // AUDIT-only candidate cell (unsound; never used as the flag base) — best-effort.
-        let free_sram_cell = self.find_free_sram_cell(image).unwrap_or(0);
-        // Flag-table base actually used by the emitted code: the validated 204-byte
-        // free hole (chip constant, hardware-proven writable+free across 24 images).
+        let ram = super::sram::SramPlacement::inspect(image);
+        let free_sram_cell = ram.candidate().unwrap_or(0);
+        // Use the modern candidate supported by the owned runtime capture,
+        // with per-image static guards; this is not universal hardware proof.
         let flag_base = FLAG_TABLE_BASE;
         // Hybrid safety belt: cells are chip constants, but assert per-image they
         // sit in mapped RAM and are unreferenced before we commit. The table holds
         // `flag[Feature::X]` for feature ids `1..=NUM_FEATURES` (slot 0 is the
         // NV saved-marker), so it spans `NUM_FEATURES + 1` = 7 bytes.
         let flag_table_len = NUM_FEATURES as u32 + 1;
-        self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
+        ram.assert_free(flag_base, flag_table_len, "flag table")?;
         // TEMPORARY flash-write probe: its 1-byte SRAM source-staging cell lives in
         // the same validated free hole, past the flag table — guard-check it per
         // image so we never stage the source byte over live SRAM.
-        self.assert_sram_cell_free(
-            image,
-            flag_base + FLASHWRITE_SCRATCH_OFF,
-            1,
-            "flash-write scratch",
-        )?;
+        ram.assert_free(flag_base + FLASHWRITE_SCRATCH_OFF, 1, "flash-write scratch")?;
 
         // Resolve the boot-init detour `(conv, orig_init)` pair once, up front,
         // so we can bake the boot function's entry VA (conv - 0x10) into the
@@ -189,8 +187,8 @@ impl Mt1959Engine {
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
 
         let handler_bytes = self
-            .build_handler_with_identity(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
@@ -273,11 +271,6 @@ impl Mt1959Engine {
         } else {
             boot_stub_va
         };
-
-        // HRL wipe-once is destructive and gated behind HRL_WIPE_ARMED (default
-        // off) — its record codegen is `hrl_valid_empty_record`; no image ships the
-        // wipe detour until a hardware-validated confirmation flips the constant.
-        let _hrl_wipe_armed = HRL_WIPE_ARMED;
 
         // Downgrade-enable (DE) byte: write 0xDE at the identity-page slot when the
         // slot resolved (idempotent on already-DE images). Best-effort: an image whose
@@ -381,21 +374,18 @@ impl Mt1959Engine {
 
         // ---- Base prerequisites: if these fail the vendor command cannot exist
         //      at all → whole-run abort ("nothing modifiable"). ----
-        self.find_scanner_entry(image)
-            .context("nothing modifiable: dispatch scanner signature not found")?;
-        self.find_cdb_base(image)?;
-        self.sense_setter(image)?;
-        let record = self.find_live_record(image, abi::READ_BUFFER_OPCODE)?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis
+            .commands()
+            .context("nothing modifiable: native command ownership")?;
+        Self::sense_setter_at(image, commands.scanner().entry())?;
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)?;
+        let ram = super::sram::SramPlacement::inspect(image);
         let flag_base = FLAG_TABLE_BASE;
         let flag_table_len = NUM_FEATURES as u32 + 1;
-        self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
+        ram.assert_free(flag_base, flag_table_len, "flag table")?;
         // TEMPORARY flash-write probe scratch cell (see build_report).
-        self.assert_sram_cell_free(
-            image,
-            flag_base + FLASHWRITE_SCRATCH_OFF,
-            1,
-            "flash-write scratch",
-        )?;
+        ram.assert_free(flag_base + FLASHWRITE_SCRATCH_OFF, 1, "flash-write scratch")?;
         // Boot function entry baked into the Verb::Reboot arm — same rule as
         // build_report (conv - 0x10). Resolve the pair once and thread it into
         // `emit_boot_init` below to avoid a second `find_boot_init` scan.
@@ -403,11 +393,12 @@ impl Mt1959Engine {
         let resolved_boot_init_site = boot_init_pair.0 as u32;
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
         let handler_bytes = self
-            .build_handler_with_defaults(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
+                identity_blob(),
                 defaults,
             )
             .context("assembling the 3C-0E handler")?;

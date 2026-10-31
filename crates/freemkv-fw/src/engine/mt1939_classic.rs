@@ -233,24 +233,15 @@ impl Mt1959Engine {
     /// `mt1939-classic-identity-base.md` proves 17/17, mirroring the base tier of
     /// [`Self::build_modify_classic`] but producing a [`CreateReport`].
     ///
-    /// Ships the injected `0x3C-0E` handler (Identity / SET / GET / SAVE / RESET /
-    /// DumpAll) + record repoint + CMAC re-sign, and — now that the classic boot
-    /// hook is blessed (`CLASSIC_BOOT_BLESSED`, emulation-verified) — the always-on
-    /// boot-init hook plus the classic feature stubs, mirroring the modern
-    /// [`Self::build_report`] structure (boot FIRST, then features).
-    ///
-    /// **SAFETY COUPLING.** The boot hook fills the flag table with `0xFF` at
-    /// power-on, which is what makes the tri-state `0x00 == OFF` invariant every
-    /// feature stub relies on hold on a freshly powered drive. It is therefore
-    /// emitted FIRST and every feature emit is gated on its success; if
-    /// `Self::emit_boot_init` fails on some classic image, this falls back to a
-    /// BARE base (handler + record repoint + CMAC only) and ships NO feature stub —
-    /// never a feature that would boot into its OFF state without the 0xFF-fill.
+    /// Installs the command handler, repoints its record and re-signs CMAC.
+    /// The source-qualified boot hook initializes the requested settings before
+    /// feature hooks run. If boot initialization cannot be installed, the base
+    /// report contains no feature hooks.
     ///
     /// Feature availability follows the emitted hooks. Classic read speed uses
     /// the native selector/RMAX contract, not the modern ramp gate. Region,
-    /// Encryption and HRL retain their own evidence. UHD/BD conversion remains
-    /// unavailable until the native recognition and read path are established.
+    /// Encryption and HRL retain their own evidence. Media conversion requires
+    /// the complete source-bound group; physical reading remains unqualified.
     pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
         self.build_report_classic_with_defaults(image, &BootSettings::standard())
     }
@@ -266,60 +257,45 @@ impl Mt1959Engine {
         }
 
         // ---- BASE (mandatory) — classic finders, all PROVEN 17/17.
-        let scanner_entry = self
-            .find_scanner_entry(image)
-            .context("classic base: dispatch scanner not found")?;
-        let cdb_base = self
-            .find_cdb_base(image)
-            .context("classic base: CDB base")?;
-        self.find_response_writer(image)
-            .context("classic base: response writer")?;
-        self.find_response_commit(image)
-            .context("classic base: response commit")?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis
+            .commands()
+            .context("classic base: native command ownership")?;
+        let scanner_entry = commands.scanner().entry() as u32;
+        let cdb_base = commands.scanner().cdb();
+        analysis.response().context("classic base: response I/O")?;
         // sense_setter is a REPORT anchor only (build_handler never uses it); the
         // classic scanner raises sense inline, so the modern shape legitimately
         // misses. Best-effort (0 when absent) — never blocks the base.
-        let sense_setter = self.sense_setter(image).unwrap_or(0);
+        let sense_setter = Self::sense_setter_at(image, commands.scanner().entry()).unwrap_or(0);
 
         // Classic 0x3C dispatch table lives in its own window (~0x1a4000), NOT the
         // modern find_live_record windows.
-        let record = self
-            .find_live_record_in(image, abi::READ_BUFFER_OPCODE, 0, image.len())
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)
             .context("classic base: live 0x3C dispatch record")?;
 
         // Classic SRAM map differs from MT1959 — derive an unreferenced cell from
         // THIS image (the modern FLAG_TABLE_BASE collides with classic live SRAM).
-        let flag_base = self
-            .find_free_sram_cell(image)
+        let ram = super::sram::SramPlacement::inspect(image);
+        let flag_base = ram
+            .candidate()
             .context("classic base: free SRAM cell for the flag table")?;
-        self.assert_sram_cell_free(
-            image,
+        ram.assert_free(
             flag_base,
             super::core::FLASHWRITE_SCRATCH_OFF + 1,
             "classic flag table and flash scratch",
         )?;
 
-        // Classic reboot verb: bake `boot_init_site - 0x10` (the classic caller_bl_site,
-        // minus 0x10 — the analogous offset to the modern boot function prologue). If
-        // the classic site refuses to resolve, treat the reboot verb as unwired (0)
-        // rather than failing the whole classic base build.
-        // Classic Verb::Reboot: RETIRED (baked as 0 = inert). The modern
-        // `boot_init_site - 0x10` offset is anchored on BOOT_INIT_SIG's fixed
-        // `bmi +3`, so on modern images subtracting 0x10 always lands at the
-        // boot function's push prologue. The classic BOOT_INIT_SIG_CLASSIC
-        // resolves a caller-bl inside whichever parent function calls the
-        // classic leaf helper, and that VA has no fixed offset to any function
-        // entry. Baking `site - 0x10` would blx into garbage and wedge the
-        // drive. Reboot on classic images is left inert (returns zeroed reply,
-        // no side effect); a future signature dedicated to the classic boot
-        // function entry can flip this back on.
+        // No classic reboot function entry is qualified. Its caller site has no
+        // fixed offset to a function prologue, so leave the reboot verb inert.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler_with_defaults(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
+                identity_blob(),
                 defaults,
             )
             .context("classic base: assembling the 3C-0E handler")?;
@@ -574,54 +550,39 @@ impl Mt1959Engine {
         // response writer/commit that build_handler needs. If any is missing the
         // vendor handler can't be built → this classic build can't run (the caller
         // degrades to the DE-only path).
-        self.find_scanner_entry(image)
-            .context("classic base: dispatch scanner not found")?;
-        self.find_cdb_base(image)
-            .context("classic base: CDB base")?;
-        self.find_response_writer(image)
-            .context("classic base: response writer")?;
-        self.find_response_commit(image)
-            .context("classic base: response commit")?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis
+            .commands()
+            .context("classic base: native command ownership")?;
+        analysis.response().context("classic base: response I/O")?;
 
         // Classic dispatch table window (~0x1a4000, engine-scope §1).
-        let record = self
-            .find_live_record_in(image, abi::READ_BUFFER_OPCODE, 0, image.len())
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)
             .context("classic base: live 0x3C dispatch record")?;
 
         // Statically unreferenced candidate for the freemkv flag table (classic SRAM map
         // differs from MT1959, so we do not reuse the MT1959 FLAG_TABLE_BASE
         // placeholder — we derive an unreferenced cell from THIS image).
-        let flag_base = self
-            .find_free_sram_cell(image)
+        let ram = super::sram::SramPlacement::inspect(image);
+        let flag_base = ram
+            .candidate()
             .context("classic base: free SRAM cell for the flag table")?;
-        self.assert_sram_cell_free(
-            image,
+        ram.assert_free(
             flag_base,
             super::core::FLASHWRITE_SCRATCH_OFF + 1,
             "classic flag table and flash scratch",
         )?;
 
-        // Classic reboot verb: same rule as build_report_classic — bake
-        // `boot_init_site - 0x10` from the classic caller_bl_site when it
-        // resolves (blessed), else 0 (unwired). Keeps modify byte-identical to
-        // create on the classic base.
-        // Classic Verb::Reboot: RETIRED (baked as 0 = inert). The modern
-        // `boot_init_site - 0x10` offset is anchored on BOOT_INIT_SIG's fixed
-        // `bmi +3`, so on modern images subtracting 0x10 always lands at the
-        // boot function's push prologue. The classic BOOT_INIT_SIG_CLASSIC
-        // resolves a caller-bl inside whichever parent function calls the
-        // classic leaf helper, and that VA has no fixed offset to any function
-        // entry. Baking `site - 0x10` would blx into garbage and wedge the
-        // drive. Reboot on classic images is left inert (returns zeroed reply,
-        // no side effect); a future signature dedicated to the classic boot
-        // function entry can flip this back on.
+        // No classic reboot function entry is qualified. Its caller site has no
+        // fixed offset to a function prologue, so leave the reboot verb inert.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler_with_defaults(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
+                identity_blob(),
                 defaults,
             )
             .context("classic base: assembling the 3C-0E handler")?;

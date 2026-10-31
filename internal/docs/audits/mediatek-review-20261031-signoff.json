@@ -1,0 +1,93 @@
+{
+  "status": "software-contract-validation-passed",
+  "version": "0.16.0",
+  "baseline_commit": "5651c2334ddf30a86ce3b0bf5743c7ca43969c8c",
+  "dependency_commit": "9456d3a9154e10f60ad8745c81a6e2c4c4eec0c8",
+  "retained_inputs": 123,
+  "newly_built_and_executed_outputs": 123,
+  "byte_identical_outputs": 123,
+  "groups": {
+    "newer-native": 82,
+    "older-conversion-required": 12,
+    "classic-conversion-required": 29
+  },
+  "five_settings_preserved": true,
+  "website_entries_supported": 97,
+  "website_entries_total": 98,
+  "hardware_validated": 0,
+  "excluded_input": "BP50NB40 1.00 c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+  "software_checks": {
+    "installed_stages": 2019,
+    "installed_cases": 5249574,
+    "native_stages": 492,
+    "native_cases": 839024,
+    "rust_library_tests_passed": 237,
+    "integration_tests_passed": 13,
+    "optional_package_test_ignored": 1,
+    "python_tests_run": 45,
+    "python_fixture_inapplicable_skips": 2,
+    "separate_newer_ake_tests_passed": 7,
+    "reset_continuation_mutants_detected": 282
+  },
+  "performance": {
+    "all": {
+      "inputs": 123,
+      "before_api_seconds": 249.696585539,
+      "after_api_seconds": 156.489319957,
+      "reduction_percent": 37.32820990755679,
+      "median_paired_ratio": 0.6111959900916236
+    },
+    "classic-conversion-required": {
+      "inputs": 29,
+      "before_api_seconds": 80.283815498,
+      "after_api_seconds": 49.312175453,
+      "reduction_percent": 38.57768823377801,
+      "median_paired_ratio": 0.615883817174177
+    },
+    "newer-native": {
+      "inputs": 82,
+      "before_api_seconds": 137.150328957,
+      "after_api_seconds": 83.487679504,
+      "reduction_percent": 39.12688351613401,
+      "median_paired_ratio": 0.6087304704542855
+    },
+    "older-conversion-required": {
+      "inputs": 12,
+      "before_api_seconds": 32.262441084,
+      "after_api_seconds": 23.689465,
+      "reduction_percent": 26.572620657187723,
+      "median_paired_ratio": 0.7523728987907887
+    }
+  },
+  "helper_size_delta_bytes": 0,
+  "builder_sha256": "9fbda6b7ef0bcaa7cdd82296b124f732e17568270ac459e3173f2e17f6c9e5c5",
+  "cli_sha256": "a26828c4ace3d76909780ea0167de9442c09c25b932b1f67c46977b71bf982b7",
+  "source_manifest_sha256": "e3940460b1c89d772274a23c38cf9245f1ce379960bf24b93245e3e7d15d6524",
+  "qualification": "Finite source-bound software contracts; not exhaustive software-state coverage, physical reading, acquisition, native initialization, resident/controller completion or AACS completion. Hardware remains 0/123.",
+  "artifacts": {
+    "mediatek-review-20261031-baseline-receipt.json.gz": "44f9de763b0ececbab0eeda730cf2460aee6c3012ea1086b0e0166caffa0fedb",
+    "mediatek-review-20261031-baseline-source.tar.gz": "3de4da8916ec1f835a6c33c199eb2166cf19efaa32fe175b397a88681d30e013",
+    "mediatek-review-20261031-benchmark.py": "2b4df98540381a4abe9f741f8714c529978907b3c619080124505ff9d5e85fa6",
+    "mediatek-review-20261031-bh16ns48.json": "1c412ddd2fabb0e2587be51531a239bb542dddca2d37639eefe094c4a4c10812",
+    "mediatek-review-20261031-capability-matrix.json.gz": "6d2f1bd2307150adce2764e2d69a8ea672d48f7c4a0a71de20edcc3f1b41affe",
+    "mediatek-review-20261031-clippy.txt": "00d18ef85d70e2be136d9682474280d9bb8c4d19f9d7647647828a675a339e6d",
+    "mediatek-review-20261031-deny-mutations.json": "527d60e72f99d92811368f223cda7645a7197e1a4dcb03810250321903a2327c",
+    "mediatek-review-20261031-deny.py": "e345bcc64b402f0c3f9ae6edb7e0ca4387a4b2ba95bc0114a528d5eee4833fbe",
+    "mediatek-review-20261031-dependencies.json": "6f75bac50ea3574874c7c42e7c2218f81cf2bcbe085fec961b03e5dc5152bcdb",
+    "mediatek-review-20261031-dependency-ref.txt": "b0e02a6602f8717444f64abd492648d64fe301a1d579831ff7bfd89f3dec659a",
+    "mediatek-review-20261031-format.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mediatek-review-20261031-integration-tests.txt.gz": "a0d9cabf3eb0282e286c05bd8306d38331ec99b0042443868f9e5e448436bcea",
+    "mediatek-review-20261031-inventory.py": "ba808a8367822ddc55a8798c82d044e4e8c25d7b62e15b19d33d32eba7664784",
+    "mediatek-review-20261031-newer-ake-tests.txt": "45c79ad3de347a6ff1110fb0064c5278f4d0990ad5a5e20f46c18d0e254e03e4",
+    "mediatek-review-20261031-output-comparison.json": "bb4b5a99c66e45f8efea3bce66002525f4f092ae079fcddd750b48fcbce0d36c",
+    "mediatek-review-20261031-performance.json": "45ebb273f7098c4e2c88099db8b9b49ff22b8452d98f32bea6ada639dfddffda",
+    "mediatek-review-20261031-python-tests.txt": "e8e440b9cb96eea39dd0cceb4daccb3ba61d41d984b2c1ddcb667a25cbe2567c",
+    "mediatek-review-20261031-receipt.json.gz": "32d821cd095480b746da5c43d71c2d919c169aa92b931384ebb8bf3720823e57",
+    "mediatek-review-20261031-rust-tests.txt.gz": "3b02f4934d9b678840d92f13a61750691e792404e421a76d4693f2ae4ba3eeb8",
+    "mediatek-review-20261031-scan-sites.json": "a5454850b3a540454289254e517043f0197a00d3410381e495c96413c1673885",
+    "mediatek-review-20261031-scope.txt": "6d6c42aa8c34bf874a4a6d3b8520086f1614251d4ee3e32215607cba4c4db1fe",
+    "mediatek-review-20261031-signatures.json": "12fc656438af3feab2626cee69f2e68029d9d6566a4654b0c2503b7ba5fdced7",
+    "mediatek-review-20261031-source.tar.gz": "e36f929c073f16b0c6c835639beb08d3c691e700c8bc8f75b1ceb95924b658d3",
+    "mediatek-review-20261031.md": "86226a5d0b50401e115aa72c7ac13a1a81eb5e761118f964380b305ffa77cc9c"
+  }
+}

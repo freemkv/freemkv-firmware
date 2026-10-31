@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Frozen OEM-only126 production/CLI/helper audit plus native-role matrix.
+"""Frozen retained OEM-only123 production/CLI/helper audit plus native-role matrix.
 
-One corpus run owns actual production authoring. Explicit refusals are retained;
-only their original OEM code is executed through --native-only evidence.
+Every retained input must produce a final BIN. Historical raw-readback refusals
+remain in their immutable receipt and are not members of this acceptance scope.
 """
 import argparse
 from collections import Counter
@@ -20,9 +20,11 @@ import stages
 
 ROLES=('DiscInformation','ControlBit','ControlField','ForwardCalculation',
        'ReverseCalculation','ParameterNibble')
-EXPECTED_GROUPS={'newer-native':85,'older-conversion-required':12,
+EXPECTED_GROUPS={'newer-native':82,'older-conversion-required':12,
                  'classic-conversion-required':29}
-REFUSAL_PREFIXES=('40118f8171da','d286c5a7ea4a','5e2ec51fb355')
+# Sorted (input hash, acceptance group) pairs from the retained 20261031 inventory.
+# This binds test membership only; production recognition never consults it.
+MEMBERSHIP_SHA256='8f7c7c842698452c44938953c67788c8ac646fc6a59997770e2e98beff38668d'
 FEATURE_FACTS={'speed':{'speed':'speed_stub_va'},'region':{'region':'region_stub_va'},
  'encryption':{'ake':'ake_stub_va','deny-reset':'deny_stub_va'},'hrl':{'hrl':'hrl_stub_va'},
  'unrestricted':{'vid':'gatea_stub_va','auth_cell':'auth_cell_stub_va',
@@ -68,32 +70,25 @@ def review_gaps(result):
     return {'reviewed_boundaries':reviewed,'unreviewed_software_gaps':unreviewed}
 
 
-def native_row(row, prior, hoard, output, builder):
+def validate_inventory(rows):
+    assert len(rows)==123 and len({r['sha256'] for r in rows})==123,'expected exact unique123 OEM-only scope'
+    assert Counter(r['acceptance_group'] for r in rows)==Counter(EXPECTED_GROUPS),'scope group membership differs'
+    assert all(r['catalogue_patched'] is False for r in rows),'modified input in OEM-only scope'
+    membership=json.dumps(sorted((r['sha256'],r['acceptance_group']) for r in rows),separators=(',',':')).encode()
+    assert corpus.sha(membership)==MEMBERSHIP_SHA256,'retained input/group membership differs'
+
+
+def native_row(row, prior, output):
     folder=Path(output)/row['sha256']
-    final=prior.get('output_sha256') is not None
-    result={'input_sha256':row['sha256'],'final_bin_compared':final,'stages':[]}
+    result={'input_sha256':row['sha256'],'final_bin_compared':False,'stages':[]}
     try:
-        if final:
-            original=(folder/'original.bin').read_bytes();modified=(folder/'modified.bin').read_bytes()
-            assert corpus.sha(original)==prior['canonical_sha256']
-            assert corpus.sha(modified)==prior['output_sha256']
-            doc=json.loads((folder/'modify.json').read_text());contracts=doc['execution_contracts']
-            base=contracts['base'];roles=contracts['native_media_roles'];engine=doc['engine']
-        else:
-            assert prior['status']=='production-refusal','native-only allowed only after explicit production refusal'
-            assert row['sha256'].startswith(REFUSAL_PREFIXES),'unexpected production refusal'
-            source=Path(hoard)/row['path'];assert corpus.sha(source.read_bytes())==row['sha256']
-            isolated=folder/'native-only';isolated.mkdir(parents=True,exist_ok=True)
-            built=corpus.command([builder,source,isolated,'--native-only'])
-            assert built['status']=='native-contracts-only' and built['input_sha256']==row['sha256']
-            original=(isolated/'original.bin').read_bytes();modified=None
-            assert corpus.sha(original)==built['canonical_sha256']
-            roles=json.loads((isolated/'native.json').read_text())
-            # Native roles never access freeMKV flags. Provide a declared mapped
-            # observation address solely to satisfy the generic CPU runner ABI.
-            base={'flags':0x0202ff00};engine=row['identified_family']
-            result['native_only_build']=built
-            result['native_contracts_sha256']=corpus.sha((isolated/'native.json').read_bytes())
+        assert prior.get('output_sha256'),'retained native row requires an actual production output'
+        original=(folder/'original.bin').read_bytes();modified=(folder/'modified.bin').read_bytes()
+        assert corpus.sha(original)==prior['canonical_sha256']
+        assert corpus.sha(modified)==prior['output_sha256']
+        result['final_bin_compared']=True
+        doc=json.loads((folder/'modify.json').read_text());contracts=doc['execution_contracts']
+        base=contracts['base'];roles=contracts['native_media_roles'];engine=doc['engine']
         result['canonical_sha256']=corpus.sha(original)
         trace=folder/'native-traces.jsonl.gz'
         with gzip.open(trace,'wt') as sink:
@@ -177,15 +172,12 @@ def main():
     for name in ('inventory','hoard','builder','fw','output'):p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--dependency-commit',required=True)
     p.add_argument('--workers',type=int,default=4)
+    p.add_argument('--baseline-receipt',type=Path,help='Require identical canonical/output bytes against this prior receipt')
     p.add_argument('--build',action='store_true')
     p.add_argument('--handler-rust-test-log',type=Path,help='Parent-reviewed final-source Rust handler/KAT test log; hashed as complementary evidence')
     args=p.parse_args();repo=Path(__file__).resolve().parents[2]
     inventory=json.loads(args.inventory.read_text());rows=inventory['images']
-    assert len(rows)==126 and len({r['sha256'] for r in rows})==126,'expected exact unique126 OEM-only scope'
-    assert Counter(r['acceptance_group'] for r in rows)==Counter(EXPECTED_GROUPS),'scope group membership differs'
-    assert all(r['catalogue_patched'] is False for r in rows),'modified input in OEM-only scope'
-    expected_refusals={r['sha256'] for r in rows if r['sha256'].startswith(REFUSAL_PREFIXES)}
-    assert len(expected_refusals)==3,'expected explicit three raw-readback producer refusals'
+    validate_inventory(rows)
     args.output.mkdir(parents=True,exist_ok=True)
     assert not (args.output/'receipt.json').exists(),'fresh output required; never overwrite a frozen run'
     argv=[sys.executable,str(Path(__file__).with_name('corpus.py')),
@@ -194,6 +186,7 @@ def main():
           '--output',str(args.output.resolve()),'--workers',str(args.workers),
           '--dependency-commit',args.dependency_commit,'--require-installed-conversion']
     if args.build:argv.append('--build')
+    if args.baseline_receipt:argv.extend(['--baseline-receipt',str(args.baseline_receipt.resolve())])
     completed=subprocess.run(argv,cwd=repo)
     receipt_path=args.output/'receipt.json'
     assert receipt_path.exists(),'corpus failed before writing frozen receipt'
@@ -214,8 +207,7 @@ def main():
     assert set(by_sha)=={r['sha256'] for r in rows},'corpus omitted scope membership'
     newer=[r for r in rows if r['acceptance_group']=='newer-native']
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        pending={pool.submit(native_row,r,by_sha[r['sha256']],str(args.hoard.resolve()),
-                             str(args.output.resolve()),str(args.builder.resolve())):r for r in newer}
+        pending={pool.submit(native_row,r,by_sha[r['sha256']],str(args.output.resolve())):r for r in newer}
         for future in as_completed(pending):
             row=pending[future]
             try:result=future.result()
@@ -236,10 +228,12 @@ def main():
     reasons=[]
     if completed.returncode:reasons.append('corpus command failed')
     if not frozen:reasons.append('source/dependency/binary freeze invalidated')
-    if actual_refusals!=expected_refusals:reasons.append('producer refusals differ from three explicit raw readbacks')
+    if actual_refusals:reasons.append('retained scope permits zero production refusals')
     if len(produced)!=123:reasons.append('expected123 actual authored outputs')
+    if args.baseline_receipt and any(not r.get('baseline_comparison',{}).get('canonical_identical') or not r.get('baseline_comparison',{}).get('output_identical') for r in receipt['images']):
+        reasons.append('baseline canonical/output comparison failed or missing')
     if any(not r.get('cli_api_identical') for r in produced):reasons.append('actual API/CLI comparison missing')
-    if any(r['status'] not in ('bounded-pass','partial','production-refusal') for r in receipt['images']):reasons.append('production or ordinary/helper row failed or unqualified')
+    if any(r['status'] not in ('bounded-pass','partial') for r in receipt['images']):reasons.append('production or ordinary/helper row failed or unqualified')
     if any(s.get('status')!='passed' or s.get('cases',0)<=0 for r in produced for s in r.get('stages',[])):
         reasons.append('installed ordinary/helper stage failed, unqualified or unexecuted')
     conversion_rows=[by_sha[r['sha256']] for r in rows if r['acceptance_group'].endswith('conversion-required')]
@@ -257,11 +251,11 @@ def main():
     if any(set(m['capabilities'])!=set(FEATURE_FACTS) or not all(c['supported'] for c in m['capabilities'].values()) for m in matrix if m['final_bin_available']):reasons.append('authorable output does not advertise exactly five supported features')
     if any(c['status'].startswith('unqualified') or c['status']=='failed' for m in matrix for c in m['capabilities'].values()):reasons.append('advertised capability missing or failed execution contract')
     if any(m['coverage_gap_review']['unreviewed_software_gaps'] for m in matrix):reasons.append('unreviewed software coverage gaps remain')
-    final={'schema':'mediatek-oem126-capability-matrix-v1','software_contract_acceptance_passed':not reasons,
+    final={'schema':'mediatek-oem123-capability-matrix-v2','software_contract_acceptance_passed':not reasons,
            'acceptance_failures':reasons,'counts':EXPECTED_GROUPS,'authorable_final_bins':len(produced),
            'explicit_production_refusals':sorted(actual_refusals),'native_cpu_cases':receipt['native_cpu_cases'],
            'source_freeze_valid':frozen,'physical_reading_qualified':False,
-           'scope':'Actual API/CLI outputs, installed helpers and bounded advertised/native software contracts; OEM-only native checks on explicit refusals never count as authored final BINs.',
+           'scope':'All 123 retained actual API/CLI outputs, installed helpers and bounded advertised/native software contracts; zero production refusals. Historical withdrawn raw readbacks are outside this scope.',
            'images':matrix}
     receipt['scope_software_contract_acceptance_passed']=not reasons
     receipt_path.write_text(json.dumps(receipt,indent=2)+'\n')

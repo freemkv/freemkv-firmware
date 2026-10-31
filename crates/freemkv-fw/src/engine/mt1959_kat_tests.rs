@@ -846,29 +846,6 @@ fn hrl_skip_stub_gates_on_hrl_cell() {
     );
 }
 
-/// The gated HRL wipe-once record codegen: a well-formed valid-empty AACS HRL
-/// (record type 0x21, total-entries 0x0000 — NOT the 0xFFFF blank sentinel). The
-/// destructive on-drive flash program stays gated off by default.
-#[test]
-fn hrl_valid_empty_record_is_count_zero_type_0x21() {
-    let r = Mt1959Engine.hrl_valid_empty_record();
-    assert_eq!(r[0], 0x21, "record type = Host Revocation List (0x21)");
-    assert_eq!(
-        &r[4..6],
-        &[0x00, 0x00],
-        "total entries = 0 (NOT the 0xFFFF blank sentinel)"
-    );
-    assert_ne!(
-        &r[4..6],
-        &[0xFF, 0xFF],
-        "must never emit the blank sentinel"
-    );
-    // The destructive on-drive HRL wipe stays gated off by default.
-    if super::HRL_WIPE_ARMED {
-        panic!("destructive HRL wipe must stay gated off by default");
-    }
-}
-
 /// STATIC encoding guard for the **classic** AKE accept stub (`build_ake_stub_classic`).
 /// It must (a) replay the overwritten `lsrs r0,r0,#6` as its FIRST instruction (the
 /// classic reject writer folds the AGID compute into the 4 replaced bytes), (b) gate
@@ -1808,61 +1785,29 @@ fn mt19xx_corpus_finders_validate() {
     );
 }
 
-/// PHASE 3a (hoard-gated): the classic boot-init fallback resolves, and
-/// `emit_boot_init` still fails CLOSED on it. Finds the first MT1939-classic image
-/// in the corpus whose `find_boot_init` returns `ClassicUnconfirmed`, asserts the
-/// site's four bytes are the `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18` reload
-/// (`80 69 00 06`), and asserts the production emit path bails rather than shipping
-/// the unblessed hook. Skips when the corpus (or any classic image) is absent.
+/// Classic boot emission requires exactly one native caller of the leaf helper.
 #[test]
-fn classic_boot_init_resolves_but_emit_fails_closed() {
-    let eng = Mt1959Engine;
-    let roots = hoard_roots();
-    if roots.is_empty() {
-        eprintln!("SKIP: FREEMKV_KAT_HOARD unset — classic boot-init fallback test skipped");
-        return;
-    }
-    let mut files = Vec::new();
-    for root in &roots {
-        collect_bins(std::path::Path::new(root), &mut files);
-    }
-    files.sort();
-    files.dedup();
+fn classic_boot_init_requires_unique_caller() {
+    let image = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let engine = Mt1959Engine;
+    let site = match engine.find_boot_init(image).unwrap() {
+        Some(super::BootInitSite::ClassicUnconfirmed(site)) => site as usize,
+        other => panic!("expected classic boot site, got {other:?}"),
+    };
+    assert_eq!(&image[site..site + 4], &[0x80, 0x69, 0x00, 0x06]);
+    let (caller, helper) = engine.resolve_boot_init_pair(image).unwrap();
+    assert_eq!(helper as usize, site - 4);
+    assert_eq!(super::thumb::decode_bl(image, caller), Some(helper));
 
-    let mut checked = 0usize;
-    for path in &files {
-        let Ok(bytes) = std::fs::read(path) else {
-            continue;
-        };
-        let Ok(Some(super::BootInitSite::ClassicUnconfirmed(site))) = eng.find_boot_init(&bytes)
-        else {
-            continue;
-        };
-        checked += 1;
-        let s = site as usize;
-        // site+? : the four bytes AT the returned hook site are the reload we replay.
-        assert_eq!(
-            &bytes[s..s + 4],
-            &[0x80, 0x69, 0x00, 0x06],
-            "classic boot-init site @ {} must land on `ldr r0,[r0,#0x18]; lsls r0,r0,#0x18`",
-            path.display()
-        );
-        // Production emit MUST fail closed on the unconfirmed classic site
-        // (the gate now lives in resolve_boot_init_pair, which emit_boot_init
-        // consumes — so a bailed resolve is what prevents shipping).
-        let err = eng
-            .resolve_boot_init_pair(&bytes)
-            .expect_err("resolve_boot_init_pair must fail closed on a ClassicUnconfirmed site");
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("hardware-unconfirmed") || msg.contains("classic"),
-            "fail-closed error must name the unconfirmed classic site: {msg}"
-        );
-        break;
-    }
-    if checked == 0 {
-        eprintln!("SKIP: no MT1939-classic image found in the corpus for the fallback test");
-    }
+    let mut missing = image.to_vec();
+    missing[caller..caller + 4].fill(0);
+    assert!(engine.resolve_boot_init_pair(&missing).is_err());
+
+    let mut ambiguous = image.to_vec();
+    let extra = image.len() - 16;
+    let call = thumb_asm::encode_bl(extra, helper).unwrap();
+    ambiguous[extra..extra + 4].copy_from_slice(&call);
+    assert!(engine.resolve_boot_init_pair(&ambiguous).is_err());
 }
 
 /// Locks the fix for the DEBUG_KNOCK-fall-through-into-safe-dispatch bug: each

@@ -63,6 +63,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
     let defaults = BootSettings::standard();
+    let build_started = std::time::Instant::now();
     let (report, support) = match api::modify_with_defaults(original, &defaults) {
         Ok(value) => value,
         Err(error) => {
@@ -74,6 +75,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
     };
+    let build_seconds = build_started.elapsed().as_secs_f64();
     let structural = engine::audit::audit_image(original, &report);
     if !structural.ok() {
         let failures: Vec<_> = structural
@@ -420,7 +422,7 @@ fn main() -> Result<()> {
         "{}",
         json!({"input_sha256":source_hash,"canonical_sha256":canonical_hash,
         "output_sha256":output_hash,"status":if report.applied_count()>0 {"supported"} else {"unchanged"},
-        "engine":report.engine,"report":"modify.json"})
+        "engine":report.engine,"report":"modify.json","build_seconds":build_seconds})
     );
     Ok(())
 }
