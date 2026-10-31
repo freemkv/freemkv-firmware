@@ -31,7 +31,7 @@ use pioneer_optical::drive::UpdateRuntime;
 #[cfg(test)]
 use pioneer_optical::drive::{UpdateError, UpdateOptions};
 use pioneer_optical::receiver::{
-    ExecutionMode, ExecutionRuntime, FlashPass, FlashTransport, PreparedNormal, PreparedUpdate,
+    ExecutionMode, ExecutionRuntime, FlashStage, FlashTransport, PreparedNormal, PreparedUpdate,
 };
 #[cfg(test)]
 use pioneer_optical::{receiver::FlashError, DriveClass};
@@ -58,6 +58,9 @@ pub(super) fn execute_with_sleep(
     mode: ExecutionMode,
     sleep: &mut dyn FnMut(Duration),
 ) -> Result<crate::backend::UpdateOutcome> {
+    if let PreparedFlash::Complete(plan) = &plan {
+        retain_handoff_bridges(plan)?;
+    }
     let shared = SharedDevice::new(dev);
     let mut reads = ScsiTransport::reads(&shared);
     let mut writes = ScsiTransport::flash(&shared);
@@ -74,7 +77,25 @@ pub(super) fn execute_with_sleep(
         mode,
         start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
-        completed_passes: 0,
+        completed_stages: 0,
+        stage_messages: match plan {
+            PreparedFlash::Complete(plan) => plan
+                .stages()
+                .iter()
+                .enumerate()
+                .skip(1)
+                .map(|(index, _)| {
+                    if plan.stages()[index - 1].bridge()
+                        == Some(pioneer_optical::receiver::BridgeKind::ReceiverMarker)
+                    {
+                        "restoring the unmodified target Kernel".to_string()
+                    } else {
+                        format!("continuing firmware update: stage {}", index + 1)
+                    }
+                })
+                .collect(),
+            PreparedFlash::Normal(_) => Vec::new(),
+        },
         verification: UpdateVerification {
             kernel: if matches!(&plan, PreparedFlash::Complete(_)) {
                 ComponentVerification::NotChecked
@@ -91,20 +112,27 @@ pub(super) fn execute_with_sleep(
         device: &shared,
         sleep,
     };
-    let restoration_required =
-        matches!(plan, PreparedFlash::Complete(p) if p.restoration_kernel_transfer().is_some());
-    let settings = match plan {
-        PreparedFlash::Complete(plan) => plan.settings(),
-        PreparedFlash::Normal(plan) => plan.settings(),
-    };
-    report_settings(settings);
+    let bridge_required =
+        matches!(plan, PreparedFlash::Complete(p) if p.final_stage_kernel_transfer().is_some());
+    match plan {
+        PreparedFlash::Complete(plan) => {
+            let mut previous = None;
+            for stage in plan.stages() {
+                if previous != Some(stage.normal_image()) {
+                    report_settings(stage.settings());
+                }
+                previous = Some(stage.normal_image());
+            }
+        }
+        PreparedFlash::Normal(plan) => report_settings(plan.settings()),
+    }
     let outcome = match plan {
         PreparedFlash::Complete(plan) => plan.execute(io, &mut runtime, mode),
         PreparedFlash::Normal(plan) => plan.execute(io, &mut runtime),
     }
     .map_err(|error| {
         crate::diagnostics::record(format!("UPDATE VERIFICATION: {}", runtime.verification));
-        execution_error(error, restoration_required, runtime.completed_passes)
+        execution_error(error, bridge_required, runtime.completed_stages)
             .context(runtime.verification.clone())
     })?;
     println!("{}", super::post_flash_line(&outcome.identity));
@@ -131,8 +159,8 @@ pub(super) fn execute_with_sleep(
             ),
             verified_regions,
             unverified_regions,
-            completed_stages: (1..=outcome.completed_passes)
-                .map(|pass| format!("Pioneer update pass {pass}"))
+            completed_stages: (1..=outcome.completed_stages)
+                .map(|stage| format!("Pioneer update stage {stage}"))
                 .collect(),
             temporary_firmware: false,
         },
@@ -158,7 +186,7 @@ fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
                 });
             }
             Effect::TemporaryKernelMarker => {
-                let text = "temporary receiver setting; pristine OEM Kernel restored and verified in the final pass";
+                let text = "temporary receiver setting; pristine OEM Kernel restored and verified in the final stage";
                 crate::diagnostics::record(format!(
                     "Pioneer setting {}: {text}",
                     setting.key().id()
@@ -201,7 +229,7 @@ where
     } else if code.starts_with("pioneer.settings.") {
         "A validated settings mapping is required for this firmware and is unavailable. No firmware was written."
     } else if status == crate::crossflash::CompatibilityStatus::SoftNo {
-        "Intermediate transfer is required but not implemented. No firmware was written."
+        "No validated bridge could be prepared for this transition. No firmware was written."
     } else {
         "No firmware was written. Check that the firmware package is complete and compatible with this drive"
     };
@@ -212,15 +240,55 @@ where
         .context(issue)
 }
 
+// Keep the exact handoff bridge in the existing report collector. After a
+// partial update it is the correct Current reference; the original backup has
+// the same displayed identity but a different programmer. No desktop files.
+pub(super) fn retain_handoff_bridges(plan: &PreparedUpdate) -> Result<()> {
+    use pioneer_optical::{envelope::Update, receiver::BridgeKind};
+    for (index, stage) in plan.stages().iter().enumerate() {
+        if stage.bridge() != Some(BridgeKind::KernelHandoff) {
+            continue;
+        }
+        let kernel = stage
+            .kernel_transfer()
+            .expect("handoff bridge includes Kernel");
+        let normal = stage.normal_transfer();
+        let package = Update::load(kernel, normal)?;
+        anyhow::ensure!(
+            Some(package.kernel().image.as_slice()) == stage.kernel_image()
+                && package.normal().image == stage.normal_image(),
+            "bridge report package differs from the prepared firmware"
+        );
+        let mut archive = tar::Builder::new(Vec::new());
+        for (name, bytes) in [("kernel.enc", kernel), ("normal.enc", normal)] {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            archive.append_data(&mut header, name, bytes)?;
+        }
+        let bytes = archive.into_inner()?;
+        let name = format!("pioneer-bridge-stage-{}.tar", index + 1);
+        crate::firmware_capture::retain("intermediate", std::path::Path::new(&name), None, &bytes);
+        crate::diagnostics::record(format!(
+            "Prepared bridge: stage={} package_sha256={}",
+            index + 1,
+            crate::mediatek_package::digest(&bytes)
+        ));
+    }
+    Ok(())
+}
+
 fn execution_error(
     error: pioneer_optical::receiver::ExecutionError<anyhow::Error>,
-    restoration_required: bool,
-    completed_passes: usize,
+    bridge_required: bool,
+    completed_stages: usize,
 ) -> anyhow::Error {
     let code = error.code();
+    let completed_stages = completed_stages.max(error.completed_stages());
     // Startup parameter writes are device mutations, but do not enter UPDATE.
-    // Only expose rollback guidance before any update command or completed pass.
-    let startup_issue = if completed_passes == 0 && !error.firmware_write_started() {
+    // Only expose rollback guidance before any update command or completed stage.
+    let startup_issue = if completed_stages == 0 && !error.firmware_write_started() {
         use pioneer_optical::startup::migration::{Error, Rollback};
         match &error {
             pioneer_optical::receiver::ExecutionError::Startup(migration) => {
@@ -260,7 +328,7 @@ fn execution_error(
     let failure = crate::backend::UpdateFailure {
         phase: error.phase().to_string(),
         write_started: error.write_started(),
-        progress: if completed_passes > 0 {
+        progress: if completed_stages > 0 {
             crate::backend::UpdateProgress::UploadComplete
         } else if error.firmware_write_started() {
             crate::backend::UpdateProgress::PayloadAttempted
@@ -268,9 +336,9 @@ fn execution_error(
             crate::backend::UpdateProgress::Preflight
         },
         payload_bytes_accepted: None,
-        temporary_firmware: restoration_required && error.firmware_write_started(),
-        completed_stages: (1..=completed_passes)
-            .map(|pass| format!("Pioneer update pass {pass}"))
+        temporary_firmware: bridge_required && error.firmware_write_started(),
+        completed_stages: (1..=completed_stages)
+            .map(|stage| format!("Pioneer update stage {stage}"))
             .collect(),
     };
     let error = anyhow::Error::new(error).context(format!("Pioneer update [{code}]; completion was not verified. Keep the pre-flash backup and diagnostic log"));
@@ -279,19 +347,24 @@ fn execution_error(
         None => error,
     };
     if failure.temporary_firmware {
-        error.context("pristine Kernel restoration did not complete; the temporary Kernel may remain installed").context(failure)
+        error
+            .context(
+                "the firmware sequence did not complete; the temporary Kernel may remain installed",
+            )
+            .context(failure)
     } else {
         error.context(failure)
     }
 }
 
 struct Runtime<'a, 'd> {
+    stage_messages: Vec<String>,
     mode: ExecutionMode,
     device: &'a SharedDevice<'d>,
     sleep: &'a mut dyn FnMut(Duration),
     start: crate::runtime_clock::Clock,
     waited: Duration,
-    completed_passes: usize,
+    completed_stages: usize,
     verification: UpdateVerification,
     kernel: style::Progress,
     normal: style::Progress,
@@ -357,7 +430,7 @@ impl UpdateRuntime for Runtime<'_, '_> {
 }
 
 impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
-    fn verified(&mut self, pass: FlashPass, role: Role, matched: bool) {
+    fn verified(&mut self, stage: FlashStage, role: Role, matched: bool) {
         let state = if matched {
             ComponentVerification::Matched
         } else {
@@ -368,10 +441,10 @@ impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
             Role::Normal => self.verification.normal = state,
         }
         crate::diagnostics::record(format!(
-            "Pioneer verification: pass={pass:?} role={role:?} result={state:?}"
+            "Pioneer verification: stage={stage:?} role={role:?} result={state:?}"
         ));
     }
-    fn observed_identity(&mut self, pass: FlashPass, id: &pioneer_optical::Identity) {
+    fn observed_identity(&mut self, stage: FlashStage, id: &pioneer_optical::Identity) {
         self.verification.observed_identity = Some(format!(
             "{} {} {}",
             style::printable(id.vendor()),
@@ -379,18 +452,18 @@ impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
             style::printable(id.revision())
         ));
         crate::diagnostics::record(format!(
-            "Pioneer identity observed: pass={pass:?} {}",
+            "Pioneer identity observed: stage={stage:?} {}",
             self.verification.observed_identity.as_deref().unwrap()
         ));
     }
-    fn startup_confirmed(&mut self, pass: FlashPass) {
+    fn startup_confirmed(&mut self, stage: FlashStage) {
         self.verification.startup_confirmed = true;
-        crate::diagnostics::record(format!("Pioneer Normal startup confirmed: pass={pass:?}"));
+        crate::diagnostics::record(format!("Pioneer Normal startup confirmed: stage={stage:?}"));
     }
 
     fn verification_unavailable(
         &mut self,
-        pass: FlashPass,
+        stage: FlashStage,
         role: Role,
         address: Option<u32>,
         reason: &dyn std::fmt::Debug,
@@ -399,19 +472,21 @@ impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
             Role::Kernel => self.verification.kernel = ComponentVerification::Unavailable,
             Role::Normal => self.verification.normal = ComponentVerification::Unavailable,
         }
-        crate::diagnostics::record(format!("Pioneer verification unavailable: pass={pass:?} region={role:?} address={address:?} reason={reason:?}"));
+        crate::diagnostics::record(format!("Pioneer verification unavailable: stage={stage:?} region={role:?} address={address:?} reason={reason:?}"));
     }
 
-    fn check_pass(&mut self, pass: FlashPass) -> Result<()> {
-        if pass == FlashPass::Restoration {
-            self.completed_passes = 1;
-        }
+    fn check_stage(&mut self, stage: FlashStage) -> Result<()> {
+        self.completed_stages = self.completed_stages.max(stage.completed_stages());
         if self.mode == ExecutionMode::Flash {
             self.device
                 .with(|dev| crate::engine::guard_no_medium(dev, true))?;
         }
-        if pass == FlashPass::Restoration {
-            println!("{}", style::dim("restoring the unmodified target Kernel"));
+        if let Some(message) = stage
+            .completed_stages()
+            .checked_sub(1)
+            .and_then(|index| self.stage_messages.get(index))
+        {
+            println!("{}", style::dim(message));
         }
         Ok(())
     }

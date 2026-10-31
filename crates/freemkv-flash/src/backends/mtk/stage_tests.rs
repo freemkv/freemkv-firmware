@@ -286,7 +286,7 @@ fn run_with_restricted_receiver(
     };
     let plan = FlashPlan::new(Plan {
         image: intermediate.clone(),
-        final_prepared: Some(final_prepared),
+        following: vec![final_prepared],
         live,
         receiver,
         drive_product: "BD-RE BU40N".into(),
@@ -570,7 +570,7 @@ fn standalone_bin_plans_only_the_requested_image() {
         let state: &Plan = plan.state().unwrap();
         assert_eq!(state.image, target);
         assert!(
-            state.final_prepared.is_none(),
+            state.following.is_empty(),
             "a standalone BIN must not infer another stage"
         );
         assert!(dev.writes.is_empty());

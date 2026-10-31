@@ -389,6 +389,24 @@ const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware genera
     restores the unmodified OEM Kernel, and readback must verify it before success is reported. \
     Keep the pre-flash backup and dump until both updates complete.";
 
+/// User-visible requirements come from the prepared stages, not model names.
+fn bridge_warnings(plan: &pioneer_optical::receiver::PreparedUpdate) -> Vec<String> {
+    use pioneer_optical::receiver::BridgeKind;
+    let mut warnings = Vec::new();
+    for stage in plan.stages() {
+        let warning = match stage.bridge() {
+            Some(BridgeKind::ReceiverMarker) if plan.stages().len() == 2 => DOWNGRADE_WARNING,
+            Some(BridgeKind::ReceiverMarker) => "The update includes a temporary accepted Kernel marker. The final stage restores the requested Kernel and verifies its bytes. Keep the backup and diagnostic log until all stages complete.",
+            Some(BridgeKind::KernelHandoff) => "This update installs a temporary firmware bridge before the requested target. Each stage must start and pass verification before the next begins. This bridge requires hardware qualification; keep the backup and diagnostic log.",
+            None => continue,
+        };
+        if !warnings.iter().any(|existing| existing == warning) {
+            warnings.push(warning.to_string());
+        }
+    }
+    warnings
+}
+
 /// The post-flash identity readback line. The fields are drive-supplied bytes,
 /// so each goes through [`crate::style::printable`].
 fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
@@ -403,14 +421,6 @@ fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
     )
 }
 
-/// Whether the plan is `KernelDowngrade`.
-fn plan_is_downgrade(plan: &crate::backends::pioneer::flash_plan::FlashPlan) -> bool {
-    matches!(
-        plan,
-        crate::backends::pioneer::flash_plan::FlashPlan::KernelDowngrade
-    )
-}
-
 /// The cautions a routed plan carries; `Refused` aborts before any write.
 /// Same-generation and newer flashes take the ordinary OEM route. A
 /// generation-barrier downgrade is prepared by the library (temporary marker
@@ -421,7 +431,7 @@ pub(crate) fn routing_warnings(
     use crate::backends::pioneer::flash_plan::FlashPlan as Route;
     match plan {
         Route::Plain | Route::KernelCrossflash => Ok(Vec::new()),
-        Route::KernelDowngrade => Ok(vec![DOWNGRADE_WARNING.to_string()]),
+        Route::KernelMarkerBridge => Ok(vec![DOWNGRADE_WARNING.to_string()]),
         Route::Refused(reason) => bail!("refusing to flash: {reason}"),
     }
 }
@@ -675,12 +685,15 @@ fn authorize_installed_inner(
     debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
         &route
     ));
-    let will_patch = prepared
-        .complete
-        .as_ref()
-        .is_some_and(|p| p.restoration_kernel_transfer().is_some());
-    if will_patch && !plan_is_downgrade(&route) {
-        warnings.push(DOWNGRADE_WARNING.to_string());
+    if let Some(complete) = &prepared.complete {
+        // The complete stage plan is authoritative once installed evidence is
+        // available, including compositions with more than one bridge.
+        warnings.retain(|warning| warning != DOWNGRADE_WARNING);
+        for warning in bridge_warnings(complete) {
+            if !warnings.contains(&warning) {
+                warnings.push(warning);
+            }
+        }
     }
     let confirmation = flash_summary(kernel, Some(normal));
     let mut authorized = AuthorizedPlan::new(plan, prepared);
@@ -1175,11 +1188,8 @@ impl RecoveryFacet for Pioneer {
                  (experimental, offline-proven, hardware-unproven)",
             );
         }
-        if plan.requires_restoration() {
-            crate::output::field(
-                "Recovery plan",
-                "Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel",
-            );
+        for warning in plan.bridge_warnings() {
+            crate::output::field("Recovery plan", warning);
         }
         Ok(Box::new(plan))
     }

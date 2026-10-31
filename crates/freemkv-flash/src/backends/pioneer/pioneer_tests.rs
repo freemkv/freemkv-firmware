@@ -370,7 +370,7 @@ fn ud04_local_oem_envelope_transcript_when_configured() {
 /// Golden KAT for `offline_pair_data_out`: the exact Kernel+Normal linear-FE
 /// transcript of a UD03->UD04 crossflash or UD04 full-pair downgrade, from the
 /// real UD04 1.14 pair in the hoard (skipped when the corpus is absent). The
-/// components stream unmodified, so `KernelDowngrade` and `KernelCrossflash`
+/// components stream unmodified, so `KernelMarkerBridge` and `KernelCrossflash`
 /// share these bytes.
 const UD04_LINEAR_FE_GOLDEN: &str =
     "112c6a26ceaf04144711f3409a608b28224e8e46fe6ae05288270756fa647cc8";
@@ -688,7 +688,7 @@ fn routing_warnings_cover_every_variant() {
         .unwrap()
         .is_empty());
     assert_eq!(
-        routing_warnings(&Route::KernelDowngrade).unwrap(),
+        routing_warnings(&Route::KernelMarkerBridge).unwrap(),
         [DOWNGRADE_WARNING]
     );
     // A refusal always aborts.

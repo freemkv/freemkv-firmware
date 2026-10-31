@@ -8,19 +8,19 @@ fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
     let source = || anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
     for error in [
         FlashError::Preflight {
-            pass: FlashPass::Restoration,
+            stage: FlashStage::Continuation(1),
             source: source(),
         },
         FlashError::DescriptorRead {
-            pass: FlashPass::Restoration,
+            stage: FlashStage::Continuation(1),
             source: pioneer_optical::drive::Error::Transport(source()),
         },
         FlashError::Update {
-            pass: FlashPass::Restoration,
+            stage: FlashStage::Continuation(1),
             source: UpdateError::Finish(pioneer_optical::drive::Error::Transport(source())),
         },
         FlashError::Readback {
-            pass: FlashPass::Restoration,
+            stage: FlashStage::Continuation(1),
             source: pioneer_optical::drive::Error::Transport(source()),
         },
     ] {
@@ -61,7 +61,7 @@ fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
     }
 }
 
-/// Execute one prepared update pass after the final tray guard.
+/// Execute one prepared update stage after the final tray guard.
 /// The caller owns captured receiver evidence and any required restoration.
 fn execute_flash(
     dev: &mut dyn ScsiDevice,
@@ -85,7 +85,8 @@ fn execute_flash(
         sleep: &mut |_| {},
         start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
-        completed_passes: 0,
+        completed_stages: 0,
+        stage_messages: Vec::new(),
         verification: UpdateVerification {
             kernel: ComponentVerification::NotChecked,
             normal: ComponentVerification::NotChecked,
@@ -109,7 +110,7 @@ fn execute_flash(
     .map_err(|error| {
         execution_error(
             pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
-                pass: FlashPass::Initial,
+                stage: FlashStage::Initial,
                 source: error,
             }),
             false,
@@ -377,7 +378,7 @@ fn disc_inserted_at_confirmation_is_refused_before_update_entry() {
 #[test]
 fn loaded_disc_guard_applies_to_flash_but_not_recovery_passes() {
     for mode in [ExecutionMode::Flash, ExecutionMode::Recovery] {
-        for pass in [FlashPass::Initial, FlashPass::Restoration] {
+        for stage in [FlashStage::Initial, FlashStage::Continuation(1)] {
             let mut dev = crate::platform::MockScsiDevice::pioneer().with_medium_loaded();
             let shared = SharedDevice::new(&mut dev);
             let mut sleep = |_| {};
@@ -387,7 +388,8 @@ fn loaded_disc_guard_applies_to_flash_but_not_recovery_passes() {
                 sleep: &mut sleep,
                 start: crate::runtime_clock::Clock::new(),
                 waited: Duration::ZERO,
-                completed_passes: 0,
+                completed_stages: 0,
+                stage_messages: Vec::new(),
                 verification: UpdateVerification {
                     kernel: ComponentVerification::NotChecked,
                     normal: ComponentVerification::NotChecked,
@@ -398,15 +400,15 @@ fn loaded_disc_guard_applies_to_flash_but_not_recovery_passes() {
                 kernel: style::Progress::new("flashing kernel", 0),
                 normal: style::Progress::new("flashing normal", 0),
             };
-            let result = runtime.check_pass(pass);
+            let result = runtime.check_stage(stage);
             match mode {
                 ExecutionMode::Flash => assert!(
                     result.unwrap_err().to_string().contains("disc"),
-                    "Flash must reject loaded media for {pass:?}"
+                    "Flash must reject loaded media for {stage:?}"
                 ),
                 ExecutionMode::Recovery => assert!(
                     result.is_ok(),
-                    "Recovery must not apply the Flash-only tray check for {pass:?}"
+                    "Recovery must not apply the Flash-only tray check for {stage:?}"
                 ),
             }
         }
@@ -743,7 +745,7 @@ fn error_guidance_retains_phase_and_uncertain_completion() {
     ] {
         let error = execution_error(
             pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
-                pass: FlashPass::Initial,
+                stage: FlashStage::Initial,
                 source,
             }),
             false,
@@ -1045,7 +1047,7 @@ fn startup_wrapper_never_hides_firmware_or_completed_pass_consequences() {
     for (source, passes) in [
         (
             ExecutionError::Flash(FlashError::Update {
-                pass: FlashPass::Initial,
+                stage: FlashStage::Initial,
                 source: UpdateError::Entry(pioneer_optical::drive::Error::Transport(anyhow!(
                     "entry failed"
                 ))),
@@ -1054,7 +1056,7 @@ fn startup_wrapper_never_hides_firmware_or_completed_pass_consequences() {
         ),
         (
             ExecutionError::Flash(FlashError::Update {
-                pass: FlashPass::Initial,
+                stage: FlashStage::Initial,
                 source: UpdateError::Transfer {
                     role: Role::Normal,
                     offset: 0,
@@ -1066,7 +1068,7 @@ fn startup_wrapper_never_hides_firmware_or_completed_pass_consequences() {
         ),
         (
             ExecutionError::NormalMismatch {
-                pass: FlashPass::Initial,
+                stage: FlashStage::Initial,
                 address: 0,
             },
             0,
@@ -1124,4 +1126,32 @@ fn settings_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
         assert!(message.contains("No firmware was written"));
         assert!(!message.contains("hardware mismatch"));
     }
+}
+
+#[test]
+fn stage_failure_retains_completion_without_host_progress_callbacks() {
+    use pioneer_optical::receiver::ExecutionError;
+    let error = execution_error(
+        ExecutionError::AfterStage {
+            completed: 2,
+            source: Box::new(ExecutionError::Plan("third-stage receiver refused")),
+        },
+        true,
+        0,
+    );
+    let failure = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert!(failure.write_started);
+    assert!(failure.temporary_firmware);
+    assert_eq!(failure.completed_stages.len(), 2);
+    assert_eq!(
+        failure.progress,
+        crate::backend::UpdateProgress::UploadComplete
+    );
+    assert!(format!("{error:#}").contains("third-stage receiver refused"));
+    assert_eq!(
+        crate::user_error::UserError::of(&error).id,
+        "errors.temporary_firmware"
+    );
 }
