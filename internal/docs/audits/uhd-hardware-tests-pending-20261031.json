@@ -1,0 +1,40 @@
+{
+  "status": "paused-awaiting-user-hardware-reports",
+  "production_commit": "7933f6f559ef40b3f897299d41ed00fb7228b4f1",
+  "files": {
+    "WH16NS58_1.V9_OEM.bin": {
+      "delivered_sha256": "97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061",
+      "desktop_present_at_pause": true
+    },
+    "WH16NS58_1.V9_UNRESTRICTED_ON_ENC_OFF.bin": {
+      "delivered_sha256": "dd92c415fff9af076550d07a73fff00f252bbd4912fb11e04ba82aa1da23e16b",
+      "desktop_present_at_pause": true
+    },
+    "BH16NS48_1.02_UHD_ON_ENC_OFF.bin": {
+      "delivered_sha256": "d70dc964b893d4a6e179a5e419707866925a8d0bc8736d3ed9f5ee6c3a0fdaa6",
+      "desktop_present_at_pause": false
+    }
+  },
+  "modified_settings": {
+    "unrestricted": "on",
+    "encryption": "off",
+    "hrl": "oem",
+    "region": "oem",
+    "speed": "oem"
+  },
+  "one_v9_physical_drive": "ASUS BW-16D1HT",
+  "one_v9_firmware_identity": "WH16NS58 1.V9",
+  "oem_observation": "Tester verified our exact unmodified 1.V9; user reports no UHD reading on ASUS BW-16D1HT. Failure stage/logs pending. File identity is settled.",
+  "pending": [
+    "BH16NS48 1.02 modified hardware report",
+    "ASUS BW-16D1HT OEM versus modified 1.V9 reports"
+  ],
+  "one_v9_validation": {
+    "stages": 9,
+    "cases": 1404,
+    "structural_audit_passed": true,
+    "evidence": "uhd-1v9-test-20261031-checks.json.gz",
+    "evidence_sha256": "d38ce128e8c5fbdcd00c8c5d32e7993c641cd8f604007bb9e2a2abd096193484"
+  },
+  "qualification": "No hardware success inferred. BH16NS48 Desktop file was delivered and verified earlier but is absent at pause; do not recreate a user-moved file."
+}
