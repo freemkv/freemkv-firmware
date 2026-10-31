@@ -35,12 +35,21 @@ fn build(
         fact("handler_len"),
         fact("boot_stub_va"),
     );
-    assert!(!report
-        .levers
-        .iter()
-        .flat_map(|l| &l.hooks)
-        .any(|h| h.id == "uhd-conversion"));
     let plan = research::UhdConversionPlan::inspect(image).unwrap();
+    // Production now installs a complete group. Verify it first, then restore
+    // its source spans solely for this explicitly partial research comparison.
+    // Ordinary Modify never performs this restoration.
+    plan.verify(image, &report.image, flags).unwrap();
+    for patch in plan.prepared_patches(image, flags).unwrap() {
+        report.image[patch.site..patch.site + patch.original.len()]
+            .copy_from_slice(&patch.original);
+    }
+    for lever in &mut report.levers {
+        lever.hooks.retain(|h| h.id != "uhd-conversion");
+        lever
+            .facts
+            .retain(|(key, _)| *key != "uhd_conversion_count");
+    }
     let candidates = plan.auxiliary_candidates(image, flags).unwrap();
     let mode_candidates: Vec<_> = candidates
         .iter()

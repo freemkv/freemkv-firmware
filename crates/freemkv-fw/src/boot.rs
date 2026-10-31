@@ -235,6 +235,7 @@ impl BootSupport {
             "uhd_stub_va" => r.uhd_stub_va,
             "auth_cell_stub_va" => r.auth_cell_stub_va,
             "auth_cell_refusal" => u32::from(r.auth_cell_refusal),
+            "uhd_conversion_count" => r.uhd_conversion_count,
             "bd_stub_va" => r.bd_stub_va,
             "hrl_stub_va" => r.hrl_stub_va,
             "ake_stub_va" => r.ake_stub_va,
@@ -258,7 +259,7 @@ impl BootSupport {
     fn from_facts(boot: bool, fact: impl Fn(&str) -> u32) -> Self {
         let refusal =
             (fact("uhd_stub_va") != 0 && fact("bd_stub_va") != 0) || fact("auth_cell_refusal") != 0;
-        let widening = fact("auth_cell_stub_va") != 0;
+        let widening = fact("auth_cell_stub_va") != 0 || fact("uhd_conversion_count") != 0;
         let supported = [
             refusal || widening,
             fact("hrl_stub_va") != 0,

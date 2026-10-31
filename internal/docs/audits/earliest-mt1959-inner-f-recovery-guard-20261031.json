@@ -1,0 +1,131 @@
+{
+  "schema": "native-inner-w-recovery-guard-v2",
+  "status": "passed",
+  "source_sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+  "cpu": "ARM926",
+  "unicorn": "2.1.4",
+  "entry": 1157688,
+  "state_cell": 33529327,
+  "flag_cell": 33557644,
+  "cases": 65536,
+  "enter_recovery_loop": 2048,
+  "bypass_recovery_loop": 63488,
+  "c7_c8_enter_loop": false,
+  "source_same_cell_reload_at": 1157856,
+  "explicit_iteration_bounds": {
+    "r4": 0,
+    "r6": 1
+  },
+  "additional_bounds_cases": 8,
+  "instructions": [
+    1157688,
+    1157690,
+    1157692,
+    1157694,
+    1157696,
+    1157698,
+    1157700,
+    1157702,
+    1157704,
+    1157706,
+    1157708,
+    1157710,
+    1157712,
+    1157714,
+    1157934,
+    1157970,
+    1157972,
+    1157974,
+    1157976,
+    1158298
+  ],
+  "edges": [
+    [
+      1157688,
+      1157690
+    ],
+    [
+      1157690,
+      1157692
+    ],
+    [
+      1157692,
+      1157694
+    ],
+    [
+      1157694,
+      1157696
+    ],
+    [
+      1157696,
+      1157698
+    ],
+    [
+      1157696,
+      1157702
+    ],
+    [
+      1157698,
+      1157700
+    ],
+    [
+      1157700,
+      1157704
+    ],
+    [
+      1157702,
+      1157704
+    ],
+    [
+      1157704,
+      1157706
+    ],
+    [
+      1157706,
+      1157708
+    ],
+    [
+      1157708,
+      1157710
+    ],
+    [
+      1157710,
+      1157712
+    ],
+    [
+      1157710,
+      1157934
+    ],
+    [
+      1157712,
+      1157970
+    ],
+    [
+      1157934,
+      1158298
+    ],
+    [
+      1157970,
+      1157972
+    ],
+    [
+      1157972,
+      1157974
+    ],
+    [
+      1157972,
+      1157976
+    ],
+    [
+      1157974,
+      1157714
+    ]
+  ],
+  "trace_sha256": "68f4761c2e7368549a14bb0de4e8e1ba47ebc4d04bcefb22b9353ff7b5e4c745",
+  "suite_sha256": "a57f5f81afad537e8fdeeeed3f51bd9441461ee8204bc32d4bd16529afbf8d70",
+  "limits": [
+    "Only native inner guard is executed",
+    "No calls are replaced or returned as success",
+    "State mutations after this guard, indirect callbacks, full request lifecycle and hardware remain unresolved"
+  ]
+}

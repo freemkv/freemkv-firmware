@@ -1,0 +1,352 @@
+{
+  "schema": "final-fail-closed-readiness-proof-v1",
+  "target_images": 30,
+  "installed_complete_groups": 29,
+  "remaining_goal_images": 1,
+  "goal_complete": false,
+  "latest_receipt_sha256": "15f2b951aff46c81be900315e3a04fc4fca95ac285012123a64022856204c90e",
+  "latest_source_snapshot": {
+    "file": "source-snapshot.tar.gz",
+    "sha256": "fcbab9d06958dccb5af42c3764b55a698e9eeb03ec79880179f7abfbbfa5ca77",
+    "files": 317,
+    "bytes": 1537866
+  },
+  "broad_conditional_development_receipt_sha256": "06dc1c51a767a512717cdc3ffb4bb233362fcb3b1d74824b6e4a9d42997586e9",
+  "latest_source_dependency_binaries_unchanged": true,
+  "ordinary_stages_passed": 202,
+  "ordinary_cases": 42877,
+  "old29_closed_helper_evidence_reuse": {
+    "method": "Fresh actual API+CLI outputs and helper/base/getter contracts are identical; execution test modules/profiles unchanged. Retain earlier source-bound CPU traces for identical BINs; no conversion CPU rerun claimed.",
+    "helpers": 798,
+    "cases": 3763084,
+    "images": [
+      {
+        "input_sha256": "3f436c31124f6b7bbe582c67370924077018eb14e768f27d9b7194904f099aa5",
+        "output_sha256": "9da390da4690aa2aa43024ff3add35153f471856995118219c54f0f8a0bff9f7",
+        "canonical_sha256": "3f436c31124f6b7bbe582c67370924077018eb14e768f27d9b7194904f099aa5",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "30e01c2b8cdc097d86f1c17e89336633d6344102d6a14004f039755f783ac49a"
+      },
+      {
+        "input_sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+        "output_sha256": "2aa3a2dcd4fde4b458045d58c2b008380a5d6972fcbf2a58cac81651e201f37c",
+        "canonical_sha256": "eee6563f68a414eb1dbc9048ab0820d01003320b080988437f762ca23d727e56",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "28523aef6d663c76cc49ba60e2016acdc9bf269bc6e30812db7862799a399eba"
+      },
+      {
+        "input_sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+        "output_sha256": "4df227836dfbbc2d97aa4e26e75152e8c2809eec17c7833168ad4814332f457a",
+        "canonical_sha256": "7f26c559774b87a8da10c42d5ce72b8f1af3aa369d14d64f7d880d2b20b0327a",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "d87b4fd90a7a1a50baadadf83f954acc363291caabae574488d8224dd712ea5e"
+      },
+      {
+        "input_sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+        "output_sha256": "f2dd99b46ecdc9efd7983bf8518534190c478a4d8fe0da138ec8f300c018073d",
+        "canonical_sha256": "01c6a76a4d16c0c6b9aafa60ececccd331b73ac1a7f8b899b3f05e558c92c07c",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 26,
+        "closed_helper_cases": 115840,
+        "broad_trace_sha256": "d2d6a087676e28d6e1e69c772b9f71e04b1e16488ab6cedb355697ea0647f7ce"
+      },
+      {
+        "input_sha256": "2f02308413c86c180ec863ada97fec3f594ebd7bf144e3159e91439518e57847",
+        "output_sha256": "53d2de28779b52730833c25ffb417c671874bb52dda2bdcb942b3884d349b931",
+        "canonical_sha256": "2f02308413c86c180ec863ada97fec3f594ebd7bf144e3159e91439518e57847",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "dc23467bc075bcb61e5ad4194c49a9e26c73d9bb189b64a377633f9fcc56e5ab"
+      },
+      {
+        "input_sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+        "output_sha256": "46d3fefb452af2b90a76492ad3c86ad338b3b74a0c5d7bd54ce24f4d86d9338f",
+        "canonical_sha256": "7ff91816c192f4c0ba492b507c8119fafb71df7a25118d0e456682bb34e2e567",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "405f905dfd73317cf641dea5e64bdbdd3a557cb1eb6b1e1ca82330067279c3c4"
+      },
+      {
+        "input_sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+        "output_sha256": "918c8b3d2c2b82984b87047e27b65cb793dabd76a967a74dfae16aaf3809f696",
+        "canonical_sha256": "d8ab861b6fefa847223a1a95b53241c9838953ac298ff068d9243fc31587df87",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 26,
+        "closed_helper_cases": 115840,
+        "broad_trace_sha256": "eebc94147e81749194b25b4c53e27a32ff073c46ac433ad21df9415f1eaf1bae"
+      },
+      {
+        "input_sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+        "output_sha256": "947d14687bc9015d04498a1df545b81509a0f1f23455cc9ad542d50c7c5ed063",
+        "canonical_sha256": "007ac6bfe4ea432c7d8e5b4bd1142a636abe452516e3cc36f67e4e13520fe40d",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "f4312781b29fa2cae40fc014e5c69ee638b2791d2bc4c5e46c1eafe1c8dbfc6e"
+      },
+      {
+        "input_sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+        "output_sha256": "a9fcf68dc41e1bc8ad0f246981af0ccbdb2297b2c3d43180e6560b4d032391df",
+        "canonical_sha256": "6a96f7267ba605eb85ead6999944069eaa5fc19bd57dca5becd79aa1525aba6e",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "abaebcd5d69a26c13156d5d20c6579e946e71836ae5fac49c44975d72bd82776"
+      },
+      {
+        "input_sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+        "output_sha256": "eeadda8a01ffb637a67696fbc5f98b4f17f0e3c5e5fcfbe972cf5132e9b31b43",
+        "canonical_sha256": "f1141a3295076c0d1a558e7ed396fee7709dc47f3ae277faed7068cd7ba66ce8",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 26,
+        "closed_helper_cases": 115840,
+        "broad_trace_sha256": "834a32c0dc172b57e8a7fa9a6453da326d8e3ef8548454c8b801b6b943e45fbe"
+      },
+      {
+        "input_sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+        "output_sha256": "847e998e78e3a5c816a084e56c2b14c34c97ddc079a5427b7d543a4e8080a6f3",
+        "canonical_sha256": "adfd807cde847ae75315b9083be29d287f56d8a628d171eaf59d6023ee266d1c",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 26,
+        "closed_helper_cases": 115840,
+        "broad_trace_sha256": "4ccd318246ad4b9c38e39c103286f19e5171161c2e0f5021bdd25a77b07c1f65"
+      },
+      {
+        "input_sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+        "output_sha256": "ce4010de5d79e864c9ec5641c274d2ccd02f324801e6fdc24feb46cbd5264b5b",
+        "canonical_sha256": "3b8faae231f30afbdd3257d9cd2b7791a005a4616391ee0f8367dfa0db51abc3",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "b8f3c6f402a3e0632227fa3baa07d21e120cd353af632358b116828f0afe948c"
+      },
+      {
+        "input_sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+        "output_sha256": "9f96bdb0f62440699663ce25bb84618a110e4e662a983440e25b581770f064c2",
+        "canonical_sha256": "ab21af6945e901c56b9f29755433cf4785e9cdc106bb123d943aea0e90d04d9e",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "e1909818663484ef3f9ab7832fa6a5d6e72f378fc0c2fa342afdb31c475ae924"
+      },
+      {
+        "input_sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+        "output_sha256": "dea42361901b82a1d20346264e4171781115eb6b0268bf285feffffc8741d20e",
+        "canonical_sha256": "208a80d0d30c1841ad0bd33d49be032dfe2110c7f50ba6298ec51851c69035b6",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "94568b9c6032b55b017f6e06155b6d0f04c3a929dbf8d37815df3e21f667e587"
+      },
+      {
+        "input_sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+        "output_sha256": "d8adeb8f5e90353558fa8476827f5c97d504a8cc23a41247b97a8a7b455f2ded",
+        "canonical_sha256": "8f5bf9536115fd6aece78d1ff6b6a7e51e3fc0d927f2ae8fd64d6121401a5dea",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "1553afdad7b14e45dac8f72cdd8c74e24e6bc0153afbd4dfbed77c6f35f655c6"
+      },
+      {
+        "input_sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+        "output_sha256": "b5be4ae3c94de6b1437ff48fe837073aad284a15d067ad785d48e97f2cfa56fb",
+        "canonical_sha256": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "859483a0a77e815524f56430a52cda084defb7f89932b200bbac791662cb2ea5"
+      },
+      {
+        "input_sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+        "output_sha256": "9b7d53214a2616c6787fc46a4f796840fa517255996ccd879d6a1d6a2394bf19",
+        "canonical_sha256": "b093a73656e58ee2a4367b5d92324fd7da3889f632a22b2f1be8802607cd3de4",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "19d740e3f1ea0f2e5d1ffd3b0230eaca65034401b9c9f8b0e85dbac627250eba"
+      },
+      {
+        "input_sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+        "output_sha256": "a8ea1f0cbfb9366e9c65b95ae840321dc152e8f41913758cec5c78411d384069",
+        "canonical_sha256": "163fb6e0057d74f38e046cf9042981c137ec70c1aaa2d7b1c3ee1a62324aa146",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "80fe7a94af696ed84857b700c524b595a4f3b4f773337e16ea9ccaaeaed87bd2"
+      },
+      {
+        "input_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+        "output_sha256": "744c8c2adf459722fe03e26a22a21df744366cb30b3d7f82335417735c39db23",
+        "canonical_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "216c2e63e53f928a9ec28b942b0e1527d2d2c1784ae0a45d4d4023d3c736f4f2"
+      },
+      {
+        "input_sha256": "84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e",
+        "output_sha256": "bf316e3d8c52b9448a986dec85e943e6f92ac91d3c705e19dee262ab65eb233c",
+        "canonical_sha256": "84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 27,
+        "closed_helper_cases": 135296,
+        "broad_trace_sha256": "39a80b31de72cdabde379f0a4a6d34e3dc4043d481df53e06a63fb1e6f2a4b2a"
+      },
+      {
+        "input_sha256": "d98c2e11f400cf54133289369f19064ccabc72c69ef189f9129fc19b2d700cc8",
+        "output_sha256": "88de80c59e32b25c6b1bb0f4f65081494a7de7f181c79a3bfa44c7cb8f74f254",
+        "canonical_sha256": "d98c2e11f400cf54133289369f19064ccabc72c69ef189f9129fc19b2d700cc8",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 27,
+        "closed_helper_cases": 135296,
+        "broad_trace_sha256": "ec82e0e1bbb2c624944b6ed04a194b23ed93eefdba43497b413419c313b4ae36"
+      },
+      {
+        "input_sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+        "output_sha256": "d459ca0cf4582042af983b30a49c84a4bd489cbd2c4ede014dc482284a0ae0ca",
+        "canonical_sha256": "8489a3a5b34ea7ee6046fec6db02be825dee1205646c10ed7d11d4809c45deeb",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 26,
+        "closed_helper_cases": 115840,
+        "broad_trace_sha256": "394ceb7d0e08f9734c16c2bcab3fc5ffbab428cee5a5556a2d8358b007c23d9d"
+      },
+      {
+        "input_sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+        "output_sha256": "2db8ff8c7d58f8aea02369f6ffee1cc0361ddee2114a953bc25181fb56d3e759",
+        "canonical_sha256": "fc3013be680340b6a413a7aa8773cc0bdd2bd1144d3ceb2002983bacfeff8442",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "6614babf51f3b2ff5e88e745aacbfe6b627d8ded58c99a1d1daa3dee3895161f"
+      },
+      {
+        "input_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+        "output_sha256": "e1b4845fa4ae5cbcb1f740faf4dfd83d7db48007a38f13a280825b477a40928b",
+        "canonical_sha256": "40eb760e23f100d55e86e9c061c73428d4087ef712294e4dbfcefa3093837a1a",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "d3ff59bcbbf7cdb7737031b26325101e07674e36ce970b562bbb81413e376834"
+      },
+      {
+        "input_sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+        "output_sha256": "44a03baefa9dcaffca12741adbc92400fe18a7736ba85bf845f0f7ec57b8040c",
+        "canonical_sha256": "f6a5a578f9b5347f6371a7ef1195ab84b1bea4d80b58c97efa23c8ddf0d6f6e9",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "aca0e50cf43813c9ad1c566976d879eba86cc668677c2e76b702b8502f28bf83"
+      },
+      {
+        "input_sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+        "output_sha256": "2aa3a2dcd4fde4b458045d58c2b008380a5d6972fcbf2a58cac81651e201f37c",
+        "canonical_sha256": "7af021b026f8aef225b2211183885be211a66c1a4d64c9dad5c84661586144c7",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "a78d484730596dde34ae9623e371a9ebe950c0ba9c4f04f82cefcdb75590ae90"
+      },
+      {
+        "input_sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+        "output_sha256": "4df227836dfbbc2d97aa4e26e75152e8c2809eec17c7833168ad4814332f457a",
+        "canonical_sha256": "1368766f8d384d0c86d4803d057b7aa1ca205542b9b6b0580e875aaa8bd015b3",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "85f10ffe17d6128b34afbbd16c6ea015855179ad9621e0e3c3e44e90d9526502"
+      },
+      {
+        "input_sha256": "46b41f15e053b66daccb024cba4380c45f791c2d0c2b8258cd23253fc5f0b22a",
+        "output_sha256": "977860d9449aa80e4fd2debe3e91c381cf51a345e7befaafb4e2907508354e67",
+        "canonical_sha256": "46b41f15e053b66daccb024cba4380c45f791c2d0c2b8258cd23253fc5f0b22a",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 28,
+        "closed_helper_cases": 133212,
+        "broad_trace_sha256": "85693d3e1391748c91698f0dc882860f173f1ee6bc812482836a37b1fa3dfdd5"
+      },
+      {
+        "input_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+        "output_sha256": "31f0649059ace87dcb80ad576db54af08bbde28e5ff28b2976d1fc4fc10eeeac",
+        "canonical_sha256": "0b2cdb82ff520589d4c750fae726571798901bf41e433de0a7164f7d74927d5f",
+        "output_byte_identical": true,
+        "helper_base_getter_contracts_identical": true,
+        "helpers": 26,
+        "closed_helper_cases": 115840,
+        "broad_trace_sha256": "76aa294fa143e799cc5722fbbada6ae03ef7b0601796081683dccbc4677d6852"
+      }
+    ]
+  },
+  "earliest": {
+    "input_sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+    "output_sha256": "bf081ce9d0028d79bab78947374a01c823ec8b5554fc4a9901ffbeb59701931d",
+    "historical_output_identical": true,
+    "strict_audit_integrity_and_api_cli_passed": true,
+    "conversion_group_count": 0,
+    "former_29_helper_sites_all_oem": true,
+    "readiness": {
+      "complete_group_ready": false,
+      "remaining_contracts": [
+        "out-of-image high-layer coefficient backing/lifetime"
+      ],
+      "status": "source-bound"
+    },
+    "unrestricted_command_gate": "Existing AACS/content-accept CDB switch remains supported; it is not an optical-conversion/readiness promise.",
+    "required_proof": "Version-bound valid backing bytes/mapping for1ff7910..17 before new C7 startup/getter use; if writable, prove producer/initialization/lifetime, or bind readonly resident contents/mapping. Numeric address and synthetic writable emulator mapping do not establish RAM versus readonly backing."
+  },
+  "broad_inventory_result": {
+    "records": 1085,
+    "outputs": 194,
+    "production_refusals": 890,
+    "fragment_refusals": 1,
+    "passing_bounded_cases": 4188702,
+    "preserved_modern_ake_arm926_failed_stages": 53,
+    "unexpected_failed_stages": 0,
+    "development_conditional_helpers": 827,
+    "development_conditional_generated_instructions": 76673,
+    "development_conditional_generated_edges": 18958,
+    "development_conditional_missing_generated_paths": 0
+  },
+  "coverage_limits": [
+    "No complete enclosing acquisition/ready/controller lifecycle proof",
+    "Native/resident/opaque calls and dynamic targets remain explicit boundaries",
+    "Vendor commit/save/flash/debug dispatch and later reply loops unqualified",
+    "No physical UHD, controller/MMIO completion or real calibration/AACS success claim"
+  ],
+  "script": "from pathlib import Path\nimport json,hashlib\nrepo=Path('/Users/matthew/Developer/tmp/freemkv-firmware-mt1939-0155');audit=repo/'internal/docs/audits';root=Path('/tmp/mediatek-production-final-readiness-54bf-20261031');broot=Path('/tmp/mediatek-production-differential-final-54bf-20261031');r=json.loads((root/'receipt.json').read_text());b=json.loads((broot/'receipt.json').read_text());sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest();early=next(x for x in r['images'] if x['input_sha256'].startswith('c88a'));assert early['classic_application_readiness']['remaining_contracts']==['out-of-image high-layer coefficient backing/lifetime'];assert not early['production_conversion_group_installed'] and not early['production_conversion_sites'];assert early['baseline_comparison']['output_identical'];proofs=[]\nfor row in r['images']:\n if row is early:continue\n old=json.loads((broot/row['input_sha256']/'modify.json').read_text())['execution_contracts'];new=json.loads((root/row['input_sha256']/'modify.json').read_text())['execution_contracts'];previous=next(x for x in b['images'] if x['input_sha256']==row['input_sha256']);assert previous['output_sha256']==row['output_sha256'] and previous['canonical_sha256']==row['canonical_sha256'];assert all(old[k]==new[k] for k in ('media_conversion_helpers','base','native_parameter_getter'))\n stages=[s for s in previous['stages'] if s['stage'].startswith('conversion:')];assert all(s['status']=='passed' and s['required_generated_coverage_complete'] for s in stages)\n proofs.append({'input_sha256':row['input_sha256'],'output_sha256':row['output_sha256'],'canonical_sha256':row['canonical_sha256'],'output_byte_identical':True,'helper_base_getter_contracts_identical':True,'helpers':len(stages),'closed_helper_cases':sum(s['cases'] for s in stages),'broad_trace_sha256':previous['trace_sha256']})\nfor name in ('cpu.py','stages.py','conversion.py','getters.py','profiles.json'):\n key='scripts/firmware_execution/'+name;assert r['source_files'][key]==b['source_files'][key]\nold=json.loads((broot/early['input_sha256']/'modify.json').read_text())['execution_contracts'];data=(root/early['input_sha256']/'modified.bin').read_bytes();assert all(data[h['site']:h['site']+len(h['original_bytes'])]==bytes(h['original_bytes']) for h in old['media_conversion_helpers'])\nproof={'schema':'final-fail-closed-readiness-proof-v1','target_images':30,'installed_complete_groups':29,'remaining_goal_images':1,'goal_complete':False,'latest_receipt_sha256':sha(root/'receipt.json'),'latest_source_snapshot':r['source_snapshot'],'broad_conditional_development_receipt_sha256':sha(broot/'receipt.json'),'latest_source_dependency_binaries_unchanged':all(r[k] for k in ('source_files_unchanged','dependency_sources_unchanged','binaries_unchanged')),'ordinary_stages_passed':r['stage_totals']['passed'],'ordinary_cases':r['cpu_cases'],'old29_closed_helper_evidence_reuse':{'method':'Fresh actual API+CLI outputs and helper/base/getter contracts are identical; execution test modules/profiles unchanged. Retain earlier source-bound CPU traces for identical BINs; no conversion CPU rerun claimed.','helpers':sum(x['helpers'] for x in proofs),'cases':sum(x['closed_helper_cases'] for x in proofs),'images':proofs},'earliest':{'input_sha256':early['input_sha256'],'output_sha256':early['output_sha256'],'historical_output_identical':True,'strict_audit_integrity_and_api_cli_passed':early['cli_api_identical'],'conversion_group_count':0,'former_29_helper_sites_all_oem':True,'readiness':early['classic_application_readiness'],'unrestricted_command_gate':'Existing AACS/content-accept CDB switch remains supported; it is not an optical-conversion/readiness promise.','required_proof':'Version-bound valid backing bytes/mapping for1ff7910..17 before new C7 startup/getter use; if writable, prove producer/initialization/lifetime, or bind readonly resident contents/mapping. Numeric address and synthetic writable emulator mapping do not establish RAM versus readonly backing.'},'broad_inventory_result':{'records':1085,'outputs':194,'production_refusals':890,'fragment_refusals':1,'passing_bounded_cases':b['cpu_cases'],'preserved_modern_ake_arm926_failed_stages':53,'unexpected_failed_stages':0,'development_conditional_helpers':827,'development_conditional_generated_instructions':76673,'development_conditional_generated_edges':18958,'development_conditional_missing_generated_paths':0},'coverage_limits':['No complete enclosing acquisition/ready/controller lifecycle proof','Native/resident/opaque calls and dynamic targets remain explicit boundaries','Vendor commit/save/flash/debug dispatch and later reply loops unqualified','No physical UHD, controller/MMIO completion or real calibration/AACS success claim'],'script':Path(__file__).read_text()};(audit/'mediatek-production-final-readiness-54bf-proof-20261031.json').write_text(json.dumps(proof,indent=2)+'\\n')\nlog=Path('/tmp/owned-final-readiness-mutations-54bf.log');assert 'Ran 24 tests' in log.read_text() and log.read_text().rstrip().endswith('OK');folders=[root/early['input_sha256'],root/'614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e'];mutation={'schema':'final-production-mutations-v1','tests':24,'passed':True,'log_sha256':sha(log),'final_source_snapshot_sha256':r['source_snapshot']['sha256'],'fixtures':[{p.name:sha(p) for p in f.iterdir() if p.name in ('original.bin','modified.bin','modify.json')} for f in folders]};(audit/'mediatek-production-mutations-readiness-54bf-20261031.json').write_text(json.dumps(mutation,indent=2)+'\\n');(audit/'mediatek-production-mutations-readiness-54bf-20261031.txt').write_bytes(log.read_bytes());(audit/'mediatek-production-readiness-owned-clippy-20261031.txt').write_bytes(Path('/tmp/owned-final-readiness-clippy.log').read_bytes());print('latest',proof['installed_complete_groups'],'remaining',proof['remaining_goal_images'],'reusedhelpers',proof['old29_closed_helper_evidence_reuse']['helpers'],'cases',proof['old29_closed_helper_evidence_reuse']['cases'])\n"
+}

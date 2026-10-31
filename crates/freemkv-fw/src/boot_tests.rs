@@ -11,7 +11,9 @@ fn classic_emitted_boot_and_region_hrl_controls_are_reported() {
     assert!(support.supports(BootFeature::Region));
     assert!(support.supports(BootFeature::Hrl));
     assert!(support.supports(BootFeature::Speed));
-    assert!(!support.supports(BootFeature::Unrestricted));
+    assert!(support.supports_value(BootFeature::Unrestricted, 1));
+    assert!(support.supports_value(BootFeature::Unrestricted, 255));
+    assert!(!support.supports_value(BootFeature::Unrestricted, 0));
 }
 
 #[test]
@@ -179,49 +181,12 @@ fn saved_settings_cannot_override_boot_but_runtime_reset_uses_same_defaults() {
     let bytes = Mt1959Engine
         .build_boot_init_with_defaults(base, 0x1234, &defaults)
         .unwrap();
-    let mut regs = [0u32; 16];
-    let mut ram = [42u8; 7];
-    // Execute the boot prefix until it restores OEM arguments. No flash read is
-    // permitted: both cold and warm startup must be independent of saved NV.
+    // Both cold and warm initialization ignore saved NV state.
     for initial in [0u8, 1, 255] {
-        ram.fill(initial);
-        for pc in (0..bytes.len()).step_by(2) {
-            use thumb_asm::isa::Operand;
-            let ins = thumb_asm::isa::decode_at(&bytes, pc).expect("decoded boot instruction");
-            match ins.mnemonic {
-                "push" => {}
-                "pop" => break, // argument restore ends the initialization prefix
-                "ldr" => {
-                    let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
-                        panic!("LDR destination");
-                    };
-                    regs[usize::from(dest.num())] = thumb_asm::analysis::literal_value(&bytes, pc)
-                        .expect("initialization prefix loads only literals");
-                }
-                "mov" => {
-                    let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
-                        panic!("MOV destination");
-                    };
-                    regs[usize::from(dest.num())] = match ins.operands.get(1) {
-                        Some(Operand::Imm(value)) => value as u32,
-                        Some(Operand::Reg(source)) => regs[usize::from(source.num())],
-                        _ => panic!("MOV source"),
-                    };
-                }
-                "strb" => {
-                    let (Some(Operand::Reg(source)), Some(Operand::Mem(memory))) =
-                        (ins.operands.get(0), ins.operands.get(1))
-                    else {
-                        panic!("STRB operands");
-                    };
-                    assert!(memory.index.is_none() && memory.add);
-                    let address = regs[usize::from(memory.base.num())] + memory.offset;
-                    ram[(address - base) as usize] = regs[usize::from(source.num())] as u8;
-                }
-                _ => panic!("unexpected boot instruction {ins:?}; review startup behavior"),
-            }
-        }
-        assert_eq!(ram, defaults.flags());
+        let mut ram = [initial; 32];
+        execute_boot_prefix(&bytes, base, &mut ram);
+        assert_eq!(&ram[..7], &defaults.flags());
+        assert!(ram[7..].iter().all(|b| *b == initial));
     }
     let (report, support) = api::modify_with_defaults(&fixture(), &defaults).unwrap();
     assert!(BootFeature::ALL.into_iter().all(|f| support.supports(f)));
@@ -380,4 +345,76 @@ fn normal_modify_refuses_a_raw_drive_dump_before_creating_unflashable_output() {
         error.downcast_ref::<freemkv_flash::user_error::IssueCode>(),
         Some(&freemkv_flash::user_error::IssueCode::UnsupportedFirmware)
     );
+}
+
+fn execute_boot_prefix(bytes: &[u8], base: u32, ram: &mut [u8]) {
+    let mut regs = [0u32; 16];
+    for pc in (0..bytes.len()).step_by(2) {
+        use thumb_asm::isa::Operand;
+        let ins = thumb_asm::isa::decode_at(&bytes, pc).expect("decoded boot instruction");
+        match ins.mnemonic {
+            "push" => {}
+            "pop" => break, // argument restore ends the initialization prefix
+            "ldr" => {
+                let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
+                    panic!("LDR destination");
+                };
+                regs[usize::from(dest.num())] = thumb_asm::analysis::literal_value(&bytes, pc)
+                    .expect("initialization prefix loads only literals");
+            }
+            "mov" => {
+                let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
+                    panic!("MOV destination");
+                };
+                regs[usize::from(dest.num())] = match ins.operands.get(1) {
+                    Some(Operand::Imm(value)) => value as u32,
+                    Some(Operand::Reg(source)) => regs[usize::from(source.num())],
+                    _ => panic!("MOV source"),
+                };
+            }
+            "strb" => {
+                let (Some(Operand::Reg(source)), Some(Operand::Mem(memory))) =
+                    (ins.operands.get(0), ins.operands.get(1))
+                else {
+                    panic!("STRB operands");
+                };
+                assert!(memory.index.is_none() && memory.add);
+                let address = regs[usize::from(memory.base.num())] + memory.offset;
+                ram[(address - base) as usize] = regs[usize::from(source.num())] as u8;
+            }
+            _ => panic!("unexpected boot instruction {ins:?}; review startup behavior"),
+        }
+    }
+}
+
+#[test]
+fn private_uhd_identity_boot_reset_preserves_features_and_flash_scratch() {
+    use crate::engine::core::{FLASHWRITE_SCRATCH_OFF, UHD_IDENTITY_OFF};
+    let base = 0x02000e40;
+    let defaults = BootSettings::standard();
+    let bytes = Mt1959Engine
+        .build_boot_init_with_private_identity(
+            base,
+            0x1234,
+            &defaults,
+            Some(base + UHD_IDENTITY_OFF),
+        )
+        .unwrap();
+    for initial in [0, 1, 0xff] {
+        let mut ram = [initial; 32];
+        execute_boot_prefix(&bytes, base, &mut ram);
+        assert_eq!(&ram[..7], &defaults.flags());
+        assert_eq!(ram[UHD_IDENTITY_OFF as usize], 0);
+        for (offset, value) in ram.iter().enumerate().skip(7) {
+            if offset != UHD_IDENTITY_OFF as usize {
+                assert_eq!(*value, initial);
+            }
+        }
+        assert_eq!(ram[FLASHWRITE_SCRATCH_OFF as usize], initial);
+    }
+    for overlap in [base, base + 3, base + FLASHWRITE_SCRATCH_OFF] {
+        assert!(Mt1959Engine
+            .build_boot_init_with_private_identity(base, 0x1234, &defaults, Some(overlap),)
+            .is_err());
+    }
 }

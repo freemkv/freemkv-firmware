@@ -90,6 +90,7 @@ struct RawReadFacts {
     auth_cell_stub_va: u32,
     auth_cell_refusal: bool,
     vid_producer: u32,
+    uhd_conversion_count: u32,
     hooks: Vec<HookReport>,
 }
 
@@ -288,6 +289,7 @@ impl Mt1959Engine {
         let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
 
         Ok(CreateReport {
+            uhd_conversion_count: f.uhd_conversion_count,
             image: signed,
             scanner_entry,
             cdb_base,
@@ -510,6 +512,12 @@ impl Mt1959Engine {
                         facts.push(("auth_cell_site", f.auth_cell_site));
                         facts.push(("auth_cell_stub_va", f.auth_cell_stub_va));
                         facts.push(("auth_cell_refusal", u32::from(f.auth_cell_refusal)));
+                    }
+                    if f.uhd_conversion_count != 0 {
+                        // Mixed classic application: verification must receive
+                        // the same reserved flag base used by its emitter.
+                        facts.push(("flag_base", flag_base));
+                        facts.push(("uhd_conversion_count", f.uhd_conversion_count));
                     }
                     LeverReport::applied(LeverId::RawRead, facts).with_hooks(f.hooks)
                 }
@@ -888,36 +896,46 @@ impl Mt1959Engine {
         // UHD conversion is separate from the raw-read controls above. Each
         // required media gap must be closed before conversion edits reach output.
         // G01-G06 matches establish the agreed media definition, not a hardware test.
-        let conversion = super::mt1959_uhd::Plan::inspect(image, flag_base);
-        hooks.push(match conversion {
-            Ok(plan) if !plan.pending().is_empty() => HookReport::unavailable(
-                "uhd-conversion",
-                format!("0 conversion edits: {}", plan.pending().join("; ")),
-            ),
-            Ok(plan) => match plan.apply(image, &mut w) {
-                Ok(()) => HookReport::applied(
+        let classic_application = super::mt1939_uhd::UhdConversionPlan::inspect(image)
+            .is_ok_and(|p| p.uses_classic_application());
+        let mut uhd_conversion_count = 0;
+        if classic_application {
+            let (hook, count) = self.emit_media_conversion_classic(image, &mut w, flag_base);
+            hooks.push(hook);
+            uhd_conversion_count = count;
+        } else {
+            let conversion = super::mt1959_uhd::Plan::inspect(image, flag_base);
+            hooks.push(match conversion {
+                Ok(plan) if !plan.pending().is_empty() => HookReport::unavailable(
                     "uhd-conversion",
-                    if plan.gaps().is_empty() {
-                        "G01-G06 native media contracts; physical validation pending".to_owned()
-                    } else {
-                        format!(
-                            "complete media group: {}; physical validation pending",
-                            plan.gaps()
-                                .iter()
-                                .map(|g| g.id())
-                                .collect::<Vec<_>>()
-                                .join(",")
-                        )
-                    },
+                    format!("0 conversion edits: {}", plan.pending().join("; ")),
                 ),
+                Ok(plan) => match plan.apply(image, &mut w) {
+                    Ok(()) => HookReport::applied(
+                        "uhd-conversion",
+                        if plan.gaps().is_empty() {
+                            "G01-G06 native media contracts; physical validation pending".to_owned()
+                        } else {
+                            format!(
+                                "complete media group: {}; physical validation pending",
+                                plan.gaps()
+                                    .iter()
+                                    .map(|g| g.id())
+                                    .collect::<Vec<_>>()
+                                    .join(",")
+                            )
+                        },
+                    ),
+                    Err(e) => HookReport::unavailable(
+                        "uhd-conversion",
+                        format!("0 conversion edits: {e:#}"),
+                    ),
+                },
                 Err(e) => {
                     HookReport::unavailable("uhd-conversion", format!("0 conversion edits: {e:#}"))
                 }
-            },
-            Err(e) => {
-                HookReport::unavailable("uhd-conversion", format!("0 conversion edits: {e:#}"))
-            }
-        });
+            });
+        }
         *out = w;
         Ok(RawReadFacts {
             ake_gate,
@@ -937,6 +955,7 @@ impl Mt1959Engine {
             auth_cell_stub_va,
             auth_cell_refusal,
             vid_producer,
+            uhd_conversion_count,
             hooks,
         })
     }

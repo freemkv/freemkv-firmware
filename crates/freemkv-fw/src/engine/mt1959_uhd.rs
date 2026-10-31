@@ -6,7 +6,8 @@
 //! No incomplete media conversion is installed; physical testing is separate.
 use anyhow::{ensure, Context, Result};
 use mediatek_optical::image::analysis::{
-    LegacyControlTail, LegacyReverse, LegacyStackDi, SavedLink, UhdArea, UhdAreas, UhdKeyPath,
+    LegacyControlTail, LegacyDensityTarget, LegacyIdentityReset, LegacyReverse, LegacyStackDi,
+    SavedLink, UhdArea, UhdAreas, UhdKeyPath,
 };
 use sha2::{Digest, Sha256};
 use thumb_asm::{Asm, Cond};
@@ -69,6 +70,8 @@ pub struct Plan {
     /// Prepared, independently testable detours; never install them individually.
     candidates: Vec<Candidate>,
     reverse: Option<LegacyReverse>,
+    density: Option<LegacyDensityTarget>,
+    identity: Option<LegacyIdentityReset>,
     authentication_differences: Vec<Gap>,
     authentication_diagnostic_error: Option<String>,
 }
@@ -86,10 +89,21 @@ impl Plan {
         &self.candidates
     }
 
-    /// Independently bound reverse arithmetic. A mode-lifecycle qualification
-    /// remains necessary before the atomic conversion may be installed.
+    /// Independently bound reverse arithmetic using this source's existing
+    /// operating mode. The detour neither creates nor replaces mode producers.
     pub fn reverse_arithmetic(&self) -> Option<&LegacyReverse> {
         self.reverse.as_ref()
+    }
+
+    /// Source-bound density target and its native measurement consumer. This
+    /// does not qualify the separate controller initialization policy.
+    pub fn density_target(&self) -> Option<&LegacyDensityTarget> {
+        self.density.as_ref()
+    }
+
+    /// Native per-disc initializer coordinated with a private identity cache.
+    pub fn identity_reset(&self) -> Option<&LegacyIdentityReset> {
+        self.identity.as_ref()
     }
 
     /// Internal G07/G08 findings, never requirements or patch candidates.
@@ -113,11 +127,15 @@ impl Plan {
             pending: Vec::new(),
             candidates: Vec::new(),
             reverse: None,
+            density: None,
+            identity: None,
             authentication_differences: Vec::new(),
             authentication_diagnostic_error: None,
         };
         let areas = UhdAreas::inspect(image);
-        let state = areas.state_address().context("UHD media-state binding")?;
+        let state = areas
+            .media_state_address()
+            .context("UHD media-state binding")?;
         for (role, gap) in [
             (UhdArea::DiscInformation, Gap::DiscInformation),
             (UhdArea::ControlBit, Gap::ControlBit),
@@ -136,7 +154,75 @@ impl Plan {
             if role == UhdArea::DiscInformation {
                 match LegacyStackDi::detect(image) {
                     Ok(di) => {
-                        plan.candidates.extend(di_candidates(image, flags, &di)?);
+                        let marker = match LegacyIdentityReset::detect(image) {
+                            Ok(reset) => {
+                                let marker = flags
+                                    .checked_add(super::core::UHD_IDENTITY_OFF)
+                                    .context("G01 identity address overflow")?;
+                                super::mt1959::Mt1959Engine.assert_sram_cell_free(
+                                    image,
+                                    marker,
+                                    1,
+                                    "UHD identity cache",
+                                )?;
+                                plan.candidates.push(Candidate {
+                                    gap,
+                                    site: reset.site,
+                                    original: reset.original.clone(),
+                                    bytes: super::mt1959_uhd_identity::reset_stub(
+                                        image, flags, &reset,
+                                    )?,
+                                });
+                                plan.identity = Some(reset);
+                                Some(marker)
+                            }
+                            Err(e) => {
+                                plan.pending
+                                    .push(format!("G01: identity reset contract: {e}"));
+                                None
+                            }
+                        };
+                        plan.candidates
+                            .extend(di_candidates(image, flags, &di, marker)?);
+                        match LegacyDensityTarget::detect(image, state) {
+                            Ok(density) => {
+                                use super::mt1959_uhd_density::{
+                                    density_stub, Adjustment, DensityBindings,
+                                };
+                                let instruction =
+                                    u16::from_le_bytes(density.original[2..4].try_into().unwrap());
+                                let adjustment = if density.lookup_displaced {
+                                    Adjustment::None
+                                } else if instruction & 0xff00 == 0x3000 {
+                                    Adjustment::Add
+                                } else {
+                                    ensure!(
+                                        instruction & 0xff00 == 0x3800,
+                                        "G01 density pointer adjustment changed"
+                                    );
+                                    Adjustment::Sub
+                                };
+                                let bytes = density_stub(&DensityBindings {
+                                    state: density.state,
+                                    flags,
+                                    normal_table: density.normal_table,
+                                    continuation: density.continuation,
+                                    lookup_displaced: density.lookup_displaced,
+                                    adjustment,
+                                    incoming_nz_valid: density.incoming_nz_valid,
+                                })?;
+                                plan.candidates.push(Candidate {
+                                    gap,
+                                    site: density.site,
+                                    original: density.original.clone(),
+                                    bytes,
+                                });
+                                plan.density = Some(density);
+                            }
+                            Err(e) => plan
+                                .pending
+                                .push(format!("G01: native density target contract: {e}")),
+                        }
                         // The native U identifier also affects controller and
                         // resident-worker policy. Admission alone does not
                         // qualify that downstream behavior, nor does it justify
@@ -172,9 +258,6 @@ impl Plan {
                             bytes,
                         });
                         plan.reverse = Some(reverse);
-                        plan.pending.push(
-                            "G05: arithmetic bound; existing mode lifecycle and caller qualification remain unresolved".into(),
-                        );
                     }
                     Err(e) => plan
                         .pending
@@ -303,6 +386,7 @@ impl Plan {
                 c.gap.id()
             );
             let target = super::mt1959::Mt1959Engine.free_space(&work, c.bytes.len())?;
+            ensure!(target & 3 == 0, "UHD helper requires four-byte alignment");
             let branch = thumb_asm::encode_bl(c.site, target).context("UHD detour range")?;
             work[target as usize..target as usize + c.bytes.len()].copy_from_slice(&c.bytes);
             work[c.site..c.site + 4].copy_from_slice(&branch);
@@ -471,7 +555,12 @@ fn finish_t1(mut a: Asm) -> Result<Vec<u8>> {
 
 /// Two coordinated G01 detours retain native format handling, its flag store,
 /// and every instruction following the native layer-state store.
-fn di_candidates(image: &[u8], flags: u32, di: &LegacyStackDi) -> Result<Vec<Candidate>> {
+pub(crate) fn di_candidates(
+    image: &[u8],
+    flags: u32,
+    di: &LegacyStackDi,
+    marker: Option<u32>,
+) -> Result<Vec<Candidate>> {
     let mut result = Vec::new();
     for layers in [false, true] {
         let mut a = Asm::new();
@@ -489,6 +578,15 @@ fn di_candidates(image: &[u8], flags: u32, di: &LegacyStackDi) -> Result<Vec<Can
         a.bind(v);
         a.movs_imm(5, 1);
         a.bind(inspect);
+        if !layers {
+            if let Some(marker) = marker {
+                // Clear before every new DI admission, including native/off
+                // fallbacks. LDR/STRB retain the incoming condition flags.
+                a.ldr_lit(0, marker);
+                a.ldr_lit(1, 0);
+                a.strb_imm(1, 0, 0);
+            }
+        }
         a.mov_reg(3, 13);
         a.adds_imm(3, 20 + di.stack_block);
         a.ldr_lit(0, flags + crate::abi::Feature::Unrestricted as u32);
@@ -546,6 +644,13 @@ fn di_candidates(image: &[u8], flags: u32, di: &LegacyStackDi) -> Result<Vec<Can
         a.cmp_imm(0, 3);
         a.bne(original);
         a.bind(valid);
+        if let Some(marker) = marker {
+            // Only the fully validated U/5, two/three-layer path gets identity.
+            // Do not clear at the layer hook: it follows primary admission.
+            a.ldr_lit(0, 1);
+            a.ldr_lit(1, marker);
+            a.strb_imm(0, 1, 0);
+        }
         a.pop(0x2f);
         if layers {
             // Native normalization uses R1=F3 and R3=the original DI block.

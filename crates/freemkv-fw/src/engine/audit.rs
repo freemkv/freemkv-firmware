@@ -362,10 +362,32 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
             }
             LeverId::RawRead => {
-                if l.hooks.iter().any(|h| h.id == "uhd-conversion") {
-                    let check =
+                let classic = report.engine == "MT1939"
+                    && original
+                        .get(0x3000..0x3010)
+                        .is_some_and(|b| b.starts_with(b"MT1939 Boot"));
+                if l.hooks
+                    .iter()
+                    .any(|h| h.id == "uhd-conversion" && (!classic || h.variant.is_some()))
+                {
+                    let classic_conversion = l.hooks.iter().any(|h| {
+                        h.id == "uhd-conversion"
+                            && h.variant
+                                .as_deref()
+                                .is_some_and(|v| v.starts_with("complete media group: classic "))
+                    });
+                    let check = if classic || classic_conversion {
+                        let flags = report.levers.iter().find_map(|v| fact(v, "flag_base"));
+                        flags
+                            .ok_or_else(|| anyhow::anyhow!("missing classic conversion flag base"))
+                            .and_then(|flags| {
+                                super::mt1939_uhd::UhdConversionPlan::inspect(original)
+                                    .and_then(|p| p.verify(original, img, flags))
+                            })
+                    } else {
                         super::mt1959_uhd::Plan::inspect(original, super::core::FLAG_TABLE_BASE)
-                            .and_then(|p| p.verify(img));
+                            .and_then(|p| p.verify(img))
+                    };
                     checks.push(AuditCheck {
                         lever: name,
                         what: "UHD conversion atomic group".into(),

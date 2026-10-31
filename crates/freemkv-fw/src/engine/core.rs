@@ -241,6 +241,13 @@ pub(crate) const NV_SAVED_MARKER: u8 = 0x01;
 /// checked per image by [`Mt1959Engine::assert_sram_cell_free`].
 pub(crate) const FLASHWRITE_SCRATCH_OFF: u32 = 0x10;
 
+/// Volatile U/5 classification cache for a qualified legacy media conversion.
+/// It is not a feature or saved configuration byte. A conversion must check its
+/// SRAM placement and bind both boot initialization and native media reset.
+pub(crate) const UHD_IDENTITY_OFF: u32 = 0x08;
+const _: () = assert!(UHD_IDENTITY_OFF > NUM_FEATURES as u32);
+const _: () = assert!(UHD_IDENTITY_OFF < FLASHWRITE_SCRATCH_OFF);
+
 /// Distinct status word the flash-write probe writes to the reply when it
 /// REFUSES an out-of-allowlist offset (PROGRAM routine not called). ASCII
 /// `"REFU"` — clearly not a PROGRAM return code, so the host can tell a refusal
@@ -974,6 +981,24 @@ impl Mt1959Engine {
             .collect();
         match hits.as_slice() {
             [rec] => Ok((*rec as u32) & !0xFFF),
+            [] => {
+                // A used RPC record need not retain its factory tag/padding.
+                // Bind its native copy routine instead of guessing a flash base.
+                let copy = mediatek_optical::image::analysis::NvRecordCopy::detect(image)
+                    .context("NV record has no factory marker or source-bound native copy")?;
+                let base = copy.record & !0xfff;
+                ensure!(
+                    image
+                        .get(base as usize..copy.record as usize)
+                        .is_some_and(|head| head.len() == SUB && head.iter().all(|b| *b == 0xff)),
+                    "native NV record has no erased settings prefix"
+                );
+                ensure!(
+                    copy.base_cell == self.find_nv_dram_base(image)?,
+                    "native NV copy and PROGRAM disagree on the DRAM window"
+                );
+                Ok(base)
+            }
             other => bail!(
                 "NV region record (00 04 05 with a blank 0x4B0-byte head) matched {} \
                  candidate(s) in the top 256 KiB (want exactly 1) — refusing to resolve \
@@ -3052,6 +3077,24 @@ impl Mt1959Engine {
         orig_init: u32,
         defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
+        self.build_boot_init_with_private_identity(flag_base, orig_init, defaults, None)
+    }
+
+    /// Build the same native-call-preserving boot wrapper with an optional
+    /// conversion-owned identity cache. Native images retain the old bytes.
+    pub(crate) fn build_boot_init_with_private_identity(
+        &self,
+        flag_base: u32,
+        orig_init: u32,
+        defaults: &BootSettings,
+        identity: Option<u32>,
+    ) -> Result<Vec<u8>> {
+        if let Some(identity) = identity {
+            ensure!(
+                flag_base.checked_add(UHD_IDENTITY_OFF) == Some(identity),
+                "private UHD identity overlaps flags or scratch"
+            );
+        }
         let mut a = Asm::new();
         // Preserve all four native arguments and the caller's r4. Keep two
         // words on the stack across the call so its entry remains 8-byte aligned.
@@ -3061,6 +3104,10 @@ impl Mt1959Engine {
         for (off, &val) in defaults.flags().iter().enumerate() {
             a.movs_imm(1, val); // selected boot value
             a.strb_imm(1, 0, off as u16); // flag[off] = default
+        }
+        if identity.is_some() {
+            a.movs_imm(1, 0);
+            a.strb_imm(1, 0, UHD_IDENTITY_OFF as u16);
         }
         // Boot choices are authoritative. Saved runtime settings are loaded only
         // by an explicit RESET_TO_FLASH, never implicitly during startup.

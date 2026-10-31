@@ -137,7 +137,7 @@ def main():
         data = (a.hoard / source['path']).read_bytes()
         assert hashlib.sha256(data).hexdigest() == digest
         contract = plan['reverse_contract']
-        assert contract and any('G05' in s for s in plan['pending'])
+        assert contract, 'G05 candidate lacks source-bound reverse contract'
         area = next(x for x in source['uhd_code']['areas'] if x['role'] == 'ReverseCalculation')
         state = source['uhd_code']['state_cell']
         native = Machine(data, area, state, contract)

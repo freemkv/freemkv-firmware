@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use freemkv_flash::cmac;
 
 use super::core::*;
-use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
+use super::lever::{HookReport, LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use super::CreateReport;
 use crate::abi;
@@ -20,6 +20,20 @@ use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
 impl Mt1959Engine {
+    pub(super) fn emit_media_conversion_classic(
+        &self,
+        source: &[u8],
+        out: &mut Vec<u8>,
+        flags: u32,
+    ) -> (HookReport, u32) {
+        let result = super::mt1939_uhd::UhdConversionPlan::inspect(source)
+            .and_then(|plan| plan.apply(source, out, flags));
+        match result {
+            Ok(count) => (HookReport::applied("uhd-conversion",
+                format!("complete media group: classic {count} source-bound helpers; software qualification pending")),count as u32),
+            Err(e) => (HookReport::unavailable("uhd-conversion",format!("0 conversion edits: {e:#}")),0),
+        }
+    }
     /// Thumb-1 selector detour: choose the native maximum only when enabled.
     /// The library proves every leaf path reaches this tail and binds RMAX to
     /// its native setter and the selector consumer to OPTM. No write speed or
@@ -189,15 +203,8 @@ impl Mt1959Engine {
 
         // Classic 0x3C dispatch table lives in its own window (~0x1a4000), NOT the
         // modern find_live_record windows.
-        const CLASSIC_TABLE_LO: usize = 0x001a_0000;
-        const CLASSIC_TABLE_HI: usize = 0x001a_8000;
         let record = self
-            .find_live_record_in(
-                image,
-                abi::READ_BUFFER_OPCODE,
-                CLASSIC_TABLE_LO,
-                CLASSIC_TABLE_HI,
-            )
+            .find_live_record_in(image, abi::READ_BUFFER_OPCODE, 0, image.len())
             .context("classic base: live 0x3C dispatch record")?;
 
         // Classic SRAM map differs from MT1959 — derive an unreferenced cell from
@@ -264,6 +271,7 @@ impl Mt1959Engine {
         let mut speed_stub_va = 0;
         let mut hrl_sites: Vec<u32> = Vec::new();
         let mut hrl_stub_va = 0u32;
+        let mut uhd_conversion_count = 0;
 
         // SAFETY COUPLING (the whole point of the classic boot blessing): the
         // always-on boot-init hook writes 0xFF into every flag byte at power-on,
@@ -347,6 +355,9 @@ impl Mt1959Engine {
                 hrl_sites = sites;
                 hrl_stub_va = stub_va;
             }
+            uhd_conversion_count = self
+                .emit_media_conversion_classic(image, &mut out, flag_base)
+                .1;
         }
 
         // Downgrade-enable (DE) byte: a fixed base identity-page byte, NOT a
@@ -375,6 +386,7 @@ impl Mt1959Engine {
         let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
 
         Ok(CreateReport {
+            uhd_conversion_count,
             image: signed,
             scanner_entry,
             cdb_base,
@@ -492,15 +504,8 @@ impl Mt1959Engine {
             .context("classic base: response commit")?;
 
         // Classic dispatch table window (~0x1a4000, engine-scope §1).
-        const CLASSIC_TABLE_LO: usize = 0x001a_0000;
-        const CLASSIC_TABLE_HI: usize = 0x001a_8000;
         let record = self
-            .find_live_record_in(
-                image,
-                abi::READ_BUFFER_OPCODE,
-                CLASSIC_TABLE_LO,
-                CLASSIC_TABLE_HI,
-            )
+            .find_live_record_in(image, abi::READ_BUFFER_OPCODE, 0, image.len())
             .context("classic base: live 0x3C dispatch record")?;
 
         // Statically unreferenced candidate for the freemkv flag table (classic SRAM map
@@ -638,6 +643,12 @@ impl Mt1959Engine {
         } else {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
         });
+
+        let (conversion, count) = self.emit_media_conversion_classic(image, &mut out, flag_base);
+        if let Some(raw_read) = levers.iter_mut().find(|l| l.id == LeverId::RawRead) {
+            raw_read.hooks.push(conversion);
+            raw_read.facts.push(("uhd_conversion_count", count));
+        }
 
         // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));

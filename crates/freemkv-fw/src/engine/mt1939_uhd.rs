@@ -1,4 +1,4 @@
-//! Retained experimental UHD components; compiled only into research tests.
+//! Source-bound classic UHD components and atomic conversion installation.
 //!
 //! Locators live in mediatek-optical. This module owns policy and Thumb emission.
 //! Installation requires every named software contract and commits atomically.
@@ -26,32 +26,196 @@ pub struct UhdConversionPlan {
     state: u32,
     source_hash: [u8; 32],
     pending: Vec<&'static str>,
+    classic_application: bool,
+    stack_di: bool,
 }
 impl UhdConversionPlan {
+    /// Install the complete group into a private buffer. Any late mismatch or
+    /// allocation failure leaves the caller's output byte-identical.
+    pub fn apply(&self, source: &[u8], out: &mut Vec<u8>, flags: u32) -> Result<usize> {
+        let patches = self.prepared_patches(source, flags)?;
+        ensure!(out.len() == source.len(), "UHD output length changed");
+        let mut work = out.clone();
+        for p in &patches {
+            ensure!(
+                work.get(p.site..p.site + p.original.len()) == Some(p.original.as_slice()),
+                "UHD source span changed: {}",
+                p.role
+            );
+            let target = super::mt1959::Mt1959Engine.free_space(&work, p.bytes.len())?;
+            ensure!(target & 3 == 0, "UHD helper alignment");
+            let branch = thumb_asm::encode_bl(p.site, target).context("UHD detour range")?;
+            work[target as usize..target as usize + p.bytes.len()].copy_from_slice(&p.bytes);
+            work[p.site..p.site + 4].copy_from_slice(&branch);
+            for at in (p.site + 4..p.site + p.original.len()).step_by(2) {
+                work[at..at + 2].copy_from_slice(&0x46c0u16.to_le_bytes());
+            }
+        }
+        self.verify(source, &work, flags)?;
+        *out = work;
+        Ok(patches.len())
+    }
+    /// Re-derive every expected helper from the original image and validate the
+    /// installed BL, exact helper bytes and displaced-span padding.
+    pub fn verify(&self, source: &[u8], out: &[u8], flags: u32) -> Result<()> {
+        for p in self.prepared_patches(source, flags)? {
+            let ins =
+                thumb_asm::isa::decode_at(out, p.site).context("UHD installed instruction")?;
+            ensure!(ins.mnemonic == "bl", "UHD installed branch: {}", p.role);
+            let target = ins.branch_target().context("UHD branch target")? as usize;
+            ensure!(
+                out.get(target..target + p.bytes.len()) == Some(p.bytes.as_slice()),
+                "UHD installed helper: {}",
+                p.role
+            );
+            for at in (p.site + 4..p.site + p.original.len()).step_by(2) {
+                ensure!(
+                    out.get(at..at + 2) == Some(0x46c0u16.to_le_bytes().as_slice()),
+                    "UHD padding: {}",
+                    p.role
+                );
+            }
+        }
+        Ok(())
+    }
+    /// Prepare the complete source-bound group, without installing any bytes.
+    /// Refuse missing contracts and overlapping detours before returning a group.
+    pub fn prepared_patches(&self, image: &[u8], flags: u32) -> Result<Vec<UhdPatch>> {
+        self.require_complete_conversion()?;
+        let mut patches = if self.stack_di {
+            let di = mediatek_optical::image::analysis::LegacyStackDi::detect(image)?;
+            super::mt1959_uhd::di_candidates(image, flags, &di, None)?
+                .into_iter()
+                .map(|c| UhdPatch {
+                    role: if c.site == di.prevalidation {
+                        "DiscInformation"
+                    } else {
+                        "DiscInformationLayers"
+                    }
+                    .into(),
+                    site: c.site,
+                    original: c.original,
+                    bytes: c.bytes,
+                })
+                .collect()
+        } else {
+            let di = build_di_prevalidation_candidate(image, flags, false, true)?;
+            vec![UhdPatch {
+                role: "DiscInformation".into(),
+                site: di.contract.prevalidation,
+                original: di.original,
+                bytes: di.bytes,
+            }]
+        };
+        patches.extend(
+            self.routing_candidates(image, flags)?
+                .into_iter()
+                .map(UhdPatch::routing),
+        );
+        patches.extend(
+            self.auxiliary_candidates(image, flags)?
+                .into_iter()
+                .map(UhdPatch::routing),
+        );
+        patches.extend(
+            self.completion_candidates(image, flags)?
+                .into_iter()
+                .map(UhdPatch::routing),
+        );
+        patches.extend(
+            self.position_candidates(image, flags)?
+                .into_iter()
+                .map(UhdPatch::routing),
+        );
+        patches.extend(
+            self.position_setup_candidates(image, flags)?
+                .into_iter()
+                .map(UhdPatch::routing),
+        );
+        let (decode, ranges) = self.read_position_candidates(image, flags)?;
+        patches.push(UhdPatch {
+            role: "ReadPositionDecode".into(),
+            site: decode.contract.decode.site(),
+            original: decode.original,
+            bytes: decode.bytes,
+        });
+        patches.extend(ranges.into_iter().map(UhdPatch::routing));
+        if let Some(c) = self.calibration_candidate(image, flags)? {
+            patches.push(UhdPatch {
+                role: "CalibrationTarget".into(),
+                site: c.contract.site,
+                original: c.original,
+                bytes: c.bytes,
+            });
+        }
+        if let Some(c) = self.parameter_candidate(image, flags)?.hook {
+            patches.push(UhdPatch::routing(c));
+        }
+        patches.sort_by_key(|c| c.site);
+        for pair in patches.windows(2) {
+            ensure!(
+                pair[0].site + pair[0].original.len() <= pair[1].site,
+                "overlapping UHD contracts {} and {}",
+                pair[0].role,
+                pair[1].role
+            );
+        }
+        for p in &patches {
+            ensure!(
+                p.original.len() >= 4
+                    && p.original.len() % 2 == 0
+                    && image.get(p.site..p.site + p.original.len()) == Some(p.original.as_slice()),
+                "invalid UHD source span {}",
+                p.role
+            );
+        }
+        Ok(patches)
+    }
     /// Select each implementation separately and require their common state cell.
     pub fn inspect(image: &[u8]) -> Result<Self> {
         let areas = UhdAreas::inspect(image);
         let state = areas
-            .state_address()
+            .media_state_address()
             .context("UHD component state bindings")?;
         areas
             .area(UhdArea::DiscInformation)
             .context("UHD DI recognition contract")?;
-        let mut pending = Vec::new();
-        if areas
+        use mediatek_optical::image::analysis::*;
+        let stack_di = LegacyStackDi::detect(image).is_ok();
+        // Parser layout and boot silicon are independent. Require the complete
+        // native position substrate plus classic reverse grammar before this
+        // mixed stack-parser application can use the classic conversion group.
+        let classic_application = areas
             .area(UhdArea::DiscInformation)?
             .variant()
             .starts_with("classic")
-        {
-            use mediatek_optical::image::analysis::*;
+            || (stack_di
+                && ClassicPosition::detect(image, state).is_ok()
+                && ClassicPositionSetup::detect(image, state).is_ok()
+                && areas
+                    .area(UhdArea::ReverseCalculation)
+                    .is_ok_and(|c| c.variant() == "classic"));
+        let mut pending = Vec::new();
+        if classic_application {
+            let parameter = ClassicParameter::detect(image, state);
+            if parameter.as_ref().is_ok_and(|c| c.coefficients_are_runtime) {
+                // A literal outside this image does not establish valid backing
+                // before the newly earlier C7 startup read. Parameterized CPU
+                // tests prove selection, not resident mapping or initialization.
+                pending.push("out-of-image high-layer coefficient backing/lifetime");
+            }
             let checks = [
                 (
                     "disc-information recognition",
-                    ClassicDi::detect(image).map(|_| ()),
+                    if stack_di {
+                        LegacyStackDi::detect(image).map(|_| ())
+                    } else {
+                        ClassicDi::detect(image).map(|_| ())
+                    },
                 ),
                 (
                     "auxiliary native selectors",
-                    ClassicConsumer::inspect(image, state).map(|_| ()),
+                    ClassicConsumer::inspect_rom(image, state).map(|_| ()),
                 ),
                 (
                     "position scaling",
@@ -65,10 +229,7 @@ impl UhdConversionPlan {
                     "read-position decode and ranges",
                     ClassicReadPosition::detect(image, state).map(|_| ()),
                 ),
-                (
-                    "parameter lookup",
-                    ClassicParameter::detect(image, state).map(|_| ()),
-                ),
+                ("parameter lookup", parameter.map(|_| ())),
                 (
                     "startup calibration",
                     ClassicCalibration::detect(image, state).map(|_| ()),
@@ -88,16 +249,16 @@ impl UhdConversionPlan {
                     .filter_map(|(name, result)| result.err().map(|_| name)),
             );
             for area in UhdArea::ALL {
+                if area == UhdArea::HardwareDefaults {
+                    continue;
+                }
                 if areas.area(area).is_err() {
                     pending.push("core native routing");
                     break;
                 }
             }
         }
-        if !areas
-            .area(UhdArea::DiscInformation)?
-            .variant()
-            .starts_with("classic")
+        if !classic_application
             && UhdArea::ALL.iter().any(|&area| {
                 !matches!(
                     areas.area(area).map(|c| c.selects_c7()),
@@ -109,10 +270,16 @@ impl UhdConversionPlan {
         }
         Ok(Self {
             pending,
+            classic_application,
+            stack_di,
             areas,
             state,
             source_hash: Sha256::digest(image).into(),
         })
+    }
+    /// Positive application-code lineage, independent of boot-derived silicon.
+    pub fn uses_classic_application(&self) -> bool {
+        self.classic_application
     }
     /// Common state byte derived from the image's independent consumers.
     pub fn state_address(&self) -> u32 {
@@ -124,6 +291,9 @@ impl UhdConversionPlan {
     }
     /// Avoid patching native implementations merely because another component is old.
     pub fn action(&self, area: UhdArea) -> Result<UhdAction> {
+        if area == UhdArea::HardwareDefaults {
+            return Ok(UhdAction::PreserveHardware);
+        }
         let contract = self.areas.area(area)?;
         Ok(match contract.selects_c7() {
             None => UhdAction::PreserveHardware,
@@ -200,7 +370,11 @@ impl UhdConversionPlan {
             <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
             "source state changed"
         );
-        mediatek_optical::image::analysis::ClassicConsumer::inspect(image, self.state)?
+        // Preserve the separate F-family rewritable read-recovery workflow.
+        // Its own native entry guard excludes C7/C8. This group extends only
+        // the shared ROM selectors; the generic completion reflection below
+        // remains independently required and patched.
+        mediatek_optical::image::analysis::ClassicConsumer::inspect_rom(image, self.state)?
             .into_iter()
             .map(|contract| {
                 let selection = contract.selection;
@@ -401,7 +575,7 @@ impl UhdConversionPlan {
         a.cmp_imm(3, 0xc7);
         a.bne(oem);
         a.pop(8);
-        a.ldrb_imm(1, 4, 2);
+        a.ldrb_imm(1, u16::from(contract.position_register), 2);
         a.lsrs_imm(1, 1, 6);
         a.cmp_imm(1, 1);
         a.bne(zero);
@@ -429,7 +603,7 @@ impl UhdConversionPlan {
                     } else {
                         PositionRole::ReadLowerRange
                     },
-                    region_start: contract.entry + if index == 0 { 0x124 } else { 0x134 },
+                    region_start: site - if index == 0 { 6 } else { 2 },
                     calculation_end: None,
                     site,
                     original: image[site..site + 4].to_vec(),
@@ -484,14 +658,22 @@ impl UhdConversionPlan {
         a.bne(oem);
         a.pop(0x0a);
         a.ldr_lit(0, contract.original_base);
-        a.adds_imm(0, 0x58);
+        if contract.base_adjustment >= 0 {
+            a.adds_imm(0, u8::try_from(contract.base_adjustment)?);
+        } else {
+            a.subs_imm(0, u8::try_from(-contract.base_adjustment)?);
+        }
         a.ldr_lit(0, coefficients);
         a.ldrh_reg(0, 0, 6);
         tail(&mut a, contract.site + 6);
         a.bind(oem);
         a.pop(0x0a);
         a.ldr_lit(0, contract.original_base);
-        a.adds_imm(0, 0x58);
+        if contract.base_adjustment >= 0 {
+            a.adds_imm(0, u8::try_from(contract.base_adjustment)?);
+        } else {
+            a.subs_imm(0, u8::try_from(-contract.base_adjustment)?);
+        }
         a.ldrh_reg(0, 0, 6);
         tail(&mut a, contract.site + 6);
         let original = image[contract.site..contract.site + 6].to_vec();
@@ -533,6 +715,24 @@ impl UhdConversionPlan {
             None
         };
         Ok(UhdParameterCandidate { contract, hook })
+    }
+}
+/// One member of a complete, uninstalled conversion group.
+#[derive(Debug, Clone)]
+pub struct UhdPatch {
+    pub role: String,
+    pub site: usize,
+    pub original: Vec<u8>,
+    pub bytes: Vec<u8>,
+}
+impl UhdPatch {
+    fn routing<R: std::fmt::Debug>(c: UhdRoutingCandidate<R>) -> Self {
+        Self {
+            role: format!("{:?}", c.area),
+            site: c.site,
+            original: c.original,
+            bytes: c.bytes,
+        }
     }
 }
 /// Bound read-position decoder and its emitted replacement.
@@ -853,6 +1053,26 @@ pub fn emit_di_layers(flags: u32) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     const CLASSIC: &[u8] = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+
+    #[test]
+    fn complete_installation_verifies_and_late_source_mismatch_rolls_back() {
+        let plan = UhdConversionPlan::inspect(CLASSIC).unwrap();
+        let patches = plan.prepared_patches(CLASSIC, 0x0200f000).unwrap();
+        let mut output = CLASSIC.to_vec();
+        assert_eq!(
+            plan.apply(CLASSIC, &mut output, 0x0200f000).unwrap(),
+            patches.len()
+        );
+        plan.verify(CLASSIC, &output, 0x0200f000).unwrap();
+        let mut corrupt = output.clone();
+        corrupt[patches[0].site] ^= 1;
+        assert!(plan.verify(CLASSIC, &corrupt, 0x0200f000).is_err());
+        let mut collision = CLASSIC.to_vec();
+        collision[patches.last().unwrap().site] ^= 1;
+        let before = collision.clone();
+        assert!(plan.apply(CLASSIC, &mut collision, 0x0200f000).is_err());
+        assert_eq!(collision, before);
+    }
     #[test]
     fn conditional_continuations_require_the_taken_condition_and_refuse_cycles() {
         let mut a = Asm::new();
@@ -936,6 +1156,16 @@ mod tests {
         );
         assert!(plan.remaining_contracts().is_empty());
         plan.require_complete_conversion().unwrap();
+        let before = CLASSIC.to_vec();
+        let patches = plan.prepared_patches(CLASSIC, 0x0200f000).unwrap();
+        assert!(patches.iter().any(|p| p.role == "DiscInformation"));
+        assert!(patches.iter().any(|p| p.role == "ReverseCalculation"));
+        assert!(patches.iter().any(|p| p.role == "ReadPositionDecode"));
+        assert_eq!(CLASSIC, before);
+        let mut stale = CLASSIC.to_vec();
+        let last = stale.len() - 1;
+        stale[last] ^= 1;
+        assert!(plan.prepared_patches(&stale, 0x0200f000).is_err());
         let mut changed = CLASSIC.to_vec();
         let completion =
             mediatek_optical::image::analysis::ClassicReadCompletion::inspect(CLASSIC, plan.state)
@@ -956,7 +1186,10 @@ mod tests {
             );
         }
         let auxiliary = plan.auxiliary_candidates(CLASSIC, 0x0200f000).unwrap();
-        assert_eq!(auxiliary.len(), 11);
+        assert_eq!(auxiliary.len(), 10);
+        assert!(auxiliary.iter().all(
+            |c| c.area != mediatek_optical::image::analysis::ClassicConsumerKind::ReadBoundary
+        ));
         for candidate in auxiliary {
             assert_eq!(
                 &CLASSIC[candidate.site..candidate.site + candidate.original.len()],
@@ -1018,7 +1251,7 @@ mod tests {
                 assert_eq!(plan.routing_candidates(&data, 0x0200f000).unwrap().len(), 5);
                 assert_eq!(
                     plan.auxiliary_candidates(&data, 0x0200f000).unwrap().len(),
-                    11
+                    10
                 );
             }
         }

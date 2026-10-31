@@ -55,7 +55,7 @@ def observations(result):
 
 
 @lru_cache(maxsize=2)
-def isolated_cpu(data,stub,site,width,patched):
+def isolated_cpu(data,stub,site,width,patched,marker=None):
     # Reuse immutable flash mappings, restoring the full CPU context for each
     # case. Checked memory writes below limit side effects to scratch stack.
     cpu=Uc(UC_ARCH_ARM,UC_MODE_THUMB);cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
@@ -67,23 +67,30 @@ def isolated_cpu(data,stub,site,width,patched):
             result.update(exit=at,registers=[c.reg_read(getattr(reg,f'UC_ARM_REG_R{i}')) for i in range(13)],
                 flags=c.reg_read(reg.UC_ARM_REG_CPSR)&0xf0000000,sp=c.reg_read(reg.UC_ARM_REG_SP));c.emu_stop()
     def write(c,_access,at,size,value,_user):
-        assert SP-64<=at and at+size<=SP,('unexpected isolated write',hex(at),size,value)
+        assert (SP-64<=at and at+size<=SP) or (marker is not None and at==marker and size==1 and value in (0,1)),('unexpected isolated write',hex(at),size,value)
     cpu.hook_add(UC_HOOK_CODE,code);cpu.hook_add(UC_HOOK_MEM_WRITE,write)
     return cpu,result,cpu.context_save()
 
 
-def di_run(data,candidate,di,feature,identifier,density,layers,attr,vflag,patched,initial_state=0):
+def di_run(data,candidate,di,feature,identifier,density,layers,attr,vflag,patched,initial_state=0,initial_marker=0xa5):
     site=candidate['site']
-    cpu,result,initial=isolated_cpu(data,bytes(candidate['bytes']),site,len(candidate['original']),patched)
+    marker=di.get('_marker')
+    cpu,result,initial=isolated_cpu(data,bytes(candidate['bytes']),site,len(candidate['original']),patched,marker)
     cpu.context_restore(initial);result.clear();cpu.mem_write(SP-64,bytes(64))
     cpu.mem_write(FLAGS,bytes([feature]));cpu.reg_write(reg.UC_ARM_REG_SP,SP)
     for i in range(13):cpu.reg_write(getattr(reg,f'UC_ARM_REG_R{i}'),0x11111111*(i+1)&0xffffffff)
+    if marker is not None:cpu.mem_write(marker,bytes([initial_marker]))
     cpu.reg_write(reg.UC_ARM_REG_R7,di['state']);cpu.mem_write(di['state'],bytes([initial_state]))
     cpu.reg_write(reg.UC_ARM_REG_CPSR,0x20|vflag)
     block=SP+di['stack_block'];offset=di['identifier_offset']
     cpu.mem_write(block+offset-4,b'BD');cpu.mem_write(block+offset,bytes([ord(identifier),attr<<4,layers<<4,density]))
     cpu.emu_start((BASE if patched else site)|1,0x200000,count=256)
     assert result and result['sp']==SP,result
+    if marker is not None:
+        accepted=(feature==1 and identifier=='U' and density==5 and layers in (2,3) and di['_oracle'][initial_state,attr,layers])
+        expected=(int(accepted) if site==di['prevalidation'] else (1 if accepted else initial_marker)) if patched else initial_marker
+        observed=cpu.mem_read(marker,1)[0]
+        assert observed==expected, ('DI private marker',hex(site),feature,identifier,density,layers,attr,initial_state,initial_marker,observed,expected)
     return dict(result)
 
 
@@ -138,6 +145,26 @@ def key_run(data,candidate,feature,key_class,patched):
     return dict(result)
 
 
+
+def delegated_suite(row,candidate):
+    gap=candidate['gap']
+    if gap in ('G03','G05'):
+        return gap
+    if gap!='G01':
+        return None
+    matches=[]
+    for field,suite in (('density_contract','G01-density'),('identity_contract','G01-identity')):
+        contract=row['plan'].get(field)
+        if contract is not None and candidate['site']==contract['site']:
+            matches.append(suite)
+    assert len(matches)<=1, ('ambiguous G01 contract',row['sha256'],candidate['site'],matches)
+    if matches:
+        return matches[0]
+    di=row.get('di_contract')
+    assert di and candidate['site'] in (di['prevalidation'],di['layers']), ('unknown G01 helper',row['sha256'],candidate['site'])
+    return None
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--scan',type=Path,required=True);p.add_argument('--candidates',type=Path,required=True)
@@ -151,22 +178,26 @@ def main():
     assert {row['sha256'] for row in plans}==set(scans), 'scan/plan inventory mismatch'
     plan_hash=hashlib.sha256(args.candidates.read_bytes()).hexdigest()
     scan_hash=hashlib.sha256(args.scan.read_bytes()).hexdigest()
-    children={}; delegated={}
+    children={}; delegated={};delegated_owners={}
+    required_suites={delegated_suite(row,c) for row in plans for c in row['plan']['candidates']} - {None}
+    child_scripts={'G03':'test-mt1959-control-field-downstream.py','G05':'test-mt1959-reverse-downstream.py',
+                   'G01-density':'test-mt1959-density-downstream.py','G01-identity':'test-mt1959-identity-downstream.py'}
     with tempfile.TemporaryDirectory(prefix='freemkv-conversion-cpu-') as temporary:
-        for gap,script in (('G03','test-mt1959-control-field-downstream.py'),('G05','test-mt1959-reverse-downstream.py')):
-            receipt_path=Path(temporary)/(gap+'.json')
+        for suite in sorted(required_suites):
+            script=child_scripts[suite];gap=suite.split('-')[0]
+            receipt_path=Path(temporary)/(suite+'.json')
             script_path=Path(__file__).with_name(script)
             subprocess.run([sys.executable,str(script_path),'--scan',str(args.scan),'--plans',str(args.candidates),
                             '--hoard',str(args.hoard),'--output',str(receipt_path)],check=True)
             receipt=json.loads(receipt_path.read_text())
             assert receipt['result']=='pass' and receipt['plans_sha256']==plan_hash and receipt['scan_sha256']==scan_hash
             assert receipt['suite_sha256']==hashlib.sha256(script_path.read_bytes()).hexdigest()
-            children[gap]=receipt
+            children[suite]=receipt
             for helper in receipt['helpers']:
                 assert helper['gap']==gap, ('unexpected child gap',gap,helper)
                 key=(helper['source_sha256'],helper['gap'],helper['site'])
                 assert key not in delegated, ('duplicate child helper',key)
-                delegated[key]=helper
+                delegated[key]=helper;delegated_owners[key]=suite
     cases=0;tested=[];coverage=[];expected=set();child_claims=set();role_cases={}
     def record(row,candidate,kind):
         key=(row['sha256'],candidate['gap'],candidate['site'])
@@ -185,12 +216,14 @@ def main():
             key=(row['sha256'],gap,candidate['site'])
             assert key not in expected, ('duplicate plan helper',key)
             expected.add(key)
-            if gap in ('G03','G05'):
+            suite=delegated_suite(row,candidate)
+            if suite is not None:
                 assert key in delegated, ('missing downstream helper coverage',key)
+                assert delegated_owners[key]==suite, ('wrong child owner',key,suite,delegated_owners[key])
                 bound=delegated[key]
                 assert bound['bytes_sha256']==hashlib.sha256(bytes(candidate['bytes'])).hexdigest()
                 assert bound['original_sha256']==hashlib.sha256(bytes(candidate['original'])).hexdigest()
-                child_claims.add(key);record(row,candidate,'downstream-'+gap)
+                child_claims.add(key);record(row,candidate,'downstream-'+suite)
                 tested.append((row['sha256'][:12],gap));continue
             before_cases=cases
 
@@ -207,7 +240,9 @@ def main():
                 record(row,candidate,'isolated-selector')
                 tested.append((row['sha256'][:12],gap));continue
             if gap=='G01':
-                di=row['di_contract'];assert di is not None
+                di=dict(row['di_contract']);assert di is not None
+                identity=row['plan'].get('identity_contract')
+                if identity is not None:di.update(_marker=identity['marker'],_oracle=di_oracle)
                 layer_hook=candidate['site']==di['layers']
                 for feature in (0,1,255):
                     for identity in ('U','O','W','R','?'):
@@ -259,6 +294,26 @@ def main():
             role_cases[gap]=role_cases.get(gap,0)+cases-before_cases
             record(row,candidate,'isolated-selector')
             tested.append((row['sha256'][:12],gap))
+    marker_cases=0
+    for row in plans:
+        identity=row['plan'].get('identity_contract')
+        if identity is None:continue
+        di=dict(row['di_contract']);di.update(_marker=identity['marker'],_oracle=di_oracle)
+        hooks={c['site']:c for c in row['plan']['candidates'] if c['gap']=='G01'}
+        assert di['prevalidation'] in hooks and di['layers'] in hooks, 'marker lifecycle requires both DI hooks'
+        data=(args.hoard/scans[row['sha256']]['path']).read_bytes()
+        for initial_marker in (0,1,255):
+            for feature in (0,1,255):
+                for state in DI_STATES:
+                    for attr in range(4):
+                        for layers in (2,3):
+                            # Each stage asserts its exact marker postcondition;
+                            # the layer stage receives the primary stage's marker.
+                            accepted=feature==1 and di_oracle[state,attr,layers]
+                            args_di=(data,hooks[di['prevalidation']],di,feature,'U',5,layers,attr,0,True,state,initial_marker)
+                            di_run(*args_di)
+                            di_run(data,hooks[di['layers']],di,feature,'U',5,layers,attr,0,True,state,int(accepted))
+                            marker_cases+=2
     assert child_claims==set(delegated), ('unclaimed child helpers',set(delegated)-child_claims)
     assert len(coverage)==len(expected)
     if args.output:
@@ -270,10 +325,10 @@ def main():
             'suite_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             'full_conversion_qualified':False,
             'helper_count_by_gap':{gap:sum(x['gap']==gap for x in coverage) for gap in sorted({x['gap'] for x in coverage})},
-            'selector_cases_by_gap':role_cases,'downstream_receipts':children,
-            'total_contract_cases':cases+sum(x['cases'] for x in children.values()),
+            'marker_lifecycle_cases':marker_cases,'selector_cases_by_gap':role_cases,'downstream_receipts':children,
+            'total_contract_cases':cases+marker_cases+sum(x['cases'] for x in children.values()),
             'limits':'Prepared private CPU patches and bounded native stages; no full installed BIN or QA qualification. Every pending plan remains unqualified.',
-            'unresolved_reverse_bindings':children['G05']['unqualified'],
+            'unresolved_reverse_bindings':children.get('G05',{}).get('unqualified',[]),
             'unqualified':[{'sha256':row['sha256'],'pending':row['plan']['pending']} for row in plans if row['plan'].get('pending')]},indent=2)+'\n')
     print(f'PASS: {cases} ARM926 selector cases, {len(tested)} candidates; OEM/Off and other-state preservation checked')
 

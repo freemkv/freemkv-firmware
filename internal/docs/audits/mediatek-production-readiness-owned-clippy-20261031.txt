@@ -1,0 +1,2 @@
+    Checking freemkv-fw v0.16.0 (/Users/matthew/Developer/tmp/freemkv-firmware-mt1939-0155/crates/freemkv-fw)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.71s
