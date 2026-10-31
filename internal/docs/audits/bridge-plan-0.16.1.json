@@ -34,7 +34,8 @@
       "placement": 231,
       "failed": 0
     },
-    "application_library_tests": 709,
+    "application_library_tests": 710,
+    "application_integration_tests": "All freemkv-flash integration suites passed with the locked git dependency, including 28 architecture checks.",
     "unchanged_pioneer_golden_scenarios": {
       "execute": 6,
       "recovery": 9,

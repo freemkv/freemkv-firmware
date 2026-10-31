@@ -1,6 +1,6 @@
-//! Flash routing for Pioneer drives: from the installed identity and the
-//! target bundle, decide between a plain flash, a cross-generation downgrade,
-//! a crossflash or a refusal. Pure classification: no device I/O.
+//! Compatibility classification for Pioneer installed and target firmware.
+//! These facts drive admission and presentation; the receiver library prepares
+//! the executable direct or bridge stages. Classification performs no device I/O.
 //!
 //! **Family gate.** `family(installed Normal body)` and `family(target Normal
 //! body)` must both profile and be equal ([`FamilyKey`]: the same silicon and
@@ -11,7 +11,7 @@
 //! **Kernel mode is not used** (see [`kernel_mode_required`]). Every flash takes
 //! the ordinary OEM-update route, whose generation lever is the decoded-body
 //! `0xFE` marker. A [`FlashPlan::KernelDowngrade`] is executable: the marker
-//! patch is applied to the Kernel at write time.
+//! bridge is fully prepared before any firmware write.
 //!
 //! Gates: Site 1 (a newer receiver rejects an incoming Kernel whose marker is
 //! `FF` or `00`: the generation barrier) and Site 2 (the installed Kernel and
@@ -149,7 +149,7 @@ pub struct Target {
     pub required_kernel_tag: Option<String>,
 }
 
-/// The chosen flash path.
+/// Compatibility facts, not a choice of executor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FlashPlan {
     /// Same model, same-or-newer, or same-generation older: write the components
@@ -157,7 +157,7 @@ pub enum FlashPlan {
     Plain,
     /// Older, crossing the `FF`/`00` generation barrier on a new-gen receiver, with
     /// a full self-consistent Kernel+Normal pair. Executable: the §15.3 marker
-    /// patch is applied to the Kernel at write time.
+    /// bridge is prepared before writing and executed by the shared stage loop.
     /// (Despite the name it needs no kernel mode; see [`kernel_mode_required`].)
     KernelDowngrade,
     /// Different model in the same family: a full self-consistent foreign
@@ -531,7 +531,7 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
 
     // A same-edition Kernel+Normal bundle: the only runtime special case is
     // Site 1, where a new-generation receiver rejects an `FF`/`00` Kernel (a
-    // KernelDowngrade, patched at write time).
+    // KernelDowngrade, prepared as marker-bridge stages).
     let kernel = target.kernel.expect("has_kernel branch");
     if installed.receiver_new_gen.unwrap_or(false)
         && Generation::from_marker(kernel.marker).site1_rejected()

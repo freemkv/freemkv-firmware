@@ -395,7 +395,8 @@ fn bridge_warnings(plan: &pioneer_optical::receiver::PreparedUpdate) -> Vec<Stri
     let mut warnings = Vec::new();
     for stage in plan.stages() {
         let warning = match stage.bridge() {
-            Some(BridgeKind::ReceiverMarker) => DOWNGRADE_WARNING,
+            Some(BridgeKind::ReceiverMarker) if plan.stages().len() == 2 => DOWNGRADE_WARNING,
+            Some(BridgeKind::ReceiverMarker) => "The update includes a temporary accepted Kernel marker. The final stage restores the requested Kernel and verifies its bytes. Keep the backup and diagnostic log until all stages complete.",
             Some(BridgeKind::KernelHandoff) => "This update installs a temporary firmware bridge before the requested target. Each stage must start and pass verification before the next begins. This bridge requires hardware qualification; keep the backup and diagnostic log.",
             None => continue,
         };
@@ -685,6 +686,9 @@ fn authorize_installed_inner(
         &route
     ));
     if let Some(complete) = &prepared.complete {
+        // The complete stage plan is authoritative once installed evidence is
+        // available, including compositions with more than one bridge.
+        warnings.retain(|warning| warning != DOWNGRADE_WARNING);
         for warning in bridge_warnings(complete) {
             if !warnings.contains(&warning) {
                 warnings.push(warning);

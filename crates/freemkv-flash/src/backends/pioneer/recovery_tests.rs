@@ -2389,3 +2389,29 @@ fn confirmation_cleanup_real_recovery_emits_experimental_and_two_pass_requiremen
         .any(|(_, value)| value == super::super::DOWNGRADE_WARNING));
     assert_eq!(drive.reads, 0);
 }
+
+#[test]
+fn composed_bridge_warnings_describe_the_final_stage_without_assuming_two_passes() {
+    let current = archive(&fixture_pair(true, 1), false);
+    let target = fixture_pair_class_with(
+        false,
+        0,
+        b"SAT FFFEGENERAL 0000",
+        [0x100, 0x200],
+        |kernel| {
+            kernel.copy_within(0x20..0x30, 0x2a);
+            kernel[0x20..0x2a].fill(0);
+            kernel[0xe107] = 0x2a;
+        },
+    );
+    let plan = Plan::prepare(&current, &archive(&target, false)).unwrap();
+    assert_eq!(plan.prepared.stages().len(), 3);
+    let warnings = plan.bridge_warnings();
+    assert_eq!(warnings.len(), 2);
+    assert!(warnings
+        .iter()
+        .any(|warning| warning.contains("final stage")));
+    assert!(!warnings
+        .iter()
+        .any(|warning| warning.contains("A second update")));
+}
