@@ -70,20 +70,11 @@ pub(super) fn density_stub(b: &DensityBindings) -> Result<Vec<u8>> {
         capture_nz(&mut a, common, 6);
         a.bind(cv);
         capture_nz(&mut a, common, 9);
-    } else {
-        // Original ADD/SUB produces a positive pointer; ADD has C=0 and SUB C=1.
-        a.movs_imm(
-            3,
-            if b.adjustment == Adjustment::Add {
-                0
-            } else {
-                3
-            },
-        );
-        a.b(common);
     }
     a.bind(common);
-    a.push(8); // captured NZCV tag
+    if b.lookup_displaced {
+        a.push(8); // captured NZCV tag
+    }
     let native = a.label();
     let high = a.label();
     let selected = a.label();
@@ -107,37 +98,54 @@ pub(super) fn density_stub(b: &DensityBindings) -> Result<Vec<u8>> {
     if b.lookup_displaced {
         a.ldrh_reg(0, 0, 6);
     }
-    a.pop(8); // r3 = saved flag tag
-    for tag in 0..12u8 {
-        let next = a.label();
-        a.cmp_imm(3, tag);
-        a.bne(next);
-        let seed = match tag / 3 {
-            0 => 0,
-            1 => 0xffff_ffff,
-            2 => 0x4000_0000,
-            _ => 0x8000_0000,
-        };
-        a.ldr_lit(3, seed);
-        a.adds_reg(3, 3, 3);
-        match tag % 3 {
-            0 => {
-                a.movs_imm(3, 1);
+    if b.lookup_displaced {
+        a.pop(8); // r3 = saved flag tag
+        for tag in 0..12u8 {
+            let next = a.label();
+            a.cmp_imm(3, tag);
+            a.bne(next);
+            let seed = match tag / 3 {
+                0 => 0,
+                1 => 0xffff_ffff,
+                2 => 0x4000_0000,
+                _ => 0x8000_0000,
+            };
+            a.ldr_lit(3, seed);
+            a.adds_reg(3, 3, 3);
+            match tag % 3 {
+                0 => {
+                    a.movs_imm(3, 1);
+                }
+                1 => {
+                    a.movs_imm(3, 0);
+                }
+                _ => {
+                    a.ldr_lit(3, 0x8000_0000);
+                    a.movs_reg(3, 3);
+                }
             }
-            1 => {
-                a.movs_imm(3, 0);
-            }
-            _ => {
-                a.ldr_lit(3, 0x8000_0000);
-                a.movs_reg(3, 3);
-            }
+            a.pop(0x0e);
+            tail(&mut a, b.continuation);
+            a.bind(next);
         }
+        // Tags are constructed locally; this cannot be reached.
+        tail(&mut a, b.continuation);
+    } else {
+        // The source-bound pointer adjustment produces N=Z=V=0. Its
+        // carry is fixed: ADD has C=0; SUB has C=1. No runtime tag is needed.
+        a.ldr_lit(
+            3,
+            if b.adjustment == Adjustment::Add {
+                0
+            } else {
+                u32::MAX
+            },
+        );
+        a.adds_reg(3, 3, 3);
+        a.movs_imm(3, 1); // N=Z=0, preserving the established C/V.
         a.pop(0x0e);
         tail(&mut a, b.continuation);
-        a.bind(next);
     }
-    // Tags are constructed locally; this cannot be reached.
-    tail(&mut a, b.continuation);
     let end = a.pos();
     let bytes = a.finish()?;
     for at in (0..end).step_by(2) {

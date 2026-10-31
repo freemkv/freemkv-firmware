@@ -33,6 +33,10 @@ fn main() -> Result<()> {
                 "identifier_offset":d.identifier_offset})),
             "plan":match plan {
                 Ok(p)=>json!({"gaps":p.gaps().iter().map(|g|g.id()).collect::<Vec<_>>(),"pending":p.pending(),
+                    "di_mode_contract":p.disc_information_mode().map(|m|json!({
+                        "region":m.region,"site":m.selection.site(),"accept":m.selection.accept(),
+                        "reject":m.selection.reject(),"relocated_load":m.relocated_load,
+                        "state_definition":m.state_definition,"caller_entry":m.caller.entry()})),
                     "density_contract":p.density_target().map(|d|json!({"site":d.site,"continuation":d.continuation,
                         "normal_table":d.normal_table,"lookup_displaced":d.lookup_displaced,"state":d.state,
                         "index_site":d.index_site,"call_site":d.call_site,"consumer":d.consumer,

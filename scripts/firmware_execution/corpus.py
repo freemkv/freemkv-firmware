@@ -70,7 +70,7 @@ def source_snapshot(repo, receipt, output, dependency_root):
 
 
 def process(row, options):
-    hoard,output,builder,fw,cli,only_conversion,only_ordinary=options
+    hoard,output,builder,fw,cli,only_conversion,only_ordinary,producer_only,require_conversion=options
     result={'path':row['path'],'input_sha256':row['sha256'],
             'identified_family':row.get('identified_family'),'catalogue_patched':row.get('catalogue_patched'),
             'inventory_bytes':row.get('bytes'),'requested_conversion_goal_qualified':False,'conversion_cpu_qualification':'unqualified: no production output executed','catalogue_identity':row.get('catalogue_identity'),'status':'failed','stages':[],'coverage_gaps':[]}
@@ -123,7 +123,7 @@ def process(row, options):
         trace_path=folder/'cpu-traces.jsonl.gz'
         stages.TRACE_SINK=gzip.open(trace_path,'wt')
         for hook in installed:
-            if only_conversion and not hook.startswith('conversion:') or only_ordinary and hook.startswith('conversion:'):
+            if producer_only or only_conversion and not hook.startswith('conversion:') or only_ordinary and hook.startswith('conversion:'):
                 result['stages'].append({'stage':hook,'status':'not-requested','cases':0,'coverage_gaps':['Hook explicitly excluded by focused run mode; the full corpus run is still required']});continue
             try:
                 stage=compare_hook(hook,old,new,built['engine'],contracts)
@@ -183,12 +183,17 @@ def process(row, options):
         result['requested_conversion_goal_qualified']=False
         result['production_conversion_sites']=sorted(conversion)
         result['production_conversion_group_installed']=bool(conversion)
+        if require_conversion and row.get('acceptance_group','').endswith('conversion-required'):
+            from installed import check_installed
+            result['required_installed_conversion']=check_installed(old,new,contracts,result['registered_hook_reports'])
         result['conversion_cpu_qualification']='bounded installed-helper contracts passed; whole optical/media workflow remains unqualified' if result['installed_conversion_helper_contracts_passed'] else 'unqualified: installed helper contracts missing or failed'
         result['conversion_source_readiness']=result['conversion']
         if any(s['status']=='failed' for s in result['stages']):result['status']='failed'
         elif any(s['status']=='unqualified' or s.get('coverage_gaps') for s in result['stages']):result['status']='partial'
         else:result['status']='bounded-pass'
         if not installed:result['status']='static-only'
+        if result.get('required_installed_conversion',{}).get('status')=='failed':
+            result['status']='failed';result['error']='Required actual final-BIN conversion group missing or invalid'
     except Exception as error:
         result['error']=str(error)
         diagnostic=folder/'audit-failure.json'
@@ -208,6 +213,8 @@ def main():
     p.add_argument('--dependency-commit',default='45e5a98b6085e938986456b098434720dd8ae368',help='Explicit expected mediatek-optical commit; verified against its Cargo.lock package source')
     p.add_argument('--only-ordinary',action='store_true',help='Focused ordinary hook run; conversion helpers are explicitly not-requested')
     p.add_argument('--only-conversion',action='store_true',help='Focused installed conversion helper run; every omitted ordinary hook is explicitly not-requested')
+    p.add_argument('--producer-only',action='store_true',help='Actual API/CLI and structural output checks only; every CPU hook explicitly not-requested')
+    p.add_argument('--require-installed-conversion',action='store_true',help='Fail conversion-required scope rows unless an actual complete final-BIN group exists; refusal is not conversion success')
     p.add_argument('--build',action='store_true',help='Build production executables and require identical source manifests before/after cargo')
     p.add_argument('--no-cli',action='store_true',help='API output only; records absence of CLI comparison')
     args=p.parse_args();repo=Path(__file__).resolve().parents[2]
@@ -252,7 +259,9 @@ def main():
         'optical_span_byte_equality_is_conversion_coverage':False,
         'requested_input_classes':json.loads(Path(__file__).with_name('profiles.json').read_text())['profiles'],
         'whole_firmware_paths_qualified':False,'physical_uhd_qualified':False,
-        'cpu':'ARM926 ARMv5 Thumb1 (both MT1939 and MT1959)','unicorn':unicorn.__version__,
+        'cpu_profiles':{'MT1939':'ARM926 ARMv5 Thumb1','MT1959':'Cortex-A8 ARMv7 ARM+Thumb2'},
+        'cpu_profile_basis':'User-specified family ISA assumption; not a hardware-identification proof. Common generated helpers retain a separate Thumb1 CFG contract.',
+        'unicorn':unicorn.__version__,
         'capstone':capstone.__version__,'python':sys.version,'dependency_commit':pin,
         'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True).strip(),
         'source_files':source_files(repo),
@@ -267,7 +276,7 @@ def main():
         assert build_binding['source_files_sha256']==sha(json.dumps(receipt['source_files'],sort_keys=True).encode()),'source changed between build and run binding'
         assert build_binding['dependency_source_files_sha256']==sha(json.dumps(receipt['dependency_source_files'],sort_keys=True).encode()),'dependency source changed between build and run binding'
     receipt['source_snapshot']=source_snapshot(repo,receipt,args.output,dependency_root)
-    options=(str(args.hoard.resolve()),str(args.output.resolve()),str(args.builder.resolve()),str(args.fw.resolve()),not args.no_cli,args.only_conversion,args.only_ordinary)
+    options=(str(args.hoard.resolve()),str(args.output.resolve()),str(args.builder.resolve()),str(args.fw.resolve()),not args.no_cli,args.only_conversion,args.only_ordinary,args.producer_only,args.require_installed_conversion)
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures={pool.submit(process,row,options):row for row in inventory}
         for f in as_completed(futures):

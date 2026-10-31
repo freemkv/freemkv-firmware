@@ -1,0 +1,12 @@
+test_actual_off_reset_prefix_matches_native_invocation (test_ake_setter.ActualAkeSetter.test_actual_off_reset_prefix_matches_native_invocation) ... ok
+test_actual_setter_and_installed_nonoff_paths_complete (test_ake_setter.ActualAkeSetter.test_actual_setter_and_installed_nonoff_paths_complete) ... ok
+test_installed_wrong_native_join_is_detected (test_ake_setter.ActualAkeSetter.test_installed_wrong_native_join_is_detected) ... skipped 'NB replaces nativeBL; desktop nativejoin mutation only'
+test_native_agid_bound_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_native_agid_bound_mutant_is_detected) ... ok
+test_native_relocation_shift_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_native_relocation_shift_mutant_is_detected) ... ok
+test_native_store_state_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_native_store_state_mutant_is_detected) ... ok
+test_off_reset_wrong_saved_agid_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_off_reset_wrong_saved_agid_mutant_is_detected) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.050s
+
+OK (skipped=1)

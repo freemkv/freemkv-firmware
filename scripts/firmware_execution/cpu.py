@@ -22,19 +22,21 @@ def thumb1_instruction(data):
 
 
 class Execution:
-    def __init__(self, engine):
+    def __init__(self, engine, profile=None):
         self.engine = engine
         if not engine.startswith(('MT1939', 'MT1959')):
             raise ValueError(f'no qualified CPU model for {engine}')
-        self.thumb1 = True
-        self.cpu_model = 'ARM926'
+        self.thumb1 = engine.startswith('MT1939') if profile is None else profile=='arm926'
+        if profile not in (None,'arm926','cortex-a8'):raise ValueError('unknown CPU profile '+profile)
+        self.cpu_model = 'ARM926' if self.thumb1 else 'Cortex-A8'
+        self.generated_thumb1 = True
         self.edges, self.instructions = set(), set()
         self.decoder = Cs(CS_ARCH_ARM, CS_MODE_THUMB)
         self.decoder.detail = True
 
     def factory(self, *args, **kwargs):
         cpu = Uc(*args, **kwargs)
-        cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
+        cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926 if self.thumb1 else reg.UC_CPU_ARM_CORTEX_A8)
         previous = [None]
         original_start = cpu.emu_start
 
@@ -89,7 +91,7 @@ class Execution:
             ins = next(self.decoder.disasm(data[at:at+4], at, count=1), None)
             if ins is None:
                 raise AssertionError(f'unbound generated instruction at {at:#x}')
-            if self.thumb1 and not thumb1_instruction(data[at:at+4]):
+            if self.generated_thumb1 and not thumb1_instruction(data[at:at+4]):
                 raise AssertionError(f'unsupported generated instruction at {at:#x}')
             end, name = at+ins.size, ins.mnemonic
             if name in CONDITIONAL:

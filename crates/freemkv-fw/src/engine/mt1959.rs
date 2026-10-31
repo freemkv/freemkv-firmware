@@ -91,6 +91,8 @@ struct RawReadFacts {
     auth_cell_refusal: bool,
     vid_producer: u32,
     uhd_conversion_count: u32,
+    /// Present only after the complete conversion group was installed and verified.
+    boot_identity: Option<u32>,
     hooks: Vec<HookReport>,
 }
 
@@ -259,6 +261,18 @@ impl Mt1959Engine {
         let f = self
             .emit_rawread(image, &mut out, flag_base)
             .unwrap_or_default();
+        let boot_stub_va = if let Some(identity) = f.boot_identity {
+            self.emit_boot_init_with_private_identity(
+                &mut out,
+                flag_base,
+                boot_init_pair,
+                defaults,
+                Some(identity),
+            )?
+            .1
+        } else {
+            boot_stub_va
+        };
 
         // HRL wipe-once is destructive and gated behind HRL_WIPE_ARMED (default
         // off) — its record codegen is `hrl_valid_empty_record`; no image ships the
@@ -468,9 +482,29 @@ impl Mt1959Engine {
         });
 
         // Raw read / clear VID (VID gate + AKE accept + deny reset) — AACS/BD.
-        levers.push(if cap.bd_aacs {
+        let raw_read = if cap.bd_aacs {
             match self.emit_rawread(image, &mut out, flag_base) {
                 Ok(f) => {
+                    if let Some(identity) = f.boot_identity {
+                        let (_, boot_stub_va) = self.emit_boot_init_with_private_identity(
+                            &mut out,
+                            flag_base,
+                            boot_init_pair,
+                            defaults,
+                            Some(identity),
+                        )?;
+                        // Editable settings must refer to the replacement hook.
+                        let identity = levers
+                            .iter_mut()
+                            .find(|l| l.id == LeverId::Identity)
+                            .unwrap();
+                        identity
+                            .facts
+                            .iter_mut()
+                            .find(|(key, _)| *key == "boot_stub_va")
+                            .unwrap()
+                            .1 = boot_stub_va;
+                    }
                     let mut facts = vec![
                         ("ake_gate", f.ake_gate),
                         ("ake_site", f.ake_site),
@@ -525,7 +559,8 @@ impl Mt1959Engine {
             }
         } else {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
-        });
+        };
+        levers.push(raw_read);
 
         // Downgrade-enable (DE) — family-agnostic: any image with a well-formed
         // MTEK identity page. Idempotent (already-0xDE → AlreadyPresent).
@@ -899,6 +934,7 @@ impl Mt1959Engine {
         let classic_application = super::mt1939_uhd::UhdConversionPlan::inspect(image)
             .is_ok_and(|p| p.uses_classic_application());
         let mut uhd_conversion_count = 0;
+        let mut boot_identity = None;
         if classic_application {
             let (hook, count) = self.emit_media_conversion_classic(image, &mut w, flag_base);
             hooks.push(hook);
@@ -911,21 +947,32 @@ impl Mt1959Engine {
                     format!("0 conversion edits: {}", plan.pending().join("; ")),
                 ),
                 Ok(plan) => match plan.apply(image, &mut w) {
-                    Ok(()) => HookReport::applied(
-                        "uhd-conversion",
-                        if plan.gaps().is_empty() {
-                            "G01-G06 native media contracts; physical validation pending".to_owned()
-                        } else {
-                            format!(
-                                "complete media group: {}; physical validation pending",
-                                plan.gaps()
-                                    .iter()
-                                    .map(|g| g.id())
-                                    .collect::<Vec<_>>()
-                                    .join(",")
-                            )
-                        },
-                    ),
+                    Ok(()) => {
+                        plan.verify(&w)?;
+                        if plan
+                            .identity_reset()
+                            .is_some_and(|reset| reset.boot_clear_required)
+                        {
+                            boot_identity =
+                                Some(super::mt1959_uhd_identity::marker_address(flag_base)?);
+                        }
+                        HookReport::applied(
+                            "uhd-conversion",
+                            if plan.gaps().is_empty() {
+                                "G01-G06 native media contracts; physical validation pending"
+                                    .to_owned()
+                            } else {
+                                format!(
+                                    "complete media group: {}; physical validation pending",
+                                    plan.gaps()
+                                        .iter()
+                                        .map(|g| g.id())
+                                        .collect::<Vec<_>>()
+                                        .join(",")
+                                )
+                            },
+                        )
+                    }
                     Err(e) => HookReport::unavailable(
                         "uhd-conversion",
                         format!("0 conversion edits: {e:#}"),
@@ -956,6 +1003,7 @@ impl Mt1959Engine {
             auth_cell_refusal,
             vid_producer,
             uhd_conversion_count,
+            boot_identity,
             hooks,
         })
     }

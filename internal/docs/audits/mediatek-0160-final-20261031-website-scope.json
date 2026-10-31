@@ -1,0 +1,48 @@
+{
+  "scope_inputs": 126,
+  "website_model_revision_count": 98,
+  "scope_model_revision_count": 97,
+  "excluded_displayed_entries": [
+    [
+      "BP50NB40",
+      "1.00"
+    ]
+  ],
+  "scope_standalone_final_images": 113,
+  "scope_bundled_intermediate_images": 6,
+  "scope_not_published": [
+    {
+      "sha256": "2e243a167739d4e46ad7095db7cb5452c2980579a0cb359208945a0bbe0f3f29",
+      "path": "dump/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.01/main/2e243a167739d4e46ad7095db7cb5452c2980579a0cb359208945a0bbe0f3f29.bin"
+    },
+    {
+      "sha256": "40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2",
+      "path": "dump/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.01/main/40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2.bin"
+    },
+    {
+      "sha256": "d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4",
+      "path": "dump/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.01/main/d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4.bin"
+    },
+    {
+      "sha256": "ce732330b3cabca5f6b0cbcf1b6fc1abd4117d6fd047fe4f9330b6b25337b521",
+      "path": "dump/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.01/main/ce732330b3cabca5f6b0cbcf1b6fc1abd4117d6fd047fe4f9330b6b25337b521.bin"
+    },
+    {
+      "sha256": "64cff02c3db347a2100284a406687a5a911463d65808db5c5c811a4cefc4fe57",
+      "path": "dump/mediatek/MT1959/HL-DT-ST_BH16NS55_NS50/GENERAL/1.02/main/64cff02c3db347a2100284a406687a5a911463d65808db5c5c811a4cefc4fe57.bin"
+    },
+    {
+      "sha256": "79e8df06c776ed40523a5b530d1559e561fbefb71a9e981d301a92b7a6b5c964",
+      "path": "dump/mediatek/MT1959/HL-DT-ST_BU40N_BU40/GENERAL/1.00/main/79e8df06c776ed40523a5b530d1559e561fbefb71a9e981d301a92b7a6b5c964.bin"
+    },
+    {
+      "sha256": "5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073",
+      "path": "dump/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.00/main/5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073.bin"
+    }
+  ],
+  "current_publishing_projection_model_revision_count": 98,
+  "projection_note": "No newly approved packages or release of the excluded outlier; capability updates do not add model/revision entries.",
+  "live_url": "https://freemkv.org/firmware/find/",
+  "live_html_sha256": "cdb7607bcf2546b92a4a888df55e698dd513f2891159bb6b544350c095d98d60",
+  "catalog_sha256": "607c3b7abf45a7d97805f95961a28af148644e35dd18cb7919f8aed4c36eb7e8"
+}

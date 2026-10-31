@@ -11,10 +11,30 @@ fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+fn native_contracts(data: &[u8]) -> Value {
+    use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
+    let areas = UhdAreas::inspect(data);
+    json!({"state":areas.media_state_address().ok(),"state_error":areas.media_state_address().err().map(|e|format!("{e:?}")),
+        "roles":UhdArea::ALL.iter().map(|&role|match areas.area(role) {
+            Ok(c)=>json!({"role":format!("{role:?}"),"status":"source-bound","site":c.site(),"length":c.length(),
+                "variant":c.variant(),"selects_c7":c.selects_c7(),"coefficient_continuation":c.coefficient_continuation(),
+                "source_span_sha256":digest(&data[c.site()..c.site()+c.length()]),
+                "literals":c.literals().iter().map(|v|json!({"instruction":v.instruction,"register":v.register,"value":v.value})).collect::<Vec<_>>(),
+                "edges":c.edges().iter().map(|e|json!({"instruction":e.instruction,"target":e.target})).collect::<Vec<_>>()}),
+            Err(e)=>json!({"role":format!("{role:?}"),"status":"not-bound","reason":format!("{e:?}")})
+        }).collect::<Vec<_>>()})
+}
+
 fn main() -> Result<()> {
     let mut args = std::env::args_os().skip(1);
     let source = PathBuf::from(args.next().context("source")?);
     let directory = PathBuf::from(args.next().context("private output directory")?);
+    let option = args.next();
+    ensure!(
+        option.as_deref().is_none_or(|v| v == "--native-only"),
+        "unknown evidence mode"
+    );
+    let native_only = option.is_some();
     let input = std::fs::read(source)?;
     std::fs::create_dir_all(&directory)?;
     let source_hash = digest(&input);
@@ -29,6 +49,19 @@ fn main() -> Result<()> {
         }
     };
     let original = artifact.image();
+    if native_only {
+        std::fs::write(directory.join("original.bin"), original)?;
+        std::fs::write(
+            directory.join("native.json"),
+            serde_json::to_vec_pretty(&native_contracts(original))?,
+        )?;
+        println!(
+            "{}",
+            json!({"status":"native-contracts-only","input_sha256":source_hash,
+            "canonical_sha256":digest(original),"report":"native.json"})
+        );
+        return Ok(());
+    }
     let defaults = BootSettings::standard();
     let (report, support) = match api::modify_with_defaults(original, &defaults) {
         Ok(value) => value,
@@ -153,6 +186,7 @@ fn main() -> Result<()> {
         .collect();
     contracts["advertised_boot_choices"] = json!(advertised);
     contracts["facts"] = json!(facts);
+    contracts["native_media_roles"] = native_contracts(original);
     contracts["classic_application_readiness"] =
         match engine::mt1939_uhd::UhdConversionPlan::inspect(original) {
             Ok(plan) => {
@@ -185,7 +219,8 @@ fn main() -> Result<()> {
             contracts["conversion_state"] = json!(plan.state_address());
             macro_rules! routing { ($items:expr)=>{for c in $items {
                 metadata.insert(c.site,json!({"kind":"selection","accept":c.accept,"reject":c.reject,
-                    "region_start":c.region_start,"calculation_end":c.calculation_end,"state":plan.state_address()}));
+                    "region_start":c.region_start,"caller_entry":c.caller.entry(),
+                    "calculation_end":c.calculation_end,"state":plan.state_address()}));
             }}; }
             routing!(plan.routing_candidates(original, flags)?);
             routing!(plan.auxiliary_candidates(original, flags)?);
@@ -278,6 +313,68 @@ fn main() -> Result<()> {
                 plan.pending().is_empty(),
                 "installed incomplete media conversion"
             );
+            use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
+            let areas = UhdAreas::inspect(original);
+            let state = areas.media_state_address()?;
+            for role in [
+                UhdArea::ControlBit,
+                UhdArea::ForwardCalculation,
+                UhdArea::ParameterNibble,
+            ] {
+                let area = areas.area(role)?;
+                if let Some(s) = area.selection() {
+                    metadata.insert(s.site(),json!({"kind":"selection","state":state,"accept":s.accept(),
+                        "reject":s.reject(),"region_start":area.site(),"calculation_end":null,
+                        "legacy_forward_end":if role==UhdArea::ForwardCalculation {area.coefficient_continuation().map(|p|p+2)} else {None}}));
+                    if role == UhdArea::ForwardCalculation {
+                        metadata.get_mut(&s.site()).expect("selection metadata")["c7_accept"] =
+                            json!(thumb_asm::isa::decode_at(original, s.accept() + 6)
+                                .and_then(|i| i.branch_target())
+                                .context("native third coefficient arm")?);
+                    }
+                }
+            }
+            if let Some(mode) = plan.disc_information_mode() {
+                metadata.insert(mode.selection.site(),json!({"kind":"selection","state":state,
+                    "accept":mode.selection.accept(),"reject":mode.selection.reject(),"region_start":mode.region,
+                    "caller_entry":mode.caller.entry(),"calculation_end":null,"native_di_mode":true}));
+            }
+            let marker = plan
+                .identity_reset()
+                .map(|_| engine::mt1959_uhd_identity::marker_address(flags))
+                .transpose()?;
+            if let Ok(di) = mediatek_optical::image::analysis::LegacyStackDi::detect(original) {
+                let mut info = json!({"kind":"legacy_di_admission","state":di.state,"entry":di.caller.entry(),
+                    "frame_bytes":di.caller.stack_bytes(),"prevalidation":di.prevalidation,
+                    "replay_continuation":di.replay_continuation,"format":di.format,"format_flag":di.format_flag,
+                    "layers":di.layers,"layer_store":di.layer_store,"after_layers":di.after_layers,
+                    "stack_block":di.stack_block,"identifier_offset":di.identifier_offset,
+                    "state_register":di.state_register,"returns":di.caller.returns(),"identity_marker":marker});
+                metadata.insert(di.prevalidation, info.clone());
+                info["kind"] = json!("legacy_di_layers");
+                metadata.insert(di.layers, info);
+            }
+            if let Some(r) = plan.reverse_arithmetic() {
+                metadata.insert(r.site,json!({"kind":"legacy_reverse","state":r.state,"mode":r.mode,
+                    "accept":r.accept,"reject":r.reject,"normalize":r.normalize,"mode_zero":r.mode_zero,
+                    "divide":r.divide,"region_start":areas.area(UhdArea::ReverseCalculation)?.site()}));
+            }
+            if let Some(d) = plan.density_target() {
+                metadata.insert(d.site,json!({"kind":"legacy_density","state":d.state,"normal_table":d.normal_table,
+                    "lookup":d.lookup,"continuation":d.continuation,"lookup_displaced":d.lookup_displaced,
+                    "index_site":d.index_site,"call_site":d.call_site,"consumer":d.consumer,
+                    "measurement":d.measurement,"target_cell":d.target_cell,"packed_mode":d.packed_mode}));
+            }
+            if let Some(r) = plan.identity_reset() {
+                contracts["legacy_uhd_identity"] =
+                    json!({"marker":marker,"boot_clear_required":r.boot_clear_required});
+                metadata.insert(
+                    r.site,
+                    json!({"kind":"identity_reset","mode":r.mode,"density_class":r.density_class,
+                    "zero_register":r.zero_register,"literal_register":r.literal_register,
+                    "continuation":r.continuation,"identity_marker":marker}),
+                );
+            }
             plan.candidates()
                 .iter()
                 .map(|c| {

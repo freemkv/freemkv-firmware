@@ -3247,6 +3247,19 @@ impl Mt1959Engine {
         boot_init_pair: (usize, u32),
         defaults: &BootSettings,
     ) -> Result<(u32, u32)> {
+        self.emit_boot_init_with_private_identity(out, flag_base, boot_init_pair, defaults, None)
+    }
+
+    /// Replace the boot hook after installing a conversion that owns a private
+    /// identity cache. Callers must obtain the address from that installed plan.
+    pub(crate) fn emit_boot_init_with_private_identity(
+        &self,
+        out: &mut [u8],
+        flag_base: u32,
+        boot_init_pair: (usize, u32),
+        defaults: &BootSettings,
+        identity: Option<u32>,
+    ) -> Result<(u32, u32)> {
         // Detour pair is pre-resolved by [`Self::resolve_boot_init_pair`]:
         // * Modern — the cold/warm-boot convergence `bl <orig_init>` (first
         //   instruction after the cold path rejoins, which runs AFTER the SRAM
@@ -3254,7 +3267,15 @@ impl Mt1959Engine {
         //   at `anchor+4` — keeps the stub's 0xFF fill alive.
         // * Classic — the helper's unique caller `bl` (only when blessed).
         let (conv, orig_init) = boot_init_pair;
-        let bytes = self.build_boot_init_with_defaults(flag_base, orig_init, defaults)?;
+        let bytes = match identity {
+            Some(identity) => self.build_boot_init_with_private_identity(
+                flag_base,
+                orig_init,
+                defaults,
+                Some(identity),
+            )?,
+            None => self.build_boot_init_with_defaults(flag_base, orig_init, defaults)?,
+        };
         let stub_va = self.free_space(out, bytes.len())?;
         thumb::write(out, stub_va as usize, &bytes);
         // Decode-back guarded like every other install site. This one was the

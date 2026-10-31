@@ -1,0 +1,44 @@
+test_actual_off_reset_prefix_matches_native_invocation (test_ake_setter.ActualAkeSetter.test_actual_off_reset_prefix_matches_native_invocation) ... skipped 'classic AKE Off goes directly to native setter'
+test_actual_setter_and_installed_nonoff_paths_complete (test_ake_setter.ActualAkeSetter.test_actual_setter_and_installed_nonoff_paths_complete) ... ok
+test_installed_wrong_native_join_is_detected (test_ake_setter.ActualAkeSetter.test_installed_wrong_native_join_is_detected) ... ok
+test_native_agid_bound_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_native_agid_bound_mutant_is_detected) ... ok
+test_native_relocation_shift_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_native_relocation_shift_mutant_is_detected) ... ok
+test_native_store_state_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_native_store_state_mutant_is_detected) ... ok
+test_off_reset_wrong_saved_agid_mutant_is_detected (test_ake_setter.ActualAkeSetter.test_off_reset_wrong_saved_agid_mutant_is_detected) ... skipped 'classic AKE Off goes directly to native setter'
+test_noop_intended_patch_is_caught (test_contracts.ProductionContractMutations.test_noop_intended_patch_is_caught) ... ok
+test_real_production_auth_contract_passes (test_contracts.ProductionContractMutations.test_real_production_auth_contract_passes) ... ok
+test_thumb2_injection_is_caught (test_contracts.ProductionContractMutations.test_thumb2_injection_is_caught) ... ok
+test_unconditional_auth_bypass_is_caught (test_contracts.ProductionContractMutations.test_unconditional_auth_bypass_is_caught) ... ok
+test_unintended_arm_mode_continuation_is_caught (test_contracts.ProductionContractMutations.test_unintended_arm_mode_continuation_is_caught) ... ok
+test_unintended_live_register_change_is_caught (test_contracts.ProductionContractMutations.test_unintended_live_register_change_is_caught) ... ok
+test_actual_installed_di_contract_passes (test_conversion_mutations.InstalledConversionMutations.test_actual_installed_di_contract_passes) ... ok
+test_actual_installed_native_math_contract_passes (test_conversion_mutations.InstalledConversionMutations.test_actual_installed_native_math_contract_passes) ... ok
+test_noop_di_extension_is_caught (test_conversion_mutations.InstalledConversionMutations.test_noop_di_extension_is_caught) ... ok
+test_noop_routing_extension_is_caught (test_conversion_mutations.InstalledConversionMutations.test_noop_routing_extension_is_caught) ... ok
+test_thumb2_conversion_injection_is_caught (test_conversion_mutations.InstalledConversionMutations.test_thumb2_conversion_injection_is_caught) ... ok
+test_unintended_native_coefficient_change_is_caught (test_conversion_mutations.InstalledConversionMutations.test_unintended_native_coefficient_change_is_caught) ... ok
+test_wrong_native_continuation_is_caught (test_conversion_mutations.InstalledConversionMutations.test_wrong_native_continuation_is_caught) ... ok
+test_wrong_uhd_identity_is_caught (test_conversion_mutations.InstalledConversionMutations.test_wrong_uhd_identity_is_caught) ... ok
+test_mt1959_native_thumb2_executes_on_user_selected_armv7 (test_cpu.CpuTests.test_mt1959_native_thumb2_executes_on_user_selected_armv7) ... ok
+test_native_thumb_bl_split_at_translation_boundary_is_legal (test_cpu.CpuTests.test_native_thumb_bl_split_at_translation_boundary_is_legal) ... ok
+test_orphan_thumb_bl_suffix_remains_illegal (test_cpu.CpuTests.test_orphan_thumb_bl_suffix_remains_illegal) ... ok
+test_thumb1_allows_native_bl_and_rejects_thumb2 (test_cpu.CpuTests.test_thumb1_allows_native_bl_and_rejects_thumb2) ... ok
+test_thumb2_is_rejected_during_legacy_execution (test_cpu.CpuTests.test_thumb2_is_rejected_during_legacy_execution) ... ok
+test_unexecuted_branch_is_a_coverage_gap (test_cpu.CpuTests.test_unexecuted_branch_is_a_coverage_gap) ... ok
+test_unknown_engine_cannot_default_to_a_permissive_cpu (test_cpu.CpuTests.test_unknown_engine_cannot_default_to_a_permissive_cpu) ... ok
+test_real_continuation_replays_native_sense_and_restores_frame (test_deny_continuation.DenyContinuation.test_real_continuation_replays_native_sense_and_restores_frame) ... ok
+test_wrong_sense_and_wrong_frame_are_detected (test_deny_continuation.DenyContinuation.test_wrong_sense_and_wrong_frame_are_detected) ... ok
+test_actual_installed_selector_passes_complete_coverage (test_read_control_inputs.ReadControlInputs.test_actual_installed_selector_passes_complete_coverage) ... ok
+test_actual_prelude_and_bodies_preserve_native_controller_transactions (test_read_control_inputs.ReadControlInputs.test_actual_prelude_and_bodies_preserve_native_controller_transactions) ... ok
+test_changed_controller_literal_is_refused (test_read_control_inputs.ReadControlInputs.test_changed_controller_literal_is_refused) ... ok
+test_controller_and_request_are_source_owned_non_aliasing_operands (test_read_control_inputs.ReadControlInputs.test_controller_and_request_are_source_owned_non_aliasing_operands) ... ok
+test_wrong_replay_base_is_rejected_on_actual_bin (test_read_control_inputs.ReadControlInputs.test_wrong_replay_base_is_rejected_on_actual_bin) ... ok
+test_explicit_input_is_read_and_returned (test_read_inputs.ExplicitNativeInputs.test_explicit_input_is_read_and_returned) ... ok
+test_unprovided_ram_read_is_rejected (test_read_inputs.ExplicitNativeInputs.test_unprovided_ram_read_is_rejected) ... ok
+test_changed_source_refuses_archive_binding (test_source_snapshot.SourceSnapshotBindings.test_changed_source_refuses_archive_binding) ... ok
+test_project_and_dependency_are_bound (test_source_snapshot.SourceSnapshotBindings.test_project_and_dependency_are_bound) ... ok
+
+----------------------------------------------------------------------
+Ran 39 tests in 26.489s
+
+OK (skipped=2)

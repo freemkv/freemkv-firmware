@@ -22,7 +22,9 @@ def regno(operand):
 
 def source_inputs(data,c,state):
     ins=next(DECODER.disasm(data[c['site']:c['site']+4],c['site'],count=1))
-    registers={i:RAM for i in range(13)}
+    # Unrelated live operands must not alias: otherwise a wrong replay base can
+    # read the same sentinel and survive every state/flag case.
+    registers={i:RAM+i*0x100 for i in range(13)}
     parts=[p.strip() for p in ins.op_str.split(',')]
     if ins.mnemonic=='bics':
         registers[regno(parts[0])]=0xc8;registers[regno(parts[1])]=state
@@ -31,6 +33,36 @@ def source_inputs(data,c,state):
         require(immediate in (0,0xc8),'unknown native selector immediate')
         registers[regno(parts[0])]=(0xc8&~state) if immediate==0 else state
     else:raise AssertionError('unknown native selector: '+ins.mnemonic+' '+ins.op_str)
+    if c.get('role')=='ReadControl':
+        region=c['contract']['region_start'];load=region-10
+        require(load>=0,'ReadControl prelude missing')
+        literal=int.from_bytes(data[load:load+2],'little')
+        require(literal&0xf800==0x4800,'ReadControl native controller literal load')
+        base_register=(literal>>8)&7
+        pool=((load+4)&~3)+(literal&255)*4
+        require(pool+4<=len(data),'ReadControl controller pool bounds')
+        controller=int.from_bytes(data[pool:pool+4],'little')
+        require(controller==0x042080c0,'ReadControl source controller identity')
+        replay=int.from_bytes(bytes(c['original_bytes'])[2:4],'little')
+        require(replay&0xf800==0x6800 and (replay>>3)&7==base_register
+                and (replay>>6)&31==6,'ReadControl replay base/member differs from native prelude')
+        require(int.from_bytes(data[load+2:load+4],'little')==replay,
+                'ReadControl prelude and displaced load disagree')
+        registers[base_register]=controller
+        # Positive native caller prefix: save incoming request in R4, then
+        # compare that same incoming R0 to the request enum. This is independent
+        # of the controller pointer subsequently loaded into R0/R2.
+        callers=[]
+        for at in range(max(0,load-0x100),load,2):
+            prefix=[int.from_bytes(data[at+i:at+i+2],'little') for i in (0,2,4)]
+            if prefix[0]&0xff00==0xb500 and prefix[1]==0x0004 and prefix[2]&0xff00==0x2800:
+                callers.append((at,prefix[2]&255))
+        declared=c['contract'].get('caller_entry')
+        if declared is not None:callers=[v for v in callers if v[0]==declared]
+        require(len(callers)==1,'ReadControl request-register definition not uniquely bound')
+        registers[4]=callers[0][1]
+        require(registers[4]!=registers[base_register],
+                'ReadControl request and controller inputs alias')
     return registers,ins.mnemonic
 
 
@@ -69,19 +101,33 @@ def selection(stage,c,contract):
         if following.mnemonic!='bne':break
         reject=int(following.op_str.lstrip('#'),0)
     require(accept==contract['accept'] and reject==contract['reject'],'exported C8 continuations disagree with independent source branch decoding')
+    c7_accept=contract.get('c7_accept',contract['accept'])
+    if c7_accept!=contract['accept']:
+        require(stage.original[contract['accept']:contract['accept']+6]==bytes.fromhex('0878cc218143')
+                and stages.branch(stage.original,contract['accept']+6)==c7_accept,'native G04 third arithmetic arm not independently bound')
+        stops.add(c7_accept)
     for setting in (0,1,2,255):
         for state in range(256):
             registers,mnemonic=source_inputs(stage.original,c,state)
-            for cv in CV if mnemonic=='bics' else (0,):
+            words=(0,0xffffffff,0x12345678,0xa55a9669) if c.get('role') in ('ReadControl','ControllerTiming') else (None,)
+            for cv,word in [(v,w) for v in (CV if mnemonic=='bics' else (0,)) for w in words]:
                 def case():
+                    memory=[(contract['state'],bytes([state])),(RAM,bytes(range(128)))]
+                    if word is not None:
+                        loads=[int.from_bytes(bytes(c['original_bytes'][i:i+2]),'little')
+                               for i in range(0,len(c['original_bytes']),2)]
+                        loads=[op for op in loads if op&0xf800==0x6800]
+                        require(len(loads)==1,'Displaced source word load not bound')
+                        op=loads[0];address=registers[(op>>3)&7]+((op>>6)&31)*4
+                        memory.append((address,struct.pack('<I',word)))
                     kw={'settings':{3:setting},'registers':registers,'initial_nzcv':cv,
-                        'memory':[(contract['state'],bytes([state])),(RAM,bytes(range(128)))]}
+                        'memory':memory,'strict_reads':True}
                     old=stage.execute(False,site,stops,**kw);new=stage.execute(True,site,stops,**kw)
-                    expected=contract['accept'] if setting==1 and state==0xc7 else old['target']
+                    expected=c7_accept if setting==1 and state==0xc7 else old['target']
                     require(new['target']==expected,'C7/On native C8 selection contract')
                     unchanged(old,new)
                     return old,new
-                stage.case([setting,state,cv],case)
+                stage.case([setting,state,cv,word],case)
     stage.result['scope']='Every state byte; isolated native selector operands; exact live GPR/NZCV/SP comparison'
     if contract.get('calculation_end') is not None:
         stage.result['coverage_gaps'].append('Selector qualified; downstream arithmetic gets a separate native-worker boundary test')
@@ -211,13 +257,19 @@ def read_position(stage,c,contract):
                     def case():
                         kw={'settings':{3:setting},'registers':{1:native_value,contract.get('position_register',4):RAM},
                             'memory':[(contract['state'],bytes([state])),(RAM+2,bytes([layer<<6]))]}
+                        kw['strict_reads']=True
                         old=stage.execute(False,site,{contract['accept'],contract['reject']},**kw)
                         new=stage.execute(True,site,stops,**kw)
                         active=setting==1 and state==0xc7
-                        expected=contract['layer_one'] if layer==1 else contract['layer_zero']
+                        expected=contract['accept']
                         require(new['target']==(expected if active else old['target']),'C7 position layer decode contract')
-                        unchanged(old,new,dead=(1,) if active else (),flags=not active)
-                        if active:require(new['registers'][1]==layer,'position layer byte extraction changed')
+                        if active:
+                            accepted_kw=dict(kw)
+                            accepted_kw['registers']=dict(kw['registers']);accepted_kw['registers'][1]=0
+                            accepted=stage.execute(False,site,{contract['accept']},**accepted_kw)
+                            require(new['nzcv']==accepted['nzcv'],'C7 flags differ from native accepted decode')
+                            unchanged(old,new,flags=False)
+                        else:unchanged(old,new)
                         return old,new
                     stage.case([setting,state,native_value,layer],case)
     stage.result['coverage_gaps'].append('Native position reflection/range worker bodies remain outside this decode boundary')
@@ -260,13 +312,28 @@ def compare(stage,c,contracts):
     contract=c.get('contract')
     if not contract:
         stage.result['status']='unqualified';stage.result['coverage_gaps'].append('Missing independent installed conversion contract');return
-    fn={'selection':selection,'di':di,'legacy_di_admission':legacy_di,'legacy_di_layers':legacy_di,'read_position_decode':read_position,'calibration':calibration}[contract['kind']]
+    from legacy import identity_reset,density,reverse
+    stage.hoard=contracts['_hoard']
+    fn={'selection':selection,'di':di,'legacy_di_admission':legacy_di,'legacy_di_layers':legacy_di,'read_position_decode':read_position,'calibration':calibration,
+        'identity_reset':identity_reset,'legacy_density':density,'legacy_reverse':reverse}[contract['kind']]
     stage.result['source_bound_helper']=c
     if fn in (di,legacy_di):fn(stage,c,contract,contracts)
     else:fn(stage,c,contract)
     if c.get('role')=='MediaSelected':
         from getters import full_getter
         full_getter(stage,c,contracts)
+    if c.get('role')=='ReadPositionDecode':
+        from position import full_decoder
+        full_decoder(stage,c,contract,contracts)
+    if c.get('role')=='ReadValue':
+        from read_value import full_worker
+        full_worker(stage,c,contract)
+    if contract.get('native_di_mode'):
+        from legacy import mode_flow
+        mode_flow(stage,c,contract)
+    if contract.get('legacy_forward_end') is not None:
+        from legacy import forward
+        forward(stage,c,contract)
 
 
 def legacy_di(stage,c,contract,contracts):
@@ -279,15 +346,19 @@ def legacy_di(stage,c,contract,contracts):
     active_target=contract['layer_store'] if is_layers else contract['format'];fallback=site+len(c['original_bytes'])
     block=contract['stack_block'];offset=contract['identifier_offset'];state_cell=contract['state']
     state_register=contract['state_register']
+    marker=contract.get('identity_marker')
+    def native_memory(item):return {k:v for k,v in item['memory'].items() if marker is None or k!=str(marker)}
     store=int.from_bytes(stage.original[contract['layer_store']:contract['layer_store']+2],'little')
     store_base=(store>>3)&7
     def inputs(setting,state,identifier,density,layers,attribute,v,prefix=b'BD'):
         raw=bytearray(offset+4);raw[offset-4:offset-2]=prefix
         raw[offset:offset+4]=bytes([identifier,attribute<<4,layers<<4,density])
         registers={} if state_register is None else {state_register:state_cell}
+        memory=[(state_cell,bytes([state])),(STACK+block,bytes(raw)),(contract['format_flag'],b'\x00')]
+        if marker is not None:memory.append((marker,b'\xa5'))
         return {'settings':{3:setting},'registers':registers,'initial_nzcv':v,
-            'memory':[(state_cell,bytes([state])),(STACK+block,bytes(raw))],
-            'observe_memory':[(state_cell,1)]}
+            'memory':memory,'strict_reads':True,'allow_writes':[(marker,marker+1)] if marker is not None else [],
+            'observe_memory':[(state_cell,1)]+([(marker,1)] if marker is not None else [])}
     def one_case(setting,state,identifier,density,layers,attribute,v):
         kw=inputs(setting,state,identifier,density,layers,attribute,v)
         old=stage.execute(False,site,{fallback},**kw)
@@ -303,7 +374,10 @@ def legacy_di(stage,c,contract,contracts):
             if state_register is None:expected[store_base]=state_cell
             require(new['registers']==expected,'stack DI layer-store arguments/live registers changed')
             require(new['sp']==STACK,'stack DI layer frame changed')
-        require(new['memory']==old['memory'],'stack DI helper wrote media state before native store')
+        require(native_memory(new)==native_memory(old),'stack DI helper wrote media state before native store')
+        if marker is not None:
+            expected=1 if accepted else 0xa5 if is_layers else 0
+            require(new['memory'][str(marker)]==bytes([expected]).hex(),'DI private identity clear/set validation differs')
         return old,new
     for setting in (0,1,2,255):
         for state in STATES:
@@ -340,7 +414,7 @@ def legacy_di(stage,c,contract,contracts):
                     def case():
                         expected={2:0xc7,3:0xc8}[layers]
                         kw=inputs(1,state,ord('U'),5,layers,attribute,0)
-                        kw['allow_writes']=[(state_cell,state_cell+1),(contract['format_flag'],contract['format_flag']+1)]
+                        kw['allow_writes'] += [(state_cell,state_cell+1),(contract['format_flag'],contract['format_flag']+1)]
                         kw['observe_memory'].append((contract['format_flag'],1))
                         oldkw=inputs(1,expected,ord('U'),5,layers,attribute,0)
                         oldkw['allow_writes']=kw['allow_writes'];oldkw['observe_memory']=kw['observe_memory']
@@ -349,7 +423,8 @@ def legacy_di(stage,c,contract,contracts):
                         new=stage.execute(True,contract['prevalidation'],stops,**kw)
                         require(new['memory'][str(state_cell)]==bytes([expected]).hex(),'coordinated DI hooks lost C7/C8 identity')
                         require(new['memory'][str(contract['format_flag'])]=='20','native format-five flag changed')
-                        require(old['memory']==new['memory'],'native shared format/layer output differs')
+                        require(native_memory(old)==native_memory(new),'native shared format/layer output differs')
+                        if marker is not None:require(new['memory'][str(marker)]=='01','coordinated admission/layers lost U identity')
                         unchanged(old,new);return old,new
                     stage.case(['coordinated-native-format-layers',state,attribute,layers],case)
     stage.result['coverage_gaps'].append('Source-bound post-acquisition parser context only; no full acquisition, ready/controller completion or physical read qualification')

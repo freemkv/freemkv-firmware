@@ -32,15 +32,15 @@ def branch(data, address):
 
 
 @lru_cache(maxsize=2)
-def machine_cache(data, engine):
-    execution=Execution(engine);cpu=execution.machine(data)
+def machine_cache(data, engine, profile=None):
+    execution=Execution(engine,profile);cpu=execution.machine(data)
     return execution,cpu,cpu.context_save(),[]
 
 
 def run(data, engine, site, stops, flags, settings=None, registers=None,
         memory=(), allow_writes=(), boundary=None, allow_stack_delta=0,
-        observe_memory=(), initial_nzcv=0xa0000000, strict_reads=False):
-    execution,cpu,initial_context,dirty=machine_cache(data,engine)
+        observe_memory=(), initial_nzcv=0xa0000000, strict_reads=False,cpu_profile=None,stop_thumb=True):
+    execution,cpu,initial_context,dirty=machine_cache(data,engine,cpu_profile)
     # Restore each memory change, including seeded inputs and aborted writes.
     # No hardware service is replaced. Flash remains the actual supplied BIN.
     for address,previous in reversed(dirty):cpu.mem_write(address,previous)
@@ -78,16 +78,17 @@ def run(data, engine, site, stops, flags, settings=None, registers=None,
     try:
         cpu.emu_start(site|1,STOP+2,count=2000)
         require(len(reached)==1,'instruction budget exhausted without proven boundary')
-        require(cpu.reg_read(reg.UC_ARM_REG_CPSR)&0x00ffffff==0x30,'unexpected CPU control/Thumb state change at continuation')
+        require(cpu.reg_read(reg.UC_ARM_REG_CPSR)&0x00ffffff==(0x30 if stop_thumb else 0x10),'unexpected CPU control/Thumb state change at continuation')
     except Exception as error:
         error.execution_evidence={'trace':trace,'writes':writes,
+            'cpu_profile':execution.cpu_model,
             'instructions':sorted(execution.instructions),'edges':sorted(execution.edges),
             'pc':cpu.reg_read(reg.UC_ARM_REG_PC),'cpsr':cpu.reg_read(reg.UC_ARM_REG_CPSR)}
         raise
     finally:
         cpu.hook_del(visit_hook);cpu.hook_del(write_hook)
         if read_hook is not None:cpu.hook_del(read_hook)
-    return {'target':reached[0],'registers':[cpu.reg_read(r) for r in REGS],
+    return {'target':reached[0],'cpu_profile':execution.cpu_model,'registers':[cpu.reg_read(r) for r in REGS],
             'sp':cpu.reg_read(reg.UC_ARM_REG_SP),'lr':cpu.reg_read(reg.UC_ARM_REG_LR),
             'cpsr':cpu.reg_read(reg.UC_ARM_REG_CPSR),'nzcv':cpu.reg_read(reg.UC_ARM_REG_CPSR)&0xf0000000,
             'before':initial,'writes':writes,'trace':trace,
@@ -343,7 +344,11 @@ def compare_hook(name, original, modified, engine, contracts):
             def case():
                 kw={'registers':{i:seed+i for i in range(5)}}
                 old=stage.execute(False,site,{target},**kw)
-                new=stage.execute(True,site,{target},allow_writes=[(base['flags'],base['flags']+7)],**kw)
+                marker=contracts.get('legacy_uhd_identity',{}).get('marker')
+                allowed=[(base['flags'],base['flags']+7)]+([(marker,marker+1)] if marker is not None else [])
+                if marker is not None:kw['memory']=[(marker,b'\xa5')];kw['observe_memory']=[(marker,1)]
+                new=stage.execute(True,site,{target},allow_writes=allowed,**kw)
+                if marker is not None:require(new['memory'][str(marker)]=='00','private U identity not cleared before native boot call')
                 require(new['target']==old['target'],'native initialization target changed')
                 unchanged(old,new,dead=(12,),flags=False,stack=False)
                 require(new['sp']==STACK-8 and new['sp']%8==0,'boot native call frame')
@@ -354,7 +359,7 @@ def compare_hook(name, original, modified, engine, contracts):
     elif name=='ake':
         site=facts['ake_site'];classic=original[site:site+2]==bytes.fromhex('8009')
         native=site+4 if classic else branch(original,site) if original[site:site+2]!=bytes.fromhex('0121') else branch(original,site+2)
-        stage.result['coverage_gaps'].append('Native setter/reset body and MMIO effects unexecuted at boundary')
+        stage.result['initial_gate_scope']='Initial gate checks stop at native joins; appended setter/reset-prefix cases execute their independently qualified bodies'
         for setting in SETTINGS:
             for value,incoming in [(v,r) for v in (0,64,128,192,255)
                                    for r in ((1,) if classic else (1,6))]:
@@ -375,6 +380,9 @@ def compare_hook(name, original, modified, engine, contracts):
                         require(base.get('native_reset') is not None and new['target']==base['native_reset'],'AKE Off bypassed source-resolved native reset')
                     return old,new
                 stage.case([setting,value,incoming],case)
+        from ake_setter import compare_closed_setter,compare_reset_prefix
+        compare_closed_setter(stage,facts,base)
+        if original[site:site+2]!=bytes.fromhex('8009'):compare_reset_prefix(stage,facts,base)
     elif name=='deny-reset':
         site=facts['deny_site']
         def case():
@@ -385,7 +393,24 @@ def compare_hook(name, original, modified, engine, contracts):
             require(new['sp']==STACK-8,'deny reset call frame')
             return old,new
         stage.case('reset-boundary',case)
-        stage.result['coverage_gaps'].append('Native reset effects, replayed sense arguments and return path unqualified')
+        # Independently enter the real post-call continuation with an explicit
+        # ABI return-state input. This proves replay/pop, not service completion.
+        continuation=next(i.address+i.size for i in DECODER.disasm(
+            modified[root:root+16],root) if i.mnemonic=='blx')
+        for seed in (0,0xffffffff,0x31415926):
+            for cv in (0,0x10000000,0x20000000,0x30000000):
+                def continuation_case():
+                    registers={i:(seed+i)&0xffffffff for i in range(13)}
+                    old=stage.execute(False,site,{site+4},registers=registers,initial_nzcv=cv)
+                    frame=struct.pack('<II',registers[4],(site+4)|1)
+                    new=stage.execute(True,continuation,{site+4},registers=registers,
+                        initial_nzcv=cv,memory=[(STACK,frame)],allow_stack_delta=8,strict_reads=True)
+                    unchanged(old,new,stack=False)
+                    require(new['sp']==STACK+8,'deny continuation failed to restore saved frame')
+                    require(new['registers'][1:3]==[0x6f,2],'deny sense arguments differ from OEM')
+                    return old,new
+                stage.case(['post-reset-ABI-continuation',seed,cv],continuation_case)
+        stage.result['coverage_gaps'].append('Native reset completion remains external; post-call replay/return tested independently with declared ABI return-state inputs')
     else:
         stage.result['status']='unqualified'
         stage.result['coverage_gaps'].append('Installed hook lacks a qualified complete CPU contract')

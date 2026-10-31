@@ -418,3 +418,65 @@ fn private_uhd_identity_boot_reset_preserves_features_and_flash_scratch() {
             .is_err());
     }
 }
+
+#[test]
+fn older_conversion_normal_apis_clear_private_identity_before_native_boot() {
+    use crate::engine::core::{FLAG_TABLE_BASE, FLASHWRITE_SCRATCH_OFF, UHD_IDENTITY_OFF};
+    use sha2::{Digest, Sha256};
+    let original = include_bytes!("../tests/fixtures/BP50NB40_NB50_1.02_unmodified_backup.bin");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(original)),
+        "a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7"
+    );
+    let plan = engine::mt1959_uhd::Plan::inspect(original, FLAG_TABLE_BASE).unwrap();
+    assert!(plan.pending().is_empty());
+    assert!(plan.identity_reset().unwrap().boot_clear_required);
+    let defaults = BootSettings::standard();
+    let (modified, _) = api::modify_with_defaults(original, &defaults).unwrap();
+    let created = api::create_with_defaults(original, &defaults).unwrap();
+    assert_eq!(created.image(), modified.image);
+    assert!(engine::audit::audit_image(original, &modified).ok());
+    let changed_defaults = settings(&["hrl=off", "encryption=off", "unrestricted=oem"]);
+    let (changed, _) = api::modify_with_defaults(&modified.image, &changed_defaults).unwrap();
+    let (restored, _) = api::modify_with_defaults(&changed.image, &defaults).unwrap();
+    assert_eq!(restored.image, modified.image);
+    let (site, native) = Mt1959Engine.resolve_boot_init_pair(original).unwrap();
+    for (image, expected) in [
+        (&modified.image, &defaults),
+        (&changed.image, &changed_defaults),
+    ] {
+        plan.verify(image).unwrap();
+        assert!(freemkv_flash::cmac::verify(image));
+        let stub = thumb_asm::decode_bl(image, site).unwrap() as usize;
+        let bytes = &image[stub..stub + 80];
+        for initial in [0, 1, 0xff] {
+            let mut ram = [initial; 32];
+            execute_boot_prefix(bytes, FLAG_TABLE_BASE, &mut ram);
+            assert_eq!(&ram[..7], &expected.flags());
+            assert_eq!(ram[UHD_IDENTITY_OFF as usize], 0);
+            assert_eq!(ram[FLASHWRITE_SCRATCH_OFF as usize], initial);
+            for (offset, value) in ram.iter().enumerate().skip(7) {
+                if offset != UHD_IDENTITY_OFF as usize {
+                    assert_eq!(*value, initial);
+                }
+            }
+        }
+        // The actual installed wrapper preserves all native arguments, keeps
+        // SP aligned at BLX r12, and returns native R0/NZCV through POP PC.
+        assert_eq!(&bytes[..2], &0xb51fu16.to_le_bytes());
+        let restore = (0..bytes.len() - 2)
+            .step_by(2)
+            .find(|&at| bytes[at..at + 2] == 0xbc0fu16.to_le_bytes())
+            .unwrap();
+        let tail: Vec<u8> = [0xbc0fu16, 0x466c, 0x6824, 0x47e0, 0xbd10]
+            .into_iter()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert_eq!(&bytes[restore..restore + tail.len()], tail);
+        assert_eq!(
+            thumb_asm::analysis::literal_value(bytes, restore - 4),
+            Some(native | 1)
+        );
+        assert_eq!(&bytes[restore - 2..restore], &0x46a4u16.to_le_bytes());
+    }
+}

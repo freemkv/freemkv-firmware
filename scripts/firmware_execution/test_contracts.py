@@ -53,9 +53,10 @@ class ProductionContractMutations(unittest.TestCase):
         self.assertTrue(any('CPU control/Thumb state' in f['error'] for f in result['failures']))
 
     def test_thumb2_injection_is_caught(self):
-        data=bytearray(self.modified);data[self.site:self.site+4]=bytes.fromhex('40f20000')
+        data=bytearray(self.modified);data[self.stub:self.stub+4]=bytes.fromhex('40f20000')
         result=self.audit(data)
         self.assertEqual(result['status'],'failed')
-        self.assertTrue(any('ARMv5 Thumb' in f['error'] for f in result['failures']))
+        self.assertTrue('unsupported generated instruction' in result.get('generated_code_error','')
+                        or any('ARMv5 Thumb' in f['error'] for f in result.get('failures',[])))
 
 if __name__=='__main__':unittest.main()
