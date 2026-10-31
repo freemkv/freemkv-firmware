@@ -2,6 +2,30 @@
 
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
+Published release dates use UTC. Development-only versions are identified below;
+version numbers without a recorded build are not invented to fill numeric gaps.
+
+## [0.16.0] - 2026-10-31
+
+### freemkv Modify
+
+- Expand media conversion for supported classic MT1939 and older MT1959 firmware,
+  with per-image Speed, Region, Encryption, HRL and Unrestricted settings. Refuse
+  incomplete conversions and unsupported firmware layouts.
+- Preserve boot settings and private media identity across supported startup and
+  reset paths, with stronger checks before producing modified firmware.
+- Reduce firmware analysis and creation time while preserving generated output.
+- Physical UHD reading is not yet confirmed for the newly supported conversions.
+  Some authentication differences remain unresolved. Hardware reports for
+  BH16NS48 1.02 and ASUS BW-16D1HT running WH16NS58 1.V9 are pending.
+
+## [0.15.5] - Development only; superseded by 0.16.0
+
+### freemkv Modify
+
+- Investigate classic MT1939 media initialization in an isolated research module
+  with detection and CPU-contract checks. This version was not published as a
+  stable release; the qualified production changes are described under 0.16.0.
 
 ## [0.15.4] - 2026-10-30
 
@@ -104,14 +128,14 @@ Versions are independent of the freemkv ripping applications.
 - Require a nonblank description when submitting a diagnostic report, and include
   the description in the maintainer notification email.
 
-## [0.15.1] - Unreleased
+## [0.15.1] - 2026-10-25
 
 ### freemkv Flash
 
 - Give clearer guidance for corrupt or incomplete firmware files.
 - Show more precise drive hardware and firmware details.
 
-## [0.15.0] - Unreleased
+## [0.15.0] - 2026-10-24
 
 ### freemkv Flash
 
@@ -161,7 +185,7 @@ Versions are independent of the freemkv ripping applications.
 - Give specific guidance for unsupported or malformed firmware files and existing
   backup destinations, with clear next steps for inspection and recovery refusals.
 
-## [0.14.5] - 2026-10-23
+## [0.14.5] - 2026-10-24
 
 ### freemkv Flash
 
@@ -211,7 +235,7 @@ Versions are independent of the freemkv ripping applications.
 - Submit a completed dump or backup with diagnostic logs and session history using Submit Dump or Submit Backup. Uploads require browser approval.
 - Recognize 32 additional Pioneer SAT firmware images when reconstructing OEM backups. ATA, SCSI and REC OEM backup construction is not yet supported.
 
-## [0.14.2] - 2026-10-22
+## [0.14.2] - 2026-10-23
 
 ### freemkv Flash
 
@@ -278,7 +302,7 @@ Versions are independent of the freemkv ripping applications.
 - Improve recognition of Pioneer-based PLEXTOR and TEAC firmware and avoid false revision mismatches.
 - Clear stale results when the selected firmware or drive changes. Incomplete verification and temporary firmware states are reported clearly.
 
-## [0.13.3] - 2026-10-19
+## [0.13.3] - 2026-10-20
 
 ### freemkv Flash
 
@@ -286,7 +310,7 @@ Versions are independent of the freemkv ripping applications.
 - Prepare the drive's startup setting for the target firmware in both Flash and Recovery. A failed setting change stops before firmware transfer.
 - Recovery from an already-running loader continues without attempting settings commands that require normal drive operation.
 
-## [0.13.2] - 2026-10-19
+## [0.13.2] - 2026-10-20
 
 ### freemkv Flash
 
@@ -330,7 +354,7 @@ Versions are independent of the freemkv ripping applications.
 
 - Modify firmware inside MediaTek release TAR packages. Preserve the intermediate image and write the changes only to the final image.
 
-## [0.12.4] - 2026-10-15
+## [0.12.4] - 2026-10-16
 
 ### freemkv Flash
 
@@ -338,7 +362,7 @@ Versions are independent of the freemkv ripping applications.
 - Improve failure messages when a firmware identity, readback region or restored backup cannot be verified.
 - Keep drive-reported model, revision and serial information available when other metadata cannot be read.
 
-## [0.12.3] - 2026-10-14
+## [0.12.3] - 2026-10-15
 
 ### freemkv Modify
 
@@ -370,7 +394,7 @@ Versions are independent of the freemkv ripping applications.
 - Add experimental Pioneer Recovery for supported same-hardware firmware transitions that normal Flash refuses. Physical-drive acceptance of the re-encoded firmware is not yet confirmed.
 - Allow compatible MediaTek cross-model updates within the same hardware family. Different or unknown hardware families are refused.
 
-## [0.12.0] - 2026-10-10
+## [0.12.0] - 2026-10-13
 
 ### freemkv Flash
 
@@ -384,14 +408,14 @@ Versions are independent of the freemkv ripping applications.
 - Make Recovery available for recognized receivers even when normal drive classification is unsupported.
 - Improve comparison results by separating expected per-drive differences from unexpected firmware changes.
 
-## [0.11.2] - 2026-10-09
+## [0.11.2] - 2026-10-10
 
 ### freemkv Flash
 
 - Show DVD regions 1–8 when the drive permits all regions, and distinguish an unset region from a selected region.
 - Show the original product code, factory date and country of manufacture when available.
 
-## [0.11.1] - 2026-10-08
+## [0.11.1] - 2026-10-09
 
 ### freemkv Flash
 
@@ -399,7 +423,7 @@ Versions are independent of the freemkv ripping applications.
 - Make capability details easier to compare and hide unsupported or unknown rows.
 - Show current and saved Quiet modes together, and keep diagnostic log locations visible.
 
-## [0.11.0] - 2026-10-08
+## [0.11.0] - 2026-10-09
 
 ### freemkv Flash
 
@@ -410,7 +434,16 @@ Versions are independent of the freemkv ripping applications.
 - Add Inspect for firmware files and captured drives, plus Compare with text and JSON export.
 - Explain unsupported files and incomplete analysis without entering update mode.
 
-## [0.10.9]
+## [0.10.10] - Release candidates only; superseded by 0.11.0
+
+### freemkv Flash
+
+- Introduce the Pioneer Recovery workflow and firmware Inspect/Compare tools in
+  release candidates rc1 and rc2. Accept unsigned Current reference backups while
+  retaining authentication requirements for targets. These changes shipped in
+  0.11.0; no stable 0.10.10 release was published.
+
+## [0.10.9] - 2026-10-08
 
 ### freemkv Flash
 
@@ -418,7 +451,7 @@ Versions are independent of the freemkv ripping applications.
 - Save usable captures even when they do not contain enough information to authorize the proposed update.
 - Recognize additional OEM firmware, including BDR-XD06U 1.11, when reconstructing backups.
 
-## [0.10.8]
+## [0.10.8] - 2026-10-08
 
 ### freemkv Flash
 
@@ -428,14 +461,14 @@ Versions are independent of the freemkv ripping applications.
 - Distinguish a refused update, a transfer failure and an update whose completion could not be verified.
 - Include more available diagnostic information in Pioneer dumps; missing optional logging does not fail the dump.
 
-## [0.10.7]
+## [0.10.7] - 2026-10-07
 
 ### freemkv Flash
 
 - Identify drives using the names shown by the operating system, including Windows drive letters, so identical drives are easier to tell apart.
 - Select a drive by its OS name or device ID. Numbered entries from `list` are no longer accepted as selectors.
 
-## [0.10.6]
+## [0.10.6] - 2026-10-06
 
 ### freemkv Flash
 
@@ -445,7 +478,7 @@ Versions are independent of the freemkv ripping applications.
 - Find Windows optical drives that were previously missing, including devices with high system-assigned numbers and strict USB bridges.
 - Give more useful diagnostics when macOS cannot open a drive or obtain exclusive access.
 
-## [0.10.5]
+## [0.10.5] - 2026-10-05
 
 ### freemkv Flash and Modify
 
@@ -457,7 +490,7 @@ Versions are independent of the freemkv ripping applications.
 - Improve Pioneer probing and stop recovery reads when the drive disconnects.
 - Preserve drive errors during transfers and report failed writes and incomplete readback clearly.
 
-## [0.10.4]
+## [0.10.4] - 2026-10-05
 
 ### freemkv Flash
 
@@ -474,7 +507,7 @@ Versions are independent of the freemkv ripping applications.
 - Find optical drives on Macs that previously reported no drives, including Blu-ray drives listed by macOS as DVD or CD devices.
 - Restore drive access on supported macOS versions older than macOS 12.
 
-## [0.10.2]
+## [0.10.2] - 2026-10-05
 
 ### freemkv Flash and Modify
 
@@ -484,7 +517,7 @@ Versions are independent of the freemkv ripping applications.
 - Fix Linux desktop startup failures caused by missing runtime libraries.
 - Improve rejection of incomplete firmware packages and make drive-disconnection and dump errors clearer.
 
-## [0.10.1]
+## [0.10.1] - 2026-10-05
 
 ### freemkv Flash
 
@@ -498,20 +531,20 @@ Versions are independent of the freemkv ripping applications.
 - Add backup-first flashing for supported Pioneer Blu-ray drives, including compatible cross-model changes and Kernel downgrades.
 - Add Pioneer dump and recovery options.
 
-## [0.9.2]
+## [0.9.2] - 2026-09-26
 
 ### freemkv Modify
 
 - Fix an incompatible-medium refusal affecting a triple-layer UHD disc on BU40N 1.00.
 - Combine Blu-ray and UHD acceptance under the Unrestricted control. Existing hosts using the former UHD control remain compatible.
 
-## [0.9.1]
+## [0.9.1] - 2026-09-24
 
 ### freemkv Modify
 
 - Improve generation of firmware modifications. Existing hardware-validated 0.9.0 images do not require replacement for this change alone.
 
-## [0.9.0]
+## [0.9.0] - 2026-09-23
 
 ### freemkv Modify
 
@@ -525,21 +558,61 @@ Versions are independent of the freemkv ripping applications.
 - Refuse a crossflash when the current firmware cannot be identified.
 - Improve rejection of unrelated drives, malformed dump archives and changed drive state before a write.
 
-## [0.8.3]
+## [0.8.14] - Development only; superseded by 0.9.0
+
+### freemkv Modify
+
+- Consolidate AKE and bus controls into Encryption, correct boot-time encryption
+  detours and tighten generated instruction checks. This development version
+  preceded the final encryption behavior released in 0.9.0.
+
+## [0.8.13] - Development only; superseded by 0.9.0
+
+### freemkv Modify
+
+- Experiment with restoring bus encryption through the OEM session-rearm path.
+  The final 0.9.0 release removed rearming on a settings change; this entry records
+  the development step, not a supported behavior of current firmware.
+
+## [0.8.12] - Development only; superseded by 0.9.0
+
+### freemkv Modify
+
+- Attempt to restore OEM encryption through session reset. Subsequent development
+  found reset alone insufficient and replaced this approach before 0.9.0.
+
+## [0.8.11] - Development only; superseded by 0.9.0
+
+### freemkv Modify
+
+- Consolidate the AKE and Bus controls into Encryption, separate diagnostic commands
+  from normal feature commands, and protect the saved-settings marker from feature
+  writes. These development changes were consolidated into the 0.9.0 release.
+
+## [0.8.4] – [0.8.10] - Development milestones; superseded by 0.9.0
+
+### freemkv Modify
+
+- Develop the revised encryption command interface, diagnostic commands and saved
+  settings writes. Historical notes record these seven versions as one development
+  series; none was published as a tagged stable release. Individual change lists
+  are not available, so the original grouped history is preserved.
+
+## [0.8.3] - 2026-09-19
 
 ### freemkv Modify
 
 - Separate reset actions for saved settings, creation-time defaults and OEM behavior.
 - Reset to OEM now clears saved freemkv settings. On the next startup, the firmware's creation-time defaults apply.
 
-## [0.8.2]
+## [0.8.2] - 2026-09-19
 
 ### freemkv Modify
 
 - Keep Blu-ray and UHD acceptance enabled after restarting the drive, using the defaults selected when the firmware was created.
 - Remember deliberately saved OEM-behavior settings instead of treating them as an empty configuration.
 
-## [0.8.1]
+## [0.8.1] - 2026-09-18
 
 ### freemkv Modify
 
@@ -548,20 +621,37 @@ Versions are independent of the freemkv ripping applications.
 - Improve matching across supported OEM firmware variants.
 - This firmware requires the matching freemkv 1.7.2 host software. Speed and UHD acceptance are unavailable on classic MT1939 firmware.
 
-## [0.7.1]
+## [0.8.0] - Development only; superseded by 0.8.1
+
+### freemkv Modify
+
+- Redesign firmware commands and saved-setting/reset behavior, and separate
+  firmware generation by processor lineage. The next published release, 0.8.1,
+  includes this foundation and the revised UHD acceptance control.
+
+## [0.7.1] - 2026-09-14
 
 ### freemkv Flash
 
 - Identify additional firmware formats, including Pioneer, Hitachi-LG and Renesas, and distinguish identification support from flashing support.
 - Require a closed, empty tray before writing firmware.
 
-## [0.7.0]
+## [0.7.0] - 2026-09-05
 
 ### freemkv Flash and Modify
 
 - Refuse corrupted MediaTek images and images for the wrong drive model before writing.
 - Report malformed or short OEM images clearly instead of crashing.
 - Improve repeated raw-read behavior after a failed or denied read.
+
+## [0.6.8] - Historical development version
+
+### freemkv Flash and Modify
+
+- Consolidate MT1959 firmware creation, desktop Flash/Modify tools and a scripted
+  hardware-test harness in the public source baseline.
+- Improve raw-read authentication state handling so a denied request does not
+  prevent the next accepted request until a power cycle.
 
 ## [0.6.2]
 
@@ -589,3 +679,10 @@ Versions are independent of the freemkv ripping applications.
 - Preview flash plans before execution, save a pre-flash backup and check readback after writing.
 - Recognize encrypted MediaTek images and verify firmware integrity.
 - Report failed firmware reads rather than silently including bad data in a backup.
+
+## [0.1.0] - Initial development version
+
+### freemkv Flash
+
+- Establish the initial flasher and firmware-build workspace before the 0.5.0
+  tool release line.

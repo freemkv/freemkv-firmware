@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.15.4"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "mediatek-optical",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.15.4"
+version = "0.16.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -1441,7 +1441,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash-gui"
-version = "0.15.4"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -1468,7 +1468,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw"
-version = "0.15.4"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1483,7 +1483,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-fw-gui"
-version = "0.15.4"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "eframe",
@@ -2518,7 +2518,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 [[package]]
 name = "mediatek-optical"
 version = "1.2.0"
-source = "git+https://github.com/MattJackson/mediatek-optical?rev=fa6ebe40cefb986073d39a4aee9efccb9ee0097c#fa6ebe40cefb986073d39a4aee9efccb9ee0097c"
+source = "git+https://github.com/MattJackson/mediatek-optical?rev=9456d3a9154e10f60ad8745c81a6e2c4c4eec0c8#9456d3a9154e10f60ad8745c81a6e2c4c4eec0c8"
 dependencies = [
  "aes",
  "cmac",

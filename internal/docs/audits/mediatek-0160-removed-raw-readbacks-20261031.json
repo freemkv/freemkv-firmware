@@ -1,0 +1,168 @@
+{
+  "replacements": {
+    "40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2": "2e243a167739d4e46ad7095db7cb5452c2980579a0cb359208945a0bbe0f3f29",
+    "d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4": "9c46e6972b7950004e9746256c97b79e8e681faad1a4174b542477ad6ff5257e",
+    "5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073": "d133893209392b74cb0c3c1225cc4c0e8b1d927f1f671261ecc82525405e47e0"
+  },
+  "removed_files": [
+    "/opt/review-home/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.01/main/40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/originals/40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2/BW-16D1HT_3.01_40118f81.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.01/main/d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/originals/d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4/BE16NU50_1.01_d286c5a7.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.00/main/5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/originals/5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073/WH16NS60_1.00_5e2ec51f.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/packages/mediatek/63db45cbaa332de03be7e1be970500d91e63e0afe19b331114b31adac3b8e067.tar",
+    "/opt/review-home/Developer/firmware-extractor/hoard/packages/mediatek/e43efb22c681ad19cf574db23f9ec58f28383ebd5077bea3246abf12b386be04.tar",
+    "/opt/review-home/Developer/firmware-extractor/hoard/packages/mediatek/e1a82cb447eed07e94e67a686f9132c1dfd702376aae7d92c8f3437778b5c918.tar"
+  ],
+  "note": "Historical source ledgers and archived source containers remain metadata/provenance; withdrawal prevents re-derivation.",
+  "removed_source_ledgers": {
+    "d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4": {
+      "source.json": {
+        "format": "fwext-source",
+        "version": 1,
+        "sha256": "d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4",
+        "size": 2097152,
+        "stored_name": "BE16NU50_1.01_d286c5a7.bin",
+        "names": [
+          "BE16NU50_1.01_d286c5a7.bin",
+          "Other_BE16NU50_1.01_K95I4AB1113.bin"
+        ],
+        "inbound_paths": [
+          "freemkv-mediatek/BE16NU50_1.01_d286c5a7.bin",
+          "research-legacy-hoard/unmatched-artifacts/models/BE16NU50/firmware/1.01/Other_BE16NU50_1.01_K95I4AB1113.bin"
+        ],
+        "urls": [
+          "https://pub-10fe57a98db44568abcfb5db130d3b3f.r2.dev/MT1939/BE16NU50_1.01_d286c5a7.bin"
+        ],
+        "captured_at": [],
+        "channel": [
+          "freemkv-published"
+        ],
+        "advertised_model": [
+          "BE16NU50"
+        ],
+        "advertised_version": [
+          "1.01"
+        ],
+        "releases": [
+          {
+            "model": "BE16NU50",
+            "version": "1.01",
+            "name": "BE16NU50_1.01_d286c5a7.bin",
+            "basis": "freemkv-catalog"
+          }
+        ],
+        "publication_models": [],
+        "legacy_paths": [],
+        "evidence": [
+          {
+            "source": "freemkv/marketing/src/data/firmware-index.json",
+            "ref": "MT1939/BE16NU50_1.01_d286c5a7.bin"
+          }
+        ],
+        "notes": [
+          "freemkv catalog: {\"baseOnly\": false, \"brand\": \"LG\", \"chipset\": \"MT1939\", \"confidence\": \"build-verified\", \"embeddedRev\": \"1.01\", \"features\": [\"Speed\", \"Region\", \"UHD\", \"BD\", \"HRL\", \"AKE\", \"Bus\"], \"key\": \"MT1939/BE16NU50_1.01_d286c5a7.bin\", \"media\": \"BD/UHD\", \"model\": \"BE16NU50\", \"modifiable\": true, \"rev\": \"1.01\", \"variant\": \"N003900\"}"
+        ]
+      }
+    },
+    "5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073": {
+      "source.json": {
+        "format": "fwext-source",
+        "version": 1,
+        "sha256": "5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073",
+        "size": 2097152,
+        "stored_name": "WH16NS60_1.00_5e2ec51f.bin",
+        "names": [
+          "LG_WH16NS60_1.00-dump_211704251756.bin",
+          "WH16NS60_1.00_5e2ec51f.bin"
+        ],
+        "inbound_paths": [
+          "freemkv-mediatek/WH16NS60_1.00_5e2ec51f.bin",
+          "research-legacy-hoard/unmatched-artifacts/models/WH16NS60/firmware/1.00/LG_WH16NS60_1.00-dump_211704251756.bin"
+        ],
+        "urls": [
+          "https://pub-10fe57a98db44568abcfb5db130d3b3f.r2.dev/MT1939/WH16NS60_1.00_5e2ec51f.bin"
+        ],
+        "captured_at": [],
+        "channel": [
+          "freemkv-published"
+        ],
+        "advertised_model": [
+          "WH16NS60"
+        ],
+        "advertised_version": [
+          "1.00"
+        ],
+        "releases": [
+          {
+            "model": "WH16NS60",
+            "version": "1.00",
+            "name": "WH16NS60_1.00_5e2ec51f.bin",
+            "basis": "freemkv-catalog"
+          }
+        ],
+        "publication_models": [],
+        "legacy_paths": [],
+        "evidence": [
+          {
+            "source": "freemkv/marketing/src/data/firmware-index.json",
+            "ref": "MT1939/WH16NS60_1.00_5e2ec51f.bin"
+          }
+        ],
+        "notes": [
+          "freemkv catalog: {\"baseOnly\": false, \"brand\": \"LG\", \"chipset\": \"MT1939\", \"confidence\": \"build-verified\", \"embeddedRev\": \"1.00\", \"features\": [\"Speed\", \"Region\", \"UHD\", \"BD\", \"HRL\", \"AKE\", \"Bus\"], \"key\": \"MT1939/WH16NS60_1.00_5e2ec51f.bin\", \"media\": \"BD/UHD\", \"model\": \"WH16NS60\", \"modifiable\": true, \"rev\": \"1.00\", \"variant\": \"N014500\"}"
+        ]
+      }
+    },
+    "40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2": {
+      "source.json": {
+        "format": "fwext-source",
+        "version": 1,
+        "sha256": "40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2",
+        "size": 2097152,
+        "stored_name": "BW-16D1HT_3.01_40118f81.bin",
+        "names": [
+          "BW-16D1HT_3.01_40118f81.bin",
+          "MediaTek_BW-16D1HT_3.01_SIK92H9MD272.bin"
+        ],
+        "inbound_paths": [
+          "freemkv-mediatek/BW-16D1HT_3.01_40118f81.bin",
+          "research-legacy-hoard/unmatched-artifacts/models/BW-16D1HT/firmware/3.01/MediaTek_BW-16D1HT_3.01_SIK92H9MD272.bin"
+        ],
+        "urls": [
+          "https://pub-10fe57a98db44568abcfb5db130d3b3f.r2.dev/MT1939/BW-16D1HT_3.01_40118f81.bin"
+        ],
+        "captured_at": [],
+        "channel": [
+          "freemkv-published"
+        ],
+        "advertised_model": [
+          "BW-16D1HT"
+        ],
+        "advertised_version": [
+          "3.01"
+        ],
+        "releases": [
+          {
+            "model": "BW-16D1HT",
+            "version": "3.01",
+            "name": "BW-16D1HT_3.01_40118f81.bin",
+            "basis": "freemkv-catalog"
+          }
+        ],
+        "publication_models": [],
+        "legacy_paths": [],
+        "evidence": [
+          {
+            "source": "freemkv/marketing/src/data/firmware-index.json",
+            "ref": "MT1939/BW-16D1HT_3.01_40118f81.bin"
+          }
+        ],
+        "notes": [
+          "freemkv catalog: {\"baseOnly\": false, \"brand\": \"ASUS\", \"chipset\": \"MT1939\", \"confidence\": \"build-verified\", \"embeddedRev\": \"3.01\", \"features\": [\"Speed\", \"Region\", \"UHD\", \"BD\", \"HRL\", \"AKE\", \"Bus\"], \"key\": \"MT1939/BW-16D1HT_3.01_40118f81.bin\", \"media\": \"BD/UHD\", \"model\": \"BW-16D1HT\", \"modifiable\": true, \"rev\": \"3.01\", \"variant\": \"W001800\"}"
+        ]
+      }
+    }
+  }
+}

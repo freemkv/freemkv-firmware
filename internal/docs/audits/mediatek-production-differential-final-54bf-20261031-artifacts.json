@@ -1,0 +1,47 @@
+{
+  "schema": "exact-production-corpus-archive-v1",
+  "scope": "All supplied corpus entries accounted for; bounded installed-hook CPU comparisons only",
+  "status": "completed-with-gaps",
+  "cpu_cases": 4188702,
+  "totals": {
+    "partial": 141,
+    "production-refusal": 890,
+    "failed": 53,
+    "fragment-or-unrecognized-refusal": 1
+  },
+  "stage_totals": {
+    "passed": 2492,
+    "failed": 53
+  },
+  "source_files_unchanged": true,
+  "dependency_sources_unchanged": true,
+  "binaries_unchanged": true,
+  "whole_optical_qualified": false,
+  "artifacts": {
+    "mediatek-production-differential-final-54bf-20261031.json.gz": {
+      "sha256": "a99da1a2544d07573fff155dc808de7fbf23a4efb2fffe76f1f0375a545cac02",
+      "bytes": 2763525
+    },
+    "mediatek-production-differential-final-54bf-20261031-source.tar.gz": {
+      "sha256": "c6d6c0f2b1e21f17718f8f9a358d5acb0e150a8dc07a5ea5ee71d3fdaca3a68c",
+      "bytes": 1537616
+    },
+    "mediatek-production-differential-final-54bf-20261031-traces-01.tar.gz": {
+      "sha256": "10394580555c286c1cdfc1068e122d9179bce13fd538af00438bdad5bf43c890",
+      "bytes": 10164386
+    },
+    "mediatek-production-differential-final-54bf-20261031-traces-02.tar.gz": {
+      "sha256": "eb15d4dcb09bdea303ee2c16fa47a040a2eacafadd8979fe5f27e7e30defa1eb",
+      "bytes": 10425140
+    },
+    "mediatek-production-differential-final-54bf-20261031-traces-03.tar.gz": {
+      "sha256": "c1112ce66dfdcc84caabf81caeda97a775085e09ca12e8448ed3d2deb9155bb3",
+      "bytes": 6852899
+    }
+  },
+  "requirements_report": {
+    "file": "mediatek-production-differential-final-54bf-requirements-20261031.json",
+    "sha256": "2572264c0f248f1ecf46ff170c31595ea8652f6cea01556707eef57a94294eb6"
+  },
+  "scope_qualification": "Complete inventory accounting and conditional bounded-helper tests. Earliest out-of-image coefficient backing/validity remains unproven; no complete software-workflow or physical UHD qualification."
+}

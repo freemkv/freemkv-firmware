@@ -159,15 +159,11 @@ pub(crate) const BOOT_INIT_SIG: &[(u16, u16)] = &[
 /// The hook site is `anchor+4` (index 2, the `ldr r0,[r0,#0x18]`), exactly as for
 /// [`BOOT_INIT_SIG`]. Capability base `0x0400_2040`, boot-mode word `@0x0400_2058`.
 ///
-/// SAFETY: this classic site is a CALLED LEAF helper, not `main()`'s prologue, so
-/// its runtime power-on call-order is HARDWARE-UNCONFIRMED. The finder therefore
-/// tags a classic resolution [`BootInitSite::ClassicUnconfirmed`] and
-/// [`Mt1959Engine::emit_boot_init`] FAILS CLOSED on it (see the gate there): the
-/// signature resolves and is unit-tested, but production emit for classic images
-/// stays a deliberate one-line flip pending on-silicon verification. This helper
-/// ALSO matches inside 157 modern images, so [`Mt1959Engine::find_boot_init`] must
-/// try [`BOOT_INIT_SIG`] FIRST and only consult this when the modern shape returns
-/// zero — a merged scan would make modern images ambiguous.
+/// This classic site is a called leaf helper. Production emission requires its
+/// unique caller, resolved by [`classic_boot_init_caller`]. Hardware call-order
+/// remains unconfirmed. The helper also matches modern images, so
+/// [`Mt1959Engine::find_boot_init`] tries the modern shape first and uses this
+/// fallback only when the modern shape has no matches.
 pub(crate) const BOOT_INIT_SIG_CLASSIC: &[(u16, u16)] = &[
     (0x4800, 0xFF00), // ldr  r0,[pc,#imm]   (boot-status base; imm varies → masked)
     (0x38C0, 0xFFFF), // subs r0,#0xc0       (classic discriminator)
@@ -241,6 +237,13 @@ pub(crate) const NV_SAVED_MARKER: u8 = 0x01;
 /// checked per image by [`Mt1959Engine::assert_sram_cell_free`].
 pub(crate) const FLASHWRITE_SCRATCH_OFF: u32 = 0x10;
 
+/// Volatile U/5 classification cache for a qualified legacy media conversion.
+/// It is not a feature or saved configuration byte. A conversion must check its
+/// SRAM placement and bind both boot initialization and native media reset.
+pub(crate) const UHD_IDENTITY_OFF: u32 = 0x08;
+const _: () = assert!(UHD_IDENTITY_OFF > NUM_FEATURES as u32);
+const _: () = assert!(UHD_IDENTITY_OFF < FLASHWRITE_SCRATCH_OFF);
+
 /// Distinct status word the flash-write probe writes to the reply when it
 /// REFUSES an out-of-allowlist offset (PROGRAM routine not called). ASCII
 /// `"REFU"` — clearly not a PROGRAM return code, so the host can tell a refusal
@@ -295,11 +298,11 @@ pub(crate) const AKE_GATE_SIG: &[(u16, u16)] = &[
     (0x7AA8, 0xFFFF), // ldrb r0,[r5,#0xa]   AGID byte
     (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID
     (0x2106, 0xFFFF), // movs r1,#6          success: state 6 (authenticated)
-    (0xE000, 0xF800), // b <set_agid_state>
+    (0xE000, 0xF800), // b <shared BL set_agid_state>
     (0x7AA8, 0xFFFF), // ldrb r0,[r5,#0xa]
     (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID
     (0x2101, 0xFFFF), // movs r1,#1          reset: state 1  ← detour site (match+12)
-    (0xE000, 0xF800), // b <set_agid_state>
+    (0xE000, 0xF800), // b <shared BL set_agid_state>
 ];
 
 /// NB-class (LG BP50NB40 / BP55EB40 / WP50NB40 portable) variant of the AKE
@@ -432,37 +435,6 @@ pub(crate) const HRL_LOOKUP_SIG: &[(u16, u16)] = &[
     (0x1D20, 0xFFFF), // adds r0,r4,#4
 ];
 
-/// EXTRA CONFIRMATION GATE for the destructive one-time HRL flash wipe
-/// ([`Feature::Hrl`] `HRL_WIPE_ONCE`). The wipe permanently rewrites the flash HRL
-/// regions and is NOT undone by [`abi::Verb::Reset`], so it is wired into a build
-/// ONLY when this is `true`. Default `false`: the record codegen
-/// ([`Mt1959Engine::hrl_valid_empty_record`]) exists and is unit-tested, but no
-/// image ships the wipe detour (the feature is inert / a lever MISS) until a
-/// hardware-validated confirmation flips this.
-///
-/// [`Feature::Hrl`]: crate::abi::Feature::Hrl
-pub(crate) const HRL_WIPE_ARMED: bool = false;
-
-/// Bless-gate for the MT1939-**classic** boot-init hook. The classic reload site is
-/// a called leaf helper whose power-on call-order is hardware-unconfirmed: installing
-/// a power-on `0xFF`-fill stub there could brick a classic drive if on-chip SRAM
-/// isn't up yet when the leaf runs. The detour rule resolves statically and uniquely
-/// 17/17 ([`classic_boot_init_caller`]), but [`Mt1959Engine::emit_boot_init`] only
-/// ships it when this is `true`. Default `false` = fail-closed (classic base ships
-/// handler-only, no boot hook — safe, see [`Mt1959Engine::build_report_classic`]).
-///
-/// **Now `true` — blessed on emulation evidence** (Unicorn ARM boot
-/// emulation): on all 17 classic images the OEM C-runtime scatterload writes the
-/// flag-cell SRAM span at icount ~1285, while the detoured leaf caller is not reached
-/// until ~128k — SRAM is provably initialised ~127k instructions before our detour. Since
-/// the OEM's own write to that cell succeeds on every real-silicon boot, the SRAM
-/// controller is provably enabled long before the leaf, so the boot stub's fill cannot
-/// fault (a fault there would require the OEM's earlier write to the same cell to fault
-/// first — the drive would not boot). This is stronger than the modern hook's ordering
-/// bless. Tier: **emulation-verified** (a single reversible on-silicon read-back, doc §5,
-/// remains the final belt-and-braces check if a classic drive becomes available).
-pub(crate) const CLASSIC_BOOT_BLESSED: bool = true;
-
 /// The [`abi::Verb::Identity`] reply lead-in: `"freemkv <version>"` (magic +
 /// crate version). The live feature-state table (6 bytes, `flag[0x01..=0x06]`)
 /// is appended after this by the handler at runtime.
@@ -488,6 +460,7 @@ pub(crate) fn pc_literal(image: &[u8], at: usize) -> Option<u32> {
 /// Observed SRAM references, including direct data/ARM literals and decoded
 /// Thumb aliases across local control flow. A clean static footprint alone is
 /// not evidence of runtime ownership or writability.
+#[cfg(test)]
 pub(crate) fn referenced_sram(image: &[u8]) -> std::collections::BTreeSet<u32> {
     mediatek_optical::image::analysis::RamReferences::inspect(image)
         .bytes()
@@ -673,19 +646,14 @@ pub(crate) fn emit_flash_write(
 
 /// The resolved boot-init hook site, tagged by which prologue shape matched.
 ///
-/// The distinction is load-bearing for safety: a [`Self::Modern`] site is the
-/// MT1959 main-task prologue whose power-on boot hook is HARDWARE-CONFIRMED, so
-/// `Mt1959Engine::emit_boot_init` ships it. A [`Self::ClassicUnconfirmed`] site
-/// is the MT1939-classic leaf helper (matched by `BOOT_INIT_SIG_CLASSIC`) whose
-/// runtime power-on call-order has NOT been verified on silicon, so `emit_boot_init`
-/// FAILS CLOSED on it — the classic images degrade to DE-only exactly as before,
-/// while the site now resolves and is unit-tested.
+/// Modern sites resolve through the cold/warm convergence call; classic sites
+/// require a unique caller of the leaf helper. Neither tag alone qualifies a detour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootInitSite {
-    /// MT1959 modern prologue site (blessed; shipped by `emit_boot_init`).
+    /// MT1959 modern prologue site.
     Modern(u32),
-    /// MT1939-classic leaf-helper site (hardware-unconfirmed; `emit_boot_init`
-    /// fails closed pending on-silicon call-order verification).
+    /// MT1939-classic leaf-helper site. The legacy variant name records that
+    /// hardware call-order remains unconfirmed; source-qualified emission is supported.
     ClassicUnconfirmed(u32),
 }
 
@@ -719,6 +687,10 @@ impl Mt1959Engine {
     /// movs r0` immediate triple inside the scanner body.
     pub fn sense_setter(&self, image: &[u8]) -> Result<u32> {
         let entry = self.find_scanner_entry(image)? as usize;
+        Self::sense_setter_at(image, entry)
+    }
+
+    pub(super) fn sense_setter_at(image: &[u8], entry: usize) -> Result<u32> {
         let end = (entry + 0x120).min(image.len().saturating_sub(4));
         let is_movs = |off: usize, rt: u16| {
             let hw = u16::from_le_bytes([image[off], image[off + 1]]);
@@ -743,6 +715,14 @@ impl Mt1959Engine {
     pub fn find_live_record(&self, image: &[u8], opcode: u8) -> Result<CommandRecord> {
         let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(image)
             .context("native command ownership")?;
+        Self::live_record_from(&commands, opcode)
+    }
+
+    pub(super) fn live_record_from(
+        commands: &mediatek_optical::image::analysis::CommandDispatch<'_>,
+        opcode: u8,
+    ) -> Result<CommandRecord> {
+        let image = commands.image();
         let record = commands
             .record(opcode, LIVE_FLAGS)
             .context("live command record")?;
@@ -974,6 +954,24 @@ impl Mt1959Engine {
             .collect();
         match hits.as_slice() {
             [rec] => Ok((*rec as u32) & !0xFFF),
+            [] => {
+                // A used RPC record need not retain its factory tag/padding.
+                // Bind its native copy routine instead of guessing a flash base.
+                let copy = mediatek_optical::image::analysis::NvRecordCopy::detect(image)
+                    .context("NV record has no factory marker or source-bound native copy")?;
+                let base = copy.record & !0xfff;
+                ensure!(
+                    image
+                        .get(base as usize..copy.record as usize)
+                        .is_some_and(|head| head.len() == SUB && head.iter().all(|b| *b == 0xff)),
+                    "native NV record has no erased settings prefix"
+                );
+                ensure!(
+                    copy.base_cell == self.find_nv_dram_base(image)?,
+                    "native NV copy and PROGRAM disagree on the DRAM window"
+                );
+                Ok(base)
+            }
             other => bail!(
                 "NV region record (00 04 05 with a blank 0x4B0-byte head) matched {} \
                  candidate(s) in the top 256 KiB (want exactly 1) — refusing to resolve \
@@ -1422,10 +1420,7 @@ impl Mt1959Engine {
         Ok(de as u32)
     }
 
-    /// Reject overlap with observed static references, including a four-byte
-    /// guard on each side, and reject storage beyond the conservative RAM ceiling.
-    /// Passing this check does not establish runtime ownership or cover arbitrary
-    /// indirect code. The modern fixed cell also has model-specific capture evidence.
+    /// Reject overlap with source references and the conservative SRAM boundary.
     pub(crate) fn assert_sram_cell_free(
         &self,
         image: &[u8],
@@ -1433,59 +1428,13 @@ impl Mt1959Engine {
         len: u32,
         what: &str,
     ) -> Result<()> {
-        let lo = base
-            .checked_sub(4)
-            .ok_or_else(|| anyhow!("{what}: SRAM lower guard underflows"))?;
-        let hi = base
-            .checked_add(len)
-            .and_then(|end| end.checked_add(4))
-            .ok_or_else(|| anyhow!("{what}: SRAM upper guard overflows"))?;
-        if lo < SRAM_LO || hi > SRAM_END {
-            return Err(anyhow!(
-                "{what} cell {base:#010x}..{:#010x} is outside the supported SRAM placement range \
-                 [{SRAM_LO:#010x}, {SRAM_END:#010x})",
-                base + len
-            )
-            .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
-        }
-        let used = referenced_sram(image);
-        for a in lo..hi {
-            if used.contains(&a) {
-                return Err(anyhow!(
-                    "{what} cell {base:#010x}..{:#010x} overlaps a code-referenced SRAM \
-                     address {a:#010x} (+guard) — refusing to clobber live state",
-                    base + len
-                )
-                .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
-            }
-        }
-        Ok(())
+        super::sram::SramPlacement::inspect(image).assert_free(base, len, what)
     }
 
-    /// Select a statically unreferenced candidate within the conservative RAM
-    /// ceiling, reserving guards and the complete flag/scratch footprint.
-    /// This is a placement candidate, not proof of runtime memory ownership.
+    /// Select a statically unreferenced candidate, including flag/scratch guards.
+    /// This does not establish runtime ownership of the selected memory.
     pub fn find_free_sram_cell(&self, image: &[u8]) -> Result<u32> {
-        let used = referenced_sram(image);
-        let footprint = (FLASHWRITE_SCRATCH_OFF + 1).max(u32::from(NUM_FEATURES) + 1);
-        let mut best: Option<(u32, u32)> = None;
-        let mut start = SRAM_LO;
-        for end in (SRAM_LO..=SRAM_END).filter(|a| *a == SRAM_END || used.contains(a)) {
-            let candidate = (start + 4 + 3) & !3; // leading guard, then word alignment
-            if candidate + footprint + 4 <= end {
-                let usable = end - candidate - 4;
-                if best.is_none_or(|(_, previous)| usable > previous) {
-                    best = Some((candidate, usable));
-                }
-            }
-            start = end + 1;
-        }
-        best.map(|(base, _)| base).ok_or_else(|| {
-            anyhow!(
-                "no statically unreferenced SRAM candidate fits the complete {footprint}-byte \
-             flag/scratch footprint and guards below {SRAM_END:#010x}"
-            )
-        })
+        super::sram::SramPlacement::inspect(image).candidate()
     }
 
     /// Assemble the freemkv `0x3C 0E` handler for the `verb [feature] [state]`
@@ -1537,24 +1486,6 @@ impl Mt1959Engine {
         )
     }
 
-    pub(crate) fn build_handler_with_defaults(
-        &self,
-        image: &[u8],
-        oem_handler: u32,
-        flag_base: u32,
-        boot_function_entry: u32,
-        defaults: &BootSettings,
-    ) -> Result<Vec<u8>> {
-        self.build_handler_with_identity(
-            image,
-            oem_handler,
-            flag_base,
-            boot_function_entry,
-            identity_blob(),
-            defaults,
-        )
-    }
-
     /// Explicit identity input keeps the golden build independent of release versions.
     pub(super) fn build_handler_with_identity(
         &self,
@@ -1566,6 +1497,27 @@ impl Mt1959Engine {
         defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
         let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        self.build_handler_from_analysis(
+            &analysis,
+            oem_handler,
+            flag_base,
+            boot_function_entry,
+            identity,
+            defaults,
+        )
+    }
+
+    /// Reuse source-bound native command/response facts from the enclosing build.
+    pub(super) fn build_handler_from_analysis(
+        &self,
+        analysis: &mediatek_optical::image::analysis::ImageAnalysis<'_>,
+        oem_handler: u32,
+        flag_base: u32,
+        boot_function_entry: u32,
+        identity: Vec<u8>,
+        defaults: &BootSettings,
+    ) -> Result<Vec<u8>> {
+        let image = analysis.image();
         let cdb = analysis
             .commands()
             .context("native command ownership")?
@@ -2239,20 +2191,20 @@ impl Mt1959Engine {
     }
 
     /// The Raw Read (0x04) flag-gated AKE accept-gate trampoline. Entered by a
-    /// Thumb-2 wide **`B` (`B.W`, T4)** — NOT a `BL` — that replaces the OEM
+    /// Thumb-1 `BL` that replaces the OEM
     /// RESET writer's `movs r1,#1; b <back>` at [`AKE_GATE_SIG`]'s `match+12`
-    /// (see `BranchKind::BWide` at the caller in `mt1959.rs`). On entry
+    /// after source-qualifying its native shared call join. On entry
     /// `r0 = AGID` (set by the preceding `ldrb/lsrs`), which is preserved. The
     /// stub picks the per-AGID state to write: `6` (AKE authenticated → VID
     /// gate open) when `flag[Ake]==STATE_OFF`, else the OEM `1` (auth failed →
     /// reset). It then jumps to `back` — the OEM `set_agid_state(r0, r1)` call
     /// the reset writer branched to — so the store happens through the OEM
-    /// primitive unchanged. `r2` is scratch (dead at `back`); `lr` is the
-    /// OUTER function's own return address, unchanged through this whole
-    /// detour (this is why the install MUST be `B.W`, not `BL` — a `BL`
-    /// would clobber `lr` with `site+4`, and `<back>`'s trailing `bx lr`
-    /// would then land inside the outer function on the entry of an unrelated
-    /// leaf routine, breaking the OEM tail-call semantics).
+    /// primitive unchanged. `back` is a native `BL` instruction, not the leaf
+    /// setter itself: that call defines LR before the setter observes it. Its
+    /// first CMP also replaces incoming flags, and r2 is defined before use.
+    /// The caller's saved return frame is proven by `SavedLink`. Older comments
+    /// incorrectly described this join as a direct tail call; the source-bound
+    /// qualification below deliberately refuses such a layout.
     ///
     /// This is the `04 02` mode: "accept ANY host cert, revoked or not." The host
     /// still drives the real AKE (`0xA3`/`0xA4`) and may present a revoked (or any)
@@ -2297,16 +2249,16 @@ impl Mt1959Engine {
         // vendor-CDB context in 0.8.14 — see the no-rearm-on-SET note in the
         // handler. Do not "upgrade" this call to the wrapper.
         //
-        // Register contract: `lr` here is the OUTER function's return address
-        // (this stub is entered by B.W precisely so `lr` survives), and `blx`
-        // destroys it — so `lr` is saved and restored around the call. Thumb
-        // `pop` cannot write `lr`, hence the pop-into-r2 + `mov lr, r2`. `r0`
-        // (the AGID) is saved because the callee is free to clobber r0-r3.
-        a.push(0x0101); // push {r0, lr}   AGID + the outer return address
+        // Preserve this stub's incoming LR across the nested reset call. The
+        // native join replaces it before the setter observes it; the caller's
+        // actual return address remains in its source-proven saved frame.
+        // Thumb POP cannot write LR, hence pop-into-r2 + MOV LR,r2. The reset
+        // callee may clobber r0-r3, so preserve the AGID as well.
+        a.push(0x0101); // push {r0, lr}
         a.ldr_lit(2, reset | 1); // r2 = aacs_session_reset (Thumb-tagged)
         a.blx(2); // clobbers lr and r0-r3
         a.pop(0x0005); // pop {r0, r2}    r0 = AGID, r2 = saved lr
-        a.mov_reg(14, 2); // mov lr, r2      restore the outer return address
+        a.mov_reg(14, 2); // mov lr, r2      restore this stub's incoming LR
         a.movs_imm(1, 6); // forced: state 6 (AKE authenticated)
         a.bind(done);
         a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
@@ -2428,8 +2380,8 @@ impl Mt1959Engine {
     /// boot hook writes `0xFF` at power-on, so `0x00` OFF is never seen at boot):
     ///   * `!= STATE_OFF` (`0xFF` passthrough / `0x01` on): replay `ldrb r0,[r2,#7];
     ///     cmp r0,#3` verbatim, so the caller's `bne` sees the exact OEM flags — UHD
-    ///     acceptance is byte-behaviour-identical to OEM (the drive reads UHD discs
-    ///     natively; ON is accept). Inert (stealth) until armed OFF.
+    ///     acceptance is byte-behaviour-identical to OEM (this hook preserves the native class check; it does not
+    ///     establish detection, reading or complete authentication support). Inert (stealth) until armed OFF.
     ///   * `== STATE_OFF` (`0x00`): after the class replay, force a non-equal compare
     ///     (the already-zero flag compared with one) so the caller's `bne <deny>` IS
     ///     taken and control jumps into the OEM `6F/05` deny block — the drive REFUSES
@@ -2790,51 +2742,11 @@ impl Mt1959Engine {
         Ok((sites, revoke, bytes))
     }
 
-    /// **HRL wipe-once codegen (destructive; gated).** The valid-empty AACS Host
-    /// Revocation List record this would program into both flash HRL regions
-    /// (`0x1e0000` BD/mode0 and `0x1d8000` UHD/mode1, `0x8000` bytes each) for
-    /// `flag[Feature::Hrl]==HRL_WIPE_ONCE`. Writing a *valid-empty* record — NOT
-    /// erasing to `0xFF` — is load-bearing: a blank region reads as the `0xFFFF`
-    /// count sentinel, so [`Self::find_hrl_lookup`]'s routine returns `2` (blank) and
-    /// the cert path still emits `6F/00`. Layout (multi-byte big-endian):
-    /// ```text
-    ///   [0]     record type   = 0x21   (Host Revocation List record)
-    ///   [1..4]  record length = 0x00000C (12-byte header, zero entries)
-    ///   [4..6]  total entries = 0x0000  ← the load-bearing field: NOT 0xFFFF,
-    ///                                     so the OEM lookup reads the list as CLEAN
-    ///   [6..8]  reserved      = 0x0000
-    /// ```
-    /// The actual on-drive flash program (routine `0x1354a0`, controller regs
-    /// `0x04002240`, mailbox `0x02001200` magic `5A A5 46 4C`, commit `0x13d9b2`
-    /// toggling `0x04020000` bit0) is **NOT** synthesized into a shipping image: the
-    /// wipe is permanent, not undone by RESET, and the exact record/signature the
-    /// lookup accepts is not re-proven on-silicon. It is therefore gated behind
-    /// [`HRL_WIPE_ARMED`] (default `false`) — the feature is inert / a lever MISS
-    /// until a hardware-validated confirmation flips that constant. The record
-    /// bytes here are the documented codegen the eventual programmer emits.
-    #[allow(dead_code)]
-    pub(crate) fn hrl_valid_empty_record(&self) -> [u8; 8] {
-        [0x21, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00]
-    }
-
-    // (Retired 0.8.9: `busenc_detour` + `debus_detour` — the `Feature::Bus`
-    // datapath lever was proved inert on hardware, so both detours plus their
-    // supporting sigs and stubs were removed together.)
-
-    // (BranchKind comes from thumb_asm — see the enum there at the
-    // end of this file so the type is namable from `crate::engine::core::`.)
-
     /// Resolve the AKE detour site + stub for whichever gate variant this image
-    /// carries. Tries the BU40N/desktop [`AKE_GATE_SIG`] first (so BU40N stays
-    /// byte-identical), then the NB-class [`AKE_GATE_SIG_NB`]. Returns
-    /// `(detour_site, stub_bytes, anchor, install_shape)`. The caller writes the
-    /// detour with `thumb::encode_b_wide` when `install_shape ==
-    /// BranchKind::BWide` (BU40N/desktop tail-call site — `bl` here would
-    /// corrupt the outer function's `lr`) or `thumb::encode_bl` when
-    /// `install_shape == BranchKind::Bl` (NB-class shared-`bl` site —
-    /// the OEM already had a `bl` there, so `lr` is meant to be set to
-    /// `site+4`). Errors (→ RawRead `SignatureNotFound`) only if neither
-    /// variant matches.
+    /// carries. Returns `(detour_site, stub_bytes, anchor, install_shape)`.
+    /// Every supported shape uses Thumb-1 BL: NB replaces a native call, while
+    /// the original writer requires proof of a saved caller frame and a native
+    /// call join which replaces LR before it is observed. Unknown joins refuse.
     pub(crate) fn ake_detour(
         &self,
         image: &[u8],
@@ -2856,15 +2768,9 @@ impl Mt1959Engine {
         // Original (BU40N / BP60NB10 / desktop): detour the reject writer
         // `movs r1,#1; b <back>` (4 bytes at anchor+12).
         //
-        // NOTE on install shape: the OEM instructions here end in an UNCONDITIONAL
-        // `b <back>` — a tail-call. `<back>` is `set_agid_state`, a shared leaf
-        // that returns via `bx lr` (its `lr` was set by the OUTER function's
-        // caller, not by anything at this site). If we install with a `bl` we
-        // clobber `lr` with `reset_site+4`, an address INSIDE the outer function,
-        // and `<back>`'s return then lands at the entry of an unrelated leaf
-        // (`push {r4,lr}` + MMIO clear at 0x04000000 bit 0x10). Install as a
-        // Thumb-2 wide `B` (`B.W` T4) so `lr` flows through unchanged and the
-        // tail-call semantics match OEM exactly.
+        // Historical B.W preserved LR unnecessarily on the reviewed source:
+        // both arms branch to a native BL, not directly to the leaf setter.
+        // Do not generalize that observation to an unqualified firmware.
         if variant == 0 {
             let ake_gate = anchor as u32;
             let reset_site = ake_gate as usize + 12;
@@ -2884,8 +2790,78 @@ impl Mt1959Engine {
                 disp -= 0x800;
             }
             let ake_back = (b_at as i32 + 4 + disp * 2) as u32;
+            let success = thumb::isa::decode_at(image, anchor + 6)
+                .and_then(|instruction| instruction.branch_target())
+                .ok_or_else(|| anyhow!("AKE success writer has no native B16 join"))?;
+            ensure!(
+                success == ake_back,
+                "AKE writers do not share their native call join"
+            );
+            let setter = thumb::decode_bl(image, ake_back as usize)
+                .ok_or_else(|| anyhow!("AKE writer join is not a native BL"))?;
+            ensure!(
+                setter == self.find_vid_gate_setter(image)?,
+                "AKE join does not call the producer-derived AGID setter"
+            );
+            // Complete operand grammar: the setter overwrites incoming flags
+            // and r2, consumes only the preserved AGID in r0 and state in r1,
+            // then returns through the LR defined by the native call join.
+            let common = [
+                (0x2802, 0xffff),
+                (0xd20c, 0xffff),
+                (0x4a00, 0xff00),
+                (0x1880, 0xffff),
+                (0x4a00, 0xff00),
+                (0x0400, 0xffff),
+                (0x6812, 0xffff),
+                (0x0c00, 0xffff),
+                (0x1810, 0xffff),
+                (0x4a00, 0xff00),
+                (0x0200, 0xffff),
+                (0x6812, 0xffff),
+                (0x0a00, 0xffff),
+                (0x1880, 0xffff),
+                (0x7001, 0xffff),
+                (0x4770, 0xffff),
+            ];
+            let short = [
+                (0x2802, 0xffff),
+                (0xd20a, 0xffff),
+                (0x4a00, 0xff00),
+                (0x1880, 0xffff),
+                (0x4a00, 0xff00),
+                (0x6812, 0xffff),
+                (0x1810, 0xffff),
+                (0x4a00, 0xff00),
+                (0x0200, 0xffff),
+                (0x6812, 0xffff),
+                (0x0a00, 0xffff),
+                (0x1880, 0xffff),
+                (0x7001, 0xffff),
+                (0x4770, 0xffff),
+            ];
+            let setter = setter as usize;
+            let literals = if image.get(setter..setter + common.len() * 2).is_some()
+                && matches_sig(image, &common, setter)
+            {
+                [4, 8, 18]
+            } else if image.get(setter..setter + short.len() * 2).is_some()
+                && matches_sig(image, &short, setter)
+            {
+                [4, 8, 14]
+            } else {
+                bail!("AKE native AGID setter operands are unqualified");
+            };
+            for offset in literals {
+                ensure!(
+                    pc_literal(image, setter + offset).is_some(),
+                    "AKE setter literal is out of image"
+                );
+            }
+            mediatek_optical::image::analysis::SavedLink::detect(image, reset_site)
+                .context("AKE writer caller does not prove saved LR and balanced exits")?;
             let bytes = self.build_ake_stub(flag_base, ake_back, reset)?;
-            return Ok((reset_site, bytes, ake_gate, BranchKind::BWide));
+            return Ok((reset_site, bytes, ake_gate, BranchKind::Bl));
         }
         // NB-class: detour the shared `bl set_agid_state` at anchor+12. The
         // OEM already installs a `bl` here — installing our own `bl` is a
@@ -3052,6 +3028,24 @@ impl Mt1959Engine {
         orig_init: u32,
         defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
+        self.build_boot_init_with_private_identity(flag_base, orig_init, defaults, None)
+    }
+
+    /// Build the same native-call-preserving boot wrapper with an optional
+    /// conversion-owned identity cache. Native images retain the old bytes.
+    pub(crate) fn build_boot_init_with_private_identity(
+        &self,
+        flag_base: u32,
+        orig_init: u32,
+        defaults: &BootSettings,
+        identity: Option<u32>,
+    ) -> Result<Vec<u8>> {
+        if let Some(identity) = identity {
+            ensure!(
+                flag_base.checked_add(UHD_IDENTITY_OFF) == Some(identity),
+                "private UHD identity overlaps flags or scratch"
+            );
+        }
         let mut a = Asm::new();
         // Preserve all four native arguments and the caller's r4. Keep two
         // words on the stack across the call so its entry remains 8-byte aligned.
@@ -3061,6 +3055,10 @@ impl Mt1959Engine {
         for (off, &val) in defaults.flags().iter().enumerate() {
             a.movs_imm(1, val); // selected boot value
             a.strb_imm(1, 0, off as u16); // flag[off] = default
+        }
+        if identity.is_some() {
+            a.movs_imm(1, 0);
+            a.strb_imm(1, 0, UHD_IDENTITY_OFF as u16);
         }
         // Boot choices are authoritative. Saved runtime settings are loaded only
         // by an explicit RESET_TO_FLASH, never implicitly during startup.
@@ -3085,7 +3083,7 @@ impl Mt1959Engine {
     ///
     /// Fail-closed rules:
     /// modern → follow the anchor's `bmi` to the cold/warm convergence `bl`;
-    /// classic → the helper's unique caller `bl`, gated behind [`CLASSIC_BOOT_BLESSED`].
+    /// classic → the helper's unique caller `bl`.
     /// A [`None`] boot-init prologue bails: tri-state OFF is unsafe without the
     /// always-on 0xFF fill.
     pub(crate) fn resolve_boot_init_pair(&self, image: &[u8]) -> Result<(usize, u32)> {
@@ -3100,14 +3098,6 @@ impl Mt1959Engine {
                 })
             }
             Some(BootInitSite::ClassicUnconfirmed(s)) => {
-                if !CLASSIC_BOOT_BLESSED {
-                    bail!(
-                        "boot-init site 0x{s:x} resolved via the MT1939-classic signature is a \
-                         called leaf helper whose power-on call-order is hardware-unconfirmed. \
-                         Refusing to ship an unblessed classic boot hook (could brick the drive) \
-                         — CLASSIC_BOOT_BLESSED is false until the site is verified on silicon."
-                    );
-                }
                 classic_boot_init_caller(image, s as usize).ok_or_else(|| {
                     anyhow!(
                         "classic boot-init: the helper at anchor 0x{:x} does not have exactly one \
@@ -3132,8 +3122,7 @@ impl Mt1959Engine {
     ///
     /// A missing boot site refuses emission. Modern sites follow the validated
     /// cold/warm convergence call; classic sites use the uniquely resolved helper
-    /// caller when `CLASSIC_BOOT_BLESSED` permits it. The resolver checks that
-    /// policy before this emitter consumes the resolved pair.
+    /// caller. The resolver qualifies the pair before this emitter consumes it.
     pub(crate) fn emit_boot_init(
         &self,
         _image: &[u8],
@@ -3142,6 +3131,19 @@ impl Mt1959Engine {
         boot_init_pair: (usize, u32),
         defaults: &BootSettings,
     ) -> Result<(u32, u32)> {
+        self.emit_boot_init_with_private_identity(out, flag_base, boot_init_pair, defaults, None)
+    }
+
+    /// Replace the boot hook after installing a conversion that owns a private
+    /// identity cache. Callers must obtain the address from that installed plan.
+    pub(crate) fn emit_boot_init_with_private_identity(
+        &self,
+        out: &mut [u8],
+        flag_base: u32,
+        boot_init_pair: (usize, u32),
+        defaults: &BootSettings,
+        identity: Option<u32>,
+    ) -> Result<(u32, u32)> {
         // Detour pair is pre-resolved by [`Self::resolve_boot_init_pair`]:
         // * Modern — the cold/warm-boot convergence `bl <orig_init>` (first
         //   instruction after the cold path rejoins, which runs AFTER the SRAM
@@ -3149,7 +3151,15 @@ impl Mt1959Engine {
         //   at `anchor+4` — keeps the stub's 0xFF fill alive.
         // * Classic — the helper's unique caller `bl` (only when blessed).
         let (conv, orig_init) = boot_init_pair;
-        let bytes = self.build_boot_init_with_defaults(flag_base, orig_init, defaults)?;
+        let bytes = match identity {
+            Some(identity) => self.build_boot_init_with_private_identity(
+                flag_base,
+                orig_init,
+                defaults,
+                Some(identity),
+            )?,
+            None => self.build_boot_init_with_defaults(flag_base, orig_init, defaults)?,
+        };
         let stub_va = self.free_space(out, bytes.len())?;
         thumb::write(out, stub_va as usize, &bytes);
         // Decode-back guarded like every other install site. This one was the

@@ -1,0 +1,667 @@
+{
+  "scope": "Compare the native mode-entry coefficient helper across the older 24 images.\n\nThe observed UHD entry supplies scale -3 and option 0. Execute that exact native\nhelper, its lookup and division code, across every signed high-byte value and\nfour low-byte values. No helper call or arithmetic result is simulated. This\nalso compares native parameter 0x10/0x11 getters/setters on passive register memory,\nincluding exact write effects. This does not prove physical hardware behavior\nor mode acquisition.\n",
+  "cpu": "ARM926",
+  "scale": -3,
+  "option": 0,
+  "signed_high_byte": "all 256 encodings",
+  "low_bytes": [
+    0,
+    1,
+    85,
+    255
+  ],
+  "executions": 25600,
+  "parameter_round_trips": 76800,
+  "images": [
+    {
+      "sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+      "binding": {
+        "entry": 295296,
+        "body": 294998,
+        "variant": "wrapper",
+        "factor_return": 295028,
+        "lookup": 288548,
+        "division": 1295584
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376450,
+          "setter": 376858,
+          "register_base": 69251200,
+          "switch_dispatcher": 1281928
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+      "binding": {
+        "entry": 282728,
+        "body": 282728,
+        "variant": "inline_scale",
+        "factor_return": 282762,
+        "lookup": 281560,
+        "division": 1310192
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 372666,
+          "setter": 373074,
+          "register_base": 69251200,
+          "switch_dispatcher": 1296536
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284408
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376370,
+          "setter": 376778,
+          "register_base": 69251200,
+          "switch_dispatcher": 1270752
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1285464
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271808
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284892
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271236
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284408
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376370,
+          "setter": 376778,
+          "register_base": 69251200,
+          "switch_dispatcher": 1270752
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+      "binding": {
+        "entry": 294968,
+        "body": 294670,
+        "variant": "wrapper",
+        "factor_return": 294700,
+        "lookup": 288220,
+        "division": 1290636
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 375962,
+          "setter": 376370,
+          "register_base": 69251200,
+          "switch_dispatcher": 1276980
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+      "binding": {
+        "entry": 294968,
+        "body": 294670,
+        "variant": "wrapper",
+        "factor_return": 294700,
+        "lookup": 288220,
+        "division": 1291068
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376270,
+          "setter": 376678,
+          "register_base": 69251200,
+          "switch_dispatcher": 1277412
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+      "binding": {
+        "entry": 294968,
+        "body": 294670,
+        "variant": "wrapper",
+        "factor_return": 294700,
+        "lookup": 288220,
+        "division": 1285520
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376042,
+          "setter": 376450,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271864
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284408
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376370,
+          "setter": 376778,
+          "register_base": 69251200,
+          "switch_dispatcher": 1270752
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1285464
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271808
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "148d89cc6ea4351c987913ec0417152808a2fb32c06c230c2ef9a1585233ed50",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284408
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376370,
+          "setter": 376778,
+          "register_base": 69251200,
+          "switch_dispatcher": 1270752
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284872
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376678,
+          "setter": 377086,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271216
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "cc7182ac0e5620504de5e75e3069cc8963344ba8a092f3b0fcd7030a7ee65522",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284872
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376678,
+          "setter": 377086,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271216
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "e04aaf44157fbbec5e3c0cbf1a9ba99c81d2aeba7d420c7ece654dc515d503ff",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1285464
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271808
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "4ed5cdc974eb79feafbba2312ffb4d54ae30b1a77a30aa7ee172a51fc64f4c09",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284408
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376370,
+          "setter": 376778,
+          "register_base": 69251200,
+          "switch_dispatcher": 1270752
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "88761a31edd5b3aedfad0e70d25f45dfb8092289743145950ff85131b2dff4e1",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284896
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271240
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "e64c4ca5244594d0b7943cbedf71a9cced2ae7c3d9b98624aa84d7e3130bac8a",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284896
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271240
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1285464
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271808
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "c0b346b0e2a7fc601ac68fe826fba20b1057eecffdc86ce96fe460184073d7f6",
+      "binding": {
+        "entry": 294968,
+        "body": 294670,
+        "variant": "wrapper",
+        "factor_return": 294700,
+        "lookup": 288220,
+        "division": 1290636
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 375962,
+          "setter": 376370,
+          "register_base": 69251200,
+          "switch_dispatcher": 1276980
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "3559077e3c032451137967d4f81f3e8777f8bfbf8245e68ac4732eb5cec5f404",
+      "binding": {
+        "entry": 294968,
+        "body": 294670,
+        "variant": "wrapper",
+        "factor_return": 294700,
+        "lookup": 288220,
+        "division": 1291088
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376290,
+          "setter": 376698,
+          "register_base": 69251200,
+          "switch_dispatcher": 1277432
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "c4d995f031fe757d9823f7410f81c88ce7ba26e14b77e766792bff2e53a8b90f",
+      "binding": {
+        "entry": 294968,
+        "body": 294670,
+        "variant": "wrapper",
+        "factor_return": 294700,
+        "lookup": 288220,
+        "division": 1291088
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376290,
+          "setter": 376698,
+          "register_base": 69251200,
+          "switch_dispatcher": 1277432
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "de24b0003fb08526382463ff60e8d5565cd92db875750e5695c740dce9775186",
+      "binding": {
+        "entry": 295004,
+        "body": 294706,
+        "variant": "wrapper",
+        "factor_return": 294736,
+        "lookup": 288256,
+        "division": 1288748
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376214,
+          "setter": 376622,
+          "register_base": 69251200,
+          "switch_dispatcher": 1275092
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "ed8f1c8414faa6990673ab1f2d968f4b93ab4ebb7b98cde907946368b505878f",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1284408
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376370,
+          "setter": 376778,
+          "register_base": 69251200,
+          "switch_dispatcher": 1270752
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    },
+    {
+      "sha256": "592e8d22d98aea9c1162c9f010fe2df29b31f6320d539336a699a78ea3af9191",
+      "binding": {
+        "entry": 295564,
+        "body": 295266,
+        "variant": "wrapper",
+        "factor_return": 295296,
+        "lookup": 288816,
+        "division": 1285464
+      },
+      "cases": 1024,
+      "result_sha256": "2979a6debd17e4f4b5f8481f3bbf3d60dd7b923650962e1dd9aef1dd08e412f7",
+      "lookup_factors": [
+        708
+      ],
+      "parameters": {
+        "binding": {
+          "getter": 376698,
+          "setter": 377106,
+          "register_base": 69251200,
+          "switch_dispatcher": 1271808
+        },
+        "cases": 3072,
+        "result_sha256": "c7b4c0d3795ec669443199a453196352bfee8a2ad99d9b078bd9b6e1d4abc080"
+      }
+    }
+  ]
+}

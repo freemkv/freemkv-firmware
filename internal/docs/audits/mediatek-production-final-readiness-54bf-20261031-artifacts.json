@@ -1,0 +1,57 @@
+{
+  "schema": "exact-production-corpus-archive-v1",
+  "scope": "All supplied corpus entries accounted for; bounded installed-hook CPU comparisons only",
+  "status": "completed-with-gaps",
+  "cpu_cases": 42877,
+  "totals": {
+    "partial": 30
+  },
+  "stage_totals": {
+    "passed": 202,
+    "not-requested": 798
+  },
+  "source_files_unchanged": true,
+  "dependency_sources_unchanged": true,
+  "binaries_unchanged": true,
+  "whole_optical_qualified": false,
+  "artifacts": {
+    "mediatek-production-final-readiness-54bf-20261031.json.gz": {
+      "sha256": "a9e070bf60c47c5a45cad1e514bc3dc87e73ec5f30d541243a90255e3266abcf",
+      "bytes": 272943
+    },
+    "mediatek-production-final-readiness-54bf-20261031-source.tar.gz": {
+      "sha256": "fcbab9d06958dccb5af42c3764b55a698e9eeb03ec79880179f7abfbbfa5ca77",
+      "bytes": 1537866
+    },
+    "mediatek-production-final-readiness-54bf-20261031-traces-01.tar.gz": {
+      "sha256": "a3c88cfe249ec18f79826802bf2019bf748afecba3f483f13f39c7230b1d3435",
+      "bytes": 479794
+    }
+  },
+  "scope_qualification": "Current fail-closed producer:29 installed groups; earliest remains1of30 incomplete with exact external coefficient backing/lifetime requirement. Existing Unrestricted command-gate support does not promise optical conversion.",
+  "readiness_proof": {
+    "file": "mediatek-production-final-readiness-54bf-proof-20261031.json",
+    "sha256": "94912fba501ed2600625568855663f96d8bbd4dd1d7b1d4863a1ad2fb5c50b15",
+    "bytes": 24936
+  },
+  "mutations": {
+    "file": "mediatek-production-mutations-readiness-54bf-20261031.json",
+    "sha256": "f8dcddbe8fc14e6b13b20b389217cdfac03d023bc961203f8930fe64cf32f7c7",
+    "bytes": 849
+  },
+  "mutation_log": {
+    "file": "mediatek-production-mutations-readiness-54bf-20261031.txt",
+    "sha256": "6463d0fd25c92ef2217e57120d78795e7b537c66dd125db20a40971eed0cfb5c",
+    "bytes": 3352
+  },
+  "owned_clippy": {
+    "file": "mediatek-production-readiness-owned-clippy-20261031.txt",
+    "sha256": "847d6d77a36a2a2dc13bf5d7467714a1341263a2156c5bd860a1a4888571ed4a",
+    "bytes": 182
+  },
+  "broad_conditional_development_archive": {
+    "file": "mediatek-production-differential-final-54bf-20261031-artifacts.json",
+    "sha256": "827daf711a07e006476e0a3278c90fcd3f03e0e57e6559a50cd109ceb7a0931d",
+    "bytes": 1946
+  }
+}

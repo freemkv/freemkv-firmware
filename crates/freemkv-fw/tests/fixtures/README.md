@@ -36,3 +36,8 @@ BW-16D1HT 3.03 is the unchanged 2 MiB OEM hoard object, SHA-256
 It anchors native response writer/committer selection where the old local
 scanner selected a different writer. `native-response-inputs.json` pins the
 selected role addresses and DMA cells for four distinct native layouts.
+
+BP50NB40 NB50 1.02 is an unmodified 2 MiB backup from the read-only hoard,
+SHA-256 `a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7`.
+Vendor-updater provenance is not established. It checks private UHD identity
+initialization through normal create/modify and editable boot settings.

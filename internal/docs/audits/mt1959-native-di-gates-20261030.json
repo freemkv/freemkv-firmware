@@ -1,0 +1,342 @@
+{
+  "scope": "Execute positively matched stock DI identifier gates, without a drive.\n\nInput is mtk_uhd_scan JSON. The native BD prefix/attribute checks are assumed\ncomplete. Stop at the first media-state store or the gate's outgoing edge.\nThis isolates identifier/density admission; it is not complete DI parsing,\nacquisition, readiness, authentication or sector-reading evidence.\n",
+  "cpu": "ARM926",
+  "images": [
+    {
+      "source_sha256": "784e017fbacd2250fc37ee442869db82ccc8d637d78126b570ba33c0256d1715",
+      "model": "BW-16D1HT",
+      "gate_variant": "modern",
+      "site": 918776,
+      "cases": [
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 2,
+          "status": "state_assigned",
+          "state_store": 199,
+          "exit": 918764
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 3,
+          "status": "state_assigned",
+          "state_store": 200,
+          "exit": 918800
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 1,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 918880
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 4,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 918880
+        },
+        {
+          "identifier": "O",
+          "density": 1,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 918812
+        },
+        {
+          "identifier": "?",
+          "density": 5,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 918812
+        }
+      ]
+    },
+    {
+      "source_sha256": "0bfdd3009ed1bc246f81aae50cfd9a5e4919c5295263e488c2a900500fe48728",
+      "model": "BD-RE  BH16NS55",
+      "gate_variant": "modern",
+      "site": 919304,
+      "cases": [
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 2,
+          "status": "state_assigned",
+          "state_store": 199,
+          "exit": 919292
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 3,
+          "status": "state_assigned",
+          "state_store": 200,
+          "exit": 919328
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 1,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 919408
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 4,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 919408
+        },
+        {
+          "identifier": "O",
+          "density": 1,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 919340
+        },
+        {
+          "identifier": "?",
+          "density": 5,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 919340
+        }
+      ]
+    },
+    {
+      "source_sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263",
+      "model": "BD-RE BU40N",
+      "gate_variant": "modern_u_flag_variant",
+      "site": 920658,
+      "cases": [
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 2,
+          "status": "state_assigned",
+          "state_store": 199,
+          "exit": 920726
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 3,
+          "status": "state_assigned",
+          "state_store": 200,
+          "exit": 920726
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 1,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920770
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 4,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920770
+        },
+        {
+          "identifier": "O",
+          "density": 1,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920704
+        },
+        {
+          "identifier": "?",
+          "density": 5,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920704
+        }
+      ]
+    },
+    {
+      "source_sha256": "20425a8ade6bb5d24bbd76fb5d5d67e744cd49e24783be87e6a89d30dfcace95",
+      "model": "BD-RE BU50N",
+      "gate_variant": "modern_u_flag_variant",
+      "site": 920658,
+      "cases": [
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 2,
+          "status": "state_assigned",
+          "state_store": 199,
+          "exit": 920726
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 3,
+          "status": "state_assigned",
+          "state_store": 200,
+          "exit": 920726
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 1,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920770
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 4,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920770
+        },
+        {
+          "identifier": "O",
+          "density": 1,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920704
+        },
+        {
+          "identifier": "?",
+          "density": 5,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 920704
+        }
+      ]
+    },
+    {
+      "source_sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+      "model": "BD-RE  WH16NS60",
+      "gate_variant": "modern_u_flag_store_variant",
+      "site": 927162,
+      "cases": [
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 2,
+          "status": "state_assigned",
+          "state_store": 199,
+          "exit": 927232
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 3,
+          "status": "state_assigned",
+          "state_store": 200,
+          "exit": 927198
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 1,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 927276
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 4,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 927276
+        },
+        {
+          "identifier": "O",
+          "density": 1,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 927210
+        },
+        {
+          "identifier": "?",
+          "density": 5,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 927210
+        }
+      ]
+    },
+    {
+      "source_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+      "model": "BD-RE  BH16NS48",
+      "gate_variant": "classic",
+      "site": 1091810,
+      "cases": [
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 1091838
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 3,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 1091838
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 1,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 1091838
+        },
+        {
+          "identifier": "U",
+          "density": 5,
+          "layers": 4,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 1091838
+        },
+        {
+          "identifier": "O",
+          "density": 1,
+          "layers": 2,
+          "status": "state_assigned",
+          "state_store": 192,
+          "exit": 1091834
+        },
+        {
+          "identifier": "?",
+          "density": 5,
+          "layers": 2,
+          "status": "outgoing_edge",
+          "state_store": null,
+          "exit": 1091838
+        }
+      ]
+    }
+  ]
+}

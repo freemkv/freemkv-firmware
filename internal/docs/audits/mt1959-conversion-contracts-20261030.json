@@ -1,0 +1,4013 @@
+{
+  "images": [
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BP50NB40",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_MT1959_BUP1_BU1/GENERAL/1.00/main/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306.bin",
+      "provenance": {
+        "build_id": "1504221517",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BP50NB40",
+        "embedded_model": "BP50NB40",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "GENERAL",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BP50NB40 MT1959 BUP1/BU1",
+          "hardware_basis": "banner",
+          "platform": "MT1959",
+          "revision": "1.00",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BP50NB40",
+          "revision": "1.00",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BP50NB40 MT1959 BUP1/BU1:GENERAL:1.00:main",
+        "label": {
+          "boot_banner": "Boot BUP1",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.911,
+          "name": "LG_BP50NB40_1.00_16277071819.bin::decoded",
+          "payload_form": "plaintext",
+          "sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BUP1",
+          "crossflash_group": "MT1959/slim/BUP1/board-unknown",
+          "family_id": "7977ec490f2eb807",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "",
+            "build_id": "1504221517",
+            "chip_field": "MT1939",
+            "code": "N000505",
+            "loader": "BU1",
+            "offset": 2015232,
+            "product": "BD-RE BP50NB40",
+            "revision": "1.00",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_MT1959_BUP1_BU1/GENERAL/1.00/main/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306.bin",
+        "product_identity": {
+          "model": "BP50NB40",
+          "product": "BD-RE BP50NB40",
+          "product_suffix": "",
+          "revision": "1.00",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+        "sources": [
+          {
+            "bundle": "bundles/259327605e849ec979f51082272453c6864a751978c6c847d28877fb934eae96/mediatek-f38ee987a90654a2507dc0cfb624992db52d7d49ce512255e294ce6cba9ccbda.firmware.tar",
+            "candidate": "LG_BP50NB40_1.00_16277071819.bin::decoded",
+            "member": "images/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "259327605e849ec979f51082272453c6864a751978c6c847d28877fb934eae96"
+          },
+          {
+            "bundle": "bundles/8727b97cbf5ef2c136adf908db634902b0b8862f028ee8869411e9d124670f79/mediatek-f21dfe3d4e60da3c06c6ba160d68c58da4e49335179fd28dcac7e5415b5b2446.firmware.tar",
+            "candidate": "16277071819_N1.00_P50NB40_150422_only_NOBJ.exe::rsrc48::decoded",
+            "member": "images/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "8727b97cbf5ef2c136adf908db634902b0b8862f028ee8869411e9d124670f79"
+          },
+          {
+            "bundle": "bundles/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306/mediatek-97a86d8c4a6a64d48d41edd3ee9bb24677b6c613bf70c153eb89f03eb9f8db64.firmware.tar",
+            "candidate": "BP50NB40_1.00_c88a6901.bin",
+            "member": "images/c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BP50NB40 MT1959 BUP1/BU1:GENERAL",
+        "version": 1
+      },
+      "sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 929966,
+                "target": 929990
+              },
+              {
+                "instruction": 929974,
+                "target": 929984
+              },
+              {
+                "instruction": 929978,
+                "target": 929984
+              },
+              {
+                "instruction": 929982,
+                "target": 930026
+              },
+              {
+                "instruction": 929988,
+                "target": 930026
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 929984,
+                "value": 33529327
+              }
+            ],
+            "role": "DiscInformation",
+            "site": 929960,
+            "variant": "no_u_modern_early_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 160166,
+                "target": 160174
+              },
+              {
+                "instruction": 160172,
+                "target": 160178
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 160150,
+                "value": 33529327
+              },
+              {
+                "instruction": 160158,
+                "value": 69243008
+              }
+            ],
+            "role": "ControlBit",
+            "site": 160150,
+            "variant": "classic_base80"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 211484,
+                "target": 211670
+              },
+              {
+                "instruction": 211492,
+                "target": 211708
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 18,
+            "literals": [
+              {
+                "instruction": 211476,
+                "value": 33529327
+              }
+            ],
+            "role": "ControlField",
+            "site": 211476,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 899728,
+                "target": 899974
+              },
+              {
+                "instruction": 899736,
+                "target": 899770
+              },
+              {
+                "instruction": 899742,
+                "target": 1310192
+              },
+              {
+                "instruction": 899752,
+                "target": 899784
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 899716,
+                "value": 33529327
+              },
+              {
+                "instruction": 899750,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 899716,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 899962,
+                "target": 899728
+              },
+              {
+                "instruction": 899970,
+                "target": 900008
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 899950,
+                "value": 33529327
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 899950,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 901144,
+                "target": 901270
+              },
+              {
+                "instruction": 901152,
+                "target": 901156
+              },
+              {
+                "instruction": 901166,
+                "target": 901186
+              },
+              {
+                "instruction": 901174,
+                "target": 901186
+              },
+              {
+                "instruction": 901184,
+                "target": 901202
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 901132,
+                "value": 33529327
+              },
+              {
+                "instruction": 901162,
+                "value": 69251456
+              },
+              {
+                "instruction": 901168,
+                "value": 33557265
+              },
+              {
+                "instruction": 901188,
+                "value": 1380725
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 901132,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 430526,
+                "target": 430714
+              },
+              {
+                "instruction": 430538,
+                "target": 430638
+              },
+              {
+                "instruction": 430546,
+                "target": 430554
+              },
+              {
+                "instruction": 430552,
+                "target": 430638
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 430508,
+                "value": 33529327
+              },
+              {
+                "instruction": 430516,
+                "value": 33557260
+              },
+              {
+                "instruction": 430518,
+                "value": 33529267
+              },
+              {
+                "instruction": 430520,
+                "value": 33529329
+              },
+              {
+                "instruction": 430522,
+                "value": 33530737
+              },
+              {
+                "instruction": 430528,
+                "value": 33529331
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 430506,
+            "variant": "slim_early_fixed6"
+          }
+        ],
+        "classification": "legacy_code_in_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 0,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 897432, state: 33529327, mode: 33530737, table: 1392751, input: C7Selection { site: 897452, replay: [11264], span: 4, accept: 897456, reject: 897488 }, output: C7Selection { site: 897578, replay: [17295], span: 4, accept: 897582, reject: 897584 }, callers: [SavedLink { entry: 897432, site: 897452, stack_bytes: 20, returns: [897586], source: [200, 138, 105, 1, 61, 85, 123, 156, 76, 241, 164, 214, 3, 195, 20, 88, 95, 81, 162, 88, 185, 116, 124, 52, 81, 132, 232, 102, 238, 243, 99, 6] }, SavedLink { entry: 897432, site: 897578, stack_bytes: 20, returns: [897586], source: [200, 138, 105, 1, 61, 85, 123, 156, 76, 241, 164, 214, 3, 195, 20, 88, 95, 81, 162, 88, 185, 116, 124, 52, 81, 132, 232, 102, 238, 243, 99, 6] }] }",
+            "role": "position"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPositionSetup { entry: 897164, position: 33557304, mode: 33530737, table: 1392751, input: C7Selection { site: 897186, replay: [11008], span: 4, accept: 897190, reject: 897226 }, command: C7Selection { site: 897284, replay: [17311], span: 4, accept: 897288, reject: 897292 }, callers: [SavedLink { entry: 897164, site: 897186, stack_bytes: 32, returns: [897430], source: [200, 138, 105, 1, 61, 85, 123, 156, 76, 241, 164, 214, 3, 195, 20, 88, 95, 81, 162, 88, 185, 116, 124, 52, 81, 132, 232, 102, 238, 243, 99, 6] }, SavedLink { entry: 897164, site: 897284, stack_bytes: 32, returns: [897430], source: [200, 138, 105, 1, 61, 85, 123, 156, 76, 241, 164, 214, 3, 195, 20, 88, 95, 81, 162, 88, 185, 116, 124, 52, 81, 132, 232, 102, 238, 243, 99, 6] }] }",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 6,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529327,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BP50NB40",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.01/main/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70.bin",
+      "provenance": {
+        "build_id": "1711231615",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BP50NB40",
+        "embedded_model": "BP50NB40",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "GENERAL",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BP50NB40 NB50",
+          "hardware_basis": "record",
+          "platform": "MT1959",
+          "revision": "1.01",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BP50NB40",
+          "revision": "1.01",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BP50NB40 NB50:GENERAL:1.01:main",
+        "label": {
+          "boot_banner": "Boot BUP3",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.728,
+          "name": "LG_BP50NB40_1.01_17346133501.bin::decoded",
+          "payload_form": "plaintext",
+          "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BUP3",
+          "crossflash_group": "MT1959/slim/BUP3/NB50",
+          "family_id": "ab4e219381d5f287",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "NB50",
+            "build_id": "1711231615",
+            "chip_field": "MT1959",
+            "code": "N008200",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE BP50NB40",
+            "revision": "1.01",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.01/main/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70.bin",
+        "product_identity": {
+          "model": "BP50NB40",
+          "product": "BD-RE BP50NB40",
+          "product_suffix": "",
+          "revision": "1.01",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+        "sources": [
+          {
+            "bundle": "bundles/21af38b8f3780e85763903b4cf58ead1ea6d9e2b56c1c8dd926fe532645f2676/mediatek-b78927714ff2201eb6b4644a48c4b6cee0806b2e6a05e0e2700e71ac208b0ebe.firmware.tar",
+            "candidate": "LG_BP50NB40_1.01_17346133501.bin::decoded",
+            "member": "images/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "21af38b8f3780e85763903b4cf58ead1ea6d9e2b56c1c8dd926fe532645f2676"
+          },
+          {
+            "bundle": "bundles/289b28efda1a3bb78cc324e113da34c0d5dc0e7d7f6a92105516d158506d4e76/mediatek-0d85414b595d2b21ddcdde42faef25ea8fd45a7f48d7e56baa64cebd62373fd4.firmware.tar",
+            "candidate": "lg_BP50NB40_NB50_2018-03-06.zip::BP50NB40_SVC code NB50.exe::rsrc49::decoded",
+            "member": "images/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "289b28efda1a3bb78cc324e113da34c0d5dc0e7d7f6a92105516d158506d4e76"
+          },
+          {
+            "bundle": "bundles/5b47b9b6ef7ff4f43fc40e9fd4f596c8198906643edad50f5cb8eb1e67c883e0/mediatek-d752da68108ce4c63d6c7c80cdb959d389eb8142a4c9d4a7b748890d31e8b3e7.firmware.tar",
+            "candidate": "17346133501_N1.01_BP50NB40_171123_only_NOBJ.zip::N1.01_P50NB40_171123_only_NOBJ.exe::rsrc49::decoded",
+            "member": "images/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "5b47b9b6ef7ff4f43fc40e9fd4f596c8198906643edad50f5cb8eb1e67c883e0"
+          },
+          {
+            "bundle": "bundles/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70/mediatek-aac03315930bcb3ca11e5dd6d96442454605b5b96850b246c338b5fc68d4a53c.firmware.tar",
+            "candidate": "BP50NB40_1.01_961acab1.bin",
+            "member": "images/961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BP50NB40 NB50:GENERAL",
+        "version": 1
+      },
+      "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 914514,
+                "target": 914536
+              },
+              {
+                "instruction": 914522,
+                "target": 914532
+              },
+              {
+                "instruction": 914526,
+                "target": 914532
+              },
+              {
+                "instruction": 914530,
+                "target": 914570
+              },
+              {
+                "instruction": 914534,
+                "target": 914570
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 914508,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 168044,
+                "target": 168052
+              },
+              {
+                "instruction": 168050,
+                "target": 168056
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 168028,
+                "value": 33529349
+              },
+              {
+                "instruction": 168036,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 168028,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218422,
+                "target": 218438
+              },
+              {
+                "instruction": 218430,
+                "target": 218438
+              },
+              {
+                "instruction": 218436,
+                "target": 218622
+              },
+              {
+                "instruction": 218442,
+                "target": 218618
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218414,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 218414,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 881938,
+                "target": 882186
+              },
+              {
+                "instruction": 881946,
+                "target": 881980
+              },
+              {
+                "instruction": 881952,
+                "target": 1284408
+              },
+              {
+                "instruction": 881962,
+                "target": 881994
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 881926,
+                "value": 33529349
+              },
+              {
+                "instruction": 881960,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 881926,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 882162,
+                "target": 881938
+              },
+              {
+                "instruction": 882170,
+                "target": 882208
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 882150,
+                "value": 33529349
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 882150,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883446,
+                "target": 883572
+              },
+              {
+                "instruction": 883454,
+                "target": 883458
+              },
+              {
+                "instruction": 883468,
+                "target": 883488
+              },
+              {
+                "instruction": 883476,
+                "target": 883488
+              },
+              {
+                "instruction": 883486,
+                "target": 883504
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 883434,
+                "value": 33529349
+              },
+              {
+                "instruction": 883464,
+                "value": 69251456
+              },
+              {
+                "instruction": 883470,
+                "value": 33557265
+              },
+              {
+                "instruction": 883490,
+                "value": 1355463
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 883434,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 891566,
+                "target": 891800
+              },
+              {
+                "instruction": 891578,
+                "target": 891734
+              },
+              {
+                "instruction": 891586,
+                "target": 891594
+              },
+              {
+                "instruction": 891592,
+                "target": 891734
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 891548,
+                "value": 33529349
+              },
+              {
+                "instruction": 891556,
+                "value": 33529286
+              },
+              {
+                "instruction": 891558,
+                "value": 33557260
+              },
+              {
+                "instruction": 891560,
+                "value": 33529351
+              },
+              {
+                "instruction": 891562,
+                "value": 33530777
+              },
+              {
+                "instruction": 891568,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 891546,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 879636, state: 33529349, mode: 33530777, table: 1368112, input: C7Selection { site: 879656, replay: [11264], span: 4, accept: 879660, reject: 879692 }, output: C7Selection { site: 879782, replay: [17295], span: 4, accept: 879786, reject: 879788 }, callers: [SavedLink { entry: 879636, site: 879656, stack_bytes: 20, returns: [879790], source: [150, 26, 202, 177, 128, 201, 166, 41, 102, 197, 79, 36, 243, 181, 250, 126, 51, 89, 65, 5, 124, 21, 97, 58, 135, 111, 79, 206, 202, 1, 11, 112] }, SavedLink { entry: 879636, site: 879782, stack_bytes: 20, returns: [879790], source: [150, 26, 202, 177, 128, 201, 166, 41, 102, 197, 79, 36, 243, 181, 250, 126, 51, 89, 65, 5, 124, 21, 97, 58, 135, 111, 79, 206, 202, 1, 11, 112] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BP50NB40",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.03/main/3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050.bin",
+      "provenance": {
+        "build_id": "2005070917",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BP50NB40",
+        "embedded_model": "BP50NB40",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "GENERAL",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BP50NB40 NB50",
+          "hardware_basis": "record",
+          "platform": "MT1959",
+          "revision": "1.03",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BP50NB40",
+          "revision": "1.03",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BP50NB40 NB50:GENERAL:1.03:main",
+        "label": {
+          "boot_banner": "Boot BUP3",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.732,
+          "name": "lg_BP50NB40_1.03_2020-12-23.zip::BP50NB40_1.03_SVC code NB40, NB50/BP50NB40_1.03.exe::rsrc49::decoded::decoded",
+          "payload_form": "plaintext",
+          "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BUP3",
+          "crossflash_group": "MT1959/slim/BUP3/NB50",
+          "family_id": "ab4e219381d5f287",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "NB50",
+            "build_id": "2005070917",
+            "chip_field": "MT1959",
+            "code": "N009800",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE BP50NB40",
+            "revision": "1.03",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/1.03/main/3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050.bin",
+        "product_identity": {
+          "model": "BP50NB40",
+          "product": "BD-RE BP50NB40",
+          "product_suffix": "",
+          "revision": "1.03",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+        "sources": [
+          {
+            "bundle": "bundles/0bf4b800cafca06a92c3b4e33ac730f82bb1e6fd3c0259d6ef94ba989f24f148/mediatek-e7fe4a290b442cefe026ca95cb2fb09e8a488c94955773cd850ffbb3340b52fe.firmware.tar",
+            "candidate": "lg_BP50NB40_1.03_2020-12-23.zip::BP50NB40_1.03_SVC code NB40, NB50/BP50NB40_1.03.exe::rsrc49::decoded::decoded",
+            "member": "images/3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "0bf4b800cafca06a92c3b4e33ac730f82bb1e6fd3c0259d6ef94ba989f24f148"
+          },
+          {
+            "bundle": "bundles/7ba34b34f991e87fafe7258ef7c9175c75d920f1654fc086e98e21e9440a6b4e/mediatek-06bc2d05ba6a08701999ce3488ee01d45e9002ebfe6f6799b4eac8952f6c0b4d.firmware.tar",
+            "candidate": "LG_BP50NB40_1.03_SVC_code_NB40_NB50.exe::rsrc49::decoded::decoded",
+            "member": "images/3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "7ba34b34f991e87fafe7258ef7c9175c75d920f1654fc086e98e21e9440a6b4e"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BP50NB40 NB50:GENERAL",
+        "version": 1
+      },
+      "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 915578,
+                "target": 915600
+              },
+              {
+                "instruction": 915586,
+                "target": 915596
+              },
+              {
+                "instruction": 915590,
+                "target": 915596
+              },
+              {
+                "instruction": 915594,
+                "target": 915634
+              },
+              {
+                "instruction": 915598,
+                "target": 915634
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 915572,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 168044,
+                "target": 168052
+              },
+              {
+                "instruction": 168050,
+                "target": 168056
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 168028,
+                "value": 33529349
+              },
+              {
+                "instruction": 168036,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 168028,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218422,
+                "target": 218438
+              },
+              {
+                "instruction": 218430,
+                "target": 218438
+              },
+              {
+                "instruction": 218436,
+                "target": 218622
+              },
+              {
+                "instruction": 218442,
+                "target": 218618
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218414,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 218414,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883002,
+                "target": 883250
+              },
+              {
+                "instruction": 883010,
+                "target": 883044
+              },
+              {
+                "instruction": 883016,
+                "target": 1285464
+              },
+              {
+                "instruction": 883026,
+                "target": 883058
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 882990,
+                "value": 33529349
+              },
+              {
+                "instruction": 883024,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 882990,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883226,
+                "target": 883002
+              },
+              {
+                "instruction": 883234,
+                "target": 883272
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 883214,
+                "value": 33529349
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 883214,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 884510,
+                "target": 884636
+              },
+              {
+                "instruction": 884518,
+                "target": 884522
+              },
+              {
+                "instruction": 884532,
+                "target": 884552
+              },
+              {
+                "instruction": 884540,
+                "target": 884552
+              },
+              {
+                "instruction": 884550,
+                "target": 884568
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 884498,
+                "value": 33529349
+              },
+              {
+                "instruction": 884528,
+                "value": 69251456
+              },
+              {
+                "instruction": 884534,
+                "value": 33557265
+              },
+              {
+                "instruction": 884554,
+                "value": 1356531
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 884498,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 892630,
+                "target": 892864
+              },
+              {
+                "instruction": 892642,
+                "target": 892798
+              },
+              {
+                "instruction": 892650,
+                "target": 892658
+              },
+              {
+                "instruction": 892656,
+                "target": 892798
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 892612,
+                "value": 33529349
+              },
+              {
+                "instruction": 892620,
+                "value": 33529286
+              },
+              {
+                "instruction": 892622,
+                "value": 33557260
+              },
+              {
+                "instruction": 892624,
+                "value": 33529351
+              },
+              {
+                "instruction": 892626,
+                "value": 33530777
+              },
+              {
+                "instruction": 892632,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 892610,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 880700, state: 33529349, mode: 33530777, table: 1369180, input: C7Selection { site: 880720, replay: [11264], span: 4, accept: 880724, reject: 880756 }, output: C7Selection { site: 880846, replay: [17295], span: 4, accept: 880850, reject: 880852 }, callers: [SavedLink { entry: 880700, site: 880720, stack_bytes: 20, returns: [880854], source: [60, 219, 218, 202, 206, 92, 110, 211, 213, 5, 187, 191, 246, 83, 80, 39, 76, 87, 117, 171, 135, 28, 66, 209, 48, 8, 47, 207, 10, 181, 96, 80] }, SavedLink { entry: 880700, site: 880846, stack_bytes: 20, returns: [880854], source: [60, 219, 218, 202, 206, 92, 110, 211, 213, 5, 187, 191, 246, 83, 80, 39, 76, 87, 117, 171, 135, 28, 66, 209, 48, 8, 47, 207, 10, 181, 96, 80] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BP50NB40",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/INTM/main/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d.bin",
+      "provenance": {
+        "build_id": "2003031607",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BP50NB40",
+        "embedded_model": "BP50NB40",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "GENERAL",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BP50NB40 NB50",
+          "hardware_basis": "record",
+          "platform": "MT1959",
+          "revision": "INTM",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BP50NB40",
+          "revision": "INTM",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BP50NB40 NB50:GENERAL:INTM:main",
+        "label": {
+          "boot_banner": "Boot BUP3",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.73,
+          "name": "lg_BP50NB40_1.03_2020-12-23.zip::BP50NB40_1.03_SVC code NB40, NB50/BP50NB40_1.03.exe::rsrc51::decoded",
+          "payload_form": "plaintext",
+          "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BUP3",
+          "crossflash_group": "MT1959/slim/BUP3/NB50",
+          "family_id": "ab4e219381d5f287",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "NB50",
+            "build_id": "2003031607",
+            "chip_field": "MT1959",
+            "code": "N008900",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE BP50NB40",
+            "revision": "INTM",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BP50NB40_NB50/GENERAL/INTM/main/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d.bin",
+        "product_identity": {
+          "model": "BP50NB40",
+          "product": "BD-RE BP50NB40",
+          "product_suffix": "",
+          "revision": "INTM",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+        "sources": [
+          {
+            "bundle": "bundles/0bf4b800cafca06a92c3b4e33ac730f82bb1e6fd3c0259d6ef94ba989f24f148/mediatek-e7fe4a290b442cefe026ca95cb2fb09e8a488c94955773cd850ffbb3340b52fe.firmware.tar",
+            "candidate": "lg_BP50NB40_1.03_2020-12-23.zip::BP50NB40_1.03_SVC code NB40, NB50/BP50NB40_1.03.exe::rsrc51::decoded",
+            "member": "images/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "0bf4b800cafca06a92c3b4e33ac730f82bb1e6fd3c0259d6ef94ba989f24f148"
+          },
+          {
+            "bundle": "bundles/27e7ee0a6fb8e1eb85b0a7fcd44f01231ca9b76161cb3a9f24fdcb5617020397/mediatek-1226eb900f416db389c8fdbc52ddecc8f7f9ca50fec197fe5064e4872f11df30.firmware.tar",
+            "candidate": "lg_WP50NB40_1.03_2020-12-23.zip::WP50NB40_SVC code NS50/WP50NB40_SVC code NS50.exe::rsrc51::decoded",
+            "member": "images/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "27e7ee0a6fb8e1eb85b0a7fcd44f01231ca9b76161cb3a9f24fdcb5617020397"
+          },
+          {
+            "bundle": "bundles/7ba34b34f991e87fafe7258ef7c9175c75d920f1654fc086e98e21e9440a6b4e/mediatek-06bc2d05ba6a08701999ce3488ee01d45e9002ebfe6f6799b4eac8952f6c0b4d.firmware.tar",
+            "candidate": "LG_BP50NB40_1.03_SVC_code_NB40_NB50.exe::rsrc51::decoded",
+            "member": "images/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "7ba34b34f991e87fafe7258ef7c9175c75d920f1654fc086e98e21e9440a6b4e"
+          },
+          {
+            "bundle": "bundles/81a01798c3b1af7fedb4e600b63ecd17deee4c71198d918ebb874531f430ca75/mediatek-fd7a11552c3bbbe9761cb2702ac499ba9ccb0207f5e4d33cf5480d6e6bafb85b.firmware.tar",
+            "candidate": "LG_WP50NB40_1.03_SVC_code_NB50_Official_Flasher.exe::rsrc51::decoded",
+            "member": "images/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "81a01798c3b1af7fedb4e600b63ecd17deee4c71198d918ebb874531f430ca75"
+          },
+          {
+            "bundle": "bundles/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d/mediatek-8363b8d0344c68caeeca053cf4b8b3c8412e7c9ed67dddb7098054256a2e5f49.firmware.tar",
+            "candidate": "BP50NB40_INTM_92bb22b2.bin",
+            "member": "images/92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BP50NB40 NB50:GENERAL",
+        "version": 1
+      },
+      "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 915006,
+                "target": 915028
+              },
+              {
+                "instruction": 915014,
+                "target": 915024
+              },
+              {
+                "instruction": 915018,
+                "target": 915024
+              },
+              {
+                "instruction": 915022,
+                "target": 915062
+              },
+              {
+                "instruction": 915026,
+                "target": 915062
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 915000,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 168044,
+                "target": 168052
+              },
+              {
+                "instruction": 168050,
+                "target": 168056
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 168028,
+                "value": 33529349
+              },
+              {
+                "instruction": 168036,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 168028,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218422,
+                "target": 218438
+              },
+              {
+                "instruction": 218430,
+                "target": 218438
+              },
+              {
+                "instruction": 218436,
+                "target": 218622
+              },
+              {
+                "instruction": 218442,
+                "target": 218618
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218414,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 218414,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 882430,
+                "target": 882678
+              },
+              {
+                "instruction": 882438,
+                "target": 882472
+              },
+              {
+                "instruction": 882444,
+                "target": 1284892
+              },
+              {
+                "instruction": 882454,
+                "target": 882486
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 882418,
+                "value": 33529349
+              },
+              {
+                "instruction": 882452,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 882418,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 882654,
+                "target": 882430
+              },
+              {
+                "instruction": 882662,
+                "target": 882700
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 882642,
+                "value": 33529349
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 882642,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883938,
+                "target": 884064
+              },
+              {
+                "instruction": 883946,
+                "target": 883950
+              },
+              {
+                "instruction": 883960,
+                "target": 883980
+              },
+              {
+                "instruction": 883968,
+                "target": 883980
+              },
+              {
+                "instruction": 883978,
+                "target": 883996
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 883926,
+                "value": 33529349
+              },
+              {
+                "instruction": 883956,
+                "value": 69251456
+              },
+              {
+                "instruction": 883962,
+                "value": 33557265
+              },
+              {
+                "instruction": 883982,
+                "value": 1355959
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 883926,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 892058,
+                "target": 892292
+              },
+              {
+                "instruction": 892070,
+                "target": 892226
+              },
+              {
+                "instruction": 892078,
+                "target": 892086
+              },
+              {
+                "instruction": 892084,
+                "target": 892226
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 892040,
+                "value": 33529349
+              },
+              {
+                "instruction": 892048,
+                "value": 33529286
+              },
+              {
+                "instruction": 892050,
+                "value": 33557260
+              },
+              {
+                "instruction": 892052,
+                "value": 33529351
+              },
+              {
+                "instruction": 892054,
+                "value": 33530777
+              },
+              {
+                "instruction": 892060,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 892038,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 880128, state: 33529349, mode: 33530777, table: 1368608, input: C7Selection { site: 880148, replay: [11264], span: 4, accept: 880152, reject: 880184 }, output: C7Selection { site: 880274, replay: [17295], span: 4, accept: 880278, reject: 880280 }, callers: [SavedLink { entry: 880128, site: 880148, stack_bytes: 20, returns: [880282], source: [146, 187, 34, 178, 200, 153, 155, 188, 222, 78, 2, 215, 133, 183, 17, 6, 60, 180, 20, 244, 11, 219, 225, 111, 172, 134, 38, 67, 178, 152, 97, 13] }, SavedLink { entry: 880128, site: 880274, stack_bytes: 20, returns: [880282], source: [146, 187, 34, 178, 200, 153, 155, 188, 222, 78, 2, 215, 133, 183, 17, 6, 60, 180, 20, 244, 11, 219, 225, 111, 172, 134, 38, 67, 178, 152, 97, 13] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BP55EB40",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BP55EB40_NB50/GENERAL/1.01/main/e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9.bin",
+      "provenance": {
+        "build_id": "1711231626",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BP55EB40",
+        "embedded_model": "BP55EB40",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "GENERAL",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BP55EB40 NB50",
+          "hardware_basis": "record",
+          "platform": "MT1959",
+          "revision": "1.01",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BP55EB40",
+          "revision": "1.01",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BP55EB40 NB50:GENERAL:1.01:main",
+        "label": {
+          "boot_banner": "Boot BUP3",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.728,
+          "name": "LG_BP55EB40_1.01_17346134154.bin::decoded",
+          "payload_form": "plaintext",
+          "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BUP3",
+          "crossflash_group": "MT1959/slim/BUP3/NB50",
+          "family_id": "ab4e219381d5f287",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "NB50",
+            "build_id": "1711231626",
+            "chip_field": "MT1959",
+            "code": "N008200",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE BP55EB40",
+            "revision": "1.01",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BP55EB40_NB50/GENERAL/1.01/main/e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9.bin",
+        "product_identity": {
+          "model": "BP55EB40",
+          "product": "BD-RE BP55EB40",
+          "product_suffix": "",
+          "revision": "1.01",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+        "sources": [
+          {
+            "bundle": "bundles/4962fe78cb8ed9250b8440b23c15bd688a9440a7110b9d1bac74e260f45b64f7/mediatek-dda2c1a2c1eea29f2d6e7d5d5f97abcaf2d982c47047c5ec2dba4cfbda89c330.firmware.tar",
+            "candidate": "LG_BP55EB40_1.01_17346134154.bin::decoded",
+            "member": "images/e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "4962fe78cb8ed9250b8440b23c15bd688a9440a7110b9d1bac74e260f45b64f7"
+          },
+          {
+            "bundle": "bundles/7e8cae6a379a99abfefcf4cf0f3038f37116bc218c0dc9d0ad383c6dd3457a18/mediatek-92f778b4b3633caa1ecf1c5dca337903b4e5b0980320f852aa7bca979a6c4b12.firmware.tar",
+            "candidate": "17346134154_N1.01_P55EB40_171123_only_NOBJ.exe::rsrc49::decoded",
+            "member": "images/e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "7e8cae6a379a99abfefcf4cf0f3038f37116bc218c0dc9d0ad383c6dd3457a18"
+          },
+          {
+            "bundle": "bundles/e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9/mediatek-52281f1196dda002c5f654412f92150def89a13b1fc0a127fb5aa19cca4c97de.firmware.tar",
+            "candidate": "BP55EB40_1.01_e60a4ce0.bin",
+            "member": "images/e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BP55EB40 NB50:GENERAL",
+        "version": 1
+      },
+      "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 914514,
+                "target": 914536
+              },
+              {
+                "instruction": 914522,
+                "target": 914532
+              },
+              {
+                "instruction": 914526,
+                "target": 914532
+              },
+              {
+                "instruction": 914530,
+                "target": 914570
+              },
+              {
+                "instruction": 914534,
+                "target": 914570
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 914508,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 168044,
+                "target": 168052
+              },
+              {
+                "instruction": 168050,
+                "target": 168056
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 168028,
+                "value": 33529349
+              },
+              {
+                "instruction": 168036,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 168028,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218422,
+                "target": 218438
+              },
+              {
+                "instruction": 218430,
+                "target": 218438
+              },
+              {
+                "instruction": 218436,
+                "target": 218622
+              },
+              {
+                "instruction": 218442,
+                "target": 218618
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218414,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 218414,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 881938,
+                "target": 882186
+              },
+              {
+                "instruction": 881946,
+                "target": 881980
+              },
+              {
+                "instruction": 881952,
+                "target": 1284408
+              },
+              {
+                "instruction": 881962,
+                "target": 881994
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 881926,
+                "value": 33529349
+              },
+              {
+                "instruction": 881960,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 881926,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 882162,
+                "target": 881938
+              },
+              {
+                "instruction": 882170,
+                "target": 882208
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 882150,
+                "value": 33529349
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 882150,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883446,
+                "target": 883572
+              },
+              {
+                "instruction": 883454,
+                "target": 883458
+              },
+              {
+                "instruction": 883468,
+                "target": 883488
+              },
+              {
+                "instruction": 883476,
+                "target": 883488
+              },
+              {
+                "instruction": 883486,
+                "target": 883504
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 883434,
+                "value": 33529349
+              },
+              {
+                "instruction": 883464,
+                "value": 69251456
+              },
+              {
+                "instruction": 883470,
+                "value": 33557265
+              },
+              {
+                "instruction": 883490,
+                "value": 1355463
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 883434,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 891566,
+                "target": 891800
+              },
+              {
+                "instruction": 891578,
+                "target": 891734
+              },
+              {
+                "instruction": 891586,
+                "target": 891594
+              },
+              {
+                "instruction": 891592,
+                "target": 891734
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 891548,
+                "value": 33529349
+              },
+              {
+                "instruction": 891556,
+                "value": 33529286
+              },
+              {
+                "instruction": 891558,
+                "value": 33557260
+              },
+              {
+                "instruction": 891560,
+                "value": 33529351
+              },
+              {
+                "instruction": 891562,
+                "value": 33530777
+              },
+              {
+                "instruction": 891568,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 891546,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 879636, state: 33529349, mode: 33530777, table: 1368112, input: C7Selection { site: 879656, replay: [11264], span: 4, accept: 879660, reject: 879692 }, output: C7Selection { site: 879782, replay: [17295], span: 4, accept: 879786, reject: 879788 }, callers: [SavedLink { entry: 879636, site: 879656, stack_bytes: 20, returns: [879790], source: [230, 10, 76, 224, 42, 88, 141, 21, 250, 162, 168, 159, 29, 151, 216, 12, 34, 221, 35, 6, 207, 98, 240, 33, 149, 21, 166, 233, 202, 93, 223, 249] }, SavedLink { entry: 879636, site: 879782, stack_bytes: 20, returns: [879790], source: [230, 10, 76, 224, 42, 88, 141, 21, 250, 162, 168, 159, 29, 151, 216, 12, 34, 221, 35, 6, 207, 98, 240, 33, 149, 21, 166, 233, 202, 93, 223, 249] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BU40N",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN11/main/5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95.bin",
+      "provenance": {
+        "build_id": "1711201351",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BU40N",
+        "embedded_model": "BU40N",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "0?",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BU40N MT1959 BU5/BU3",
+          "hardware_basis": "banner",
+          "platform": "MT1959",
+          "revision": "BN11",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BU40N",
+          "revision": "BN11",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BU40N MT1959 BU5/BU3:0?:BN11:main",
+        "label": {
+          "boot_banner": "Boot BU5",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.696,
+          "name": "BU40N_BN11_5c01c1fd.bin",
+          "payload_form": "plaintext",
+          "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BU5",
+          "crossflash_group": "MT1959/slim/BU5/board-unknown",
+          "family_id": "309829e6c3c8f31d",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "",
+            "build_id": "1711201351",
+            "chip_field": "MT1959",
+            "code": "0000300",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE BU40N",
+            "revision": "BN11",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN11/main/5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95.bin",
+        "product_identity": {
+          "model": "BU40N",
+          "product": "BD-RE BU40N",
+          "product_suffix": "",
+          "revision": "BN11",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+        "sources": [
+          {
+            "bundle": "bundles/5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95/mediatek-fdc8ccaef7b6703f733e9440a6469a61e8eea34fd9027c8b32c07a289b097975.firmware.tar",
+            "candidate": "BU40N_BN11_5c01c1fd.bin",
+            "member": "images/5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95"
+          },
+          {
+            "bundle": "bundles/89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399/mediatek-dba9fe0184fa2488210d95d9356fa4fd492aa1657fea6112bf9c8ee994da38d0.firmware.tar",
+            "candidate": "brdrive_fwupdater_100.exe::brdrive_fwupdater_100/DATA/Buffalo_Special_FW_Updater_1.00.exe::rsrc1",
+            "member": "images/5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399"
+          },
+          {
+            "bundle": "bundles/89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399/mediatek-dba9fe0184fa2488210d95d9356fa4fd492aa1657fea6112bf9c8ee994da38d0.firmware.tar",
+            "candidate": "brdrive_fwupdater_100.exe::overlay::brdrive_fwupdater_100/DATA/Buffalo_Special_FW_Updater_1.00.exe::rsrc1",
+            "member": "images/5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BU40N MT1959 BU5/BU3:0?",
+        "version": 1
+      },
+      "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 916216,
+                "target": 916238
+              },
+              {
+                "instruction": 916224,
+                "target": 916234
+              },
+              {
+                "instruction": 916228,
+                "target": 916234
+              },
+              {
+                "instruction": 916232,
+                "target": 916272
+              },
+              {
+                "instruction": 916236,
+                "target": 916272
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 916210,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167772,
+                "target": 167780
+              },
+              {
+                "instruction": 167778,
+                "target": 167784
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 167756,
+                "value": 33529348
+              },
+              {
+                "instruction": 167764,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167756,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218150,
+                "target": 218166
+              },
+              {
+                "instruction": 218158,
+                "target": 218166
+              },
+              {
+                "instruction": 218164,
+                "target": 218350
+              },
+              {
+                "instruction": 218170,
+                "target": 218346
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218142,
+                "value": 33529348
+              }
+            ],
+            "role": "ControlField",
+            "site": 218142,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 884128,
+                "target": 884374
+              },
+              {
+                "instruction": 884136,
+                "target": 884170
+              },
+              {
+                "instruction": 884142,
+                "target": 1290636
+              },
+              {
+                "instruction": 884152,
+                "target": 884184
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 884116,
+                "value": 33529348
+              },
+              {
+                "instruction": 884150,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 884116,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 884354,
+                "target": 884128
+              },
+              {
+                "instruction": 884362,
+                "target": 884400
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 884342,
+                "value": 33529348
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 884342,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 885638,
+                "target": 885764
+              },
+              {
+                "instruction": 885646,
+                "target": 885650
+              },
+              {
+                "instruction": 885660,
+                "target": 885680
+              },
+              {
+                "instruction": 885668,
+                "target": 885680
+              },
+              {
+                "instruction": 885678,
+                "target": 885696
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 885626,
+                "value": 33529348
+              },
+              {
+                "instruction": 885656,
+                "value": 69251456
+              },
+              {
+                "instruction": 885662,
+                "value": 33557265
+              },
+              {
+                "instruction": 885682,
+                "value": 1361131
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 885626,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 893404,
+                "target": 893638
+              },
+              {
+                "instruction": 893416,
+                "target": 893572
+              },
+              {
+                "instruction": 893424,
+                "target": 893432
+              },
+              {
+                "instruction": 893430,
+                "target": 893572
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 893386,
+                "value": 33529348
+              },
+              {
+                "instruction": 893394,
+                "value": 33529286
+              },
+              {
+                "instruction": 893396,
+                "value": 33557260
+              },
+              {
+                "instruction": 893398,
+                "value": 33529350
+              },
+              {
+                "instruction": 893400,
+                "value": 33530773
+              },
+              {
+                "instruction": 893406,
+                "value": 33529352
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 893384,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 881820, state: 33529348, mode: 33530773, table: 1373840, input: C7Selection { site: 881840, replay: [11264], span: 4, accept: 881844, reject: 881876 }, output: C7Selection { site: 881966, replay: [17295], span: 4, accept: 881970, reject: 881972 }, callers: [SavedLink { entry: 881820, site: 881840, stack_bytes: 20, returns: [881974], source: [92, 1, 193, 253, 165, 159, 61, 177, 48, 189, 20, 170, 100, 254, 151, 212, 1, 3, 118, 121, 135, 22, 177, 103, 146, 219, 255, 213, 156, 72, 138, 149] }, SavedLink { entry: 881820, site: 881966, stack_bytes: 20, returns: [881974], source: [92, 1, 193, 253, 165, 159, 61, 177, 48, 189, 20, 170, 100, 254, 151, 212, 1, 3, 118, 121, 135, 22, 177, 103, 146, 219, 255, 213, 156, 72, 138, 149] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529348,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BU40N",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN12/main/3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7.bin",
+      "provenance": {
+        "build_id": "1902230925",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BU40N",
+        "embedded_model": "BU40N",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "0?",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BU40N MT1959 BU5/BU3",
+          "hardware_basis": "banner",
+          "platform": "MT1959",
+          "revision": "BN12",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BU40N",
+          "revision": "BN12",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BU40N MT1959 BU5/BU3:0?:BN12:main",
+        "label": {
+          "boot_banner": "Boot BU5",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.698,
+          "name": "brdrive_fwupdater_200.exe::brdrive_fwupdater_200/DATA/Buffalo_BU40N_FW_Updater_2.01.exe::rsrc1::decoded",
+          "payload_form": "plaintext",
+          "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BU5",
+          "crossflash_group": "MT1959/slim/BU5/board-unknown",
+          "family_id": "309829e6c3c8f31d",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "",
+            "build_id": "1902230925",
+            "chip_field": "MT1959",
+            "code": "0001001",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE BU40N",
+            "revision": "BN12",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/0_/BN12/main/3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7.bin",
+        "product_identity": {
+          "model": "BU40N",
+          "product": "BD-RE BU40N",
+          "product_suffix": "",
+          "revision": "BN12",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+        "sources": [
+          {
+            "bundle": "bundles/f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2/mediatek-8d8e583335d4a50e0ca4dc567dc883b35833735f0d8183f4d90aca3f74357ef9.firmware.tar",
+            "candidate": "brdrive_fwupdater_200.exe::brdrive_fwupdater_200/DATA/Buffalo_BU40N_FW_Updater_2.01.exe::rsrc1::decoded",
+            "member": "images/3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2"
+          },
+          {
+            "bundle": "bundles/f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2/mediatek-8d8e583335d4a50e0ca4dc567dc883b35833735f0d8183f4d90aca3f74357ef9.firmware.tar",
+            "candidate": "brdrive_fwupdater_200.exe::overlay::brdrive_fwupdater_200/DATA/Buffalo_BU40N_FW_Updater_2.01.exe::rsrc1::decoded",
+            "member": "images/3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BU40N MT1959 BU5/BU3:0?",
+        "version": 1
+      },
+      "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 916648,
+                "target": 916670
+              },
+              {
+                "instruction": 916656,
+                "target": 916666
+              },
+              {
+                "instruction": 916660,
+                "target": 916666
+              },
+              {
+                "instruction": 916664,
+                "target": 916704
+              },
+              {
+                "instruction": 916668,
+                "target": 916704
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 916642,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167772,
+                "target": 167780
+              },
+              {
+                "instruction": 167778,
+                "target": 167784
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 167756,
+                "value": 33529348
+              },
+              {
+                "instruction": 167764,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167756,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218150,
+                "target": 218166
+              },
+              {
+                "instruction": 218158,
+                "target": 218166
+              },
+              {
+                "instruction": 218164,
+                "target": 218350
+              },
+              {
+                "instruction": 218170,
+                "target": 218346
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218142,
+                "value": 33529348
+              }
+            ],
+            "role": "ControlField",
+            "site": 218142,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 884560,
+                "target": 884806
+              },
+              {
+                "instruction": 884568,
+                "target": 884602
+              },
+              {
+                "instruction": 884574,
+                "target": 1291068
+              },
+              {
+                "instruction": 884584,
+                "target": 884616
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 884548,
+                "value": 33529348
+              },
+              {
+                "instruction": 884582,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 884548,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 884786,
+                "target": 884560
+              },
+              {
+                "instruction": 884794,
+                "target": 884832
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 884774,
+                "value": 33529348
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 884774,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 886070,
+                "target": 886196
+              },
+              {
+                "instruction": 886078,
+                "target": 886082
+              },
+              {
+                "instruction": 886092,
+                "target": 886112
+              },
+              {
+                "instruction": 886100,
+                "target": 886112
+              },
+              {
+                "instruction": 886110,
+                "target": 886128
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 886058,
+                "value": 33529348
+              },
+              {
+                "instruction": 886088,
+                "value": 69251456
+              },
+              {
+                "instruction": 886094,
+                "value": 33557265
+              },
+              {
+                "instruction": 886114,
+                "value": 1361575
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 886058,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 893836,
+                "target": 894070
+              },
+              {
+                "instruction": 893848,
+                "target": 894004
+              },
+              {
+                "instruction": 893856,
+                "target": 893864
+              },
+              {
+                "instruction": 893862,
+                "target": 894004
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 893818,
+                "value": 33529348
+              },
+              {
+                "instruction": 893826,
+                "value": 33529286
+              },
+              {
+                "instruction": 893828,
+                "value": 33557260
+              },
+              {
+                "instruction": 893830,
+                "value": 33529350
+              },
+              {
+                "instruction": 893832,
+                "value": 33530773
+              },
+              {
+                "instruction": 893838,
+                "value": 33529352
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 893816,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 882252, state: 33529348, mode: 33530773, table: 1374284, input: C7Selection { site: 882272, replay: [11264], span: 4, accept: 882276, reject: 882308 }, output: C7Selection { site: 882398, replay: [17295], span: 4, accept: 882402, reject: 882404 }, callers: [SavedLink { entry: 882252, site: 882272, stack_bytes: 20, returns: [882406], source: [61, 59, 173, 214, 125, 71, 27, 56, 14, 85, 102, 231, 71, 180, 47, 119, 117, 171, 255, 125, 217, 251, 188, 45, 13, 33, 146, 10, 147, 123, 52, 215] }, SavedLink { entry: 882252, site: 882398, stack_bytes: 20, returns: [882406], source: [61, 59, 173, 214, 125, 71, 27, 56, 14, 85, 102, 231, 71, 180, 47, 119, 117, 171, 255, 125, 217, 251, 188, 45, 13, 33, 146, 10, 147, 123, 52, 215] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529348,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE BU40N",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/CB04/CB04/main/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin",
+      "provenance": {
+        "build_id": "1705182012",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "BU40N",
+        "embedded_model": "BU40N",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "CB04",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST BU40N MT1959 BU5/BU3",
+          "hardware_basis": "banner",
+          "platform": "MT1959",
+          "revision": "CB04",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE BU40N",
+          "revision": "CB04",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST BU40N MT1959 BU5/BU3:CB04:CB04:main",
+        "label": {
+          "boot_banner": "Boot BU5",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.683,
+          "name": "17327062901_bu40n_cb04.zip::BU40N_CB04.exe::rsrc48::decoded",
+          "payload_form": "plaintext",
+          "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BU5",
+          "crossflash_group": "MT1959/slim/BU5/board-unknown",
+          "family_id": "309829e6c3c8f31d",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "",
+            "build_id": "1705182012",
+            "chip_field": "MT1959",
+            "code": "H001300",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE BU40N",
+            "revision": "CB04",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_BU40N_MT1959_BU5_BU3/CB04/CB04/main/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin",
+        "product_identity": {
+          "model": "BU40N",
+          "product": "BD-RE BU40N",
+          "product_suffix": "",
+          "revision": "CB04",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+        "sources": [
+          {
+            "bundle": "bundles/6b5c9f57d15758bbcfb856cb2cf6461668fd5b5af4cb1099c518e321ffe8961a/mediatek-270397be46b2d532cb43a3f67def132302f54a66456dea8814b78a04d6d4a705.firmware.tar",
+            "candidate": "17327062901_bu40n_cb04.zip::BU40N_CB04.exe::rsrc48::decoded",
+            "member": "images/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "6b5c9f57d15758bbcfb856cb2cf6461668fd5b5af4cb1099c518e321ffe8961a"
+          },
+          {
+            "bundle": "bundles/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4/mediatek-d329b82d81ac554e809cd03bfbb1bed2f9dd9cbcc0aea8c6bdfc240c437325d3.firmware.tar",
+            "candidate": "BU40N_CB04_78f75561.bin",
+            "member": "images/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4"
+          },
+          {
+            "bundle": "bundles/a2c6cf7c4970cd21d0b701b6ffe15f57a9add02a75834c774a227b7b25149ca1/mediatek-7d1328c973dd7e676a0fc374ab61df0b74fca62c9df1cd82c6cb685d47e22c39.firmware.tar",
+            "candidate": "LG_BU40N_CB04-00_17327062901_1.bin::rsrc48::decoded",
+            "member": "images/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "a2c6cf7c4970cd21d0b701b6ffe15f57a9add02a75834c774a227b7b25149ca1"
+          },
+          {
+            "bundle": "bundles/baddb3a3caee88e306340f432ce750c8cf0405d73f8affa93f84e5786ba3c1b8/mediatek-81f90ef42ddbe2df66668a9fb128414813ee8473d46da7dce3d5cb674bac5c53.firmware.tar",
+            "candidate": "LG_BU40N_CB04-00_17327062901_2.bin::decoded",
+            "member": "images/78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "baddb3a3caee88e306340f432ce750c8cf0405d73f8affa93f84e5786ba3c1b8"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST BU40N MT1959 BU5/BU3:CB04",
+        "version": 1
+      },
+      "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 914650,
+                "target": 914672
+              },
+              {
+                "instruction": 914658,
+                "target": 914668
+              },
+              {
+                "instruction": 914662,
+                "target": 914668
+              },
+              {
+                "instruction": 914666,
+                "target": 914706
+              },
+              {
+                "instruction": 914670,
+                "target": 914706
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 914644,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 167492,
+                "target": 167500
+              },
+              {
+                "instruction": 167498,
+                "target": 167504
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 167476,
+                "value": 33529349
+              },
+              {
+                "instruction": 167484,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 167476,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 217870,
+                "target": 217886
+              },
+              {
+                "instruction": 217878,
+                "target": 217886
+              },
+              {
+                "instruction": 217884,
+                "target": 218070
+              },
+              {
+                "instruction": 217890,
+                "target": 218066
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 217862,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 217862,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 882536,
+                "target": 882782
+              },
+              {
+                "instruction": 882544,
+                "target": 882578
+              },
+              {
+                "instruction": 882550,
+                "target": 1285520
+              },
+              {
+                "instruction": 882560,
+                "target": 882592
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 882524,
+                "value": 33529349
+              },
+              {
+                "instruction": 882558,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 882524,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 882762,
+                "target": 882536
+              },
+              {
+                "instruction": 882770,
+                "target": 882808
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 882750,
+                "value": 33529349
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 882750,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 884046,
+                "target": 884172
+              },
+              {
+                "instruction": 884054,
+                "target": 884058
+              },
+              {
+                "instruction": 884068,
+                "target": 884088
+              },
+              {
+                "instruction": 884076,
+                "target": 884088
+              },
+              {
+                "instruction": 884086,
+                "target": 884104
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 884034,
+                "value": 33529349
+              },
+              {
+                "instruction": 884064,
+                "value": 69251456
+              },
+              {
+                "instruction": 884070,
+                "value": 33557265
+              },
+              {
+                "instruction": 884090,
+                "value": 1355307
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 884034,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 891820,
+                "target": 892054
+              },
+              {
+                "instruction": 891832,
+                "target": 891988
+              },
+              {
+                "instruction": 891840,
+                "target": 891848
+              },
+              {
+                "instruction": 891846,
+                "target": 891988
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 891802,
+                "value": 33529349
+              },
+              {
+                "instruction": 891810,
+                "value": 33529287
+              },
+              {
+                "instruction": 891812,
+                "value": 33557260
+              },
+              {
+                "instruction": 891814,
+                "value": 33529351
+              },
+              {
+                "instruction": 891816,
+                "value": 33530777
+              },
+              {
+                "instruction": 891822,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 891800,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 880228, state: 33529349, mode: 33530777, table: 1368016, input: C7Selection { site: 880248, replay: [11264], span: 4, accept: 880252, reject: 880284 }, output: C7Selection { site: 880374, replay: [17295], span: 4, accept: 880378, reject: 880380 }, callers: [SavedLink { entry: 880228, site: 880248, stack_bytes: 20, returns: [880382], source: [120, 247, 85, 97, 212, 116, 208, 154, 75, 59, 211, 28, 227, 70, 57, 86, 0, 226, 237, 93, 35, 67, 31, 107, 250, 2, 165, 0, 204, 174, 231, 212] }, SavedLink { entry: 880228, site: 880374, stack_bytes: 20, returns: [880382], source: [120, 247, 85, 97, 212, 116, 208, 154, 75, 59, 211, 28, 227, 70, 57, 86, 0, 226, 237, 93, 35, 67, 31, 107, 250, 2, 165, 0, 204, 174, 231, 212] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE WP50NB40",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.01/main/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c.bin",
+      "provenance": {
+        "build_id": "1711231646",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "WP50NB40",
+        "embedded_model": "WP50NB40",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "GENERAL",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST WP50NB40 NB50",
+          "hardware_basis": "record",
+          "platform": "MT1959",
+          "revision": "1.01",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE WP50NB40",
+          "revision": "1.01",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST WP50NB40 NB50:GENERAL:1.01:main",
+        "label": {
+          "boot_banner": "Boot BUP3",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.728,
+          "name": "17346134120_N1.01_WP50NB40_171123_only_NOBJ.zip::N1.01_P50NB40_171123_only_NOBJ.exe::rsrc49::decoded",
+          "payload_form": "plaintext",
+          "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BUP3",
+          "crossflash_group": "MT1959/slim/BUP3/NB50",
+          "family_id": "ab4e219381d5f287",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "NB50",
+            "build_id": "1711231646",
+            "chip_field": "MT1959",
+            "code": "N008200",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE WP50NB40",
+            "revision": "1.01",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.01/main/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c.bin",
+        "product_identity": {
+          "model": "WP50NB40",
+          "product": "BD-RE WP50NB40",
+          "product_suffix": "",
+          "revision": "1.01",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+        "sources": [
+          {
+            "bundle": "bundles/519d1cec3a130ca3d122163015ea318220eb129eb45e9465bcfce0ccb7eed99c/mediatek-c9cc482073d7d9074f6433b9abea47fe753e1638b77e586611a45a16c7e64dbd.firmware.tar",
+            "candidate": "17346134120_N1.01_WP50NB40_171123_only_NOBJ.zip::N1.01_P50NB40_171123_only_NOBJ.exe::rsrc49::decoded",
+            "member": "images/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "519d1cec3a130ca3d122163015ea318220eb129eb45e9465bcfce0ccb7eed99c"
+          },
+          {
+            "bundle": "bundles/b4460b4256528615ccef47fac4aa5c576faf358b80157f10d78afce896ac73d1/mediatek-49775d9765bcc63f11ba5db4b6cd57235aa1a286754fcdfec7f8295fbfc3ed93.firmware.tar",
+            "candidate": "lg_WP50NB40_NB50_2018-02-27.zip::WP50NB40_SVC Code_NB50.exe::rsrc49::decoded",
+            "member": "images/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "b4460b4256528615ccef47fac4aa5c576faf358b80157f10d78afce896ac73d1"
+          },
+          {
+            "bundle": "bundles/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c/mediatek-94ef00a38d08885e89886ea63fb82a403d8b8e712108c57d57e650a43584fef4.firmware.tar",
+            "candidate": "WP50NB40_1.01_bea3a823.bin",
+            "member": "images/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c"
+          },
+          {
+            "bundle": "bundles/f9baefa59da03e3707f0d2bf5eb745e0eb2691a8975fc054695256fd25ac3538/mediatek-7722db4ed8ac56c7560e8400911de2d961bfc7dba27f0504db90b64805305c66.firmware.tar",
+            "candidate": "LG_WP50NB40_1.01_17346134120.bin::decoded",
+            "member": "images/bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "f9baefa59da03e3707f0d2bf5eb745e0eb2691a8975fc054695256fd25ac3538"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST WP50NB40 NB50:GENERAL",
+        "version": 1
+      },
+      "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 914514,
+                "target": 914536
+              },
+              {
+                "instruction": 914522,
+                "target": 914532
+              },
+              {
+                "instruction": 914526,
+                "target": 914532
+              },
+              {
+                "instruction": 914530,
+                "target": 914570
+              },
+              {
+                "instruction": 914534,
+                "target": 914570
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 914508,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 168044,
+                "target": 168052
+              },
+              {
+                "instruction": 168050,
+                "target": 168056
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 168028,
+                "value": 33529349
+              },
+              {
+                "instruction": 168036,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 168028,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218422,
+                "target": 218438
+              },
+              {
+                "instruction": 218430,
+                "target": 218438
+              },
+              {
+                "instruction": 218436,
+                "target": 218622
+              },
+              {
+                "instruction": 218442,
+                "target": 218618
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218414,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 218414,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 881938,
+                "target": 882186
+              },
+              {
+                "instruction": 881946,
+                "target": 881980
+              },
+              {
+                "instruction": 881952,
+                "target": 1284408
+              },
+              {
+                "instruction": 881962,
+                "target": 881994
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 881926,
+                "value": 33529349
+              },
+              {
+                "instruction": 881960,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 881926,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 882162,
+                "target": 881938
+              },
+              {
+                "instruction": 882170,
+                "target": 882208
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 882150,
+                "value": 33529349
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 882150,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883446,
+                "target": 883572
+              },
+              {
+                "instruction": 883454,
+                "target": 883458
+              },
+              {
+                "instruction": 883468,
+                "target": 883488
+              },
+              {
+                "instruction": 883476,
+                "target": 883488
+              },
+              {
+                "instruction": 883486,
+                "target": 883504
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 883434,
+                "value": 33529349
+              },
+              {
+                "instruction": 883464,
+                "value": 69251456
+              },
+              {
+                "instruction": 883470,
+                "value": 33557265
+              },
+              {
+                "instruction": 883490,
+                "value": 1355463
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 883434,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 891566,
+                "target": 891800
+              },
+              {
+                "instruction": 891578,
+                "target": 891734
+              },
+              {
+                "instruction": 891586,
+                "target": 891594
+              },
+              {
+                "instruction": 891592,
+                "target": 891734
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 891548,
+                "value": 33529349
+              },
+              {
+                "instruction": 891556,
+                "value": 33529286
+              },
+              {
+                "instruction": 891558,
+                "value": 33557260
+              },
+              {
+                "instruction": 891560,
+                "value": 33529351
+              },
+              {
+                "instruction": 891562,
+                "value": 33530777
+              },
+              {
+                "instruction": 891568,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 891546,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 879636, state: 33529349, mode: 33530777, table: 1368112, input: C7Selection { site: 879656, replay: [11264], span: 4, accept: 879660, reject: 879692 }, output: C7Selection { site: 879782, replay: [17295], span: 4, accept: 879786, reject: 879788 }, callers: [SavedLink { entry: 879636, site: 879656, stack_bytes: 20, returns: [879790], source: [190, 163, 168, 35, 55, 10, 152, 90, 254, 55, 206, 106, 106, 173, 75, 103, 239, 122, 241, 83, 7, 246, 34, 170, 172, 31, 118, 188, 122, 29, 187, 92] }, SavedLink { entry: 879636, site: 879782, stack_bytes: 20, returns: [879790], source: [190, 163, 168, 35, 55, 10, 152, 90, 254, 55, 206, 106, 106, 173, 75, 103, 239, 122, 241, 83, 7, 246, 34, 170, 172, 31, 118, 188, 122, 29, 187, 92] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    },
+    {
+      "bytes": 2097152,
+      "family": "MT1959",
+      "model": "BD-RE WP50NB40",
+      "our_modified_pair": null,
+      "path": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.03/main/263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1.bin",
+      "provenance": {
+        "build_id": "2005070929",
+        "bytes": 2097152,
+        "category": "oem",
+        "display_model": "WP50NB40",
+        "embedded_model": "WP50NB40",
+        "format": "fwext-image",
+        "identity": {
+          "confidence": "exact",
+          "destination": "GENERAL",
+          "family": "mediatek",
+          "hardware": "HL-DT-ST WP50NB40 NB50",
+          "hardware_basis": "record",
+          "platform": "MT1959",
+          "revision": "1.03",
+          "revision_basis": "record",
+          "role": "main"
+        },
+        "inquiry": {
+          "product": "BD-RE WP50NB40",
+          "revision": "1.03",
+          "vendor": "HL-DT-ST"
+        },
+        "key": "mediatek:HL-DT-ST WP50NB40 NB50:GENERAL:1.03:main",
+        "label": {
+          "boot_banner": "Boot BUP3",
+          "chipset": "MediaTek MT1959",
+          "chipset_confidence": "exact",
+          "chipset_evidence": "MT1959",
+          "confidence": "confident",
+          "encrypted": false,
+          "entropy": 6.732,
+          "name": "lg_WP50NB40_1.03_2020-12-23.zip::WP50NB40_SVC code NS50/WP50NB40_SVC code NS50.exe::rsrc49::decoded::decoded",
+          "payload_form": "plaintext",
+          "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+          "size": 2097152,
+          "status": "extracted"
+        },
+        "mediatek": {
+          "banner_chip": "MT1959",
+          "banner_loader": "BUP3",
+          "crossflash_group": "MT1959/slim/BUP3/NB50",
+          "family_id": "ab4e219381d5f287",
+          "fragment": false,
+          "patched": false,
+          "record": {
+            "board": "NB50",
+            "build_id": "2005070929",
+            "chip_field": "MT1959",
+            "code": "N009800",
+            "loader": "BU3",
+            "offset": 2015232,
+            "product": "BD-RE WP50NB40",
+            "revision": "1.03",
+            "vendor": "HL-DT-ST"
+          }
+        },
+        "path": "oem/mediatek/MT1959/HL-DT-ST_WP50NB40_NB50/GENERAL/1.03/main/263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1.bin",
+        "product_identity": {
+          "model": "WP50NB40",
+          "product": "BD-RE WP50NB40",
+          "product_suffix": "",
+          "revision": "1.03",
+          "vendor": "HL-DT-ST"
+        },
+        "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+        "sources": [
+          {
+            "bundle": "bundles/27e7ee0a6fb8e1eb85b0a7fcd44f01231ca9b76161cb3a9f24fdcb5617020397/mediatek-1226eb900f416db389c8fdbc52ddecc8f7f9ca50fec197fe5064e4872f11df30.firmware.tar",
+            "candidate": "lg_WP50NB40_1.03_2020-12-23.zip::WP50NB40_SVC code NS50/WP50NB40_SVC code NS50.exe::rsrc49::decoded::decoded",
+            "member": "images/263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "27e7ee0a6fb8e1eb85b0a7fcd44f01231ca9b76161cb3a9f24fdcb5617020397"
+          },
+          {
+            "bundle": "bundles/81a01798c3b1af7fedb4e600b63ecd17deee4c71198d918ebb874531f430ca75/mediatek-fd7a11552c3bbbe9761cb2702ac499ba9ccb0207f5e4d33cf5480d6e6bafb85b.firmware.tar",
+            "candidate": "LG_WP50NB40_1.03_SVC_code_NB50_Official_Flasher.exe::rsrc49::decoded::decoded",
+            "member": "images/263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1.bin",
+            "source_byte_offset": 0,
+            "source_sha256": "81a01798c3b1af7fedb4e600b63ecd17deee4c71198d918ebb874531f430ca75"
+          }
+        ],
+        "target_key": "mediatek:HL-DT-ST WP50NB40 NB50:GENERAL",
+        "version": 1
+      },
+      "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+      "uhd_code": {
+        "access_policy": "not_determined_by_this_scan",
+        "areas": [
+          {
+            "edges": [
+              {
+                "instruction": 915578,
+                "target": 915600
+              },
+              {
+                "instruction": 915586,
+                "target": 915596
+              },
+              {
+                "instruction": 915590,
+                "target": 915596
+              },
+              {
+                "instruction": 915594,
+                "target": 915634
+              },
+              {
+                "instruction": 915598,
+                "target": 915634
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 28,
+            "literals": [],
+            "role": "DiscInformation",
+            "site": 915572,
+            "variant": "no_u_modern_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 168044,
+                "target": 168052
+              },
+              {
+                "instruction": 168050,
+                "target": 168056
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 168028,
+                "value": 33529349
+              },
+              {
+                "instruction": 168036,
+                "value": 69242944
+              }
+            ],
+            "role": "ControlBit",
+            "site": 168028,
+            "variant": "classic_base40"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 218422,
+                "target": 218438
+              },
+              {
+                "instruction": 218430,
+                "target": 218438
+              },
+              {
+                "instruction": 218436,
+                "target": 218622
+              },
+              {
+                "instruction": 218442,
+                "target": 218618
+              }
+            ],
+            "evidence": "explicit_u_or_c7",
+            "length": 30,
+            "literals": [
+              {
+                "instruction": 218414,
+                "value": 33529349
+              }
+            ],
+            "role": "ControlField",
+            "site": 218414,
+            "variant": "modern_redundant_c8_test"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883002,
+                "target": 883250
+              },
+              {
+                "instruction": 883010,
+                "target": 883044
+              },
+              {
+                "instruction": 883016,
+                "target": 1285464
+              },
+              {
+                "instruction": 883026,
+                "target": 883058
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 38,
+            "literals": [
+              {
+                "instruction": 882990,
+                "value": 33529349
+              },
+              {
+                "instruction": 883024,
+                "value": 20913
+              }
+            ],
+            "role": "ForwardCalculation",
+            "site": 882990,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 883226,
+                "target": 883002
+              },
+              {
+                "instruction": 883234,
+                "target": 883272
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 22,
+            "literals": [
+              {
+                "instruction": 883214,
+                "value": 33529349
+              }
+            ],
+            "role": "ReverseCalculation",
+            "site": 883214,
+            "variant": "classic"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 884510,
+                "target": 884636
+              },
+              {
+                "instruction": 884518,
+                "target": 884522
+              },
+              {
+                "instruction": 884532,
+                "target": 884552
+              },
+              {
+                "instruction": 884540,
+                "target": 884552
+              },
+              {
+                "instruction": 884550,
+                "target": 884568
+              }
+            ],
+            "evidence": "recognized_legacy_path",
+            "length": 72,
+            "literals": [
+              {
+                "instruction": 884498,
+                "value": 33529349
+              },
+              {
+                "instruction": 884528,
+                "value": 69251456
+              },
+              {
+                "instruction": 884534,
+                "value": 33557265
+              },
+              {
+                "instruction": 884554,
+                "value": 1356531
+              }
+            ],
+            "role": "ParameterNibble",
+            "site": 884498,
+            "variant": "classic_register_variant"
+          },
+          {
+            "edges": [
+              {
+                "instruction": 892630,
+                "target": 892864
+              },
+              {
+                "instruction": 892642,
+                "target": 892798
+              },
+              {
+                "instruction": 892650,
+                "target": 892658
+              },
+              {
+                "instruction": 892656,
+                "target": 892798
+              }
+            ],
+            "evidence": "hardware_policy_only",
+            "length": 48,
+            "literals": [
+              {
+                "instruction": 892612,
+                "value": 33529349
+              },
+              {
+                "instruction": 892620,
+                "value": 33529286
+              },
+              {
+                "instruction": 892622,
+                "value": 33557260
+              },
+              {
+                "instruction": 892624,
+                "value": 33529351
+              },
+              {
+                "instruction": 892626,
+                "value": 33530777
+              },
+              {
+                "instruction": 892632,
+                "value": 33529353
+              }
+            ],
+            "role": "HardwareDefaults",
+            "site": 892610,
+            "variant": "slim_fixed6_no_c7_test"
+          }
+        ],
+        "classification": "mixed_reviewed_roles",
+        "di_recognition": "recognized_legacy_path",
+        "explicit_roles": 1,
+        "legacy_dependencies": [
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "DI"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "auxiliary_selectors"
+          },
+          {
+            "bound": true,
+            "contract": "ClassicPosition { entry: 880700, state: 33529349, mode: 33530777, table: 1369180, input: C7Selection { site: 880720, replay: [11264], span: 4, accept: 880724, reject: 880756 }, output: C7Selection { site: 880846, replay: [17295], span: 4, accept: 880850, reject: 880852 }, callers: [SavedLink { entry: 880700, site: 880720, stack_bytes: 20, returns: [880854], source: [38, 57, 148, 171, 239, 176, 181, 167, 87, 215, 183, 182, 119, 180, 226, 77, 255, 181, 55, 255, 18, 74, 129, 173, 84, 66, 105, 72, 168, 50, 101, 241] }, SavedLink { entry: 880700, site: 880846, stack_bytes: 20, returns: [880854], source: [38, 57, 148, 171, 239, 176, 181, 167, 87, 215, 183, 182, 119, 180, 226, 77, 255, 181, 55, 255, 18, 74, 129, 173, 84, 66, 105, 72, 168, 50, 101, 241] }] }",
+            "role": "position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "position_setup"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "read_position"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "parameters"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "calibration"
+          },
+          {
+            "bound": false,
+            "error": "UnknownLayout",
+            "role": "completion"
+          }
+        ],
+        "legacy_roles": 5,
+        "physical_reading": "not_determined_by_this_scan",
+        "state_binding_error": null,
+        "state_cell": 33529349,
+        "unknown_roles": 0
+      }
+    }
+  ],
+  "limits": "Seven reviewed instruction roles only; no proof of complete acquisition, density handling, access permission, or physical reading. Unknown is not absence. Signatures never select by model or hash.",
+  "producer_version": "0.15.5",
+  "schema": "mtk-uhd-code-evidence-v1",
+  "totals": {
+    "legacy_code_in_reviewed_roles": 1,
+    "mixed_reviewed_roles": 9
+  },
+  "unidentified_inputs_scanned": 0
+}

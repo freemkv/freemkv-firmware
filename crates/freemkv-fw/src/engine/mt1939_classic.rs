@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use freemkv_flash::cmac;
 
 use super::core::*;
-use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
+use super::lever::{HookReport, LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use super::CreateReport;
 use crate::abi;
@@ -19,7 +19,101 @@ use crate::boot::BootSettings;
 use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
+// UH12NS30 JBC5 schedules the first state-pointer load through r7 before
+// adding the session offset. The resulting state byte and CMP/BNE contract
+// are identical to the classic r1-only producer, including their offsets.
+const VID_GATE_SIG_CLASSIC_R7: &[(u16, u16)] = &[
+    (0x7aa8, 0xffff),
+    (0x4900, 0xff00),
+    (0x0980, 0xffff),
+    (0x4f00, 0xff00),
+    (0x1840, 0xffff),
+    (0x6839, 0xffff),
+    (0x0400, 0xffff),
+    (0x0c00, 0xffff),
+    (0x1808, 0xffff),
+    (0x4900, 0xff00),
+    (0x0200, 0xffff),
+    (0x6809, 0xffff),
+    (0x0a00, 0xffff),
+    (0x1840, 0xffff),
+    (0x7800, 0xffff),
+    (0x2806, 0xffff),
+    (0xd100, 0xff00),
+];
+
+// WH16NS48 1.D3 keeps the authenticated response construction between the
+// success and rejection writers (OEM 0x181c08..0x181c6e). Bind both complete
+// response arms, their common call and both state-setter calls below.
+const AKE_GATE_SIG_CLASSIC_SPLIT: &[(u16, u16)] = &[
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2106, 0xffff),
+    (0xf000, 0xf800),
+    (0xf800, 0xf800),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2802, 0xffff),
+    (0xd200, 0xff00),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x1980, 0xffff),
+    (0x6821, 0xffff),
+    (0x0400, 0xffff),
+    (0x0c00, 0xffff),
+    (0x1808, 0xffff),
+    (0x6839, 0xffff),
+    (0x0200, 0xffff),
+    (0x0a00, 0xffff),
+    (0x1840, 0xffff),
+    (0x7801, 0xffff),
+    (0xe000, 0xf800),
+    (0x2100, 0xffff),
+    (0x4800, 0xff00),
+    (0xe000, 0xf800),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2101, 0xffff),
+    (0xf000, 0xf800),
+    (0xf800, 0xf800),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2802, 0xffff),
+    (0xd200, 0xff00),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x1980, 0xffff),
+    (0x6821, 0xffff),
+    (0x0400, 0xffff),
+    (0x0c00, 0xffff),
+    (0x1808, 0xffff),
+    (0x6839, 0xffff),
+    (0x0200, 0xffff),
+    (0x0a00, 0xffff),
+    (0x1840, 0xffff),
+    (0x7801, 0xffff),
+    (0xe000, 0xf800),
+    (0x2100, 0xffff),
+    (0x4800, 0xff00),
+    (0xf000, 0xf800),
+    (0xf800, 0xf800),
+];
+
 impl Mt1959Engine {
+    pub(super) fn emit_media_conversion_classic(
+        &self,
+        source: &[u8],
+        out: &mut Vec<u8>,
+        flags: u32,
+    ) -> (HookReport, u32) {
+        let result = super::mt1939_uhd::UhdConversionPlan::inspect(source)
+            .and_then(|plan| plan.apply(source, out, flags));
+        match result {
+            Ok(count) => (HookReport::applied("uhd-conversion",
+                format!("complete media group: classic {count} source-bound helpers; software qualification pending")),count as u32),
+            Err(e) => (HookReport::unavailable("uhd-conversion",format!("0 conversion edits: {e:#}")),0),
+        }
+    }
     /// Thumb-1 selector detour: choose the native maximum only when enabled.
     /// The library proves every leaf path reaches this tail and binds RMAX to
     /// its native setter and the selector consumer to OPTM. No write speed or
@@ -139,24 +233,15 @@ impl Mt1959Engine {
     /// `mt1939-classic-identity-base.md` proves 17/17, mirroring the base tier of
     /// [`Self::build_modify_classic`] but producing a [`CreateReport`].
     ///
-    /// Ships the injected `0x3C-0E` handler (Identity / SET / GET / SAVE / RESET /
-    /// DumpAll) + record repoint + CMAC re-sign, and — now that the classic boot
-    /// hook is blessed (`CLASSIC_BOOT_BLESSED`, emulation-verified) — the always-on
-    /// boot-init hook plus the classic feature stubs, mirroring the modern
-    /// [`Self::build_report`] structure (boot FIRST, then features).
-    ///
-    /// **SAFETY COUPLING.** The boot hook fills the flag table with `0xFF` at
-    /// power-on, which is what makes the tri-state `0x00 == OFF` invariant every
-    /// feature stub relies on hold on a freshly powered drive. It is therefore
-    /// emitted FIRST and every feature emit is gated on its success; if
-    /// `Self::emit_boot_init` fails on some classic image, this falls back to a
-    /// BARE base (handler + record repoint + CMAC only) and ships NO feature stub —
-    /// never a feature that would boot into its OFF state without the 0xFF-fill.
+    /// Installs the command handler, repoints its record and re-signs CMAC.
+    /// The source-qualified boot hook initializes the requested settings before
+    /// feature hooks run. If boot initialization cannot be installed, the base
+    /// report contains no feature hooks.
     ///
     /// Feature availability follows the emitted hooks. Classic read speed uses
     /// the native selector/RMAX contract, not the modern ramp gate. Region,
-    /// Encryption and HRL retain their own evidence. UHD/BD conversion remains
-    /// unavailable until the native recognition and read path are established.
+    /// Encryption and HRL retain their own evidence. Media conversion requires
+    /// the complete source-bound group; physical reading remains unqualified.
     pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
         self.build_report_classic_with_defaults(image, &BootSettings::standard())
     }
@@ -172,67 +257,45 @@ impl Mt1959Engine {
         }
 
         // ---- BASE (mandatory) — classic finders, all PROVEN 17/17.
-        let scanner_entry = self
-            .find_scanner_entry(image)
-            .context("classic base: dispatch scanner not found")?;
-        let cdb_base = self
-            .find_cdb_base(image)
-            .context("classic base: CDB base")?;
-        self.find_response_writer(image)
-            .context("classic base: response writer")?;
-        self.find_response_commit(image)
-            .context("classic base: response commit")?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis
+            .commands()
+            .context("classic base: native command ownership")?;
+        let scanner_entry = commands.scanner().entry() as u32;
+        let cdb_base = commands.scanner().cdb();
+        analysis.response().context("classic base: response I/O")?;
         // sense_setter is a REPORT anchor only (build_handler never uses it); the
         // classic scanner raises sense inline, so the modern shape legitimately
         // misses. Best-effort (0 when absent) — never blocks the base.
-        let sense_setter = self.sense_setter(image).unwrap_or(0);
+        let sense_setter = Self::sense_setter_at(image, commands.scanner().entry()).unwrap_or(0);
 
         // Classic 0x3C dispatch table lives in its own window (~0x1a4000), NOT the
         // modern find_live_record windows.
-        const CLASSIC_TABLE_LO: usize = 0x001a_0000;
-        const CLASSIC_TABLE_HI: usize = 0x001a_8000;
-        let record = self
-            .find_live_record_in(
-                image,
-                abi::READ_BUFFER_OPCODE,
-                CLASSIC_TABLE_LO,
-                CLASSIC_TABLE_HI,
-            )
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)
             .context("classic base: live 0x3C dispatch record")?;
 
         // Classic SRAM map differs from MT1959 — derive an unreferenced cell from
         // THIS image (the modern FLAG_TABLE_BASE collides with classic live SRAM).
-        let flag_base = self
-            .find_free_sram_cell(image)
+        let ram = super::sram::SramPlacement::inspect(image);
+        let flag_base = ram
+            .candidate()
             .context("classic base: free SRAM cell for the flag table")?;
-        self.assert_sram_cell_free(
-            image,
+        ram.assert_free(
             flag_base,
             super::core::FLASHWRITE_SCRATCH_OFF + 1,
             "classic flag table and flash scratch",
         )?;
 
-        // Classic reboot verb: bake `boot_init_site - 0x10` (the classic caller_bl_site,
-        // minus 0x10 — the analogous offset to the modern boot function prologue). If
-        // the classic site refuses to resolve, treat the reboot verb as unwired (0)
-        // rather than failing the whole classic base build.
-        // Classic Verb::Reboot: RETIRED (baked as 0 = inert). The modern
-        // `boot_init_site - 0x10` offset is anchored on BOOT_INIT_SIG's fixed
-        // `bmi +3`, so on modern images subtracting 0x10 always lands at the
-        // boot function's push prologue. The classic BOOT_INIT_SIG_CLASSIC
-        // resolves a caller-bl inside whichever parent function calls the
-        // classic leaf helper, and that VA has no fixed offset to any function
-        // entry. Baking `site - 0x10` would blx into garbage and wedge the
-        // drive. Reboot on classic images is left inert (returns zeroed reply,
-        // no side effect); a future signature dedicated to the classic boot
-        // function entry can flip this back on.
+        // No classic reboot function entry is qualified. Its caller site has no
+        // fixed offset to a function prologue, so leave the reboot verb inert.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler_with_defaults(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
+                identity_blob(),
                 defaults,
             )
             .context("classic base: assembling the 3C-0E handler")?;
@@ -264,6 +327,7 @@ impl Mt1959Engine {
         let mut speed_stub_va = 0;
         let mut hrl_sites: Vec<u32> = Vec::new();
         let mut hrl_stub_va = 0u32;
+        let mut uhd_conversion_count = 0;
 
         // SAFETY COUPLING (the whole point of the classic boot blessing): the
         // always-on boot-init hook writes 0xFF into every flag byte at power-on,
@@ -289,7 +353,7 @@ impl Mt1959Engine {
                 speed_stub_va = facts.iter().find(|(k, _)| *k == "speed_stub_va").unwrap().1;
             }
 
-            // Region-free — classic REGION_EMIT_SIG window (proven on classic, the
+            // Region-free — unique native REGION_EMIT_SIG (proven on classic, the
             // same emit `build_modify_classic` ships).
             if let Ok((emitter, va)) = self.emit_region_classic(&mut out, flag_base) {
                 region_emitter = emitter;
@@ -347,6 +411,9 @@ impl Mt1959Engine {
                 hrl_sites = sites;
                 hrl_stub_va = stub_va;
             }
+            uhd_conversion_count = self
+                .emit_media_conversion_classic(image, &mut out, flag_base)
+                .1;
         }
 
         // Downgrade-enable (DE) byte: a fixed base identity-page byte, NOT a
@@ -375,6 +442,7 @@ impl Mt1959Engine {
         let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
 
         Ok(CreateReport {
+            uhd_conversion_count,
             image: signed,
             scanner_entry,
             cdb_base,
@@ -482,61 +550,39 @@ impl Mt1959Engine {
         // response writer/commit that build_handler needs. If any is missing the
         // vendor handler can't be built → this classic build can't run (the caller
         // degrades to the DE-only path).
-        self.find_scanner_entry(image)
-            .context("classic base: dispatch scanner not found")?;
-        self.find_cdb_base(image)
-            .context("classic base: CDB base")?;
-        self.find_response_writer(image)
-            .context("classic base: response writer")?;
-        self.find_response_commit(image)
-            .context("classic base: response commit")?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis
+            .commands()
+            .context("classic base: native command ownership")?;
+        analysis.response().context("classic base: response I/O")?;
 
         // Classic dispatch table window (~0x1a4000, engine-scope §1).
-        const CLASSIC_TABLE_LO: usize = 0x001a_0000;
-        const CLASSIC_TABLE_HI: usize = 0x001a_8000;
-        let record = self
-            .find_live_record_in(
-                image,
-                abi::READ_BUFFER_OPCODE,
-                CLASSIC_TABLE_LO,
-                CLASSIC_TABLE_HI,
-            )
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)
             .context("classic base: live 0x3C dispatch record")?;
 
         // Statically unreferenced candidate for the freemkv flag table (classic SRAM map
         // differs from MT1959, so we do not reuse the MT1959 FLAG_TABLE_BASE
         // placeholder — we derive an unreferenced cell from THIS image).
-        let flag_base = self
-            .find_free_sram_cell(image)
+        let ram = super::sram::SramPlacement::inspect(image);
+        let flag_base = ram
+            .candidate()
             .context("classic base: free SRAM cell for the flag table")?;
-        self.assert_sram_cell_free(
-            image,
+        ram.assert_free(
             flag_base,
             super::core::FLASHWRITE_SCRATCH_OFF + 1,
             "classic flag table and flash scratch",
         )?;
 
-        // Classic reboot verb: same rule as build_report_classic — bake
-        // `boot_init_site - 0x10` from the classic caller_bl_site when it
-        // resolves (blessed), else 0 (unwired). Keeps modify byte-identical to
-        // create on the classic base.
-        // Classic Verb::Reboot: RETIRED (baked as 0 = inert). The modern
-        // `boot_init_site - 0x10` offset is anchored on BOOT_INIT_SIG's fixed
-        // `bmi +3`, so on modern images subtracting 0x10 always lands at the
-        // boot function's push prologue. The classic BOOT_INIT_SIG_CLASSIC
-        // resolves a caller-bl inside whichever parent function calls the
-        // classic leaf helper, and that VA has no fixed offset to any function
-        // entry. Baking `site - 0x10` would blx into garbage and wedge the
-        // drive. Reboot on classic images is left inert (returns zeroed reply,
-        // no side effect); a future signature dedicated to the classic boot
-        // function entry can flip this back on.
+        // No classic reboot function entry is qualified. Its caller site has no
+        // fixed offset to a function prologue, so leave the reboot verb inert.
         let boot_function_entry: u32 = 0;
         let handler_bytes = self
-            .build_handler_with_defaults(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
+                identity_blob(),
                 defaults,
             )
             .context("classic base: assembling the 3C-0E handler")?;
@@ -639,6 +685,12 @@ impl Mt1959Engine {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
         });
 
+        let (conversion, count) = self.emit_media_conversion_classic(image, &mut out, flag_base);
+        if let Some(raw_read) = levers.iter_mut().find(|l| l.id == LeverId::RawRead) {
+            raw_read.hooks.push(conversion);
+            raw_read.facts.push(("uhd_conversion_count", count));
+        }
+
         // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));
 
@@ -675,10 +727,10 @@ impl Mt1959Engine {
         })
     }
 
-    /// Region-free emission for the MT1939 classic window (mirrors [`Self::emit_region`]
-    /// with the classic `REGION_EMIT_SIG` window, `~0x154000..0x157000`).
+    /// Region-free emission using the unique native RPC emitter grammar.
+    /// Classic application layouts relocate it across the image.
     pub(crate) fn emit_region_classic(&self, out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
-        let region_emitter = self.find_region_emitter_in(out, 0x0015_0000, 0x0016_0000)?;
+        let region_emitter = self.find_region_emitter(out)?;
         let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
         let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
@@ -726,7 +778,11 @@ impl Mt1959Engine {
 
         // ---- validate (read-only) ----
         // Classic VID producer Gate-A, required unique.
-        let vid_gate = match masked_matches(image, VID_GATE_SIG_CLASSIC, lo, hi).as_slice() {
+        let mut vid_gates = masked_matches(image, VID_GATE_SIG_CLASSIC, lo, hi);
+        vid_gates.extend(masked_matches(image, VID_GATE_SIG_CLASSIC_R7, lo, hi));
+        vid_gates.sort_unstable();
+        vid_gates.dedup();
+        let vid_gate = match vid_gates.as_slice() {
             [one] => *one,
             hits => bail!(
                 "classic VID gate matched {} time(s) in [0x{lo:x},0x{hi:x}) (want 1)",
@@ -770,18 +826,38 @@ impl Mt1959Engine {
         // find_vid_gate whose window can miss a classic image whose AACS block is
         // relocated (e.g. BE14NU40 1.01 at ~0x180k). Best-effort: never fail the
         // classic Raw-read/AKE emit on an audit anchor.
-        let (vid_producer, scratch) = self.find_vid_producer(image).unwrap_or((0, 0));
+        let vid_output = self.find_vid_producer(image).ok();
 
         // Classic AKE accept gate (04 02), required unique. The reject writer folds
         // the `lsrs` (AGID compute) into the 4 replaced bytes.
-        let ake = match masked_matches(image, AKE_GATE_SIG_CLASSIC, lo, hi).as_slice() {
+        let mut ake_gates: Vec<_> = masked_matches(image, AKE_GATE_SIG_CLASSIC, lo, hi)
+            .into_iter()
+            .map(|gate| (gate, gate + 6))
+            .collect();
+        for gate in masked_matches(image, AKE_GATE_SIG_CLASSIC_SPLIT, lo, hi) {
+            for (branch, target) in [(16, 44), (42, 46), (48, 98), (66, 94), (92, 96)] {
+                let decoded = thumb::isa::decode_at(image, gate + branch)
+                    .and_then(|instruction| instruction.branch_target());
+                if decoded != Some((gate + target) as u32) {
+                    bail!("classic split AKE response branches cross native arms");
+                }
+            }
+            let success =
+                thumb::decode_bl(image, gate + 6).context("classic split AKE success setter")?;
+            let reject =
+                thumb::decode_bl(image, gate + 56).context("classic split AKE reject setter")?;
+            if success != reject {
+                bail!("classic split AKE writers name different state setters");
+            }
+            ake_gates.push((gate, gate + 52));
+        }
+        let (ake, ake_site) = match ake_gates.as_slice() {
             [one] => *one,
             hits => bail!(
                 "classic AKE gate matched {} time(s) in [0x{lo:x},0x{hi:x}) (want 1)",
                 hits.len()
             ),
         };
-        let ake_site = ake + 6;
         let lsrs_hw = u16::from_le_bytes([image[ake_site], image[ake_site + 1]]);
         let movs_hw = u16::from_le_bytes([image[ake_site + 2], image[ake_site + 3]]);
         if lsrs_hw != 0x0980 || movs_hw != 0x2101 {
@@ -790,7 +866,7 @@ impl Mt1959Engine {
                  (got 0x{lsrs_hw:04x} 0x{movs_hw:04x})"
             );
         }
-        let ake_back = (ake + 0xa) as u32; // shared `bl set_agid_state` call site
+        let ake_back = (ake_site + 4) as u32; // native `bl set_agid_state` call site
         let ake_bytes = self.build_ake_stub_classic(flag_base, ake_back)?;
 
         // ---- commit on a working copy (atomic) ----
@@ -822,7 +898,7 @@ impl Mt1959Engine {
         )?;
 
         *out = w;
-        Ok(vec![
+        let mut facts = vec![
             ("gatea_gate", gatea_cmp as u32),
             ("gatea_stub_va", gatea_stub_va),
             ("gatea_authed", gatea_authed),
@@ -830,9 +906,15 @@ impl Mt1959Engine {
             ("ake_stub_va", ake_stub_va),
             ("ake_gate", ake as u32),
             ("deny", gatea_deny),
-            ("scratch", scratch),
-            ("vid_producer", vid_producer),
-        ])
+        ];
+        if let Some((vid_producer, scratch)) = vid_output {
+            facts.extend([("scratch", scratch), ("vid_producer", vid_producer)]);
+        } else {
+            // These helpers use the native producer and never access a clear
+            // VID buffer directly. An unbound optional diagnostic is not RAM 0.
+            facts.push(("scratch_not_used_by_helpers", 1));
+        }
+        Ok(facts)
     }
 
     /// Host-Revocation-List skip emission for the MT1939 **classic** cert path — the
@@ -866,8 +948,11 @@ impl Mt1959Engine {
     ) -> Result<(Vec<u32>, u32)> {
         use super::mt1939::{masked_matches, HRL_LOOKUP_SIG_CLASSIC};
 
-        // ---- locate the classic HRL lookup routine, required unique image-wide ----
-        let hrl = match masked_matches(image, HRL_LOOKUP_SIG_CLASSIC, 0, image.len()).as_slice() {
+        // ---- locate the HRL lookup routine, required unique across native
+        // translation orders. UH12 combines classic boot with modern HRL. ----
+        let mut hrl_routines = masked_matches(image, HRL_LOOKUP_SIG_CLASSIC, 0, image.len());
+        hrl_routines.extend(masked_matches(image, HRL_LOOKUP_SIG, 0, image.len()));
+        let hrl = match hrl_routines.as_slice() {
             [one] => *one as u32,
             hits => bail!(
                 "classic HRL lookup matched {} time(s) image-wide (want 1)",
@@ -931,7 +1016,9 @@ impl Mt1959Engine {
         //      `ldrb r0,[r5,#2]; cmp r0,#0; bne …; movs r0,#0x6f` (the 6F deny). ----
         let t = revoke as usize;
         let head_ok = t + 8 <= image.len()
-            && hw(t) == 0x78A8 // ldrb r0,[r5,#2]   (classic r5; modern head is r4/0x78A0)
+            // The lookup's scheduling and its caller's register allocation are
+            // independent: UH12 has modern lookup order with a classic r5 head.
+            && matches!(hw(t), 0x78a8 | 0x78a0)
             && hw(t + 2) == 0x2800 // cmp  r0,#0
             && (hw(t + 4) & 0xFF00) == 0xD100 // bne  <loop>
             && hw(t + 6) == 0x206F; // movs r0,#0x6f   (6F copy-protection sense)

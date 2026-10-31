@@ -497,7 +497,7 @@ fn fully_landed() -> (Vec<u8>, ModifyReport) {
     img[ro + 4..ro + 8].copy_from_slice(&(HANDLER_VA | 1).to_le_bytes());
     install_bl(&mut img, SPEED_GATE + 4, SPEED_STUB);
     install_bl(&mut img, REGION_EMITTER + 6, REGION_STUB);
-    install_bw(&mut img, AKE_SITE, AKE_STUB);
+    install_bl(&mut img, AKE_SITE, AKE_STUB);
     install_bl(&mut img, GATEA_SITE, GATEA_STUB);
     img[DE_OFF as usize] = 0xDE;
     let img = signed(img);
@@ -583,13 +583,12 @@ fn a_fully_landed_synthetic_image_passes_every_structural_audit_check() {
         12,
         "no check silently dropped or duplicated"
     );
-    // The AKE install here is a `B.W`; the detail must say so, because that
-    // string is how a failing audit tells an operator which shape it saw.
+    // The AKE install is the source-qualified Thumb-1 BL.
     assert!(
         find(&a, "Raw read", "AKE detour branch")
             .detail
-            .contains("(b.w)"),
-        "a B.W install must be reported as b.w, got: {}",
+            .contains("(bl)"),
+        "a BL install must be reported as bl, got: {}",
         find(&a, "Raw read", "AKE detour branch").detail
     );
 }
@@ -660,10 +659,7 @@ fn a_stub_that_runs_off_the_end_of_the_image_is_not_present() {
     );
 }
 
-/// The AKE arm accepts EITHER a wide `B.W` (tail-call install) or a wide `BL`
-/// (shared-call install). Both shapes must pass and be named correctly — if the
-/// `BL` arm stopped matching, every NB-class build would audit red, and an
-/// operator would re-flash chasing a bug that is not there.
+/// AKE installations require the exact source-qualified Thumb-1 BL.
 #[test]
 fn the_ake_detour_check_accepts_a_wide_bl_install_and_names_it() {
     let mut img = blank();
@@ -699,7 +695,7 @@ fn the_ake_detour_check_accepts_a_wide_bl_install_and_names_it() {
 #[test]
 fn an_ake_branch_into_a_blank_stub_fails_the_audit() {
     let mut img = blank();
-    install_bw(&mut img, AKE_SITE, AKE_STUB); // stub deliberately left erased
+    install_bl(&mut img, AKE_SITE, AKE_STUB); // stub deliberately left erased
     let report = report_of(
         img,
         vec![applied(
@@ -752,7 +748,7 @@ fn an_ake_hook_site_at_the_final_four_bytes_of_the_image_passes() {
     let mut img = blank();
     write_stub(&mut img, AKE_STUB);
     let site = (IMG_LEN - 4) as u32;
-    install_bw(&mut img, site, AKE_STUB);
+    install_bl(&mut img, site, AKE_STUB);
     let report = report_of(
         img,
         vec![applied(
@@ -1250,4 +1246,24 @@ fn classic_speed_tail_requires_saved_lr_and_thumb1_call() {
     assert!(audit_image(original, &report)
         .failures()
         .any(|c| c.what == "classic speed saved return"));
+}
+
+#[test]
+fn ake_audit_refuses_an_alternative_branch_encoding_with_the_same_target() {
+    let mut img = blank();
+    write_stub(&mut img, AKE_STUB);
+    install_bw(&mut img, AKE_SITE, AKE_STUB);
+    let report = report_of(
+        img,
+        vec![applied(
+            LeverId::RawRead,
+            vec![("ake_site", AKE_SITE), ("ake_stub_va", AKE_STUB)],
+        )],
+    );
+    let check = find(
+        &audit_image(&blank(), &report),
+        "Raw read",
+        "AKE detour branch",
+    );
+    assert!(!check.ok, "B.W is not the current source-qualified BL plan");
 }

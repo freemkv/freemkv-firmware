@@ -1,0 +1,50 @@
+{
+  "status": "ready-for-hardware-testing",
+  "version": "0.16.0",
+  "modifiable_and_software_validated": 123,
+  "hardware_validated": 0,
+  "groups": {
+    "newer1959": 82,
+    "older1959": 12,
+    "classic1939": 29
+  },
+  "website_entries_supported": 97,
+  "website_entries_total": 98,
+  "excluded_outlier": "BP50NB40 1.00 c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+  "tested_input_count": 126,
+  "raw_readback_refusals": [
+    "40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2",
+    "5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073",
+    "d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4"
+  ],
+  "all_five_features": [
+    "speed",
+    "region",
+    "encryption",
+    "hrl",
+    "unrestricted"
+  ],
+  "software_checks": {
+    "installed_stages": 2019,
+    "native_stages": 510,
+    "installed_cases": 5249574,
+    "native_cases": 869720,
+    "rust_tests_passed": 238,
+    "python_tests_run": 39,
+    "python_not_applicable_skips": 2,
+    "reset_mutants_detected": 282
+  },
+  "qualification": "Defined source-bound software contracts passed; finite RAM inputs and bounded native calls do not prove all possible software states, complete boot/resident/MMIO behavior, physical detection, reading or AACS completion.",
+  "post_corpus_source_changes": "Only two standalone mutation-test setup fixes and one new deny-continuation mutation test; production and corpus execution modules unchanged. Those tests then passed against the final outputs.",
+  "dependency_commit": "9456d3a9154e10f60ad8745c81a6e2c4c4eec0c8",
+  "artifacts": {
+    "mediatek-0160-final-20261031-receipt.json.gz": "21fb9c05b6e4e8ac0c1b437fd236bad167de46f26d6d4fe56dba15e5e5f35472",
+    "mediatek-0160-final-20261031-capability-matrix.json.gz": "02b28600aac2e8bc25a846538dd36e979002cd8297e75f80f9018a94076aeeab",
+    "mediatek-0160-final-20261031-source-snapshot.tar.gz": "3755743c29c9734f71cd8a626df2a6d6ff4381c751e882847e5f8e02af585d7c",
+    "mediatek-0160-final-20261031-rust-tests.txt": "97c8c6e3a713e118e1304cd45e83deac163a9cbe740fa2ae9b9981b76af95bd8",
+    "mediatek-0160-final-20261031-python-tests.txt": "c4e12ff3d99aa0ea3b953c31679209c71c95e6016622b83c10f91229b12bb729",
+    "mediatek-0160-final-20261031-newer-ake-tests.txt": "df59baa50d649f539b61dac66bf20b4b7138d9bc821cff34f88fcad5f3f8f6c7",
+    "mediatek-0160-final-20261031-deny-mutations.json": "220e48ef9c983cbd25c98807248ae57229265aab940b53d868bebb885cc36f3a",
+    "mediatek-0160-final-20261031-website-scope.json": "d07bbd39a5366216f47a53059b2593f8ee65907eb5af64c7d1b6647b337d8480"
+  }
+}

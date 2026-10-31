@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "scope": "Named software-stage inputs. Media state and authentication band are supplied at their bound stage, not a simulated laser or a complete drive boot.",
+  "profiles": [
+    {"id": "cd", "media_state": 0, "auth_band": 0},
+    {"id": "dvd_single_layer", "media_state": 64, "auth_band": 4},
+    {"id": "dvd_dual_layer", "media_state": 68, "auth_band": 4},
+    {"id": "bd_single_layer", "media_state": 192, "auth_band": 12},
+    {"id": "bd_dual_layer", "media_state": 196, "auth_band": 12},
+    {"id": "bdxl_three_layer", "media_state": 200, "auth_band": 12},
+    {"id": "uhd_dual_layer", "media_state": 199, "auth_band": 12},
+    {"id": "uhd_three_layer", "media_state": 200, "auth_band": 12},
+    {"id": "invalid_state", "media_state": 255, "auth_band": 15}
+  ],
+  "unbound_full_drive_scenarios": ["no_disc_acquisition", "optical_read_error", "physical_layer_boundary_read"]
+}

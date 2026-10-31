@@ -1,0 +1,19 @@
+{
+  "schema": "final-production-mutations-v1",
+  "tests": 24,
+  "passed": true,
+  "log_sha256": "6463d0fd25c92ef2217e57120d78795e7b537c66dd125db20a40971eed0cfb5c",
+  "final_source_snapshot_sha256": "fcbab9d06958dccb5af42c3764b55a698e9eeb03ec79880179f7abfbbfa5ca77",
+  "fixtures": [
+    {
+      "original.bin": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+      "modify.json": "bf89d96257cee1ebe9cb814c090110d91ed5ae747733d0eca689852ae6ca801a",
+      "modified.bin": "bf081ce9d0028d79bab78947374a01c823ec8b5554fc4a9901ffbeb59701931d"
+    },
+    {
+      "original.bin": "614b41f61837f84a46b73fe4da28ff9db13bf45fe291f2728a5197c67857446e",
+      "modify.json": "a63b3e16022391900677818ee0585f1e5e18c3bf20eefc8c7089fcaa5fa42a0c",
+      "modified.bin": "b5be4ae3c94de6b1437ff48fe837073aad284a15d067ad785d48e97f2cfa56fb"
+    }
+  ]
+}

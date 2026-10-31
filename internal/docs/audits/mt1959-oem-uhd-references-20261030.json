@@ -1,0 +1,266 @@
+{
+  "scope": "Nine stock-source hashes across four manufacturer-advertised UHD product families. OEM UHD is a product/source qualification, not nine local operational tests. Hashes pin evidence; patches must use signatures.",
+  "references": [
+    {
+      "sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+      "product": "LG WH16NS60",
+      "url": "https://www.lg.com/us/burners-drives/lg-wh16ns60-internal-blu-ray-dvd-drive",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/198c01224a0ad29baca6b532aec928989d60db4caed765a29988c165940449a0/mediatek-81ff38130af0b31174e730e4458d0ef566825377a113d62b02814a814fe890d6.firmware.tar",
+          "candidate": "WH16NS60.zip::WH16NS60.exe::rsrc49::decoded",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "198c01224a0ad29baca6b532aec928989d60db4caed765a29988c165940449a0"
+        },
+        {
+          "bundle": "bundles/546daa60c625e91cb82ebedaa0b5ce2991bdb45466bec2cb75393de938e5e03f/mediatek-3c7958f6b5b4006a3c51b30f5990ecf53990578c81a318e5ca6c5eb94e7fbd9e.firmware.tar",
+          "candidate": "LG_WH16NS60_1.01_17327061143.bin::decoded",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "546daa60c625e91cb82ebedaa0b5ce2991bdb45466bec2cb75393de938e5e03f"
+        },
+        {
+          "bundle": "bundles/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2/mediatek-9103c6f3a1b83a77c41215b0bad3d7c14b00a23f38b4335285867d8346f3f79f.firmware.tar",
+          "candidate": "WH16NS60_1.01_aea98763.bin",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2"
+        },
+        {
+          "bundle": "bundles/e99cf91b88295954bd43a65901d2d1ae471036fc7455723c5d4fe48142641814/mediatek-117a1a8f8f336799622d6ced207e2fc5439b52b928023390842de585daad4289.firmware.tar",
+          "candidate": "17327061143_N1.01_WH16NS60_171120_only_NOBJ.exe::rsrc49::decoded",
+          "member": "images/aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "e99cf91b88295954bd43a65901d2d1ae471036fc7455723c5d4fe48142641814"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source provenance; not a local physical test."
+    },
+    {
+      "sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+      "product": "LG WH16NS60",
+      "url": "https://www.lg.com/us/burners-drives/lg-wh16ns60-internal-blu-ray-dvd-drive",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/15b4c454f706d09e6ad9ab5eb62fe3c138fc193d0d310c1df24d79004d365e59/mediatek-a4f7d528496ff07e7436e07e7e84e13a6b43c48cd3b39324283255685916e9ae.firmware.tar",
+          "candidate": "LG_WH16NS60_1.03_Original_Flasher(2).zip::WH16NS60_1.03/WH16NS60_1.03.exe::rsrc49::decoded::decoded",
+          "member": "images/f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "15b4c454f706d09e6ad9ab5eb62fe3c138fc193d0d310c1df24d79004d365e59"
+        },
+        {
+          "bundle": "bundles/b75e1bd9f54c98458ab343f1c34044d1309f9217c47a9e383e0252edd3135035/mediatek-be154d7fceb0b40ee2b65321709de7772e3ad753bff322d08d15801f952d65f2.firmware.tar",
+          "candidate": "LG_WH16NS60_1.03_Original_Flasher(2).exe::rsrc49::decoded::decoded",
+          "member": "images/f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "b75e1bd9f54c98458ab343f1c34044d1309f9217c47a9e383e0252edd3135035"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source provenance; not a local physical test."
+    },
+    {
+      "sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263",
+      "product": "HLDS BU40N general retail",
+      "url": "https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/076a4d5415199b944748e9823f007a4a765f4657a0bf78f670e037991f7e45dc/mediatek-3cd470c575398dc4412b2cbcfcdfc16f2fe8c560b9628d0a1921e91352a3cd7a.firmware.tar",
+          "candidate": "17327060418_N1.02_U40N_171120_only_NOBJ.exe::rsrc48::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "076a4d5415199b944748e9823f007a4a765f4657a0bf78f670e037991f7e45dc"
+        },
+        {
+          "bundle": "bundles/2bcef5df48529b6de60a5e24ff3c6e4ec44acd425f4f627d20072c3232af60df/mediatek-65f8c8a3ea506a91045d3a2c9e73906ad25a15543a9e5e3902cf676dfef7b06e.firmware.tar",
+          "candidate": "lg_BU40N_N1.02.zip::BU40N.exe::rsrc48::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "2bcef5df48529b6de60a5e24ff3c6e4ec44acd425f4f627d20072c3232af60df"
+        },
+        {
+          "bundle": "bundles/881ca32eb9dd3a7f1c7edc2cf7cd52074de13667aa26b18cd5282c410a843118/mediatek-c49e17bf4f2263b97f9555146903e27f1697a9675de09db8e8ff155322aca54c.firmware.tar",
+          "candidate": "LG_BU40N_1.02_17327060418.bin::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "881ca32eb9dd3a7f1c7edc2cf7cd52074de13667aa26b18cd5282c410a843118"
+        },
+        {
+          "bundle": "bundles/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263/mediatek-7dfac90c2a70325c21f622598ecf3dbea40f87f8ee694026e16584d00bbee326.firmware.tar",
+          "candidate": "BU40N_1.02_97bee5c5.bin",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263"
+        },
+        {
+          "bundle": "bundles/a3dc7160e57af629b8019859d5fbcbd23b42e3c7401c88fb3b588f7394bb84b4/mediatek-3620a0e61f36dcd25a1045cd15285e14de6d309f67414e864ecb9ee2bc505acc.firmware.tar",
+          "candidate": "Asus SBW-06D5H-U.zip::Asus SBW-06D5H-U/Crossflash_firmware/other-DO-NOT-USE/BU40N_1.02.zip::BU40N.exe::rsrc48::decoded",
+          "member": "images/97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "a3dc7160e57af629b8019859d5fbcbd23b42e3c7401c88fb3b588f7394bb84b4"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source provenance; not a local physical test."
+    },
+    {
+      "sha256": "5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69",
+      "product": "HLDS BU40N general retail",
+      "url": "https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/b4151d560fc43975a686b1fcd775a0e558fe139764f8708282511f92c2827855/mediatek-32be7679e8973b38f0bc80e8410cdbd7aee926f35e3f3b33f4c65300cfb4e7a7.firmware.tar",
+          "candidate": "LG_BU40N_1.04_Original_Flasher.zip::BU40N_1.04/BU40N_1.04.exe::rsrc49::decoded::decoded",
+          "member": "images/5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "b4151d560fc43975a686b1fcd775a0e558fe139764f8708282511f92c2827855"
+        },
+        {
+          "bundle": "bundles/bd655b799491c67ccc7789ed4aaa4e9fabd30017103118f0b88a07e0d88b192c/mediatek-2c241cacf2fb365d84762895d65f4a8420dacdc696e39b220ee524811b843d41.firmware.tar",
+          "candidate": "LG_BU40N_1.04_Original_Flasher.exe::rsrc49::decoded::decoded",
+          "member": "images/5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "bd655b799491c67ccc7789ed4aaa4e9fabd30017103118f0b88a07e0d88b192c"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source provenance; not a local physical test."
+    },
+    {
+      "sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8",
+      "product": "LG BP60NB10",
+      "url": "https://media.us.lg.com/m/23735db0ce507a13/original/BP60NB10-Spec-Sheet.PDF",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/256e718763ff02351277dec65e90409131a4d1bc210785aad52e03254d6afb51/mediatek-3014cd4dce907913d794fc538fc5d2f730b7e9362a3151f44c40b3aabbc06ee4.firmware.tar",
+          "candidate": "17327060256_N1.00_P60NB10_171121_only_NOBJ.exe::rsrc49::decoded",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "256e718763ff02351277dec65e90409131a4d1bc210785aad52e03254d6afb51"
+        },
+        {
+          "bundle": "bundles/29901d7771f6f1f9346fab82d9b6fb9449b49fc41f0480f17528079e2e6f6058/mediatek-a8beef71ee1669cdcce4094daacca84b73ee609f0764ab4c0fa9d5bc45a6313d.firmware.tar",
+          "candidate": "LG_BP60NB10_1.00_17327060256.bin::decoded",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "29901d7771f6f1f9346fab82d9b6fb9449b49fc41f0480f17528079e2e6f6058"
+        },
+        {
+          "bundle": "bundles/bbe3e1cc28a48c2d43918fd60a8e04164cb34cbdefb75400cffc50f18e97ac2a/mediatek-f3592c5eb0b51673ace669ec917b85db5901daf1fc40629219ba652a031cc697.firmware.tar",
+          "candidate": "LG_BP60NB10_1.00_Official_Flasher.zip::LG_BP60NB10_1.00_Official_Flasher/BP60NB10_1.00.exe::rsrc49::decoded",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "bbe3e1cc28a48c2d43918fd60a8e04164cb34cbdefb75400cffc50f18e97ac2a"
+        },
+        {
+          "bundle": "bundles/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8/mediatek-2a019241d354d6aa3d9ec05ede49217871b1a4489ab1b70aa29f49fd3fc2619c.firmware.tar",
+          "candidate": "BP60NB10_1.00_f60b037f.bin",
+          "member": "images/f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source provenance; not a local physical test."
+    },
+    {
+      "sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+      "product": "Buffalo BRUHD-PU3 / BU40N BU11",
+      "url": "https://www.buffalo.jp/product/detail/bruhd-pu3-bk.html",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399/mediatek-dba9fe0184fa2488210d95d9356fa4fd492aa1657fea6112bf9c8ee994da38d0.firmware.tar",
+          "candidate": "brdrive_fwupdater_100.exe::brdrive_fwupdater_100/DATA/Buffalo_Special_FW_Updater_1.00.exe::rsrc0",
+          "member": "images/08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399"
+        },
+        {
+          "bundle": "bundles/89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399/mediatek-dba9fe0184fa2488210d95d9356fa4fd492aa1657fea6112bf9c8ee994da38d0.firmware.tar",
+          "candidate": "brdrive_fwupdater_100.exe::overlay::brdrive_fwupdater_100/DATA/Buffalo_Special_FW_Updater_1.00.exe::rsrc0",
+          "member": "images/08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "89776e751332d88c42b1a3e074c4c08ccb0dc2ceee97b54761257db1997e9399"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source provenance; not a local physical test."
+    },
+    {
+      "sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+      "product": "HLDS BU40N general retail",
+      "url": "https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396/mediatek-3356d30c0ca3fb2d2813a1bdf65e1abf6eefd6f0ec9f5e27711ffc892d6b2cda.firmware.tar",
+          "candidate": "BU40N_1.02_1bbeb535.bin",
+          "member": "images/1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396"
+        },
+        {
+          "bundle": "bundles/e8c1feafcbead797a80d63d205e4b10414e69c3e7de52ac9b2456ac4025958bc/mediatek-6ed181de572f0e1cbac9aa88dea20ae4e1b5a746948064053005efc37c1af027.firmware.tar",
+          "candidate": "LG_BU40N_1.02-01_18006090326.bin::decoded",
+          "member": "images/1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "e8c1feafcbead797a80d63d205e4b10414e69c3e7de52ac9b2456ac4025958bc"
+        },
+        {
+          "bundle": "bundles/f3497aeb3ea8807547735c6b8f63b5d5d5b097dc60289476904625863d39e308/mediatek-b57cbb7c3c418f6e1a17dad7153322af53a1c5383b1f51bda22384954eb426d4.firmware.tar",
+          "candidate": "18006090326_N1.02_U40N_171130_only_NOBJ.zip::N1.02_U40N_171130_only_NOBJ.exe::rsrc48::decoded",
+          "member": "images/1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "f3497aeb3ea8807547735c6b8f63b5d5d5b097dc60289476904625863d39e308"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source updater provenance; not a local physical test."
+    },
+    {
+      "sha256": "fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d",
+      "product": "HLDS BU40N general retail",
+      "url": "https://advdownload.advantech.com/productfile/PIS/96SDVR-8X-ST-HL-BB/file/96SDVR-8X-ST-HL-BB_datasheet_2025032820250328133155.pdf",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/a3dc7160e57af629b8019859d5fbcbd23b42e3c7401c88fb3b588f7394bb84b4/mediatek-3620a0e61f36dcd25a1045cd15285e14de6d309f67414e864ecb9ee2bc505acc.firmware.tar",
+          "candidate": "Asus SBW-06D5H-U.zip::Asus SBW-06D5H-U/Crossflash_firmware/BD-RE_BU40N______1.05.exe::rsrc49::decoded::decoded",
+          "member": "images/fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "a3dc7160e57af629b8019859d5fbcbd23b42e3c7401c88fb3b588f7394bb84b4"
+        },
+        {
+          "bundle": "bundles/e0fdf2002a3b4b98f98120d36582270175cde0a7638458679e13fedbdcfaeed5/mediatek-9ce4b47664d1859ceebc7072928fda034ceade575c281e8d37bcce21db090871.firmware.tar",
+          "candidate": "lg_BU40N_1.05.zip::BD-RE_BU40N______1.05.exe::rsrc49::decoded::decoded",
+          "member": "images/fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "e0fdf2002a3b4b98f98120d36582270175cde0a7638458679e13fedbdcfaeed5"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source updater provenance; not a local physical test."
+    },
+    {
+      "sha256": "920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801",
+      "product": "Buffalo BRUHD-PU3 / BU40N BU12",
+      "url": "https://www.buffalo.jp/product/detail/bruhd-pu3-bk.html",
+      "stock_provenance": [
+        {
+          "bundle": "bundles/920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801/mediatek-52004915e069ab284b543d5b79d0adeb08599e53ce3515f6db01b0899c427a0b.firmware.tar",
+          "candidate": "BU40N_BU12_920a89f9.bin",
+          "member": "images/920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801"
+        },
+        {
+          "bundle": "bundles/f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2/mediatek-8d8e583335d4a50e0ca4dc567dc883b35833735f0d8183f4d90aca3f74357ef9.firmware.tar",
+          "candidate": "brdrive_fwupdater_200.exe::brdrive_fwupdater_200/DATA/Buffalo_BU40N_FW_Updater_2.01.exe::rsrc0::decoded",
+          "member": "images/920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2"
+        },
+        {
+          "bundle": "bundles/f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2/mediatek-8d8e583335d4a50e0ca4dc567dc883b35833735f0d8183f4d90aca3f74357ef9.firmware.tar",
+          "candidate": "brdrive_fwupdater_200.exe::overlay::brdrive_fwupdater_200/DATA/Buffalo_BU40N_FW_Updater_2.01.exe::rsrc0::decoded",
+          "member": "images/920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801.bin",
+          "source_byte_offset": 0,
+          "source_sha256": "f0c6de003f7acddb7fa66f863244fe36fae1a2aa1cfa143b8180e04c390a67e2"
+        }
+      ],
+      "qualification": "Manufacturer specification and stock-source updater provenance; not a local physical test."
+    }
+  ]
+}

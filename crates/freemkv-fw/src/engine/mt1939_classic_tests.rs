@@ -65,6 +65,13 @@ fn fixture() -> Vec<u8> {
         .unwrap()
         .anchor();
     image[modern_anchor..modern_anchor + 2].fill(0);
+    // These emitters now recognize both native scheduling generations and
+    // search RPC image-wide. A graft must replace the fixture's native role.
+    for signature in [REGION_EMIT_SIG, HRL_LOOKUP_SIG] {
+        for anchor in masked_matches(&image, signature, 0, image.len()) {
+            image[anchor..anchor + 2].fill(0);
+        }
+    }
     image
 }
 
@@ -386,6 +393,159 @@ fn classic_rawread_image(bne_lo: u8) -> Vec<u8> {
     plant_vid_gate(&mut img, VID, bne_lo);
     plant_ake_gate(&mut img, AKE);
     img
+}
+
+#[test]
+fn classic_rpc_emitter_is_unique_even_outside_the_old_window() {
+    let mut image = fixture();
+    let relocated = 0x1c6000;
+    put_hw(
+        &mut image,
+        relocated,
+        &REGION_EMIT_SIG.iter().map(|p| p.0).collect::<Vec<_>>(),
+    );
+    let (anchor, _) = Mt1959Engine
+        .emit_region_classic(&mut image, FLAG_BASE)
+        .unwrap();
+    assert_eq!(anchor as usize, relocated);
+}
+
+#[test]
+fn classic_rawread_binds_r7_vid_scheduling_and_refuses_mixed_ambiguity() {
+    let mut image = classic_rawread_image(0x12);
+    put_hw(
+        &mut image,
+        VID,
+        &VID_GATE_SIG_CLASSIC_R7
+            .iter()
+            .map(|p| p.0)
+            .collect::<Vec<_>>(),
+    );
+    // Remove only the optional diagnostic buffer literal. The emitted helpers
+    // do not read it, and must not invent a zero-valued buffer fact.
+    let (_, scratch) = Mt1959Engine.find_vid_producer(&image).unwrap();
+    for word in image.as_chunks_mut::<4>().0 {
+        if *word == scratch.to_le_bytes() {
+            word.copy_from_slice(&0xff001234u32.to_le_bytes());
+        }
+    }
+    let mut output = image.clone();
+    let facts = Mt1959Engine
+        .emit_rawread_classic(&image, &mut output, FLAG_BASE)
+        .unwrap();
+    assert!(facts
+        .iter()
+        .all(|p| p.0 != "scratch" && p.0 != "vid_producer"));
+    assert!(facts.contains(&("scratch_not_used_by_helpers", 1)));
+    assert_eq!(
+        facts.iter().find(|p| p.0 == "gatea_gate").unwrap().1,
+        (VID + 30) as u32
+    );
+    plant_vid_gate(&mut image, VID + 0x80, 0x12);
+    let mut output = image.clone();
+    assert!(Mt1959Engine
+        .emit_rawread_classic(&image, &mut output, FLAG_BASE)
+        .is_err());
+    assert_eq!(output, image);
+}
+
+#[test]
+fn classic_split_ake_requires_both_writers_to_call_the_same_setter() {
+    let mut image = classic_rawread_image(0x12);
+    put_hw(
+        &mut image,
+        AKE,
+        &AKE_GATE_SIG_CLASSIC_SPLIT
+            .iter()
+            .map(|p| p.0)
+            .collect::<Vec<_>>(),
+    );
+    for offset in [6, 56] {
+        thumb::write(
+            &mut image,
+            AKE + offset,
+            &thumb::encode_bl(AKE + offset, 0xcadf8).unwrap(),
+        );
+    }
+    for (branch, target, opcode) in [
+        (16, 44, 0xd200),
+        (42, 46, 0xe000),
+        (48, 98, 0xe000),
+        (66, 94, 0xd200),
+        (92, 96, 0xe000),
+    ] {
+        put_hw(
+            &mut image,
+            AKE + branch,
+            &[opcode | ((target - branch - 4) / 2) as u16],
+        );
+    }
+    let mut output = image.clone();
+    let facts = Mt1959Engine
+        .emit_rawread_classic(&image, &mut output, FLAG_BASE)
+        .unwrap();
+    assert_eq!(
+        facts.iter().find(|p| p.0 == "ake_site").unwrap().1,
+        (AKE + 52) as u32
+    );
+    for offset in [16, 42, 48, 66, 92] {
+        let mut changed = image.clone();
+        let opcode = if matches!(offset, 16 | 66) {
+            0xd200
+        } else {
+            0xe000
+        };
+        put_hw(&mut changed, AKE + offset, &[opcode | 1]);
+        let mut output = changed.clone();
+        assert!(Mt1959Engine
+            .emit_rawread_classic(&changed, &mut output, FLAG_BASE)
+            .is_err());
+        assert_eq!(output, changed);
+    }
+    thumb::write(
+        &mut image,
+        AKE + 56,
+        &thumb::encode_bl(AKE + 56, 0xcadfc).unwrap(),
+    );
+    let mut output = image.clone();
+    assert!(Mt1959Engine
+        .emit_rawread_classic(&image, &mut output, FLAG_BASE)
+        .is_err());
+    assert_eq!(output, image);
+}
+
+#[test]
+fn classic_hrl_lookup_order_is_independent_of_the_native_deny_register() {
+    let mut image = fixture();
+    put_hw(
+        &mut image,
+        HRL,
+        &HRL_LOOKUP_SIG.iter().map(|p| p.0).collect::<Vec<_>>(),
+    );
+    for offset in [8, 16] {
+        thumb::write(
+            &mut image,
+            HRL + offset,
+            &thumb::encode_bl(HRL + offset, 0x1000).unwrap(),
+        );
+    }
+    plant_hrl_site(&mut image, HRL + 0x180, HRL, REVOKE);
+    put_hw(&mut image, REVOKE, &[0x78a0, 0x2800, 0xd1fe, 0x206f]);
+    let mut output = image.clone();
+    Mt1959Engine
+        .emit_hrl_classic(&image, &mut output, FLAG_BASE)
+        .unwrap();
+    plant_revoke_head(&mut image, REVOKE);
+    let mut output = image.clone();
+    Mt1959Engine
+        .emit_hrl_classic(&image, &mut output, FLAG_BASE)
+        .unwrap();
+    put_hw(&mut image, REVOKE, &[0x78b0]);
+    let mut output = image.clone();
+    assert!(Mt1959Engine
+        .emit_hrl_classic(&image, &mut output, FLAG_BASE)
+        .is_err());
+    assert_eq!(output, image);
 }
 
 /// Every address `emit_rawread_classic` derives is asserted EXACTLY, because
@@ -821,8 +981,8 @@ fn classic_hrl_refuses_when_any_single_halfword_of_the_oem_6f_deny_head_is_wrong
     let cases: [(usize, u16, &str); 4] = [
         (
             0,
-            0x78A0,
-            "ldrb r0,[r5,#2] (classic r5 — 0x78A0 is the MODERN r4 head)",
+            0x78B0,
+            "ldrb r0,[r4/r5,#2] (neither native deny register)",
         ),
         (2, 0x2801, "cmp r0,#0"),
         (4, 0xD000, "bne <loop>"),
