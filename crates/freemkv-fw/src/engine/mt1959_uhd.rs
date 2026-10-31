@@ -5,7 +5,9 @@
 //! nor generate patches. Existing freemkv AKE/encryption controls are separate.
 //! No incomplete media conversion is installed; physical testing is separate.
 use anyhow::{ensure, Context, Result};
-use mediatek_optical::image::analysis::{LegacyStackDi, SavedLink, UhdArea, UhdAreas, UhdKeyPath};
+use mediatek_optical::image::analysis::{
+    LegacyControlTail, LegacyReverse, LegacyStackDi, SavedLink, UhdArea, UhdAreas, UhdKeyPath,
+};
 use sha2::{Digest, Sha256};
 use thumb_asm::{Asm, Cond};
 
@@ -66,6 +68,7 @@ pub struct Plan {
     pending: Vec<String>,
     /// Prepared, independently testable detours; never install them individually.
     candidates: Vec<Candidate>,
+    reverse: Option<LegacyReverse>,
     authentication_differences: Vec<Gap>,
     authentication_diagnostic_error: Option<String>,
 }
@@ -81,6 +84,12 @@ impl Plan {
     /// Read-only prepared detours for independent verification.
     pub fn candidates(&self) -> &[Candidate] {
         &self.candidates
+    }
+
+    /// Independently bound reverse arithmetic. A mode-lifecycle qualification
+    /// remains necessary before the atomic conversion may be installed.
+    pub fn reverse_arithmetic(&self) -> Option<&LegacyReverse> {
+        self.reverse.as_ref()
     }
 
     /// Internal G07/G08 findings, never requirements or patch candidates.
@@ -103,6 +112,7 @@ impl Plan {
             gaps: Vec::new(),
             pending: Vec::new(),
             candidates: Vec::new(),
+            reverse: None,
             authentication_differences: Vec::new(),
             authentication_diagnostic_error: None,
         };
@@ -127,16 +137,49 @@ impl Plan {
                 match LegacyStackDi::detect(image) {
                     Ok(di) => {
                         plan.candidates.extend(di_candidates(image, flags, &di)?);
+                        // The native U identifier also affects controller and
+                        // resident-worker policy. Admission alone does not
+                        // qualify that downstream behavior, nor does it justify
+                        // copying the newer marker onto an older RAM field.
+                        plan.pending.push(
+                            "G01: U-identity downstream controller/worker qualification remains unresolved".into(),
+                        );
                     }
                     Err(e) => plan.pending.push(format!("G01: native DI contract: {e}")),
                 }
                 continue;
             }
             if role == UhdArea::ReverseCalculation {
-                plan.pending.push(
-                    "G05: bind the native reverse-mode flag and both numerical continuations"
-                        .into(),
-                );
+                match LegacyReverse::detect(image, &areas) {
+                    Ok(reverse) => {
+                        let bytes = super::mt1959_uhd_reverse::reverse_stub(
+                            &super::mt1959_uhd_reverse::ReverseBindings {
+                                state: reverse.state,
+                                mode: reverse.mode,
+                                flags,
+                                replay: 0x4382,
+                                accept: reverse.accept,
+                                reject: follow_taken_bne(image, reverse.reject)?,
+                                divide: reverse.divide,
+                                mode_zero: reverse.mode_zero,
+                                normalize: reverse.normalize,
+                            },
+                        )?;
+                        plan.candidates.push(Candidate {
+                            gap,
+                            site: reverse.site,
+                            original: reverse.original.clone(),
+                            bytes,
+                        });
+                        plan.reverse = Some(reverse);
+                        plan.pending.push(
+                            "G05: arithmetic bound; existing mode lifecycle and caller qualification remain unresolved".into(),
+                        );
+                    }
+                    Err(e) => plan
+                        .pending
+                        .push(format!("G05: native reverse contract: {e}")),
+                }
                 continue;
             }
             let Some(s) = contract.selection() else {
@@ -165,6 +208,26 @@ impl Plan {
                 original: image[s.site()..s.site() + s.span()].to_vec(),
                 bytes: selection_stub(state, flags, s.replay(), s.accept(), reject, c7_accept)?,
             });
+            if role == UhdArea::ControlField {
+                match LegacyControlTail::detect(image, contract, state) {
+                    Ok(tail) => plan.candidates.push(Candidate {
+                        gap,
+                        site: tail.site,
+                        original: tail.original,
+                        bytes: selection_stub(
+                            state,
+                            flags,
+                            &tail.replay,
+                            tail.accept,
+                            tail.reject,
+                            tail.accept,
+                        )?,
+                    }),
+                    Err(e) => plan
+                        .pending
+                        .push(format!("G03: follow-on controller field: {e}")),
+                }
+            }
         }
         // Authentication parity is retained for internal analysis only. Neither
         // a difference nor an unresolved diagnostic authorizes an auth patch
@@ -441,7 +504,35 @@ fn di_candidates(image: &[u8], flags: u32, di: &LegacyStackDi) -> Result<Vec<Can
         a.ldrb_imm(0, 3, u16::from(di.identifier_offset) + 1);
         a.lsls_imm(0, 0, 26);
         a.lsrs_imm(0, 0, 30);
+        // Match native validation against the prior media state. The state
+        // pointer is bound from this image, including early literal layouts.
         let attr = a.label();
+        let attr_rom = a.label();
+        let attr_recordable = a.label();
+        a.ldr_lit(1, di.state);
+        a.ldrb_imm(1, 1, 0);
+        a.cmp_imm(1, 0xc7);
+        a.beq(attr_rom);
+        a.lsrs_imm(2, 1, 2);
+        a.cmp_imm(2, 0x32);
+        a.beq(attr_rom);
+        a.lsrs_imm(2, 1, 3);
+        a.cmp_imm(2, 0x1d);
+        a.beq(attr_recordable);
+        a.cmp_imm(2, 0x1f);
+        a.beq(attr_recordable);
+        a.movs_imm(2, 0xc8);
+        a.raw16(0x4011); // ands r1, r2
+        a.cmp_imm(1, 0xc8);
+        a.beq(attr);
+        a.cmp_imm(0, 0);
+        a.beq(attr);
+        a.b(original);
+        a.bind(attr_recordable);
+        a.cmp_imm(0, 1);
+        a.beq(attr);
+        a.b(original);
+        a.bind(attr_rom);
         a.cmp_imm(0, 0);
         a.beq(attr);
         a.cmp_imm(0, 3);

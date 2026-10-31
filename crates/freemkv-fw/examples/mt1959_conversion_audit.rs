@@ -33,6 +33,8 @@ fn main() -> Result<()> {
                 "identifier_offset":d.identifier_offset})),
             "plan":match plan {
                 Ok(p)=>json!({"gaps":p.gaps().iter().map(|g|g.id()).collect::<Vec<_>>(),"pending":p.pending(),
+                    "reverse_contract":p.reverse_arithmetic().map(|r|json!({"mode":r.mode,"divide":r.divide,
+                        "mode_zero":r.mode_zero,"normalize":r.normalize,"site":r.site})),
                     "authentication_differences":p.authentication_differences().iter().map(|g|g.id()).collect::<Vec<_>>(),
                     "authentication_diagnostic_error":p.authentication_diagnostic_error(),
                     "candidates":p.candidates().iter().map(|c|json!({"gap":c.gap.id(),"site":c.site,"original":c.original,"bytes":c.bytes})).collect::<Vec<_>>()}),
