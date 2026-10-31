@@ -1,8 +1,8 @@
 {
-  "scope": "Trace a bound native operation-stage mode transition without running hardware.\n\nThe caller's R5 structure and R7 media-state pointer are supplied explicitly.\nStops at the selected native callee before executing it. This establishes stage\ndispatch, not the units of the coordinate, full caller reachability or reading.\nUnmatched compiler layouts remain unresolved, never classified as absent.\n",
+  "scope": "Trace a bound native operation-stage mode transition without running hardware.\n\nThe caller's R5 structure and R7 media-state pointer are supplied explicitly.\nStops at the selected native callee before executing it. This establishes stage\ndispatch, not the units of the coordinate, full caller reachability or reading.\nThe enclosing caller is also checked for its actual R5 base and coordinate\nfields. The native phase field must alias the numerical mode byte. Local flow\noverapproximates branches and assumes calls preserve callee-saved R5. Unmatched\ncompiler layouts remain unresolved, never classified as absent.\n",
   "cpu": "ARM926",
   "cases": 8775,
-  "scan_sha256": "6c6e6201d6f3e0e34467c7b68c78782b56f8bf220d368850a9fe8178e92d847d",
+  "scan_sha256": "57fb876830bb1a91ef85732d122d106ff0855854dfbbe0682162a519697720ef",
   "images": [
     {
       "sha256": "dd03cdae194de03a710b5f6e88dfedf421fd20667a3cc9ec58e828bd769ab2ed",
@@ -69,7 +69,20 @@
       "contract": {
         "site": 448894,
         "variant": "direct_driver",
-        "driver": 1336628
+        "driver": 1336628,
+        "frame": {
+          "entry": 448552,
+          "base_load": 448562,
+          "base": 33557248,
+          "coordinate_use": 448940,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -889,7 +902,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1336652
+        "driver": 1336652,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -1715,6 +1741,20 @@
         "enter": 504744,
         "leave": 505012,
         "driver": 1347672,
+        "frame": {
+          "entry": 449328,
+          "base_load": 449340,
+          "base": 33557248,
+          "coordinate_use": 449762,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504882,
           "mode_cell": 33557274,
@@ -2546,6 +2586,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1345960,
+        "frame": {
+          "entry": 447972,
+          "base_load": 447982,
+          "base": 33557248,
+          "coordinate_use": 448406,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
@@ -3377,6 +3431,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1345960,
+        "frame": {
+          "entry": 447972,
+          "base_load": 447982,
+          "base": 33557248,
+          "coordinate_use": 448406,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
@@ -4208,6 +4276,20 @@
         "enter": 503872,
         "leave": 504140,
         "driver": 1347576,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448584,
+          "base": 33557248,
+          "coordinate_use": 449062,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504010,
           "mode_cell": 33557274,
@@ -5033,7 +5115,20 @@
       "contract": {
         "site": 447956,
         "variant": "direct_driver",
-        "driver": 1342404
+        "driver": 1342404,
+        "frame": {
+          "entry": 447550,
+          "base_load": 447562,
+          "base": 33557248,
+          "coordinate_use": 448002,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 410,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -5859,6 +5954,20 @@
         "enter": 503080,
         "leave": 503348,
         "driver": 1348992,
+        "frame": {
+          "entry": 447792,
+          "base_load": 447804,
+          "base": 33557248,
+          "coordinate_use": 448282,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503218,
           "mode_cell": 33557274,
@@ -6690,6 +6799,20 @@
         "enter": 503080,
         "leave": 503348,
         "driver": 1348992,
+        "frame": {
+          "entry": 447792,
+          "base_load": 447804,
+          "base": 33557248,
+          "coordinate_use": 448282,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503218,
           "mode_cell": 33557274,
@@ -7521,6 +7644,20 @@
         "enter": 503688,
         "leave": 503956,
         "driver": 1347164,
+        "frame": {
+          "entry": 448478,
+          "base_load": 448488,
+          "base": 33557248,
+          "coordinate_use": 448912,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503826,
           "mode_cell": 33557274,
@@ -8470,7 +8607,20 @@
       "contract": {
         "site": 448586,
         "variant": "direct_driver",
-        "driver": 1336152
+        "driver": 1336152,
+        "frame": {
+          "entry": 448244,
+          "base_load": 448254,
+          "base": 33557248,
+          "coordinate_use": 448632,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -9290,7 +9440,20 @@
       "contract": {
         "site": 448894,
         "variant": "direct_driver",
-        "driver": 1336628
+        "driver": 1336628,
+        "frame": {
+          "entry": 448552,
+          "base_load": 448562,
+          "base": 33557248,
+          "coordinate_use": 448940,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -10110,7 +10273,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1337220
+        "driver": 1337220,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -10930,7 +11106,20 @@
       "contract": {
         "site": 448586,
         "variant": "direct_driver",
-        "driver": 1336152
+        "driver": 1336152,
+        "frame": {
+          "entry": 448244,
+          "base_load": 448254,
+          "base": 33557248,
+          "coordinate_use": 448632,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -11750,7 +11939,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1336652
+        "driver": 1336652,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -12570,7 +12772,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1337220
+        "driver": 1337220,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -13396,6 +13611,20 @@
         "enter": 504400,
         "leave": 504668,
         "driver": 1347368,
+        "frame": {
+          "entry": 448996,
+          "base_load": 449008,
+          "base": 33557248,
+          "coordinate_use": 449430,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504538,
           "mode_cell": 33557274,
@@ -14227,6 +14456,20 @@
         "enter": 504744,
         "leave": 505012,
         "driver": 1347672,
+        "frame": {
+          "entry": 449328,
+          "base_load": 449340,
+          "base": 33557248,
+          "coordinate_use": 449762,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504882,
           "mode_cell": 33557274,
@@ -15058,6 +15301,20 @@
         "enter": 504744,
         "leave": 505012,
         "driver": 1348272,
+        "frame": {
+          "entry": 449328,
+          "base_load": 449340,
+          "base": 33557248,
+          "coordinate_use": 449762,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504882,
           "mode_cell": 33557274,
@@ -15889,6 +16146,20 @@
         "enter": 504744,
         "leave": 505012,
         "driver": 1348284,
+        "frame": {
+          "entry": 449328,
+          "base_load": 449340,
+          "base": 33557248,
+          "coordinate_use": 449762,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504882,
           "mode_cell": 33557274,
@@ -16720,6 +16991,20 @@
         "enter": 503508,
         "leave": 503776,
         "driver": 1347076,
+        "frame": {
+          "entry": 448220,
+          "base_load": 448232,
+          "base": 33557248,
+          "coordinate_use": 448710,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503646,
           "mode_cell": 33557274,
@@ -17551,6 +17836,20 @@
         "enter": 503872,
         "leave": 504140,
         "driver": 1347576,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448584,
+          "base": 33557248,
+          "coordinate_use": 449062,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504010,
           "mode_cell": 33557274,
@@ -18382,6 +18681,20 @@
         "enter": 503896,
         "leave": 504164,
         "driver": 1348208,
+        "frame": {
+          "entry": 448596,
+          "base_load": 448608,
+          "base": 33557248,
+          "coordinate_use": 449086,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504034,
           "mode_cell": 33557274,
@@ -19207,7 +19520,20 @@
       "contract": {
         "site": 447628,
         "variant": "direct_driver",
-        "driver": 1341940
+        "driver": 1341940,
+        "frame": {
+          "entry": 447222,
+          "base_load": 447234,
+          "base": 33557248,
+          "coordinate_use": 447674,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 410,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -20027,7 +20353,20 @@
       "contract": {
         "site": 447956,
         "variant": "direct_driver",
-        "driver": 1342404
+        "driver": 1342404,
+        "frame": {
+          "entry": 447550,
+          "base_load": 447562,
+          "base": 33557248,
+          "coordinate_use": 448002,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 410,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -20847,7 +21186,20 @@
       "contract": {
         "site": 447916,
         "variant": "direct_driver",
-        "driver": 1339248
+        "driver": 1339248,
+        "frame": {
+          "entry": 447496,
+          "base_load": 447508,
+          "base": 33557248,
+          "coordinate_use": 447962,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 413,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -21673,6 +22025,20 @@
         "enter": 503592,
         "leave": 503860,
         "driver": 1349484,
+        "frame": {
+          "entry": 448292,
+          "base_load": 448304,
+          "base": 33557248,
+          "coordinate_use": 448782,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503730,
           "mode_cell": 33557274,
@@ -22504,6 +22870,20 @@
         "enter": 503688,
         "leave": 503956,
         "driver": 1347164,
+        "frame": {
+          "entry": 448478,
+          "base_load": 448488,
+          "base": 33557248,
+          "coordinate_use": 448912,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503826,
           "mode_cell": 33557274,
@@ -23335,6 +23715,20 @@
         "enter": 503564,
         "leave": 503832,
         "driver": 1346328,
+        "frame": {
+          "entry": 448296,
+          "base_load": 448306,
+          "base": 33557248,
+          "coordinate_use": 448730,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503702,
           "mode_cell": 33557274,
@@ -24166,6 +24560,20 @@
         "enter": 503176,
         "leave": 503444,
         "driver": 1345896,
+        "frame": {
+          "entry": 447920,
+          "base_load": 447930,
+          "base": 33557248,
+          "coordinate_use": 448354,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503314,
           "mode_cell": 33557274,
@@ -24997,6 +25405,20 @@
         "enter": 503264,
         "leave": 503532,
         "driver": 1349144,
+        "frame": {
+          "entry": 447976,
+          "base_load": 447988,
+          "base": 33557248,
+          "coordinate_use": 448466,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503402,
           "mode_cell": 33557274,
@@ -25828,6 +26250,20 @@
         "enter": 503508,
         "leave": 503776,
         "driver": 1347048,
+        "frame": {
+          "entry": 448220,
+          "base_load": 448232,
+          "base": 33557248,
+          "coordinate_use": 448710,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503646,
           "mode_cell": 33557274,
@@ -26705,7 +27141,20 @@
       "contract": {
         "site": 448586,
         "variant": "direct_driver",
-        "driver": 1336152
+        "driver": 1336152,
+        "frame": {
+          "entry": 448244,
+          "base_load": 448254,
+          "base": 33557248,
+          "coordinate_use": 448632,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -27525,7 +27974,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1337220
+        "driver": 1337220,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -28449,7 +28911,20 @@
       "contract": {
         "site": 452208,
         "variant": "direct_driver",
-        "driver": 1362108
+        "driver": 1362108,
+        "frame": {
+          "entry": 451866,
+          "base_load": 451876,
+          "base": 33557248,
+          "coordinate_use": 452254,
+          "requested_coordinate_offset": 52,
+          "returned_coordinate_offset": 56,
+          "flow": {
+            "cfg_states": 407,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -29269,7 +29744,20 @@
       "contract": {
         "site": 448586,
         "variant": "direct_driver",
-        "driver": 1336152
+        "driver": 1336152,
+        "frame": {
+          "entry": 448244,
+          "base_load": 448254,
+          "base": 33557248,
+          "coordinate_use": 448632,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -30089,7 +30577,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1337220
+        "driver": 1337220,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -30909,7 +31410,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1336648
+        "driver": 1336648,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -31729,7 +32243,20 @@
       "contract": {
         "site": 448586,
         "variant": "direct_driver",
-        "driver": 1336152
+        "driver": 1336152,
+        "frame": {
+          "entry": 448244,
+          "base_load": 448254,
+          "base": 33557248,
+          "coordinate_use": 448632,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -32555,6 +33082,20 @@
         "enter": 504400,
         "leave": 504668,
         "driver": 1347368,
+        "frame": {
+          "entry": 448996,
+          "base_load": 449008,
+          "base": 33557248,
+          "coordinate_use": 449430,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504538,
           "mode_cell": 33557274,
@@ -33386,6 +33927,20 @@
         "enter": 503508,
         "leave": 503776,
         "driver": 1347076,
+        "frame": {
+          "entry": 448220,
+          "base_load": 448232,
+          "base": 33557248,
+          "coordinate_use": 448710,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503646,
           "mode_cell": 33557274,
@@ -34217,6 +34772,20 @@
         "enter": 503508,
         "leave": 503776,
         "driver": 1347048,
+        "frame": {
+          "entry": 448220,
+          "base_load": 448232,
+          "base": 33557248,
+          "coordinate_use": 448710,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503646,
           "mode_cell": 33557274,
@@ -35048,6 +35617,20 @@
         "enter": 503896,
         "leave": 504164,
         "driver": 1348208,
+        "frame": {
+          "entry": 448596,
+          "base_load": 448608,
+          "base": 33557248,
+          "coordinate_use": 449086,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504034,
           "mode_cell": 33557274,
@@ -35879,6 +36462,20 @@
         "enter": 504728,
         "leave": 504996,
         "driver": 1352332,
+        "frame": {
+          "entry": 448648,
+          "base_load": 448660,
+          "base": 33557248,
+          "coordinate_use": 449138,
+          "requested_coordinate_offset": 64,
+          "returned_coordinate_offset": 68,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504866,
           "mode_cell": 33557274,
@@ -36704,7 +37301,20 @@
       "contract": {
         "site": 447628,
         "variant": "direct_driver",
-        "driver": 1341940
+        "driver": 1341940,
+        "frame": {
+          "entry": 447222,
+          "base_load": 447234,
+          "base": 33557248,
+          "coordinate_use": 447674,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 410,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -37524,7 +38134,20 @@
       "contract": {
         "site": 447936,
         "variant": "direct_driver",
-        "driver": 1342384
+        "driver": 1342384,
+        "frame": {
+          "entry": 447530,
+          "base_load": 447542,
+          "base": 33557248,
+          "coordinate_use": 447982,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 410,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -38350,6 +38973,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1348984,
+        "frame": {
+          "entry": 447940,
+          "base_load": 447952,
+          "base": 33557248,
+          "coordinate_use": 448430,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
@@ -39181,6 +39818,20 @@
         "enter": 503592,
         "leave": 503860,
         "driver": 1349484,
+        "frame": {
+          "entry": 448292,
+          "base_load": 448304,
+          "base": 33557248,
+          "coordinate_use": 448782,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503730,
           "mode_cell": 33557274,
@@ -40006,7 +40657,20 @@
       "contract": {
         "site": 447902,
         "variant": "direct_driver",
-        "driver": 1336116
+        "driver": 1336116,
+        "frame": {
+          "entry": 447490,
+          "base_load": 447502,
+          "base": 33557248,
+          "coordinate_use": 447948,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 413,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -40832,6 +41496,20 @@
         "enter": 505244,
         "leave": 505512,
         "driver": 1349616,
+        "frame": {
+          "entry": 448402,
+          "base_load": 448414,
+          "base": 33557248,
+          "coordinate_use": 448900,
+          "requested_coordinate_offset": 64,
+          "returned_coordinate_offset": 68,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 505382,
           "mode_cell": 33557274,
@@ -41663,6 +42341,20 @@
         "enter": 503692,
         "leave": 503960,
         "driver": 1351368,
+        "frame": {
+          "entry": 448392,
+          "base_load": 448404,
+          "base": 33557248,
+          "coordinate_use": 448882,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503830,
           "mode_cell": 33557274,
@@ -42494,6 +43186,20 @@
         "enter": 503176,
         "leave": 503444,
         "driver": 1345896,
+        "frame": {
+          "entry": 447920,
+          "base_load": 447930,
+          "base": 33557248,
+          "coordinate_use": 448354,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503314,
           "mode_cell": 33557274,
@@ -43325,6 +44031,20 @@
         "enter": 503264,
         "leave": 503532,
         "driver": 1349144,
+        "frame": {
+          "entry": 447976,
+          "base_load": 447988,
+          "base": 33557248,
+          "coordinate_use": 448466,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503402,
           "mode_cell": 33557274,
@@ -44156,6 +44876,20 @@
         "enter": 503516,
         "leave": 503784,
         "driver": 1347760,
+        "frame": {
+          "entry": 448306,
+          "base_load": 448316,
+          "base": 33557248,
+          "coordinate_use": 448740,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503654,
           "mode_cell": 33557274,
@@ -44987,6 +45721,20 @@
         "enter": 503508,
         "leave": 503776,
         "driver": 1347048,
+        "frame": {
+          "entry": 448220,
+          "base_load": 448232,
+          "base": 33557248,
+          "coordinate_use": 448710,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503646,
           "mode_cell": 33557274,
@@ -45872,7 +46620,20 @@
       "contract": {
         "site": 448586,
         "variant": "direct_driver",
-        "driver": 1336152
+        "driver": 1336152,
+        "frame": {
+          "entry": 448244,
+          "base_load": 448254,
+          "base": 33557248,
+          "coordinate_use": 448632,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -46692,7 +47453,20 @@
       "contract": {
         "site": 448914,
         "variant": "direct_driver",
-        "driver": 1337220
+        "driver": 1337220,
+        "frame": {
+          "entry": 448572,
+          "base_load": 448582,
+          "base": 33557248,
+          "coordinate_use": 448960,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 412,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          }
+        }
       },
       "cases": [
         {
@@ -47518,6 +48292,20 @@
         "enter": 503956,
         "leave": 504224,
         "driver": 1347020,
+        "frame": {
+          "entry": 448674,
+          "base_load": 448686,
+          "base": 33557248,
+          "coordinate_use": 449172,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504094,
           "mode_cell": 33557274,
@@ -48349,6 +49137,20 @@
         "enter": 503956,
         "leave": 504224,
         "driver": 1347020,
+        "frame": {
+          "entry": 448674,
+          "base_load": 448686,
+          "base": 33557248,
+          "coordinate_use": 449172,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 504094,
           "mode_cell": 33557274,
@@ -49180,6 +49982,20 @@
         "enter": 503528,
         "leave": 503796,
         "driver": 1346468,
+        "frame": {
+          "entry": 448246,
+          "base_load": 448258,
+          "base": 33557248,
+          "coordinate_use": 448744,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 431,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503666,
           "mode_cell": 33557274,
@@ -50035,6 +50851,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1345960,
+        "frame": {
+          "entry": 447972,
+          "base_load": 447982,
+          "base": 33557248,
+          "coordinate_use": 448406,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
@@ -50866,6 +51696,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1345960,
+        "frame": {
+          "entry": 447972,
+          "base_load": 447982,
+          "base": 33557248,
+          "coordinate_use": 448406,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
@@ -51697,6 +52541,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1345960,
+        "frame": {
+          "entry": 447972,
+          "base_load": 447982,
+          "base": 33557248,
+          "coordinate_use": 448406,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
@@ -52528,6 +53386,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1345960,
+        "frame": {
+          "entry": 447972,
+          "base_load": 447982,
+          "base": 33557248,
+          "coordinate_use": 448406,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
@@ -53359,6 +54231,20 @@
         "enter": 503228,
         "leave": 503496,
         "driver": 1345960,
+        "frame": {
+          "entry": 447972,
+          "base_load": 447982,
+          "base": 33557248,
+          "coordinate_use": 448406,
+          "requested_coordinate_offset": 60,
+          "returned_coordinate_offset": 64,
+          "flow": {
+            "cfg_states": 433,
+            "stage_base": 33557248,
+            "call_assumption": "AAPCS callee-saved R5"
+          },
+          "phase_address": 33557274
+        },
         "mode_producer": {
           "store_site": 503366,
           "mode_cell": 33557274,
