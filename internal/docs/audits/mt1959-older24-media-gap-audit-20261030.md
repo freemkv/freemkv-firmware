@@ -67,3 +67,11 @@ The other106newer compiler layouts are unresolved by this particular grammar,
 not missing the transition. Execution supplies R5/R7 inputs and stops before
 the chosen callee, so no calibration/device result is fabricated. The receipt
 is `mt1959-uhd-mode-transition-receipts-20261030.json`.
+
+## Mode primitive execution follow-up
+
+All 24 older images contain the same relevant coefficient and parameter primitives as the native BU40N 1.02 reference. A signature-bound audit executes the actual routines, lookup tables, ARM switch dispatcher and division worker without substituting function results. It compares all signed high-byte encodings for the native mode-entry scale -3 / option 0, with four low-byte values: 25,600 coefficient executions across the reference and 24 images.
+
+The same audit executes parameters 0x10 and 0x11 through native get/set/get for all high bytes, three low nibbles and two initial register patterns: 76,800 round trips (230,400 native function calls). Getter results, exact register writes and full final register-page hashes agree with the reference. SP and callee-saved registers are checked, with writes confined to stack and the independently bound register page. These are passive MMIO memory tests; hardware side effects are not simulated.
+
+The earliest BP50 1.00 uses an inline scale operation where the other images use a wrapper; both signature grammars execute identically. This narrows G05: these primitives can be reused, but mode-entry/exit orchestration, mode consumers and the caller's frame fields remain unresolved. It does not install or qualify a complete G05 conversion. Receipts: `mt1959-uhd-mode-arithmetic-receipts-20261030.json`; harness: `scripts/audit-mtk-uhd-mode-arithmetic.py`.
