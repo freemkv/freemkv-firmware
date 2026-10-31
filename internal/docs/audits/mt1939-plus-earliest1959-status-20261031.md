@@ -23,3 +23,7 @@ To enable earliest conversion, obtain version-bound valid backing bytes and mapp
 The two conventional native scatter tables (loaders `0x3018` and `0x187ec`) do not cover this profile. Bounded Thumb/ARM literal searches found consumers and resident code targets, not a producer; this is not a universal absence proof. Existing held BU40N captures are differently versioned and cannot authenticate this BP50NB40 profile.
 
 Existing Unrestricted settings describe the retained AACS/content-accept command hooks, including BD. Their advertised switch does not certify optical conversion readiness. No complete enclosing acquisition/ready/controller lifecycle or physical UHD success is claimed. No release, deployment or hardware operation was performed.
+
+## Held capture revalidation
+
+[Byte-range and provenance check](earliest-held-resident-capture-coverage-20261031.json): the actual OEM overlay ends at `0x01ff0000`, below the required profile. The full capture covers the address but is documented BU40N1.03MK with a runtime blob, not BP50NB40c88a. Its existence cannot qualify the earliest profile. The seven supplied diagnostic ZIPs contain no resident-named candidate or matching BP50NB40/c88a metadata. No production/test source or qualification result changed; the exact dependency remains unresolved.
