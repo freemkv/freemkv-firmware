@@ -1,0 +1,29 @@
+0.16.0 QA candidate
+
+User authorization: promote the current work to qa and get the full QA gate green.
+Public release/main promotion remains the user's later decision.
+
+Production source is 7933f6f; diagnostic/hardware handoff is 7c479e3.
+Version is already 0.16.0. Candidate preparation adds release notes and removes
+local home-directory prefixes from public text evidence. The transformation
+manifest preserves before/after digests; it does not alter measurement results,
+production firmware code or historical compressed receipts.
+
+Evidence: mediatek-review-20261031-signoff.json and associated artifacts.
+123/123 retained images authored, executed and byte-identical after cleanup.
+237 Rust library tests, 13 integration tests, 45 Python tests with two explicit
+fixture-inapplicable skips, seven separate newer AKE tests, and 282 detected
+reset-continuation mutants. CPU checks: 2019 installed stages/5249574 cases,
+492 native stages/839024 cases. 37.33% less host API build time in one paired
+123-input run; emitted helper size delta is zero. These are bounded software
+contracts, not full drive/optical/authentication qualification.
+
+Pending hardware reports: BH16NS48 1.02 modified; ASUS BW-16D1HT running the
+verified supplied WH16NS58 1.V9 OEM versus modified. See
+uhd-hardware-tests-pending-20261031.json for exact BIN hashes and settings.
+G07/G08 differences remain unpatched on 91/123 retained inputs. A complete
+G01-G06 media plan does not establish full authenticated UHD support.
+BP50NB40 1.00 remains excluded; its additional diagnosis was read-only.
+
+Remote QA must complete all release tests/platform packaging, GUI, cross-lint,
+forge corpus and required repository guards before this candidate is called green.

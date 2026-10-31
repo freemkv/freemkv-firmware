@@ -223,7 +223,7 @@ Run the Rust library tests first and retain their log, then run:
 ```sh
 python scripts/firmware_execution/scope.py --build \
   --inventory internal/docs/audits/mediatek-oem-only-123-retained-20261031.json \
-  --hoard /Users/matthew/Developer/firmware-extractor/hoard \
+  --hoard /opt/review-home/Developer/firmware-extractor/hoard \
   --builder target/release/examples/firmware_execution_evidence \
   --fw target/release/freemkv-fw --output /tmp/freemkv-review-reproduction \
   --workers 6 --dependency-commit 9456d3a9154e10f60ad8745c81a6e2c4c4eec0c8 \

@@ -17,48 +17,48 @@ test abi::tests::vendor_commands_floor_alloc_len_at_min_for_hw ... ok
 test abi::tests::verb_values_are_pinned_to_the_wire_protocol ... ok
 test abi::tests::verify_response_matches_only_the_magic_lead ... ok
 test abi::tests::build_call_and_poke_cdbs_carry_debug_knock_and_target ... ok
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-3.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-0.logDiagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-2.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-1.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-3.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-0.logDiagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-2.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-1.log
 
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-0.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-0.log
 test api::tests::create_refuses_an_image_no_engine_recognizes ... ok
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-3.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-3.log
 test api::tests::sign_refuses_an_image_with_no_active_regions ... ok
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-5.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-4.log
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-5.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-5.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-4.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-5.log
 test api::tests::verify_reports_not_ok_when_the_image_has_no_active_regions ... ok
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-4.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770200-56748-6.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770201-56748-7.log
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770200-56748-6.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770199-56748-4.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770200-56748-6.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770201-56748-7.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770200-56748-6.log
 test api::tests::sign_returns_a_self_verifying_image_for_a_normal_image ... ok
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770201-56748-7.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770202-56748-8.log
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770202-56748-8.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770201-56748-7.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770202-56748-8.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770202-56748-8.log
 test api::tests::verify_reports_ok_only_when_every_active_region_matches ... ok
 test api::tests::old_modified_table_corruption_is_refused_before_modification ... ok
 test boot::tests::editable_settings_do_not_require_boot_to_follow_the_handler ... ok
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770633-56748-9.log
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770633-56748-9.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770633-56748-9.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770633-56748-9.log
 test api::tests::create_diagnoses_legacy_freemkv_input_before_searching_for_oem_handlers ... ok
 test boot::tests::corrupt_or_ambiguous_records_are_refused_even_if_resigned ... ok
 test boot::tests::existing_partial_capability_records_do_not_gain_off_from_new_engine_support ... ok
 test boot::tests::normal_modify_refuses_a_raw_drive_dump_before_creating_unflashable_output ... ok
 test boot::tests::classic_emitted_boot_and_region_hrl_controls_are_reported ... ok
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-1.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465784518-56748-10.log
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465784518-56748-10.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-1.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465784518-56748-10.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465784518-56748-10.log
 test api::tests::create_with_defaults_diagnoses_a_previous_production_build ... ok
 test boot::tests::parser_preserves_shipping_defaults_and_rejects_ambiguous_requests ... ok
 test boot::tests::private_uhd_identity_boot_reset_preserves_features_and_flash_scratch ... ok
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-2.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465770163-56748-2.log
 test api::tests::create_succeeds_on_the_oem_base_and_hands_back_the_report_image ... ok
 test boot::tests::explicit_unsupported_features_and_legacy_modified_images_are_refused ... ok
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465784977-56748-11.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465792218-56748-12.log
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465792218-56748-12.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465784977-56748-11.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465792218-56748-12.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465792218-56748-12.log
 test boot::tests::new_images_can_be_reconfigured_and_reset_without_reinjecting_hooks ... ok
 test boot::tests::paired_tar_modification_preserves_intermediate_and_source_evidence ... ok
 test boot::tests::shared_reset_records_refuse_a_forged_third_instruction_site ... ok
@@ -77,8 +77,8 @@ test engine::audit::tests::an_ake_branch_into_a_blank_stub_fails_the_audit ... o
 test engine::audit::tests::an_ake_hook_site_at_the_final_four_bytes_of_the_image_passes ... ok
 test engine::audit::tests::an_ake_hook_site_straddling_the_image_end_fails_without_reading_past_it ... ok
 test engine::audit::tests::an_identity_record_offset_past_the_image_end_fails_without_panicking ... ok
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465784977-56748-11.log
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465802297-56748-14.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465784977-56748-11.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465802297-56748-14.log
 test boot::tests::tight_bu40n_v105_has_room_for_exact_boot_metadata_after_all_hooks ... ok
 test engine::audit::tests::flipping_one_covered_byte_fails_only_the_integrity_check ... ok
 test engine::audit::tests::identity_audit_flags_missing_reboot_literal ... ok
@@ -105,7 +105,7 @@ test boot::tests::wh_auth_hook_exposes_and_roundtrips_all_three_proven_choices .
 test capabilities::tests::wh_capabilities_bind_real_emission_choices_and_missing_hooks_to_the_input ... ok
 test boot::tests::strict_and_modify_share_the_same_boot_image ... ok
 test engine::audit::tests::classic_speed_tail_requires_saved_lr_and_thumb1_call ... ok
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465802297-56748-14.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465802297-56748-14.log
 test engine::core::kat_tests::create_embeds_current_version_and_verifies ... ok
 test engine::core::kat_tests::emit_boot_init_fails_closed_without_a_site ... ok
 test engine::core::kat_tests::emit_boot_init_installs_detour_on_bu40n ... ok
@@ -263,8 +263,8 @@ test scheme::tests::sign_on_an_already_valid_image_reports_no_changed_regions ..
 test scheme::tests::sign_repairs_corruption_with_one_change ... ok
 test scheme::tests::verify_passes_on_valid_image ... ok
 test scheme::tests::verify_reports_mismatch_after_corruption ... ok
-Diagnostic log: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465918066-56748-15.log
-Diagnostic log saved: /Users/matthew/Library/Logs/freemkv/freemkv-fw-1793465918066-56748-15.log
+Diagnostic log: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465918066-56748-15.log
+Diagnostic log saved: /opt/review-home/Library/Logs/freemkv/freemkv-fw-1793465918066-56748-15.log
 test mt1939_initialization_tests::mode_comparison_keeps_read_and_acquisition_components_native ... ok
 test engine::mt1959::tests::the_rearm_absence_guard_scans_the_handler_bytes ... ok
 test engine::mt1959::tests::wh16ns60_103_normal_modify_qualifies_space_and_preserves_native_programming ... ok

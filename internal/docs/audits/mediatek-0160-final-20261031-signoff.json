@@ -41,7 +41,7 @@
     "mediatek-0160-final-20261031-receipt.json.gz": "21fb9c05b6e4e8ac0c1b437fd236bad167de46f26d6d4fe56dba15e5e5f35472",
     "mediatek-0160-final-20261031-capability-matrix.json.gz": "02b28600aac2e8bc25a846538dd36e979002cd8297e75f80f9018a94076aeeab",
     "mediatek-0160-final-20261031-source-snapshot.tar.gz": "3755743c29c9734f71cd8a626df2a6d6ff4381c751e882847e5f8e02af585d7c",
-    "mediatek-0160-final-20261031-rust-tests.txt": "f83a7392f7ae1e437aad97b4c7edd3db66400ec777c0f9e6295ea2cd3796a65d",
+    "mediatek-0160-final-20261031-rust-tests.txt": "97c8c6e3a713e118e1304cd45e83deac163a9cbe740fa2ae9b9981b76af95bd8",
     "mediatek-0160-final-20261031-python-tests.txt": "c4e12ff3d99aa0ea3b953c31679209c71c95e6016622b83c10f91229b12bb729",
     "mediatek-0160-final-20261031-newer-ake-tests.txt": "df59baa50d649f539b61dac66bf20b4b7138d9bc821cff34f88fcad5f3f8f6c7",
     "mediatek-0160-final-20261031-deny-mutations.json": "220e48ef9c983cbd25c98807248ae57229265aab940b53d868bebb885cc36f3a",

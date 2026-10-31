@@ -7,7 +7,7 @@
       "sha256": "6413aed95433680eb0b38fa51da09183b92c7d6ef4d942a97b21547ff64654b7"
     },
     "after": {
-      "path": "/Users/matthew/Developer/freemkv/freemkv-firmware/target/release/examples/firmware_execution_evidence",
+      "path": "/opt/review-home/Developer/freemkv/freemkv-firmware/target/release/examples/firmware_execution_evidence",
       "sha256": "9fbda6b7ef0bcaa7cdd82296b124f732e17568270ac459e3173f2e17f6c9e5c5"
     }
   },

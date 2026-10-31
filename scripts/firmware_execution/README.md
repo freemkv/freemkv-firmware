@@ -8,7 +8,7 @@ Run with the private Python environment described in `requirements.txt`:
 /tmp/mt1939-recognition-venv/bin/python scripts/firmware_execution/corpus.py \
   --build \
   --inventory internal/docs/audits/mediatek-uhd-corpus-20261030.json \
-  --hoard /Users/matthew/Developer/firmware-extractor/hoard \
+  --hoard /opt/review-home/Developer/firmware-extractor/hoard \
   --builder target/release/examples/firmware_execution_evidence \
   --fw target/release/freemkv-fw \
   --output /tmp/mediatek-corpus-differential-20261030 --workers 6 \

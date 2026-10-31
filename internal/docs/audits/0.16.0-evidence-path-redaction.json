@@ -1,0 +1,90 @@
+{
+  "transformation": "Public text artifacts replace the local account home prefix with /opt/review-home/. Measurements, source hashes, output hashes and compressed historical receipts remain unchanged. Original log digests in those receipts refer to the pre-redaction bytes; this mapping binds their public representations. Signoff artifact digests updated for transformed public files.",
+  "files": [
+    {
+      "path": "internal/docs/audits/adversarial-g04-20261030.md",
+      "original_sha256": "be5056fdbee7355d3acba5b87d10cb05a150442f44fc864bfc5cab97b7309406",
+      "sanitized_sha256": "fe93600a92c08c23a78210719fec4783cc2973f88e24a8f861b4b6413e4e8218"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-0160-final-20261031-rust-tests.txt",
+      "original_sha256": "f83a7392f7ae1e437aad97b4c7edd3db66400ec777c0f9e6295ea2cd3796a65d",
+      "sanitized_sha256": "97c8c6e3a713e118e1304cd45e83deac163a9cbe740fa2ae9b9981b76af95bd8"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-0160-removed-raw-readbacks-20261031.json",
+      "original_sha256": "161990f83b0d79140458e211db6a84aa4e924a01e5c5bf34913f9c2ff063dc2c",
+      "sanitized_sha256": "d54b8cf015e0a95ac66a48aadb22f371b591af7a4e61c80ec78ced6b4e94378b"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-production-differential-final-54bf-requirements-20261031.json",
+      "original_sha256": "2572264c0f248f1ecf46ff170c31595ea8652f6cea01556707eef57a94294eb6",
+      "sanitized_sha256": "cb53409a542f8fbb2c19bb31cfcb47840eb8efb01b48f3e1394b6add785d2c51"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-production-final-readiness-54bf-proof-20261031.json",
+      "original_sha256": "94912fba501ed2600625568855663f96d8bbd4dd1d7b1d4863a1ad2fb5c50b15",
+      "sanitized_sha256": "bc1dd27145612355c4e48d5da98bd40226d1d773d90bd4005cb10b0ef4c40efd"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-production-readiness-owned-clippy-20261031.txt",
+      "original_sha256": "847d6d77a36a2a2dc13bf5d7467714a1341263a2156c5bd860a1a4888571ed4a",
+      "sanitized_sha256": "d24ad3b854e6675402e7a61111dd0826431264c8e6eb6f71aad81fdfb847ca90"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-review-20261031-benchmark.py",
+      "original_sha256": "2b4df98540381a4abe9f741f8714c529978907b3c619080124505ff9d5e85fa6",
+      "sanitized_sha256": "abb55ba9bcf74a38a54d88ed994f30abd2b80f699df7cf76ecfa36ecfe650a50"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-review-20261031-clippy.txt",
+      "original_sha256": "00d18ef85d70e2be136d9682474280d9bb8c4d19f9d7647647828a675a339e6d",
+      "sanitized_sha256": "ef20bb8953c2e9a923d271344c31a76e5951c02688ce28edd42f44aa77289e06"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-review-20261031-inventory.py",
+      "original_sha256": "ba808a8367822ddc55a8798c82d044e4e8c25d7b62e15b19d33d32eba7664784",
+      "sanitized_sha256": "6e6a8f1b8a221c95df4eedc57b06b2e7f63edf033942602a81be47939820dc7b"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-review-20261031-performance.json",
+      "original_sha256": "45ebb273f7098c4e2c88099db8b9b49ff22b8452d98f32bea6ada639dfddffda",
+      "sanitized_sha256": "8469d8206dbeb98c81b5abaf5b20660045fd50afb233d3ad223c2bf4620c238d"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-review-20261031-scope.txt",
+      "original_sha256": "6d6c42aa8c34bf874a4a6d3b8520086f1614251d4ee3e32215607cba4c4db1fe",
+      "sanitized_sha256": "044411db0cd332be5b4b9acd28632c5a0943411b15aa32eac5921e780b26c7be"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-review-20261031.md",
+      "original_sha256": "86226a5d0b50401e115aa72c7ac13a1a81eb5e761118f964380b305ffa77cc9c",
+      "sanitized_sha256": "fdc4bbffd9f5b15701d7c6a3968af71b2c8be7ff70a67d03cd0bb076efba9151"
+    },
+    {
+      "path": "internal/docs/audits/mt1959-native-c7-getter-policy-20261031.json",
+      "original_sha256": "721da0b05d7c731f7bc3ae7d375101271561fa66174b0cd476fd5de2b1319a8c",
+      "sanitized_sha256": "2e4b68eb63019db9592957338d9945109255193785e2f44c3b64c5d72694799a"
+    },
+    {
+      "path": "internal/docs/audits/mt1959-native-startup-getter-policy-20261031.json",
+      "original_sha256": "6f3d8b5540c6a86fcf60dbf4ee65ad5063582f01c000790de8b0a547127cdf07",
+      "sanitized_sha256": "56a9b97895179efb644a36a991c1999d534f2bdfc75e860a2fe5ba8e825ec22c"
+    },
+    {
+      "path": "scripts/firmware_execution/README.md",
+      "original_sha256": "65d327c5c331b3db3718e60e5c1f5dd00eb7ade54ae2cfddad25f04c334aaa6d",
+      "sanitized_sha256": "7b2d3dc0233b00f25d38b76a646d31b56eefba897a8c235b5ec3e811dfbeff9b"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-0160-final-20261031-signoff.json",
+      "original_sha256": "1c6548b412393489e5230ae5c6d637d5c345e3c61076ce6f0302b7dcbca0d402",
+      "sanitized_sha256": "618f9d2121e1d2e2f2c02b1d103ae6cec412d397aa339c63d2d29595abc3548a"
+    },
+    {
+      "path": "internal/docs/audits/mediatek-review-20261031-signoff.json",
+      "original_sha256": "7937bb0432d7976f6ae137409355be03baa6d94ac9f9105ea67a524b64b9fc46",
+      "sanitized_sha256": "9312e9d2d305d4397a2f9d6bd96906d91e90a73b5aab43cb27825fe0f28fa53a"
+    }
+  ]
+}

@@ -9,7 +9,7 @@ for n,row in enumerate(rows):
  # Alternate ordering to reduce systematic warm-cache and thermal bias.
  for label in (('before','after') if n%2==0 else ('after','before')):
   directory=root/label;directory.mkdir(exist_ok=True)
-  source=pathlib.Path('/Users/matthew/Developer/firmware-extractor/hoard')/row['path']
+  source=pathlib.Path('/opt/review-home/Developer/firmware-extractor/hoard')/row['path']
   assert hashlib.sha256(source.read_bytes()).hexdigest()==row['sha256']
   started=time.perf_counter();p=subprocess.run([str(executables[label]),str(source),str(directory)],capture_output=True,text=True,check=True)
   elapsed=time.perf_counter()-started;doc=json.loads(p.stdout)

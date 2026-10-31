@@ -5,15 +5,15 @@
     "5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073": "d133893209392b74cb0c3c1225cc4c0e8b1d927f1f671261ecc82525405e47e0"
   },
   "removed_files": [
-    "/Users/matthew/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.01/main/40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2.bin",
-    "/Users/matthew/Developer/firmware-extractor/hoard/originals/40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2/BW-16D1HT_3.01_40118f81.bin",
-    "/Users/matthew/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.01/main/d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4.bin",
-    "/Users/matthew/Developer/firmware-extractor/hoard/originals/d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4/BE16NU50_1.01_d286c5a7.bin",
-    "/Users/matthew/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.00/main/5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073.bin",
-    "/Users/matthew/Developer/firmware-extractor/hoard/originals/5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073/WH16NS60_1.00_5e2ec51f.bin",
-    "/Users/matthew/Developer/firmware-extractor/hoard/packages/mediatek/63db45cbaa332de03be7e1be970500d91e63e0afe19b331114b31adac3b8e067.tar",
-    "/Users/matthew/Developer/firmware-extractor/hoard/packages/mediatek/e43efb22c681ad19cf574db23f9ec58f28383ebd5077bea3246abf12b386be04.tar",
-    "/Users/matthew/Developer/firmware-extractor/hoard/packages/mediatek/e1a82cb447eed07e94e67a686f9132c1dfd702376aae7d92c8f3437778b5c918.tar"
+    "/opt/review-home/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/ASUS_BW-16D1HT_MT1959_JB8_JB8/ASUS/3.01/main/40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/originals/40118f8171daf03e62e89055c14f7680bcfa5108df71acf1a79bd2c326bd14f2/BW-16D1HT_3.01_40118f81.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/HL-DT-ST_BE16NU50_NU50/GENERAL/1.01/main/d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/originals/d286c5a7ea4a4d0779fec709fd30ed6a9ad5e20fd760364edf93e570678ba9e4/BE16NU50_1.01_d286c5a7.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/dump/mediatek/MT1959/HL-DT-ST_WH16NS60_NS60/GENERAL/1.00/main/5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/originals/5e2ec51fb3559623e555aadf280c96268fee6da0acfa7b4000c0d4564e7da073/WH16NS60_1.00_5e2ec51f.bin",
+    "/opt/review-home/Developer/firmware-extractor/hoard/packages/mediatek/63db45cbaa332de03be7e1be970500d91e63e0afe19b331114b31adac3b8e067.tar",
+    "/opt/review-home/Developer/firmware-extractor/hoard/packages/mediatek/e43efb22c681ad19cf574db23f9ec58f28383ebd5077bea3246abf12b386be04.tar",
+    "/opt/review-home/Developer/firmware-extractor/hoard/packages/mediatek/e1a82cb447eed07e94e67a686f9132c1dfd702376aae7d92c8f3437778b5c918.tar"
   ],
   "note": "Historical source ledgers and archived source containers remain metadata/provenance; withdrawal prevents re-derivation.",
   "removed_source_ledgers": {

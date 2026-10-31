@@ -4,12 +4,12 @@ Verdict: **unproven as a requirement for UHD reading; conditional requirement fo
 
 ## Binary evidence
 
-Inspected actual 2 MiB images from `/Users/matthew/Developer/firmware-extractor/hoard`, identified by full SHA-256:
+Inspected actual 2 MiB images from `/opt/review-home/Developer/firmware-extractor/hoard`, identified by full SHA-256:
 
 - New BU40N 1.02: `1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396`.
 - Old BU40N BN11: `5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95`.
 
-Worktree under audit: `/Users/matthew/Developer/tmp/freemkv-firmware-mt1939-0155`, supplied revision `f5b7f12`; dependency supplied revision `66c4b1c`. Address notation below is firmware file offset / mapped address, not an optical-sector address.
+Worktree under audit: `/opt/review-home/Developer/tmp/freemkv-firmware-mt1939-0155`, supplied revision `f5b7f12`; dependency supplied revision `66c4b1c`. Address notation below is firmware file offset / mapped address, not an optical-sector address.
 
 New function entry `0xd866e`, old `0xd7ce6`. Both read a global halfword at `0x02000b2c` through R4, save its original value, optionally divide that halfword by four (new `0xd86ce–0xd86d8`, old `0xd7d46–0xd7d50`), then choose a calculation according to state, a flags byte at `0x02000b6d`, and a comparison with `0x20000`. The comparison operand comes from global cells `0x02000b40`/`0x02000b3c` around a call to new `0xd82d4` / old `0xd795a`. These are prerequisites missing from a stage-only entry.
 
@@ -91,7 +91,7 @@ Disassembly commands:
 ## Follow-up implementation: read-only reverse substrate contract
 
 At the parent's request, added dependency-only `LegacyReverse` in
-`/Users/matthew/Developer/tmp/mediatek-optical-mt1959-uhd/src/image/analysis/uhd_reverse.rs`,
+`/opt/review-home/Developer/tmp/mediatek-optical-mt1959-uhd/src/image/analysis/uhd_reverse.rs`,
 with export in `analysis/mod.rs` and hash-checked sparse fixtures under
 `tests/fixtures/analysis/uhd-reverse`. It does not install any firmware patch.
 

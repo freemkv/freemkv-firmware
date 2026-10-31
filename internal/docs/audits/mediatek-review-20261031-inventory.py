@@ -35,7 +35,7 @@ for k,p in new.items():
  compiled.append((k,re.compile(b'(?=('+b''.join(parts)+b'))',re.S)))
 rows=json.loads((repo/'internal/docs/audits/mediatek-oem-only-123-retained-20261031.json').read_text())['images']
 def scan(row):
- data=(pathlib.Path('/Users/matthew/Developer/firmware-extractor/hoard')/row['path']).read_bytes()
+ data=(pathlib.Path('/opt/review-home/Developer/firmware-extractor/hoard')/row['path']).read_bytes()
  assert hashlib.sha256(data).hexdigest()==row['sha256']
  return row['sha256'],{k:sum(m.start()%2==0 for m in pat.finditer(data)) for k,pat in compiled}
 if __name__=='__main__':
