@@ -1,0 +1,1141 @@
+{
+  "scope": "Bind each image's native calibration defaults and execute its restore blocks.\n\nCompare six native parameter-loading blocks with the UHD reference on ARM926.\nEach image supplies its own default addresses and setter; no calibration values\nare copied from another image. Inputs and passive MMIO are supplied explicitly.\nThis does not execute mode acquisition, clock changes or physical side effects.\n",
+  "cpu": "ARM926",
+  "result": "pass",
+  "reference": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+  "executions": 12000,
+  "images": [
+    {
+      "sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+      "parameters": {
+        "getter": 376450,
+        "setter": 376858,
+        "register_base": 69251200,
+        "switch_dispatcher": 1281928
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 503872,
+          "default_address": 33529804
+        },
+        {
+          "parameter": 16,
+          "site": 503892,
+          "default_address": 33529796
+        },
+        {
+          "parameter": 32,
+          "site": 503912,
+          "default_address": 33529812
+        },
+        {
+          "parameter": 1,
+          "site": 503948,
+          "default_address": 33529780
+        },
+        {
+          "parameter": 17,
+          "site": 503968,
+          "default_address": 33529772
+        },
+        {
+          "parameter": 33,
+          "site": 503988,
+          "default_address": 33529788
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7",
+      "parameters": {
+        "getter": 376678,
+        "setter": 377086,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271216
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500176,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500196,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500216,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500294,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500314,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500334,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "e64c4ca5244594d0b7943cbedf71a9cced2ae7c3d9b98624aa84d7e3130bac8a",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271240
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "c4d995f031fe757d9823f7410f81c88ce7ba26e14b77e766792bff2e53a8b90f",
+      "parameters": {
+        "getter": 376290,
+        "setter": 376698,
+        "register_base": 69251200,
+        "switch_dispatcher": 1277432
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499204,
+          "default_address": 33529804
+        },
+        {
+          "parameter": 16,
+          "site": 499224,
+          "default_address": 33529796
+        },
+        {
+          "parameter": 32,
+          "site": 499244,
+          "default_address": 33529812
+        },
+        {
+          "parameter": 1,
+          "site": 499322,
+          "default_address": 33529780
+        },
+        {
+          "parameter": 17,
+          "site": 499342,
+          "default_address": 33529772
+        },
+        {
+          "parameter": 33,
+          "site": 499362,
+          "default_address": 33529788
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "148d89cc6ea4351c987913ec0417152808a2fb32c06c230c2ef9a1585233ed50",
+      "parameters": {
+        "getter": 376370,
+        "setter": 376778,
+        "register_base": 69251200,
+        "switch_dispatcher": 1270752
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499856,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 499876,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 499896,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 499974,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 499994,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500014,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "cc7182ac0e5620504de5e75e3069cc8963344ba8a092f3b0fcd7030a7ee65522",
+      "parameters": {
+        "getter": 376678,
+        "setter": 377086,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271216
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500176,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500196,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500216,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500294,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500314,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500334,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "e04aaf44157fbbec5e3c0cbf1a9ba99c81d2aeba7d420c7ece654dc515d503ff",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271808
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "4ed5cdc974eb79feafbba2312ffb4d54ae30b1a77a30aa7ee172a51fc64f4c09",
+      "parameters": {
+        "getter": 376370,
+        "setter": 376778,
+        "register_base": 69251200,
+        "switch_dispatcher": 1270752
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499856,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 499876,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 499896,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 499974,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 499994,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500014,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "88761a31edd5b3aedfad0e70d25f45dfb8092289743145950ff85131b2dff4e1",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271240
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "0f7b3d34cbf58b033cdad2d234f0ed0a5782de50f9bb42d80b60835d61f569d2",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271808
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "c0b346b0e2a7fc601ac68fe826fba20b1057eecffdc86ce96fe460184073d7f6",
+      "parameters": {
+        "getter": 375962,
+        "setter": 376370,
+        "register_base": 69251200,
+        "switch_dispatcher": 1276980
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 498864,
+          "default_address": 33529804
+        },
+        {
+          "parameter": 16,
+          "site": 498884,
+          "default_address": 33529796
+        },
+        {
+          "parameter": 32,
+          "site": 498904,
+          "default_address": 33529812
+        },
+        {
+          "parameter": 1,
+          "site": 498982,
+          "default_address": 33529780
+        },
+        {
+          "parameter": 17,
+          "site": 499002,
+          "default_address": 33529772
+        },
+        {
+          "parameter": 33,
+          "site": 499022,
+          "default_address": 33529788
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "3559077e3c032451137967d4f81f3e8777f8bfbf8245e68ac4732eb5cec5f404",
+      "parameters": {
+        "getter": 376290,
+        "setter": 376698,
+        "register_base": 69251200,
+        "switch_dispatcher": 1277432
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499204,
+          "default_address": 33529804
+        },
+        {
+          "parameter": 16,
+          "site": 499224,
+          "default_address": 33529796
+        },
+        {
+          "parameter": 32,
+          "site": 499244,
+          "default_address": 33529812
+        },
+        {
+          "parameter": 1,
+          "site": 499322,
+          "default_address": 33529780
+        },
+        {
+          "parameter": 17,
+          "site": 499342,
+          "default_address": 33529772
+        },
+        {
+          "parameter": 33,
+          "site": 499362,
+          "default_address": 33529788
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "de24b0003fb08526382463ff60e8d5565cd92db875750e5695c740dce9775186",
+      "parameters": {
+        "getter": 376214,
+        "setter": 376622,
+        "register_base": 69251200,
+        "switch_dispatcher": 1275092
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499108,
+          "default_address": 33529804
+        },
+        {
+          "parameter": 16,
+          "site": 499128,
+          "default_address": 33529796
+        },
+        {
+          "parameter": 32,
+          "site": 499148,
+          "default_address": 33529812
+        },
+        {
+          "parameter": 1,
+          "site": 499226,
+          "default_address": 33529780
+        },
+        {
+          "parameter": 17,
+          "site": 499246,
+          "default_address": 33529772
+        },
+        {
+          "parameter": 33,
+          "site": 499266,
+          "default_address": 33529788
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "ed8f1c8414faa6990673ab1f2d968f4b93ab4ebb7b98cde907946368b505878f",
+      "parameters": {
+        "getter": 376370,
+        "setter": 376778,
+        "register_base": 69251200,
+        "switch_dispatcher": 1270752
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499856,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 499876,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 499896,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 499974,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 499994,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500014,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "592e8d22d98aea9c1162c9f010fe2df29b31f6320d539336a699a78ea3af9191",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271808
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+      "parameters": {
+        "getter": 372666,
+        "setter": 373074,
+        "register_base": 69251200,
+        "switch_dispatcher": 1296536
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 506164,
+          "default_address": 33529760
+        },
+        {
+          "parameter": 16,
+          "site": 506184,
+          "default_address": 33529752
+        },
+        {
+          "parameter": 32,
+          "site": 506204,
+          "default_address": 33529768
+        },
+        {
+          "parameter": 1,
+          "site": 506282,
+          "default_address": 33530957
+        },
+        {
+          "parameter": 17,
+          "site": 506302,
+          "default_address": 33530949
+        },
+        {
+          "parameter": 33,
+          "site": 506322,
+          "default_address": 33530965
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+      "parameters": {
+        "getter": 376370,
+        "setter": 376778,
+        "register_base": 69251200,
+        "switch_dispatcher": 1270752
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499856,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 499876,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 499896,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 499974,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 499994,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500014,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271808
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271236
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+      "parameters": {
+        "getter": 376370,
+        "setter": 376778,
+        "register_base": 69251200,
+        "switch_dispatcher": 1270752
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499856,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 499876,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 499896,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 499974,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 499994,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500014,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+      "parameters": {
+        "getter": 375962,
+        "setter": 376370,
+        "register_base": 69251200,
+        "switch_dispatcher": 1276980
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 498864,
+          "default_address": 33529804
+        },
+        {
+          "parameter": 16,
+          "site": 498884,
+          "default_address": 33529796
+        },
+        {
+          "parameter": 32,
+          "site": 498904,
+          "default_address": 33529812
+        },
+        {
+          "parameter": 1,
+          "site": 498982,
+          "default_address": 33529780
+        },
+        {
+          "parameter": 17,
+          "site": 499002,
+          "default_address": 33529772
+        },
+        {
+          "parameter": 33,
+          "site": 499022,
+          "default_address": 33529788
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+      "parameters": {
+        "getter": 376270,
+        "setter": 376678,
+        "register_base": 69251200,
+        "switch_dispatcher": 1277412
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499184,
+          "default_address": 33529804
+        },
+        {
+          "parameter": 16,
+          "site": 499204,
+          "default_address": 33529796
+        },
+        {
+          "parameter": 32,
+          "site": 499224,
+          "default_address": 33529812
+        },
+        {
+          "parameter": 1,
+          "site": 499302,
+          "default_address": 33529780
+        },
+        {
+          "parameter": 17,
+          "site": 499322,
+          "default_address": 33529772
+        },
+        {
+          "parameter": 33,
+          "site": 499342,
+          "default_address": 33529788
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+      "parameters": {
+        "getter": 376042,
+        "setter": 376450,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271864
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499128,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 499148,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 499168,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 499246,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 499266,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 499286,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+      "parameters": {
+        "getter": 376370,
+        "setter": 376778,
+        "register_base": 69251200,
+        "switch_dispatcher": 1270752
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 499856,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 499876,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 499896,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 499974,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 499994,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500014,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    },
+    {
+      "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+      "parameters": {
+        "getter": 376698,
+        "setter": 377106,
+        "register_base": 69251200,
+        "switch_dispatcher": 1271808
+      },
+      "defaults": [
+        {
+          "parameter": 0,
+          "site": 500196,
+          "default_address": 33529808
+        },
+        {
+          "parameter": 16,
+          "site": 500216,
+          "default_address": 33529800
+        },
+        {
+          "parameter": 32,
+          "site": 500236,
+          "default_address": 33529816
+        },
+        {
+          "parameter": 1,
+          "site": 500314,
+          "default_address": 33529784
+        },
+        {
+          "parameter": 17,
+          "site": 500334,
+          "default_address": 33529776
+        },
+        {
+          "parameter": 33,
+          "site": 500354,
+          "default_address": 33529792
+        }
+      ],
+      "executions": 480,
+      "refused_mutations": 2,
+      "observations_sha256": "d53967e4fe85b59fe1acb4c9b97a11743f265e3ee4fe35c3495719795008b763"
+    }
+  ],
+  "script_sha256": "f29cb465a84011596ed39cf38688220ea2af0de07c95381729e63cda1420af34",
+  "values": [
+    0,
+    1,
+    15,
+    255,
+    256,
+    257,
+    271,
+    511,
+    32512,
+    32513,
+    32527,
+    32767,
+    32768,
+    32769,
+    32783,
+    33023,
+    65280,
+    65281,
+    65295,
+    65535
+  ],
+  "mmio_seeds": [
+    0,
+    165
+  ],
+  "scratch_upper_halves": [
+    0,
+    65535
+  ],
+  "refused_mutations": 50
+}

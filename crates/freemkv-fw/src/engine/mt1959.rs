@@ -90,6 +90,9 @@ struct RawReadFacts {
     auth_cell_stub_va: u32,
     auth_cell_refusal: bool,
     vid_producer: u32,
+    uhd_conversion_count: u32,
+    /// Present only after the complete conversion group was installed and verified.
+    boot_identity: Option<u32>,
     hooks: Vec<HookReport>,
 }
 
@@ -139,14 +142,16 @@ impl Mt1959Engine {
 
         // ---- BASE (mandatory) — the verb handler + boot hook + save/reset need these;
         // a miss means this image cannot carry a freemkv base, so refuse.
-        let scanner_entry = self.find_scanner_entry(image)?;
-        let cdb_base = self.find_cdb_base(image)?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis.commands().context("native command ownership")?;
+        let scanner_entry = commands.scanner().entry() as u32;
+        let cdb_base = commands.scanner().cdb();
         // sense_setter is a REPORT anchor only — build_handler never uses it, and the
         // classic scanner raises sense inline (no movs r2/r1/r0 + bl triple), so its
         // modern shape legitimately misses on classic. Best-effort (0 when absent) so
         // it never blocks the base; byte-identical on every path (emit ignores it).
-        let sense_setter = self.sense_setter(image).unwrap_or(0);
-        let record = self.find_live_record(image, abi::READ_BUFFER_OPCODE)?;
+        let sense_setter = Self::sense_setter_at(image, commands.scanner().entry()).unwrap_or(0);
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)?;
         // ---- FEATURE facts (best-effort) — these are per-feature report anchors, NOT
         // required by the base handler. A miss = that feature is unavailable on this
         // image (0/None), advertised as such; it must never fail the base build.
@@ -157,25 +162,21 @@ impl Mt1959Engine {
         let setdiscmode = self.find_setdiscmode(image).unwrap_or(0);
         let de_off = self.find_de_byte(image).ok(); // DowngradeEnable feature (optional)
                                                     // AUDIT-only candidate cell (unsound; never used as the flag base) — best-effort.
-        let free_sram_cell = self.find_free_sram_cell(image).unwrap_or(0);
-        // Flag-table base actually used by the emitted code: the validated 204-byte
-        // free hole (chip constant, hardware-proven writable+free across 24 images).
+        let ram = super::sram::SramPlacement::inspect(image);
+        let free_sram_cell = ram.candidate().unwrap_or(0);
+        // Use the modern candidate supported by the owned runtime capture,
+        // with per-image static guards; this is not universal hardware proof.
         let flag_base = FLAG_TABLE_BASE;
         // Hybrid safety belt: cells are chip constants, but assert per-image they
         // sit in mapped RAM and are unreferenced before we commit. The table holds
         // `flag[Feature::X]` for feature ids `1..=NUM_FEATURES` (slot 0 is the
         // NV saved-marker), so it spans `NUM_FEATURES + 1` = 7 bytes.
         let flag_table_len = NUM_FEATURES as u32 + 1;
-        self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
+        ram.assert_free(flag_base, flag_table_len, "flag table")?;
         // TEMPORARY flash-write probe: its 1-byte SRAM source-staging cell lives in
         // the same validated free hole, past the flag table — guard-check it per
         // image so we never stage the source byte over live SRAM.
-        self.assert_sram_cell_free(
-            image,
-            flag_base + FLASHWRITE_SCRATCH_OFF,
-            1,
-            "flash-write scratch",
-        )?;
+        ram.assert_free(flag_base + FLASHWRITE_SCRATCH_OFF, 1, "flash-write scratch")?;
 
         // Resolve the boot-init detour `(conv, orig_init)` pair once, up front,
         // so we can bake the boot function's entry VA (conv - 0x10) into the
@@ -186,8 +187,8 @@ impl Mt1959Engine {
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
 
         let handler_bytes = self
-            .build_handler_with_identity(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
@@ -258,11 +259,18 @@ impl Mt1959Engine {
         let f = self
             .emit_rawread(image, &mut out, flag_base)
             .unwrap_or_default();
-
-        // HRL wipe-once is destructive and gated behind HRL_WIPE_ARMED (default
-        // off) — its record codegen is `hrl_valid_empty_record`; no image ships the
-        // wipe detour until a hardware-validated confirmation flips the constant.
-        let _hrl_wipe_armed = HRL_WIPE_ARMED;
+        let boot_stub_va = if let Some(identity) = f.boot_identity {
+            self.emit_boot_init_with_private_identity(
+                &mut out,
+                flag_base,
+                boot_init_pair,
+                defaults,
+                Some(identity),
+            )?
+            .1
+        } else {
+            boot_stub_va
+        };
 
         // Downgrade-enable (DE) byte: write 0xDE at the identity-page slot when the
         // slot resolved (idempotent on already-DE images). Best-effort: an image whose
@@ -288,6 +296,7 @@ impl Mt1959Engine {
         let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
 
         Ok(CreateReport {
+            uhd_conversion_count: f.uhd_conversion_count,
             image: signed,
             scanner_entry,
             cdb_base,
@@ -365,21 +374,18 @@ impl Mt1959Engine {
 
         // ---- Base prerequisites: if these fail the vendor command cannot exist
         //      at all → whole-run abort ("nothing modifiable"). ----
-        self.find_scanner_entry(image)
-            .context("nothing modifiable: dispatch scanner signature not found")?;
-        self.find_cdb_base(image)?;
-        self.sense_setter(image)?;
-        let record = self.find_live_record(image, abi::READ_BUFFER_OPCODE)?;
+        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let commands = analysis
+            .commands()
+            .context("nothing modifiable: native command ownership")?;
+        Self::sense_setter_at(image, commands.scanner().entry())?;
+        let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)?;
+        let ram = super::sram::SramPlacement::inspect(image);
         let flag_base = FLAG_TABLE_BASE;
         let flag_table_len = NUM_FEATURES as u32 + 1;
-        self.assert_sram_cell_free(image, flag_base, flag_table_len, "flag table")?;
+        ram.assert_free(flag_base, flag_table_len, "flag table")?;
         // TEMPORARY flash-write probe scratch cell (see build_report).
-        self.assert_sram_cell_free(
-            image,
-            flag_base + FLASHWRITE_SCRATCH_OFF,
-            1,
-            "flash-write scratch",
-        )?;
+        ram.assert_free(flag_base + FLASHWRITE_SCRATCH_OFF, 1, "flash-write scratch")?;
         // Boot function entry baked into the Verb::Reboot arm — same rule as
         // build_report (conv - 0x10). Resolve the pair once and thread it into
         // `emit_boot_init` below to avoid a second `find_boot_init` scan.
@@ -387,11 +393,12 @@ impl Mt1959Engine {
         let resolved_boot_init_site = boot_init_pair.0 as u32;
         let boot_function_entry = resolved_boot_init_site.wrapping_sub(0x10);
         let handler_bytes = self
-            .build_handler_with_defaults(
-                image,
+            .build_handler_from_analysis(
+                &analysis,
                 record.handler,
                 flag_base,
                 boot_function_entry,
+                identity_blob(),
                 defaults,
             )
             .context("assembling the 3C-0E handler")?;
@@ -466,9 +473,29 @@ impl Mt1959Engine {
         });
 
         // Raw read / clear VID (VID gate + AKE accept + deny reset) — AACS/BD.
-        levers.push(if cap.bd_aacs {
+        let raw_read = if cap.bd_aacs {
             match self.emit_rawread(image, &mut out, flag_base) {
                 Ok(f) => {
+                    if let Some(identity) = f.boot_identity {
+                        let (_, boot_stub_va) = self.emit_boot_init_with_private_identity(
+                            &mut out,
+                            flag_base,
+                            boot_init_pair,
+                            defaults,
+                            Some(identity),
+                        )?;
+                        // Editable settings must refer to the replacement hook.
+                        let identity = levers
+                            .iter_mut()
+                            .find(|l| l.id == LeverId::Identity)
+                            .unwrap();
+                        identity
+                            .facts
+                            .iter_mut()
+                            .find(|(key, _)| *key == "boot_stub_va")
+                            .unwrap()
+                            .1 = boot_stub_va;
+                    }
                     let mut facts = vec![
                         ("ake_gate", f.ake_gate),
                         ("ake_site", f.ake_site),
@@ -511,13 +538,20 @@ impl Mt1959Engine {
                         facts.push(("auth_cell_stub_va", f.auth_cell_stub_va));
                         facts.push(("auth_cell_refusal", u32::from(f.auth_cell_refusal)));
                     }
+                    if f.uhd_conversion_count != 0 {
+                        // Mixed classic application: verification must receive
+                        // the same reserved flag base used by its emitter.
+                        facts.push(("flag_base", flag_base));
+                        facts.push(("uhd_conversion_count", f.uhd_conversion_count));
+                    }
                     LeverReport::applied(LeverId::RawRead, facts).with_hooks(f.hooks)
                 }
                 Err(e) => LeverReport::missed(LeverId::RawRead, format!("{e:#}")),
             }
         } else {
             LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
-        });
+        };
+        levers.push(raw_read);
 
         // Downgrade-enable (DE) — family-agnostic: any image with a well-formed
         // MTEK identity page. Idempotent (already-0xDE → AlreadyPresent).
@@ -626,11 +660,9 @@ impl Mt1959Engine {
         // ---- validate (read-only) ----
         // AKE accept gate — BU40N/desktop (reject-writer detour) or NB-class
         // (shared-`bl` detour). Resolved by `ake_detour`; BU40N matches the
-        // original signature first. `install_shape` picks the correct 4-byte
-        // encoding at the detour site: `WideB` (Thumb-2 wide `B`) for the
-        // BU40N tail-call site so `lr` is preserved through the shared setter,
-        // `WideBl` for NB shared-`bl` sites where OEM already had a `bl` and
-        // `lr = site+4` is the intended return.
+        // original signature first. Every qualified shape uses Thumb-1 BL:
+        // the original writer reaches a source-proven native call join, while
+        // NB replaces the shared native BL itself.
         let (reset_site, ake_bytes, ake_gate, ake_install_shape) =
             self.ake_detour(image, flag_base)?;
 
@@ -730,8 +762,10 @@ impl Mt1959Engine {
         let mut hooks = vec![
             HookReport::applied(
                 "ake",
-                if ake_install_shape == thumb::BranchKind::BWide {
-                    "reject-tail-call"
+                if reset_site == ake_gate as usize + 12
+                    && image.get(reset_site..reset_site + 2) == Some(&[0x01, 0x21])
+                {
+                    "reject-native-call-join"
                 } else {
                     "shared-call"
                 },
@@ -748,8 +782,9 @@ impl Mt1959Engine {
 
         // `Feature::Unrestricted` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
         // accept gate's UHD class-3 check (via uhd_gate_detour → find_bd_gate) — the
-        // UHD sibling of the BD arm on the SAME gate. When `flag[Uhd]==STATE_OFF` the
-        // stub forces the OEM deny; unarmed it replays OEM (UHD reads are native).
+        // UHD sibling of the BD arm on the SAME gate. When `flag[Unrestricted]==STATE_OFF` the
+        // stub forces the OEM deny; otherwise it replays the existing class check.
+        // This control does not add media recognition or missing AACS2 workers.
         // Images on the descriptor-classifier gate shape (no class-3 arm) leave it
         // unwired (0). Committed so the free_space order matches build_report (…→ deny → uhd).
         let (uhd_site, uhd_stub_va) = match self.uhd_gate_detour(image, flag_base) {
@@ -884,6 +919,61 @@ impl Mt1959Engine {
         let auth_cell_refusal = auth_cell_stub_va != 0
             && mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()
                 != mediatek_optical::image::analysis::AuthCellVariant::R0StateR1Alternate;
+        // UHD conversion is separate from the raw-read controls above. Each
+        // required media gap must be closed before conversion edits reach output.
+        // G01-G06 matches establish the agreed media definition, not a hardware test.
+        let classic_application = super::mt1939_uhd::UhdConversionPlan::inspect(image)
+            .is_ok_and(|p| p.uses_classic_application());
+        let mut uhd_conversion_count = 0;
+        let mut boot_identity = None;
+        if classic_application {
+            let (hook, count) = self.emit_media_conversion_classic(image, &mut w, flag_base);
+            hooks.push(hook);
+            uhd_conversion_count = count;
+        } else {
+            let conversion = super::mt1959_uhd::Plan::inspect(image, flag_base);
+            hooks.push(match conversion {
+                Ok(plan) if !plan.pending().is_empty() => HookReport::unavailable(
+                    "uhd-conversion",
+                    format!("0 conversion edits: {}", plan.pending().join("; ")),
+                ),
+                Ok(plan) => match plan.apply(image, &mut w) {
+                    Ok(()) => {
+                        plan.verify(&w)?;
+                        if plan
+                            .identity_reset()
+                            .is_some_and(|reset| reset.boot_clear_required)
+                        {
+                            boot_identity =
+                                Some(super::mt1959_uhd_identity::marker_address(flag_base)?);
+                        }
+                        HookReport::applied(
+                            "uhd-conversion",
+                            if plan.gaps().is_empty() {
+                                "G01-G06 native media contracts; physical validation pending"
+                                    .to_owned()
+                            } else {
+                                format!(
+                                    "complete media group: {}; physical validation pending",
+                                    plan.gaps()
+                                        .iter()
+                                        .map(|g| g.id())
+                                        .collect::<Vec<_>>()
+                                        .join(",")
+                                )
+                            },
+                        )
+                    }
+                    Err(e) => HookReport::unavailable(
+                        "uhd-conversion",
+                        format!("0 conversion edits: {e:#}"),
+                    ),
+                },
+                Err(e) => {
+                    HookReport::unavailable("uhd-conversion", format!("0 conversion edits: {e:#}"))
+                }
+            });
+        }
         *out = w;
         Ok(RawReadFacts {
             ake_gate,
@@ -903,6 +993,8 @@ impl Mt1959Engine {
             auth_cell_stub_va,
             auth_cell_refusal,
             vid_producer,
+            uhd_conversion_count,
+            boot_identity,
             hooks,
         })
     }

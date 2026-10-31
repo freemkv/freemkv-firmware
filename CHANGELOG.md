@@ -3,6 +3,22 @@
 Customer-visible changes to freemkv Flash and freemkv Modify, newest first.
 Versions are independent of the freemkv ripping applications.
 
+## [0.16.0] - Unreleased
+
+### freemkv Modify
+
+- Add source-qualified media conversion for retained classic MT1939 and older
+  MT1959 firmware, with per-image Speed, Region, Encryption, HRL and Unrestricted
+  settings. Refuse incomplete conversion groups and unsupported source layouts.
+- Preserve boot settings and private media identity across the qualified boot
+  and reset hooks, and strengthen Thumb instruction and calling-convention checks.
+- Reuse native command and SRAM analysis during modification. A paired run over
+  123 retained inputs measured 37% less analysis/build time with identical outputs.
+- Validate 123 retained production outputs against independent CPU contracts.
+  These software checks do not establish physical UHD reading or full authenticated
+  playback. G07/G08 authentication differences remain unpatched; hardware reports
+  for BH16NS48 1.02 and ASUS BW-16D1HT running WH16NS58 1.V9 are pending.
+
 ## [0.15.4] - 2026-10-30
 
 ### freemkv Modify

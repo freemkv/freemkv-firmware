@@ -1,0 +1,31 @@
+{
+  "scope": "Primary-source provenance checks. Source authenticity and UHD product qualification are recorded separately.",
+  "variants": [
+    {
+      "firmware_sha256": "c328b6561228dc4c26f3eee901bd51af353b2f4eefb74d8be02da2c9a76606fb",
+      "revision": "TK03",
+      "manufacturer_support_page": "https://dynabook.com/assistpc/download/modify/dynabook/t85/xxc/oddfw/index_j.htm",
+      "manufacturer_page_revision": "TK03",
+      "official_download_url": "https://dynabook.com/assistpc/download/modify/dynabook/t85/xxc/oddfw/TCJ0066100A.exe",
+      "download_bytes": 3899072,
+      "download_sha256": "3e72a0e0c8147afde277d71f9c80d7e63a42a64026150f7a8b5c79b8e5a70ec3",
+      "matches_held_original": true,
+      "verification_date": "2026-10-30",
+      "uhd_qualification": "The update page describes Blu-ray drive stability and lists target laptop families; it does not advertise UHD playback. Exact UHD-capable SKU qualification remains unresolved."
+    }
+  ],
+  "reference_source_verifications": [
+    {
+      "firmware_sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+      "manufacturer_support_page": "https://www.lg.com/us/support/product/lg-WH16NS60.AUSU10B",
+      "official_download_url": "https://gscs-b2c.lge.com/downloadFile?fileId=QvLSWdF1TTP5vTRuHnCew",
+      "download_bytes": 2536652,
+      "download_sha256": "198c01224a0ad29baca6b532aec928989d60db4caed765a29988c165940449a0",
+      "matches_held_original": true,
+      "member": "WH16NS60.exe",
+      "member_sha256": "e99cf91b88295954bd43a65901d2d1ae471036fc7455723c5d4fe48142641814",
+      "verification_date": "2026-10-30",
+      "product_qualification": "The manufacturer page explicitly advertises Ultra HD Blu-ray playback and lists this N1.01 updater."
+    }
+  ]
+}

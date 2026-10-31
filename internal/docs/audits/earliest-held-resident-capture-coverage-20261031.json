@@ -1,0 +1,39 @@
+{
+  "schema": "earliest-held-resident-capture-coverage-v1",
+  "required_source_sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
+  "required_address": "0x01ff7910",
+  "required_length": 8,
+  "required_timing": "valid before new C7 startup lookup at0xdd998, and native getter use",
+  "capture_readme_sha256": "a57bc567f01bae681d9d68b2911d96568ff21f3864f18f0d997fea003c34583e",
+  "captures": [
+    {
+      "file": "BU40N_OEM_overlay_0x1f80000.bin",
+      "base": "0x1f80000",
+      "end": "0x1ff0000",
+      "bytes": 458752,
+      "sha256": "8639ac84e8a4face6415e7f68f7714d0198f02908175b6c5b28a69e246545bc4",
+      "covers_profile": false,
+      "version_bound_to_c88a": false
+    },
+    {
+      "file": "BU40N_1.03MK_blob_fullram_0x1c00000.bin",
+      "base": "0x1c00000",
+      "end": "0x2010000",
+      "bytes": 4259840,
+      "sha256": "b6d4e6ae092d3f3ff42b31cf2b60c975021c9c7b22213adc733af9118ae592d1",
+      "covers_profile": true,
+      "version_bound_to_c88a": false,
+      "profile_sha256": "53b1cc47a978db1d792da008130c914d5a691fe048fcd75197db7f7fcfdd2e06",
+      "profile_all_zero": false,
+      "profile_all_erased": false
+    }
+  ],
+  "result": "no version-bound usable capture found",
+  "limits": [
+    "Address coverage alone is not firmware-version authentication.",
+    "The OEM overlay actual size exceeds its README extent, but still does not cover the required address.",
+    "The covering capture is documented BU40N1.03MK with runtime blob active, not BP50NB40c88a.",
+    "No coefficient bytes or memory-kind assumptions are imported into production.",
+    "Seven user-supplied report archives were checked for resident-capture names and BP50NB40/c88a metadata mentions; none were found. This is a bounded archive check, not a universal absence proof."
+  ]
+}

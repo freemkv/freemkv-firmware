@@ -78,6 +78,77 @@ fn uh12_oem_allocation_failure_builds_through_the_normal_modify_api() {
     ));
 }
 
+/// Tight OEM coverage must not silently remove otherwise qualified features.
+#[test]
+fn wh16ns60_103_normal_modify_qualifies_space_and_preserves_native_programming() {
+    use sha2::{Digest, Sha256};
+    let original = include_bytes!("../../tests/fixtures/WH16NS60_OEM_1.03.bin");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(original)),
+        "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814"
+    );
+    let (report, support) =
+        crate::api::modify_with_defaults(original, &crate::boot::BootSettings::standard()).unwrap();
+    for id in [
+        LeverId::Identity,
+        LeverId::Speed,
+        LeverId::RegionFree,
+        LeverId::RawRead,
+        LeverId::BootSettings,
+    ] {
+        assert!(
+            report
+                .levers
+                .iter()
+                .any(|lever| lever.id == id && lever.outcome == LeverOutcome::Applied),
+            "{id:?}"
+        );
+    }
+    assert!(crate::boot::BootFeature::ALL
+        .iter()
+        .all(|feature| support.supports(*feature)));
+    assert!(support.supports_value(crate::boot::BootFeature::Unrestricted, 0));
+    assert!(freemkv_flash::cmac::verify(&report.image));
+    assert!(crate::engine::audit::audit_image(original, &report).ok());
+    assert!(crate::engine::code_space::metadata_preserved(
+        original,
+        &report.image
+    ));
+    freemkv_flash::crossflash::admits(
+        freemkv_flash::crossflash::Platform::Mediatek,
+        original,
+        &report.image,
+    )
+    .unwrap();
+    // Coverage retry authenticates an erased tail, preserving the receiver's
+    // actual native programming loop, source selection and integrity checker.
+    for span in [0x1a000..0x1a828, 0x13cd76..0x13cf0e, 0x13cbb4..0x13ccf0] {
+        assert_eq!(&original[span.clone()], &report.image[span]);
+    }
+    for reserved in core::iter::once(mediatek_optical::layout::BOOT_AREA)
+        .chain(mediatek_optical::layout::DRIVE_WRITTEN)
+    {
+        assert_eq!(
+            &original[reserved.start..reserved.end()],
+            &report.image[reserved.start..reserved.end()]
+        );
+    }
+    let before = freemkv_flash::cmac::parse_table(original).unwrap();
+    let after = freemkv_flash::cmac::parse_table(&report.image).unwrap();
+    for (before, after) in before.iter().zip(&after) {
+        assert_eq!(before.enabled, after.enabled);
+        assert_eq!(before.start, after.start);
+        assert_eq!(
+            after.end,
+            if before.index == 1 {
+                0x15bfff
+            } else {
+                before.end
+            }
+        );
+    }
+}
+
 #[test]
 fn uh12_coverage_retry_refuses_changed_receiver_contracts_even_when_resigned() {
     let original = include_bytes!("../../tests/fixtures/UH12NS40_OEM_1.03.bin");

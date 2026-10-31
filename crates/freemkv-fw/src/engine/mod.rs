@@ -20,6 +20,7 @@ use thumb_asm::CommandRecord;
 
 pub mod audit;
 mod code_space;
+mod sram;
 pub use code_space::NoCodeSpace;
 pub(crate) use code_space::{coverage_retry, validate_metadata};
 pub mod core;
@@ -28,6 +29,10 @@ pub mod mt1939;
 pub mod mt1939_classic;
 pub mod mt1939_modern;
 pub mod mt1959;
+pub mod mt1959_uhd;
+mod mt1959_uhd_density;
+pub mod mt1959_uhd_identity;
+mod mt1959_uhd_reverse;
 pub mod pioneer;
 pub mod profile;
 
@@ -38,6 +43,8 @@ pub use lever::ModifyReport;
 /// assert exactly what was found and changed.
 #[derive(Debug, Clone)]
 pub struct CreateReport {
+    /// Number of installed source-bound classic UHD media helpers; zero when unavailable.
+    pub uhd_conversion_count: u32,
     /// The re-signed freemkv image.
     pub image: Vec<u8>,
     /// Scanner entry the record format + `cdb_base` were proven from.
@@ -207,3 +214,7 @@ pub fn for_family(fam: ChipFamily) -> Result<Box<dyn Engine>> {
 #[cfg(test)]
 #[path = "engine_tests.rs"]
 mod tests;
+
+pub mod mt1939_uhd;
+#[cfg(test)]
+pub use mt1939_uhd as mt1939_research;

@@ -1,0 +1,32 @@
+PAUSED AT USER REQUEST — WAIT FOR BOTH HARDWARE REPORTS
+
+Production cleanup is committed/pushed as 7933f6f on dev. Wait for the user
+reports or explicit resumption before further firmware work.
+
+Pending: BH16NS48 1.02 modified, and ASUS BW-16D1HT running our WH16NS58
+1.V9 OEM versus modified. Exact delivered hashes, boot settings, validation
+and current Desktop presence are in audits/uhd-hardware-tests-pending-20261031.json.
+Both modified files use Unrestricted ON, Encryption OFF, other settings OEM.
+BH16NS48 file is no longer on Desktop at pause; do not recreate it unasked.
+
+User repeatedly confirmed tester verified our exact OEM 1.V9. File identity
+is settled. User reports OEM does not read UHD on this ASUS. Exact failure
+stage/application/logs and both modified hardware results are pending.
+
+Read audits/uhd-reference-diagnostic-20261031.md and JSON before resuming.
+123 retained inputs: 91 have G07/G08 differences, 32 have neither. 1.V9 has
+both; inspected advertised-UHD WH16NS60/BU40N reference rows have neither.
+G07/G08 remain diagnostic, unpatched. G01-G06 completion does not establish
+complete reading or authenticated playback. BU40N uhd-native/bd-native hooks
+add forced refusal for Off; their absence on 1.V9 is NOT a missing-unlock proof.
+Earlier conversational claims that OEM 1.V9 reads UHD were corrected.
+The 124th diagnostic input is excluded BP50NB40 1.00, inspected read-only;
+its exclusion remains. No production changes were made during diagnosis.
+
+User reports successful modified BU40N UHD reading. Exact successful revision,
+BIN/settings/client profile remains to be bound if needed. On receipt of reports,
+compare recognition, capacity, open/authentication, sustained reading and ordinary
+disc regressions against the delivered hashes; local CPU tests are not hardware proof.
+
+Pre-existing audit edits/deletions/untracked evidence remain outside these commits.
+Do not stage them indiscriminately.

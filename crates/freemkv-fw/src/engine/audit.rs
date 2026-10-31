@@ -96,10 +96,9 @@ fn check_bl(
     );
 }
 
-/// AKE-detour install check: passes if the 4 bytes at `site` are either the
-/// Thumb-2 wide `B.W` (BU40N/desktop tail-call install) OR the wide `BL`
-/// (NB-class shared-call install) targeting `stub`. See `AkeInstallShape` in
-/// `crate::engine::core` for which variant each gate resolution produces.
+/// AKE-detour install check: require the source-qualified Thumb-1 BL to `stub`.
+/// Every currently supported
+/// AKE shape emits BL; accepting a byte-valid B.W would hide plan/install drift.
 fn check_ake_detour(
     checks: &mut Vec<AuditCheck>,
     lever: &'static str,
@@ -108,7 +107,6 @@ fn check_ake_detour(
     stub: u32,
 ) {
     let s = site as usize;
-    let expected_bw = thumb::encode_b_wide(s, stub);
     let expected_bl = thumb::encode_bl(s, stub);
     if s + 4 > img.len() {
         checks.push(AuditCheck {
@@ -120,15 +118,8 @@ fn check_ake_detour(
         return;
     }
     let found = &img[s..s + 4];
-    let ok = expected_bw.as_ref().is_some_and(|e| found == e)
-        || expected_bl.as_ref().is_some_and(|e| found == e);
-    let kind_matched = if expected_bw.as_ref().is_some_and(|e| found == e) {
-        "b.w"
-    } else if expected_bl.as_ref().is_some_and(|e| found == e) {
-        "bl"
-    } else {
-        "neither"
-    };
+    let ok = expected_bl.as_ref().is_some_and(|e| found == e);
+    let kind_matched = if ok { "bl" } else { "neither" };
     let (ok, detail) = if ok && !stub_present(img, stub) {
         (
             false,
@@ -138,8 +129,8 @@ fn check_ake_detour(
         (
             ok,
             format!(
-                "site 0x{site:08x} -> stub 0x{stub:08x} ({kind_matched}): b.w={:02x?}, bl={:02x?}, found {:02x?}",
-                expected_bw, expected_bl, found
+                "site 0x{site:08x} -> stub 0x{stub:08x} ({kind_matched}): required bl={:02x?}, found {:02x?}",
+                expected_bl, found
             ),
         )
     };
@@ -362,13 +353,46 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
             }
             LeverId::RawRead => {
+                let classic = report.engine == "MT1939"
+                    && original
+                        .get(0x3000..0x3010)
+                        .is_some_and(|b| b.starts_with(b"MT1939 Boot"));
+                if l.hooks
+                    .iter()
+                    .any(|h| h.id == "uhd-conversion" && (!classic || h.variant.is_some()))
+                {
+                    let classic_conversion = l.hooks.iter().any(|h| {
+                        h.id == "uhd-conversion"
+                            && h.variant
+                                .as_deref()
+                                .is_some_and(|v| v.starts_with("complete media group: classic "))
+                    });
+                    let check = if classic || classic_conversion {
+                        let flags = report.levers.iter().find_map(|v| fact(v, "flag_base"));
+                        flags
+                            .ok_or_else(|| anyhow::anyhow!("missing classic conversion flag base"))
+                            .and_then(|flags| {
+                                super::mt1939_uhd::UhdConversionPlan::inspect(original)
+                                    .and_then(|p| p.verify(original, img, flags))
+                            })
+                    } else {
+                        super::mt1959_uhd::Plan::inspect(original, super::core::FLAG_TABLE_BASE)
+                            .and_then(|p| p.verify(img))
+                    };
+                    checks.push(AuditCheck {
+                        lever: name,
+                        what: "UHD conversion atomic group".into(),
+                        ok: check.is_ok(),
+                        detail: match check {
+                            Ok(()) => "complete group or unchanged conversion sites".into(),
+                            Err(e) => format!("{e:#}"),
+                        },
+                    });
+                }
                 let before = checks.len();
                 if let (Some(site), Some(stub)) = (fact(l, "ake_site"), fact(l, "ake_stub_va")) {
-                    // AKE install shape depends on the resolved gate variant:
-                    // BU40N/desktop uses `B.W` (tail-call preservation); NB
-                    // variants use `BL`. Try `B.W` first, fall back to `BL`; a
-                    // valid install must be one of the two encodings targeting
-                    // the AKE stub.
+                    // Require the actual current plan's BL encoding, rather
+                    // than accepting an alternative branch with the same target.
                     check_ake_detour(&mut checks, name, img, site, stub);
                 }
                 if let (Some(site), Some(stub)) = (fact(l, "gatea_gate"), fact(l, "gatea_stub_va"))

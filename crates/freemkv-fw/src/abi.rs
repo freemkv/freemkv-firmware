@@ -314,8 +314,7 @@ pub enum Feature {
     /// (`0xFF`) = OEM enforce; [`STATE_OFF`] (`0x00`) = off (skip the HRL lookup —
     /// revoked certs accepted, non-destructive); [`STATE_ON`] (`0x01`) = on (enforce
     /// the HRL). Polarity note: OFF now means "skip" — the pre-migration spec put
-    /// skip on `0x01`. `0x02` is a reserved/internal deferred value (see the
-    /// `pub(crate)` `HRL_WIPE_ONCE`) that is NOT part of the host-facing ABI.
+    /// skip on `0x01`. `0x02` is reserved and is not part of the host-facing ABI.
     Hrl = 0x05,
     /// Content encryption / drive-host AKE (single consolidated feature — hardware
     /// proved on BU40N/MT1959 that toggling this alone de-busses content reads).
@@ -326,14 +325,6 @@ pub enum Feature {
     /// Wire id `0x07` is retired (was `Bus`, proved inert as a datapath lever).
     Encryption = 0x06,
 }
-
-/// [`Feature::Hrl`] internal deferred state: one-time PERMANENT wipe of the flash
-/// HRL to valid-empty. **NOT part of the host-facing wire ABI** — it is
-/// `pub(crate)` and referenced only by the gated-off firmware wipe codegen (see
-/// `HRL_WIPE_ARMED`, default `false`). Kept at `0x02` so the deferred codegen
-/// stays compilable; the wire only exposes HRL `skip` (`0x01`).
-#[allow(dead_code)]
-pub(crate) const HRL_WIPE_ONCE: u8 = 0x02;
 
 // The old `STATE_BD_DISABLE` (`0x02`) sentinel is RETIRED: with the always-on
 // boot hook writing `0xFF` into every flag at power-on, `0x00` is a safe OFF value

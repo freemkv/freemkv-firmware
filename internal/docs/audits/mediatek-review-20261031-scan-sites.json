@@ -1,0 +1,479 @@
+{
+  "scope": "Static engine source call sites outside test modules, not runtime scan totals. Includes the cfg(test) referenced_sram wrapper. Excludes declarations and comments; exact snippets retained.",
+  "counts": {
+    "RamReferences::inspect": 2,
+    "find_masked": 3,
+    "find_masked_all": 7,
+    "find_unique": 8,
+    "CommandScanner::inspect": 2,
+    "CommandDispatch::inspect": 1,
+    "ResponseIo::inspect": 2,
+    "find_unique_variant": 2,
+    "ImageAnalysis::inspect": 5,
+    "AuthCell::detect": 4,
+    "free_space": 22,
+    "UhdConversionPlan::inspect": 3,
+    "Plan::inspect": 2,
+    "UhdAreas::inspect": 2,
+    "masked_matches": 9,
+    "prepared_patches": 2
+  },
+  "sites": [
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 500,
+      "call": "RamReferences::inspect",
+      "source": "mediatek_optical::image::analysis::RamReferences::inspect(image)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 516,
+      "call": "find_masked",
+      "source": "pub(crate) fn find_masked(image: &[u8], sig: &[(u16, u16)], lo: usize, hi: usize) -> Option<usize> {"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 529,
+      "call": "find_masked_all",
+      "source": "pub(crate) fn find_masked_all("
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 560,
+      "call": "find_unique",
+      "source": "pub(crate) fn find_unique("
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 596,
+      "call": "find_masked_all",
+      "source": "for site in find_masked_all(image, pattern, lo, hi) {"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 713,
+      "call": "CommandScanner::inspect",
+      "source": "mediatek_optical::image::analysis::CommandScanner::inspect(image)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 720,
+      "call": "CommandScanner::inspect",
+      "source": "mediatek_optical::image::analysis::CommandScanner::inspect(image)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 756,
+      "call": "CommandDispatch::inspect",
+      "source": "let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(image)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 809,
+      "call": "ResponseIo::inspect",
+      "source": "let io = mediatek_optical::image::analysis::ResponseIo::inspect(image)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 829,
+      "call": "ResponseIo::inspect",
+      "source": "let io = mediatek_optical::image::analysis::ResponseIo::inspect(image)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 871,
+      "call": "find_masked_all",
+      "source": "let hits: Vec<usize> = find_masked_all(image, FLASH_PROGRAM_SIG, 0, image.len())"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1040,
+      "call": "find_masked_all",
+      "source": "match find_masked_all(image, BOOT_INIT_SIG, 0, image.len()).as_slice() {"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1044,
+      "call": "find_masked_all",
+      "source": "[] => match find_masked_all(image, BOOT_INIT_SIG_CLASSIC, 0, image.len()).as_slice() {"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1090,
+      "call": "find_masked",
+      "source": "let dispatcher = find_masked(image, DISP, 0x000a_0000, 0x000c_0000)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1095,
+      "call": "find_masked",
+      "source": "let deny = find_masked(image, DENY, 0x0013_0000, 0x0014_0000)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1208,
+      "call": "find_unique",
+      "source": "Ok(find_unique(image, SETDISCMODE_SIG, lo, hi, \"SetDiscMode\")? as u32)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1219,
+      "call": "find_unique_variant",
+      "source": "let (site, variant) = find_unique_variant("
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1239,
+      "call": "find_unique",
+      "source": "Ok(find_unique(image, REGION_EMIT_SIG, 0, image.len(), \"RPC-state emitter\")? as u32)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1249,
+      "call": "find_unique",
+      "source": "Ok(find_unique(image, REGION_EMIT_SIG, lo, hi, \"RPC-state emitter\")? as u32)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1259,
+      "call": "find_unique",
+      "source": "Ok(find_unique(image, AKE_GATE_SIG, 0, image.len(), \"AACS AKE accept gate\")? as u32)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1266,
+      "call": "find_unique",
+      "source": "Ok(find_unique("
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1280,
+      "call": "find_unique",
+      "source": "Ok(find_unique("
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1345,
+      "call": "find_masked_all",
+      "source": "let hits: Vec<usize> = find_masked_all(image, SIG, 0, image.len())"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1400,
+      "call": "find_masked_all",
+      "source": "let hits: Vec<usize> = find_masked_all(image, SIG, lo, hi)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 1539,
+      "call": "ImageAnalysis::inspect",
+      "source": "let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 2579,
+      "call": "AuthCell::detect",
+      "source": "let contract = AuthCell::detect(image)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 2615,
+      "call": "AuthCell::detect",
+      "source": "let contract = AuthCell::detect(image).map_err(|e| anyhow!(\"auth-cell layout: {e}\"))?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 2655,
+      "call": "find_unique",
+      "source": "Ok(find_unique(image, HRL_LOOKUP_SIG, 0, image.len(), \"HRL lookup routine\")? as u32)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 2834,
+      "call": "find_unique_variant",
+      "source": "let (anchor, variant) = find_unique_variant("
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/core.rs",
+      "line": 3246,
+      "call": "free_space",
+      "source": "let stub_va = self.free_space(out, bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/audit.rs",
+      "line": 375,
+      "call": "UhdConversionPlan::inspect",
+      "source": "super::mt1939_uhd::UhdConversionPlan::inspect(original)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/audit.rs",
+      "line": 379,
+      "call": "Plan::inspect",
+      "source": "super::mt1959_uhd::Plan::inspect(original, super::core::FLAG_TABLE_BASE)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959_uhd.rs",
+      "line": 142,
+      "call": "UhdAreas::inspect",
+      "source": "let areas = UhdAreas::inspect(image);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959_uhd.rs",
+      "line": 430,
+      "call": "free_space",
+      "source": "let target = super::mt1959::Mt1959Engine.free_space(&work, c.bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 145,
+      "call": "ImageAnalysis::inspect",
+      "source": "let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 208,
+      "call": "free_space",
+      "source": "let handler_va = self.free_space(&out, handler_bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 382,
+      "call": "ImageAnalysis::inspect",
+      "source": "let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 412,
+      "call": "free_space",
+      "source": "let handler_va = self.free_space(&out, handler_bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 618,
+      "call": "free_space",
+      "source": "let speed_stub_va = self.free_space(out, speed_bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 639,
+      "call": "free_space",
+      "source": "let region_stub_va = self.free_space(out, region_bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 724,
+      "call": "free_space",
+      "source": "let ake_stub_va = self.free_space(&w, ake_bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 741,
+      "call": "free_space",
+      "source": "let gatea_stub_va = self.free_space(&w, gatea_bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 754,
+      "call": "free_space",
+      "source": "let deny_stub_va = self.free_space(&w, deny_bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 797,
+      "call": "free_space",
+      "source": "let stub_va = self.free_space(&w, bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 827,
+      "call": "free_space",
+      "source": "let stub_va = self.free_space(&w, bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 858,
+      "call": "free_space",
+      "source": "let stub_va = self.free_space(&w, bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 897,
+      "call": "free_space",
+      "source": "let stub_va = self.free_space(&w, bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 913,
+      "call": "AuthCell::detect",
+      "source": "mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 925,
+      "call": "AuthCell::detect",
+      "source": "&& mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 930,
+      "call": "UhdConversionPlan::inspect",
+      "source": "let classic_application = super::mt1939_uhd::UhdConversionPlan::inspect(image)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1959.rs",
+      "line": 939,
+      "call": "Plan::inspect",
+      "source": "let conversion = super::mt1959_uhd::Plan::inspect(image, flag_base);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 109,
+      "call": "UhdConversionPlan::inspect",
+      "source": "let result = super::mt1939_uhd::UhdConversionPlan::inspect(source)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 160,
+      "call": "free_space",
+      "source": "let va = self.free_space(out, bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 269,
+      "call": "ImageAnalysis::inspect",
+      "source": "let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 325,
+      "call": "free_space",
+      "source": "let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 516,
+      "call": "free_space",
+      "source": "let stub_va = self.free_space(out, bytes.len() + 16).ok()?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 574,
+      "call": "ImageAnalysis::inspect",
+      "source": "let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 624,
+      "call": "free_space",
+      "source": "let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 769,
+      "call": "free_space",
+      "source": "let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 814,
+      "call": "masked_matches",
+      "source": "let mut vid_gates = masked_matches(image, VID_GATE_SIG_CLASSIC, lo, hi);"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 815,
+      "call": "masked_matches",
+      "source": "vid_gates.extend(masked_matches(image, VID_GATE_SIG_CLASSIC_R7, lo, hi));"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 866,
+      "call": "masked_matches",
+      "source": "let mut ake_gates: Vec<_> = masked_matches(image, AKE_GATE_SIG_CLASSIC, lo, hi)"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 870,
+      "call": "masked_matches",
+      "source": "for gate in masked_matches(image, AKE_GATE_SIG_CLASSIC_SPLIT, lo, hi) {"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 907,
+      "call": "free_space",
+      "source": "let gatea_stub_va = self.free_space(&w, gatea_bytes.len() + 16)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 920,
+      "call": "free_space",
+      "source": "let ake_stub_va = self.free_space(&w, ake_bytes.len() + 16)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 986,
+      "call": "masked_matches",
+      "source": "let mut hrl_routines = masked_matches(image, HRL_LOOKUP_SIG_CLASSIC, 0, image.len());"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 987,
+      "call": "masked_matches",
+      "source": "hrl_routines.extend(masked_matches(image, HRL_LOOKUP_SIG, 0, image.len()));"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_classic.rs",
+      "line": 1068,
+      "call": "free_space",
+      "source": "let stub_va = self.free_space(&w, bytes.len() + 16)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/sram.rs",
+      "line": 14,
+      "call": "RamReferences::inspect",
+      "source": "references: RamReferences::inspect(image),"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939.rs",
+      "line": 129,
+      "call": "masked_matches",
+      "source": "pub(crate) fn masked_matches(image: &[u8], sig: &[(u16, u16)], lo: usize, hi: usize) -> Vec<usize> {"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939.rs",
+      "line": 157,
+      "call": "masked_matches",
+      "source": "let vid = masked_matches(image, VID_GATE_SIG_CLASSIC, 0, image.len());"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939.rs",
+      "line": 158,
+      "call": "masked_matches",
+      "source": "let ake = masked_matches(image, AKE_GATE_SIG_CLASSIC, 0, image.len());"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_uhd.rs",
+      "line": 36,
+      "call": "prepared_patches",
+      "source": "let patches = self.prepared_patches(source, flags)?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_uhd.rs",
+      "line": 45,
+      "call": "free_space",
+      "source": "let target = super::mt1959::Mt1959Engine.free_space(&work, p.bytes.len())?;"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_uhd.rs",
+      "line": 61,
+      "call": "prepared_patches",
+      "source": "for p in self.prepared_patches(source, flags)? {"
+    },
+    {
+      "file": "crates/freemkv-fw/src/engine/mt1939_uhd.rs",
+      "line": 176,
+      "call": "UhdAreas::inspect",
+      "source": "let areas = UhdAreas::inspect(image);"
+    }
+  ]
+}

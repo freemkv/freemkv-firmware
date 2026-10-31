@@ -1,0 +1,2446 @@
+[
+  {
+    "sha256": "103b9da94c91212df6313b150d3cf7e10c6b891a4ab65c49773e891a05f96a2e",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "103b9da94c91212df6313b150d3cf7e10c6b891a4ab65c49773e891a05f96a2e",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "103b9da94c91212df6313b150d3cf7e10c6b891a4ab65c49773e891a05f96a2e",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "5c1a47392976add3f84aa90a9a17dcf835361cecda706e6d7d388d7b92a24b69",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "215488b5ac20fc3ed7fe33ff5679a13a839f0729cc85d0b8bcf0fd3e4c749b23",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "215488b5ac20fc3ed7fe33ff5679a13a839f0729cc85d0b8bcf0fd3e4c749b23",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "215488b5ac20fc3ed7fe33ff5679a13a839f0729cc85d0b8bcf0fd3e4c749b23",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "97b287072e20c9527de6f34f6d564c8edcc6afb3ecf5675c11b8262c11663061",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "8961b80b005c1b2ba7a8dbc10a4bd3fe6680bd2befcc71de95bd32de34bb4482",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "8961b80b005c1b2ba7a8dbc10a4bd3fe6680bd2befcc71de95bd32de34bb4482",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "8961b80b005c1b2ba7a8dbc10a4bd3fe6680bd2befcc71de95bd32de34bb4482",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "53d2cdc32a2ae99864ec8fc4ea98a3a5218220aea990481f560112adaa871624",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "53d2cdc32a2ae99864ec8fc4ea98a3a5218220aea990481f560112adaa871624",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "53d2cdc32a2ae99864ec8fc4ea98a3a5218220aea990481f560112adaa871624",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "7d7f2465feafbcc05b74fbaff1dced8a55b19ddb1c03297a8027e261045d2e9e",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "beb8330e79d08824a62d5eb2b91a144ebb34c9acba8d393d8b32f2b2ae3196de",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "beb8330e79d08824a62d5eb2b91a144ebb34c9acba8d393d8b32f2b2ae3196de",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "beb8330e79d08824a62d5eb2b91a144ebb34c9acba8d393d8b32f2b2ae3196de",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "e64c4ca5244594d0b7943cbedf71a9cced2ae7c3d9b98624aa84d7e3130bac8a",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "e64c4ca5244594d0b7943cbedf71a9cced2ae7c3d9b98624aa84d7e3130bac8a",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "e64c4ca5244594d0b7943cbedf71a9cced2ae7c3d9b98624aa84d7e3130bac8a",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "d133893209392b74cb0c3c1225cc4c0e8b1d927f1f671261ecc82525405e47e0",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "d133893209392b74cb0c3c1225cc4c0e8b1d927f1f671261ecc82525405e47e0",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "d133893209392b74cb0c3c1225cc4c0e8b1d927f1f671261ecc82525405e47e0",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "fbe641e5e808e8127c0196e28bc8a10ba9d8ae61bd8645affff9f259b4a6b25c",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "fbe641e5e808e8127c0196e28bc8a10ba9d8ae61bd8645affff9f259b4a6b25c",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "fbe641e5e808e8127c0196e28bc8a10ba9d8ae61bd8645affff9f259b4a6b25c",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "223e7e38b85f0d27464de596d373464cb7bf77ca825b81f2351abaf8c6cefba1",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "223e7e38b85f0d27464de596d373464cb7bf77ca825b81f2351abaf8c6cefba1",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "223e7e38b85f0d27464de596d373464cb7bf77ca825b81f2351abaf8c6cefba1",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "eb0e2e7275448919aa72bec63ed0cd24ca360fcb0a8347601e85c2750f0d173a",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "eb0e2e7275448919aa72bec63ed0cd24ca360fcb0a8347601e85c2750f0d173a",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "eb0e2e7275448919aa72bec63ed0cd24ca360fcb0a8347601e85c2750f0d173a",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "eeb1c948f1ed98245b7d21d03fe5e333a3349d28453690e2a60b4a8dc01765ba",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "4f4e63cd5988f68f5729af21fe4033d0da2eeeec8f7576772f0f3a197f8eda21",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "4f4e63cd5988f68f5729af21fe4033d0da2eeeec8f7576772f0f3a197f8eda21",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "4f4e63cd5988f68f5729af21fe4033d0da2eeeec8f7576772f0f3a197f8eda21",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "784e017fbacd2250fc37ee442869db82ccc8d637d78126b570ba33c0256d1715",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "784e017fbacd2250fc37ee442869db82ccc8d637d78126b570ba33c0256d1715",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "784e017fbacd2250fc37ee442869db82ccc8d637d78126b570ba33c0256d1715",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "d1e4d3d704c6f2f8ea200d64ff39e3a1a564769dfa66798039015c615536cf4b",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "d1e4d3d704c6f2f8ea200d64ff39e3a1a564769dfa66798039015c615536cf4b",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "d1e4d3d704c6f2f8ea200d64ff39e3a1a564769dfa66798039015c615536cf4b",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "92bb22b2c8999bbcde4e02d785b711063cb414f40bdbe16fac862643b298610d",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "ae0c03138570c73d0ba8ed6d7d5e9798ee54e6c22fcb4c815a86eea3301180f6",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "ae0c03138570c73d0ba8ed6d7d5e9798ee54e6c22fcb4c815a86eea3301180f6",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "ae0c03138570c73d0ba8ed6d7d5e9798ee54e6c22fcb4c815a86eea3301180f6",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "78f75561d474d09a4b3bd31ce346395600e2ed5d23431f6bfa02a500ccaee7d4",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "aea98763cad71e8cfbd8d32963a63adf429e889bd13b749e7c4a792cc5b076a2",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "bdfd6f290ba8172d4c46d8c822013255043f4ad30deb8604608fa0397bddb648",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "bdfd6f290ba8172d4c46d8c822013255043f4ad30deb8604608fa0397bddb648",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "bdfd6f290ba8172d4c46d8c822013255043f4ad30deb8604608fa0397bddb648",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "dd27dc3901ea0ef2e8704a54c8e0f3be44d11cbef061b202f69ef96f70522681",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "dd27dc3901ea0ef2e8704a54c8e0f3be44d11cbef061b202f69ef96f70522681",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "dd27dc3901ea0ef2e8704a54c8e0f3be44d11cbef061b202f69ef96f70522681",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "87790f053877e3e1bdd22969d70a7b1b6ed36624bb474bfcdee6526ac6e227c0",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "87790f053877e3e1bdd22969d70a7b1b6ed36624bb474bfcdee6526ac6e227c0",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "87790f053877e3e1bdd22969d70a7b1b6ed36624bb474bfcdee6526ac6e227c0",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "f1cd257b8c4bb163c7f00610abb30704ea58d93a87be385f48afeb61de239814",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "4ef56002dd392733d15378e4535115f24ba891d3266a7c87420df14df0a7089d",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "4ef56002dd392733d15378e4535115f24ba891d3266a7c87420df14df0a7089d",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "4ef56002dd392733d15378e4535115f24ba891d3266a7c87420df14df0a7089d",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "9c46e6972b7950004e9746256c97b79e8e681faad1a4174b542477ad6ff5257e",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "9c46e6972b7950004e9746256c97b79e8e681faad1a4174b542477ad6ff5257e",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "9c46e6972b7950004e9746256c97b79e8e681faad1a4174b542477ad6ff5257e",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "b7a368da0fcbe905e45a09c6523bdd6f80557ce455272238c73868aa4ae4bd41",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "b7a368da0fcbe905e45a09c6523bdd6f80557ce455272238c73868aa4ae4bd41",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "b7a368da0fcbe905e45a09c6523bdd6f80557ce455272238c73868aa4ae4bd41",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "20425a8ade6bb5d24bbd76fb5d5d67e744cd49e24783be87e6a89d30dfcace95",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "20425a8ade6bb5d24bbd76fb5d5d67e744cd49e24783be87e6a89d30dfcace95",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "20425a8ade6bb5d24bbd76fb5d5d67e744cd49e24783be87e6a89d30dfcace95",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "bc4e6126b880475d58c21e8639ea81f33facc3d4c8284bf6a739d8e8f6c75921",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "bc4e6126b880475d58c21e8639ea81f33facc3d4c8284bf6a739d8e8f6c75921",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "bc4e6126b880475d58c21e8639ea81f33facc3d4c8284bf6a739d8e8f6c75921",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "a344e289e0b1f34bd1a5ae66f0498df9f1a485ad1416f93592e40db2fb5409c7",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "731bcf7aa48dacbcb5729f97576cf24b90d7a795a330c2ab8a801c57eb738f0e",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "731bcf7aa48dacbcb5729f97576cf24b90d7a795a330c2ab8a801c57eb738f0e",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "731bcf7aa48dacbcb5729f97576cf24b90d7a795a330c2ab8a801c57eb738f0e",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "97bee5c51fbeb7980c35539bdf44e5d2c1628908721815fcee4ea2b9f22e9263",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "580d867cee3d219a6e61e460c11fa33e27ca43c912d1d2dc777039a6a8f3f7e9",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "580d867cee3d219a6e61e460c11fa33e27ca43c912d1d2dc777039a6a8f3f7e9",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "580d867cee3d219a6e61e460c11fa33e27ca43c912d1d2dc777039a6a8f3f7e9",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "08d14869e553b84a92c4f897a120559673e75eee6d786988d038471aa2f5369a",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "de13d8d0fd56ffa16ef6bcffcab946e3839cefd85975d8e925dfbb4e8e881f72",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "de13d8d0fd56ffa16ef6bcffcab946e3839cefd85975d8e925dfbb4e8e881f72",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "de13d8d0fd56ffa16ef6bcffcab946e3839cefd85975d8e925dfbb4e8e881f72",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "e9d8bcddf85aab6627c90623efcb7a39ee97681a68b729ef58fea391bc99b33a",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "e9d8bcddf85aab6627c90623efcb7a39ee97681a68b729ef58fea391bc99b33a",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "e9d8bcddf85aab6627c90623efcb7a39ee97681a68b729ef58fea391bc99b33a",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "64688690a2878c792833d9af8731004411f86d7a64ceb522a82368584d84282a",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "64688690a2878c792833d9af8731004411f86d7a64ceb522a82368584d84282a",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "64688690a2878c792833d9af8731004411f86d7a64ceb522a82368584d84282a",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "bea3a823370a985afe37ce6a6aad4b67ef7af15307f622aaac1f76bc7a1dbb5c",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "93ea068da225140d9628c105d88d13088982c61024bf6cca03e0fe456d53a721",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "93ea068da225140d9628c105d88d13088982c61024bf6cca03e0fe456d53a721",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "93ea068da225140d9628c105d88d13088982c61024bf6cca03e0fe456d53a721",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "0bfdd3009ed1bc246f81aae50cfd9a5e4919c5295263e488c2a900500fe48728",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "0bfdd3009ed1bc246f81aae50cfd9a5e4919c5295263e488c2a900500fe48728",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "0bfdd3009ed1bc246f81aae50cfd9a5e4919c5295263e488c2a900500fe48728",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "5f3fa17d61118f8405248cf9d206e32824c2321c9bfda0739b75a8633c3a81e8",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "5f3fa17d61118f8405248cf9d206e32824c2321c9bfda0739b75a8633c3a81e8",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "5f3fa17d61118f8405248cf9d206e32824c2321c9bfda0739b75a8633c3a81e8",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "5f9abd3f7169b1d6525c47c5f406c1ddb13fca5b9f93fc646a1a924f13da9779",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "5f9abd3f7169b1d6525c47c5f406c1ddb13fca5b9f93fc646a1a924f13da9779",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "5f9abd3f7169b1d6525c47c5f406c1ddb13fca5b9f93fc646a1a924f13da9779",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "fbfed0cc2d55bf823012d76cc7ac6d7fa742f059602d9d126b4866bdd8617d2d",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "ca7e8db8576a0ab5f5376270159c133195ba1f60d90e7e7465dae7f4dacc3532",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "ca7e8db8576a0ab5f5376270159c133195ba1f60d90e7e7465dae7f4dacc3532",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "ca7e8db8576a0ab5f5376270159c133195ba1f60d90e7e7465dae7f4dacc3532",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "221ad35b7edd402353e125841893ce651064e8fc6b90368fe84ff19a85a506f4",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "3d3badd67d471b380e5566e747b42f7775abff7dd9fbbc2d0d21920a937b34d7",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "83ea24bb07b8a7a451bba1856d1db18b7f54b1823b9d148e213f25daf2e0a1d2",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "83ea24bb07b8a7a451bba1856d1db18b7f54b1823b9d148e213f25daf2e0a1d2",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "83ea24bb07b8a7a451bba1856d1db18b7f54b1823b9d148e213f25daf2e0a1d2",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "1d57260bf091dc89b6ab5b3e2cc7aa1b843d89227a3a4811e6244eaba353b764",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "569cea9bb8add8b5638fbf0f5ea47b8014f851f007b2cbef2be44737d7cdbf68",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "569cea9bb8add8b5638fbf0f5ea47b8014f851f007b2cbef2be44737d7cdbf68",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "569cea9bb8add8b5638fbf0f5ea47b8014f851f007b2cbef2be44737d7cdbf68",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "38a70ac234a1dfd67725890bdb82f1bf798262a6e345b8edc6633f5d980bfcb1",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "5c01c1fda59f3db130bd14aa64fe97d4010376798716b16792dbffd59c488a95",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "3e3b227e1338b5bc601ad6b2ce02fd1d375b7ea6179b055412ea0702ce54615c",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "3e3b227e1338b5bc601ad6b2ce02fd1d375b7ea6179b055412ea0702ce54615c",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "3e3b227e1338b5bc601ad6b2ce02fd1d375b7ea6179b055412ea0702ce54615c",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "ffde0e55aed6484046d539a455e04dfd0765b927a57cce0af9018726fe23725f",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "aaeea1ba97d05fae0b4de1ff1b84076f8ba897cb15b45a398f9bc4c25fe1738b",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "aaeea1ba97d05fae0b4de1ff1b84076f8ba897cb15b45a398f9bc4c25fe1738b",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "aaeea1ba97d05fae0b4de1ff1b84076f8ba897cb15b45a398f9bc4c25fe1738b",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "164e2475aea287ec5759ee07eb285697b52923ead1288f24358a70fc7ed3ec32",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "164e2475aea287ec5759ee07eb285697b52923ead1288f24358a70fc7ed3ec32",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "164e2475aea287ec5759ee07eb285697b52923ead1288f24358a70fc7ed3ec32",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "37a32bfd708b86c825877364d7e52c943d0a856ec3e5457953b61b7fa1c9a23f",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "37a32bfd708b86c825877364d7e52c943d0a856ec3e5457953b61b7fa1c9a23f",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "37a32bfd708b86c825877364d7e52c943d0a856ec3e5457953b61b7fa1c9a23f",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "961acab180c9a62966c54f24f3b5fa7e335941057c15613a876f4fceca010b70",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "acbe782ebc3c4850a24f852b8dc2ec42059f6b131e29d96157b09505628c415b",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "acbe782ebc3c4850a24f852b8dc2ec42059f6b131e29d96157b09505628c415b",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "acbe782ebc3c4850a24f852b8dc2ec42059f6b131e29d96157b09505628c415b",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "1bbeb5351dc0d69feaeefdac9ada7f3f48eed0ca4e2f879d9266679cec133396",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "dd03cdae194de03a710b5f6e88dfedf421fd20667a3cc9ec58e828bd769ab2ed",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "dd03cdae194de03a710b5f6e88dfedf421fd20667a3cc9ec58e828bd769ab2ed",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "dd03cdae194de03a710b5f6e88dfedf421fd20667a3cc9ec58e828bd769ab2ed",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "3cdbdacace5c6ed3d505bbbff65350274c5775ab871c42d130082fcf0ab56050",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "64cff02c3db347a2100284a406687a5a911463d65808db5c5c811a4cefc4fe57",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "64cff02c3db347a2100284a406687a5a911463d65808db5c5c811a4cefc4fe57",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "64cff02c3db347a2100284a406687a5a911463d65808db5c5c811a4cefc4fe57",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "c328b6561228dc4c26f3eee901bd51af353b2f4eefb74d8be02da2c9a76606fb",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "c328b6561228dc4c26f3eee901bd51af353b2f4eefb74d8be02da2c9a76606fb",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "c328b6561228dc4c26f3eee901bd51af353b2f4eefb74d8be02da2c9a76606fb",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "fb9174aa26153911120a92d95beb8cf598f1f860344af2ccf67e98a99f4ca049",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "fb9174aa26153911120a92d95beb8cf598f1f860344af2ccf67e98a99f4ca049",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "fb9174aa26153911120a92d95beb8cf598f1f860344af2ccf67e98a99f4ca049",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "12c4ee6fb88d4c5402e9e8fab0881a93fd1ab18e5a82bb87ecd4ef30c807cf53",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "12c4ee6fb88d4c5402e9e8fab0881a93fd1ab18e5a82bb87ecd4ef30c807cf53",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "12c4ee6fb88d4c5402e9e8fab0881a93fd1ab18e5a82bb87ecd4ef30c807cf53",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "394e6f8d6319b79fed26fb296a435e4d047c382bf8434cc870f89c6913fd27d7",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "394e6f8d6319b79fed26fb296a435e4d047c382bf8434cc870f89c6913fd27d7",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "394e6f8d6319b79fed26fb296a435e4d047c382bf8434cc870f89c6913fd27d7",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "920a89f98b69b144290cb37dc37a7019c8ee37cf577457f0941a43395dfa7801",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "ccc97e4f92e47b6fc1fab1e9baa1860020c7f104efa9ffb649321a173523adfb",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "ccc97e4f92e47b6fc1fab1e9baa1860020c7f104efa9ffb649321a173523adfb",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "ccc97e4f92e47b6fc1fab1e9baa1860020c7f104efa9ffb649321a173523adfb",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "648a16d024eea31ef4901f3ac2180cbfffeda1161d70f9096335d8a6097445bc",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "e24060184915a9860a84ea7d0ad23fee478e6eb31af86da589f5723c8e29a1cd",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "e24060184915a9860a84ea7d0ad23fee478e6eb31af86da589f5723c8e29a1cd",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "e24060184915a9860a84ea7d0ad23fee478e6eb31af86da589f5723c8e29a1cd",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "c68cd76b6ca94c077ee7c1fd4ab4ebee06056683158f2259302fd687069e5dca",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "c68cd76b6ca94c077ee7c1fd4ab4ebee06056683158f2259302fd687069e5dca",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "c68cd76b6ca94c077ee7c1fd4ab4ebee06056683158f2259302fd687069e5dca",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "4af842c0acf4a9ff42b5554d6d1d320b245ab4973b174a8b7ccf1f941f7ab715",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "4af842c0acf4a9ff42b5554d6d1d320b245ab4973b174a8b7ccf1f941f7ab715",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "4af842c0acf4a9ff42b5554d6d1d320b245ab4973b174a8b7ccf1f941f7ab715",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "e60a4ce02a588d15faa2a89f1d97d80c22dd2306cf62f0219515a6e9ca5ddff9",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "58203b539de096786cde232ee3b0ef3fe824b20d7768a96b30f6a96bdac77bfb",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "58203b539de096786cde232ee3b0ef3fe824b20d7768a96b30f6a96bdac77bfb",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "58203b539de096786cde232ee3b0ef3fe824b20d7768a96b30f6a96bdac77bfb",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "3b9dd9b4c9bd295b1b4cd9d94ce592522588e95a5569f529306b962b337d0e4b",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "3b9dd9b4c9bd295b1b4cd9d94ce592522588e95a5569f529306b962b337d0e4b",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "3b9dd9b4c9bd295b1b4cd9d94ce592522588e95a5569f529306b962b337d0e4b",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "9f5bc003674065d4b5108ba45033c418cd38be4e46e5d218dc82409260c2f05c",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "9f5bc003674065d4b5108ba45033c418cd38be4e46e5d218dc82409260c2f05c",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "9f5bc003674065d4b5108ba45033c418cd38be4e46e5d218dc82409260c2f05c",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "c4d995f031fe757d9823f7410f81c88ce7ba26e14b77e766792bff2e53a8b90f",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "c4d995f031fe757d9823f7410f81c88ce7ba26e14b77e766792bff2e53a8b90f",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "c4d995f031fe757d9823f7410f81c88ce7ba26e14b77e766792bff2e53a8b90f",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "2e243a167739d4e46ad7095db7cb5452c2980579a0cb359208945a0bbe0f3f29",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "2e243a167739d4e46ad7095db7cb5452c2980579a0cb359208945a0bbe0f3f29",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "2e243a167739d4e46ad7095db7cb5452c2980579a0cb359208945a0bbe0f3f29",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "7dcc99d276008cf2cfc6214eb0f4b88ec5eb3937f21bb1853b53f2b8d42ea6c8",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "29ad302647148e270c15a5a4542aa4796ee9ba25ea9fbf9f2be9465c01c139a7",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "29ad302647148e270c15a5a4542aa4796ee9ba25ea9fbf9f2be9465c01c139a7",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "29ad302647148e270c15a5a4542aa4796ee9ba25ea9fbf9f2be9465c01c139a7",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "f60b037fb29edecff5d0d8476cc5dcfd5acf96b2b985c1d841c2b5a1a41f7da8",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "a5bb75b8dbec1684e596f473aa53905f9f723b2b2f9c448550cb523145f90dd3",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "a5bb75b8dbec1684e596f473aa53905f9f723b2b2f9c448550cb523145f90dd3",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "a5bb75b8dbec1684e596f473aa53905f9f723b2b2f9c448550cb523145f90dd3",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "6d9fdb2bd658165a073e6144c8938057e08d8cba7ca108274b120dd30c55328f",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "6d9fdb2bd658165a073e6144c8938057e08d8cba7ca108274b120dd30c55328f",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "6d9fdb2bd658165a073e6144c8938057e08d8cba7ca108274b120dd30c55328f",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "ce732330b3cabca5f6b0cbcf1b6fc1abd4117d6fd047fe4f9330b6b25337b521",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "ce732330b3cabca5f6b0cbcf1b6fc1abd4117d6fd047fe4f9330b6b25337b521",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "ce732330b3cabca5f6b0cbcf1b6fc1abd4117d6fd047fe4f9330b6b25337b521",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "14d86e9949d93126d6ec7eaa11eeaba512569f51a8ecfce9d707cb0cec6b5e24",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "14d86e9949d93126d6ec7eaa11eeaba512569f51a8ecfce9d707cb0cec6b5e24",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "14d86e9949d93126d6ec7eaa11eeaba512569f51a8ecfce9d707cb0cec6b5e24",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "4041c0f122a902288ca8439888f68f7760616a0a37c366b825d6497b51157e46",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "4041c0f122a902288ca8439888f68f7760616a0a37c366b825d6497b51157e46",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "4041c0f122a902288ca8439888f68f7760616a0a37c366b825d6497b51157e46",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "3018997b63cc9a2f31618fd9b6b5c6bfe0cc921b891f4a80ac08ae3ef2b16504",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "3018997b63cc9a2f31618fd9b6b5c6bfe0cc921b891f4a80ac08ae3ef2b16504",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "3018997b63cc9a2f31618fd9b6b5c6bfe0cc921b891f4a80ac08ae3ef2b16504",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "2b3ea41f87764ccc497059c9e362657df545fb169d6eeb2e78ccfbd7fafee533",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "2b3ea41f87764ccc497059c9e362657df545fb169d6eeb2e78ccfbd7fafee533",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "2b3ea41f87764ccc497059c9e362657df545fb169d6eeb2e78ccfbd7fafee533",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "fc98fda6431f71ebc29a3fadf572fcd09c58cc4b5bed1bf918dbc29b3616777e",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "fc98fda6431f71ebc29a3fadf572fcd09c58cc4b5bed1bf918dbc29b3616777e",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "fc98fda6431f71ebc29a3fadf572fcd09c58cc4b5bed1bf918dbc29b3616777e",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "1baed51d34e05db345798e3820a38ae2c6598cad38d20522e476e803d1f46562",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "1baed51d34e05db345798e3820a38ae2c6598cad38d20522e476e803d1f46562",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "1baed51d34e05db345798e3820a38ae2c6598cad38d20522e476e803d1f46562",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "c3a18eed17251d1508964647e833ffdfe01b13c28dff9a717dfac6336e7c70e6",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "c3a18eed17251d1508964647e833ffdfe01b13c28dff9a717dfac6336e7c70e6",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "c3a18eed17251d1508964647e833ffdfe01b13c28dff9a717dfac6336e7c70e6",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "79e8df06c776ed40523a5b530d1559e561fbefb71a9e981d301a92b7a6b5c964",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "79e8df06c776ed40523a5b530d1559e561fbefb71a9e981d301a92b7a6b5c964",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "79e8df06c776ed40523a5b530d1559e561fbefb71a9e981d301a92b7a6b5c964",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  },
+  {
+    "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+    "mutation": "wrong-ASCQ",
+    "detected": true,
+    "errors": [
+      "live r2 changed"
+    ]
+  },
+  {
+    "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+    "mutation": "wrong-ASC",
+    "detected": true,
+    "errors": [
+      "live r1 changed"
+    ]
+  },
+  {
+    "sha256": "263994abefb0b5a757d7b7b677b4e24dffb537ff124a81ad54426948a83265f1",
+    "mutation": "wrong-frame",
+    "detected": true,
+    "errors": [
+      "Invalid instruction (UC_ERR_INSN_INVALID)",
+      "Invalid memory fetch (UC_ERR_FETCH_UNMAPPED)",
+      "unintended memory write 0x16/1/0xffffffff"
+    ]
+  }
+]
