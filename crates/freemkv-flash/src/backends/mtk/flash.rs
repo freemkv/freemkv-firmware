@@ -41,7 +41,7 @@ use crate::transport::{ScsiTransport, SharedDevice};
 /// What `plan` decided, for `authorize`.
 struct Plan {
     image: Vec<u8>,
-    final_prepared: Option<Executable>,
+    following: Vec<Executable>,
     live: Identity,
     receiver: mediatek_optical::receiver::Receiver,
     drive_product: String,
@@ -108,11 +108,13 @@ impl FlashFacet for Mtk {
             }
             FormatRole::Image => req.input.clone(),
         };
-        let final_prepared = final_image
+        let following = final_image
             .as_deref()
             .map(|target| prepare_next_stage(&image, target))
             .transpose()
-            .context("preparing final-stage receiver plan before any firmware write")?;
+            .context("preparing final-stage receiver plan before any firmware write")?
+            .into_iter()
+            .collect();
         let (live, verdict) = self.validate_image(dev, &image, &req.drive_model)?;
         let receiver = match req.current.as_deref() {
             Some(current) => super::receiver_reference::detect(dev, current)?,
@@ -159,7 +161,7 @@ impl FlashFacet for Mtk {
         ))));
         let mut plan = FlashPlan::new(Plan {
             image,
-            final_prepared,
+            following,
             live,
             receiver,
             drive_product: req.drive_model.clone(),
@@ -231,22 +233,23 @@ impl FlashFacet for Mtk {
     ) -> Result<UpdateOutcome> {
         let first: &Executable = authorized.state()?;
         let state: &Plan = authorized.plan.state()?;
-        let mut evidence =
-            execute_stage(dev, &first.prepared, state.final_prepared.is_some(), vec![])?;
-        evidence.completed_stages.push(
-            if state.final_prepared.is_some() {
-                "intermediate"
-            } else {
+        let total = 1 + state.following.len();
+        let mut completed = Vec::new();
+        let mut outcome = None;
+        for (index, stage) in std::iter::once(first).chain(&state.following).enumerate() {
+            let mut evidence = execute_stage(dev, &stage.prepared, total > 1, completed.clone())?;
+            let label = if total == 1 {
                 "firmware"
-            }
-            .into(),
-        );
-        if let Some(next) = &state.final_prepared {
-            let first_stages = evidence.completed_stages.clone();
-            evidence = execute_stage(dev, &next.prepared, true, first_stages.clone())?;
-            evidence.completed_stages = first_stages;
-            evidence.completed_stages.push("final firmware".into());
+            } else if index + 1 == total {
+                "final firmware"
+            } else {
+                "intermediate"
+            };
+            completed.push(label.to_string());
+            evidence.completed_stages = completed.clone();
+            outcome = Some(evidence);
         }
+        let evidence = outcome.expect("authorized sequence includes its initial stage");
         Ok(UpdateOutcome::Completed(evidence))
     }
 }
@@ -850,7 +853,7 @@ impl Mtk {
 pub(super) fn test_plan(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<FlashPlan> {
     Ok(FlashPlan::new(Plan {
         image: image.to_vec(),
-        final_prepared: None,
+        following: Vec::new(),
         live: identity_of_image(image)?,
         receiver: detect_receiver(&mut ReadDevice::without_unlocks(dev))?,
         drive_product: "BD-RE BU40N".into(),

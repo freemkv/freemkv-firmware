@@ -545,7 +545,7 @@ fn failed_sense_poll_cannot_turn_a_stuck_loader_into_success() {
 }
 
 #[test]
-fn handoff_mismatch_refuses_flash_offline_and_recovery_preparation() {
+fn recognized_handoff_bridge_is_prepared_by_flash_offline_and_recovery() {
     let current = fixture_pair(false, 1);
     let target = fixture_pair_class_with(
         false,
@@ -559,22 +559,46 @@ fn handoff_mismatch_refuses_flash_offline_and_recovery_preparation() {
     );
     let current = archive(&current, false);
     let target = archive(&target, false);
-    let error = Plan::prepare(&current, &target)
-        .err()
-        .expect("Recovery must refuse during preparation");
-    let text = format!("{error:#}");
-    assert!(
-        text.contains("handoff mismatch") && text.contains("0x400020") && text.contains("0x40002a"),
-        "{text}"
+    let plan = Plan::prepare(&current, &target).unwrap();
+    let stages = plan.prepared.stages();
+    assert_eq!(stages.len(), 2);
+    assert_eq!(
+        stages[0].bridge(),
+        Some(pioneer_optical::receiver::BridgeKind::KernelHandoff)
     );
+    assert_eq!(stages[1].bridge(), None);
+    let original = Current::load(&current).unwrap();
+    let desired = Target::load(&target).unwrap();
+    assert_eq!(stages[0].normal_image(), original.normal.image);
+    assert_eq!(
+        stages[1].kernel_image().unwrap(),
+        desired.update.kernel().image
+    );
+    assert_eq!(
+        stages[1].normal_transfer(),
+        desired.update.normal_transfer()
+    );
+    let retained = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let sink = retained.clone();
+    crate::firmware_capture::capture_firmware_inputs(
+        move |input| sink.borrow_mut().push(input),
+        || super::super::flash::retain_handoff_bridges(&plan.prepared),
+    )
+    .unwrap();
+    let inputs = retained.borrow();
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0].role, "intermediate");
+    let captured = Current::load(&inputs[0].bytes).unwrap();
+    assert_eq!(captured.kernel.image, stages[0].kernel_image().unwrap());
+    assert_eq!(captured.normal.image, stages[0].normal_image());
+    // An interrupted bridge can explicitly continue forward using its actual
+    // captured Current; do not silently substitute the original OEM backup.
+    let forward = Plan::prepare(&inputs[0].bytes, &target).unwrap();
+    assert_eq!(forward.prepared.stages().len(), 1);
     let decision =
         crate::crossflash::decide(crate::crossflash::Platform::Pioneer, &current, &target);
-    assert_eq!(
-        decision.status,
-        crate::crossflash::CompatibilityStatus::SoftNo
-    );
-    let error = super::super::decide_offline(&current, &target).unwrap_err();
-    assert!(format!("{error:#}").contains("handoff mismatch"));
+    assert_eq!(decision.status, crate::crossflash::CompatibilityStatus::Yes);
+    super::super::decide_offline(&current, &target).unwrap();
 }
 
 #[test]
@@ -627,9 +651,10 @@ fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
     );
     assert_eq!(
         decide(Platform::Pioneer, &installed, &incompatible).status,
-        SoftNo
+        Yes
     );
-    assert!(Plan::prepare(&installed, &incompatible).is_err());
+    let bridge = Plan::prepare(&installed, &incompatible).unwrap();
+    assert_eq!(bridge.prepared.stages().len(), 2);
     assert_eq!(decide(Platform::Pioneer, b"invalid", &same).status, HardNo);
 }
 
@@ -2359,6 +2384,8 @@ fn confirmation_cleanup_real_recovery_emits_experimental_and_two_pass_requiremen
     assert!(rows
         .iter()
         .any(|(_, value)| value.contains("experimental, offline-proven, hardware-unproven")));
-    assert!(rows.iter().any(|(_, value)| value.contains("Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel")));
+    assert!(rows
+        .iter()
+        .any(|(_, value)| value == super::super::DOWNGRADE_WARNING));
     assert_eq!(drive.reads, 0);
 }

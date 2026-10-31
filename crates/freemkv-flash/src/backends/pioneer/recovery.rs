@@ -197,6 +197,10 @@ impl Plan {
     pub(crate) fn was_reencoded(&self) -> bool {
         self.reencoded
     }
+    pub(crate) fn bridge_warnings(&self) -> Vec<String> {
+        super::bridge_warnings(&self.prepared)
+    }
+    #[cfg(test)]
     pub(crate) fn requires_restoration(&self) -> bool {
         self.prepared.restoration_kernel_transfer().is_some()
     }

@@ -5,6 +5,21 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.16.1] - Unreleased
+
+### freemkv Flash
+
+- Use prepared stages for direct and intermediate firmware updates, including
+  downgrade markers, startup settings and receiver-specific transfer formats.
+- Prepare recognized Pioneer Kernel-handoff bridges from firmware evidence,
+  retaining the installed Normal for the bridge before writing the requested
+  target. These new bridge routes still require physical hardware qualification.
+- Validate the complete sequence before writing, verify each stage, and retain
+  completed-stage information if a later stage fails. Show bridge requirements
+  consistently in Flash and Recovery.
+- Consolidate MediaTek direct and packaged-intermediate execution while retaining
+  existing receiver checks, transfer encoding and verification behavior.
+
 ## [0.16.0] - 2026-10-31
 
 ### freemkv Modify

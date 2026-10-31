@@ -86,6 +86,7 @@ fn execute_flash(
         start: crate::runtime_clock::Clock::new(),
         waited: Duration::ZERO,
         completed_passes: 0,
+        stage_messages: Vec::new(),
         verification: UpdateVerification {
             kernel: ComponentVerification::NotChecked,
             normal: ComponentVerification::NotChecked,
@@ -388,6 +389,7 @@ fn loaded_disc_guard_applies_to_flash_but_not_recovery_passes() {
                 start: crate::runtime_clock::Clock::new(),
                 waited: Duration::ZERO,
                 completed_passes: 0,
+                stage_messages: Vec::new(),
                 verification: UpdateVerification {
                     kernel: ComponentVerification::NotChecked,
                     normal: ComponentVerification::NotChecked,
@@ -1124,4 +1126,32 @@ fn settings_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
         assert!(message.contains("No firmware was written"));
         assert!(!message.contains("hardware mismatch"));
     }
+}
+
+#[test]
+fn stage_failure_retains_completion_without_host_progress_callbacks() {
+    use pioneer_optical::receiver::ExecutionError;
+    let error = execution_error(
+        ExecutionError::AfterStage {
+            completed: 2,
+            source: Box::new(ExecutionError::Plan("third-stage receiver refused")),
+        },
+        true,
+        0,
+    );
+    let failure = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert!(failure.write_started);
+    assert!(failure.temporary_firmware);
+    assert_eq!(failure.completed_stages.len(), 2);
+    assert_eq!(
+        failure.progress,
+        crate::backend::UpdateProgress::UploadComplete
+    );
+    assert!(format!("{error:#}").contains("third-stage receiver refused"));
+    assert_eq!(
+        crate::user_error::UserError::of(&error).id,
+        "errors.temporary_firmware"
+    );
 }

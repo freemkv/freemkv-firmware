@@ -389,6 +389,23 @@ const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware genera
     restores the unmodified OEM Kernel, and readback must verify it before success is reported. \
     Keep the pre-flash backup and dump until both updates complete.";
 
+/// User-visible requirements come from the prepared stages, not model names.
+fn bridge_warnings(plan: &pioneer_optical::receiver::PreparedUpdate) -> Vec<String> {
+    use pioneer_optical::receiver::BridgeKind;
+    let mut warnings = Vec::new();
+    for stage in plan.stages() {
+        let warning = match stage.bridge() {
+            Some(BridgeKind::ReceiverMarker) => DOWNGRADE_WARNING,
+            Some(BridgeKind::KernelHandoff) => "This update installs a temporary firmware bridge before the requested target. Each stage must start and pass verification before the next begins. This bridge requires hardware qualification; keep the backup and diagnostic log.",
+            None => continue,
+        };
+        if !warnings.iter().any(|existing| existing == warning) {
+            warnings.push(warning.to_string());
+        }
+    }
+    warnings
+}
+
 /// The post-flash identity readback line. The fields are drive-supplied bytes,
 /// so each goes through [`crate::style::printable`].
 fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
@@ -400,14 +417,6 @@ fn post_flash_line(ident: &pioneer_optical::Identity) -> String {
         printable(ident.revision()),
         printable(ident.platform()),
         printable(ident.kernel_tag()),
-    )
-}
-
-/// Whether the plan is `KernelDowngrade`.
-fn plan_is_downgrade(plan: &crate::backends::pioneer::flash_plan::FlashPlan) -> bool {
-    matches!(
-        plan,
-        crate::backends::pioneer::flash_plan::FlashPlan::KernelDowngrade
     )
 }
 
@@ -675,12 +684,12 @@ fn authorize_installed_inner(
     debug_assert!(!crate::backends::pioneer::flash_plan::kernel_mode_required(
         &route
     ));
-    let will_patch = prepared
-        .complete
-        .as_ref()
-        .is_some_and(|p| p.restoration_kernel_transfer().is_some());
-    if will_patch && !plan_is_downgrade(&route) {
-        warnings.push(DOWNGRADE_WARNING.to_string());
+    if let Some(complete) = &prepared.complete {
+        for warning in bridge_warnings(complete) {
+            if !warnings.contains(&warning) {
+                warnings.push(warning);
+            }
+        }
     }
     let confirmation = flash_summary(kernel, Some(normal));
     let mut authorized = AuthorizedPlan::new(plan, prepared);
@@ -1175,11 +1184,8 @@ impl RecoveryFacet for Pioneer {
                  (experimental, offline-proven, hardware-unproven)",
             );
         }
-        if plan.requires_restoration() {
-            crate::output::field(
-                "Recovery plan",
-                "Two passes: temporary accepted Kernel, then verified restoration of the original OEM Kernel",
-            );
+        for warning in plan.bridge_warnings() {
+            crate::output::field("Recovery plan", warning);
         }
         Ok(Box::new(plan))
     }
