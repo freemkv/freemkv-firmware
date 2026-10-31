@@ -2509,5 +2509,1201 @@
     "New handoff bridge execution has not been physically qualified.",
     "Offline corpus scope is complete modern Kernel/Normal pairs found in the local package corpus; it does not certify every firmware or hardware combination.",
     "CI status must be checked on the exact dev heads; this receipt records local validation."
-  ]
+  ],
+  "full_hoard_handoff_audit": {
+    "scope": "All .enc Kernel envelopes under hoard/oem/pioneer; JSON sidecars excluded. Packages and captures outside this canonical tree are not asserted covered.",
+    "unique_envelopes": 410,
+    "counts": {
+      "unrecognized_contract": 55,
+      "outside_modern_kernel_size": 19,
+      "recognized": 336
+    },
+    "diagnosis": "All 336 modern Bd-dialect envelopes recognize both startup and programmer handoff, and marker policy. The other 74 are Dvr-dialect: 55 SparseChecksum kernels lack both modern handoff signatures and modern finalizer recognition; 19 KernelLegacyLe/KernelRom kernels also differ in size. These need legacy DVR contract analysis, not a broader modern signature or a 205-to-206 workaround.",
+    "exceptions": [
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.58\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "75c006147cd61f209bbfab98387ffb8bbc2e85ca9924abdac9c8b91f883cb030",
+        "sources": [
+          "ata/ATA_0009/GENERAL/1.58/kernel/75c006147cd61f209bbfab98387ffb8bbc2e85ca9924abdac9c8b91f883cb030.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.50\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "391614ad17c707de5bb780e63b56fd733d8b5d4e857bf4ac7684d80040a4a3cd",
+        "sources": [
+          "ata/ATA_0009/GENERAL/1.50/kernel/391614ad17c707de5bb780e63b56fd733d8b5d4e857bf4ac7684d80040a4a3cd.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.57\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "74ba31b10b51ef1ef5be6c81f9a0b0d9dc9156a0e26dc7695481fecb9059e191",
+        "sources": [
+          "ata/ATA_0009/GENERAL/1.57/kernel/74ba31b10b51ef1ef5be6c81f9a0b0d9dc9156a0e26dc7695481fecb9059e191.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.40\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "28fd4df0bcfac97ce3b2b316f2216b91d9f52113617b26a512f21a27435d0888",
+        "sources": [
+          "ata/ATA_0009/GENERAL/1.40/kernel/28fd4df0bcfac97ce3b2b316f2216b91d9f52113617b26a512f21a27435d0888.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.55\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "3e846072a0d2afebb7bc66fa370997695af40a03ce28f8fc0b18aca14c174425",
+        "sources": [
+          "ata/ATA_0009/GENERAL/1.55/kernel/3e846072a0d2afebb7bc66fa370997695af40a03ce28f8fc0b18aca14c174425.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.58\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "c9d5a0f654df8bc68c4553327c94dc878c87b860ee372ddb8812c6f30044dca7",
+        "sources": [
+          "ata/ATA_0009/PIO_ADV/1.58/kernel/c9d5a0f654df8bc68c4553327c94dc878c87b860ee372ddb8812c6f30044dca7.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.50\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "a7017221cae3e4c546b5e5c2bc48656575e06371ecd9ca845256d428036e0467",
+        "sources": [
+          "ata/ATA_0009/PIO_ADV/1.50/kernel/a7017221cae3e4c546b5e5c2bc48656575e06371ecd9ca845256d428036e0467.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.57\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "d1cb5ee1feda5fa3295fc826c9f00a11a47ba3d34cee24a9d2aab06a236ec877",
+        "sources": [
+          "ata/ATA_0009/PIO_ADV/1.57/kernel/d1cb5ee1feda5fa3295fc826c9f00a11a47ba3d34cee24a9d2aab06a236ec877.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.40\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "8db622effa3fd761dc717af79ac6b0f2abfbb2a69dc71f0e8561783c413c6475",
+        "sources": [
+          "ata/ATA_0009/PIO_ADV/1.40/kernel/8db622effa3fd761dc717af79ac6b0f2abfbb2a69dc71f0e8561783c413c6475.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"1.55\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "176892797dd5984a8e7860b2a7fb7c07621fcdb31bedc1e6ccc342c6ae1e8fe7",
+        "sources": [
+          "ata/ATA_0009/PIO_ADV/1.55/kernel/176892797dd5984a8e7860b2a7fb7c07621fcdb31bedc1e6ccc342c6ae1e8fe7.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608PH\", revision: \"1.59\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"HP\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23958, length: 41578, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "424a24caea0c6a25d135ada3289a74b253fdc9af0fa5690068ec4045e5897ba9",
+        "sources": [
+          "ata/ATA_0009/HP/1.59/kernel/424a24caea0c6a25d135ada3289a74b253fdc9af0fa5690068ec4045e5897ba9.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608PH\", revision: \"1.57\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"HP\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23958, length: 41578, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "04568f17e80e88765fa216fc9b390db4429c8b264fd92b621ca80f863ad91a2e",
+        "sources": [
+          "ata/ATA_0009/HP/1.57/kernel/04568f17e80e88765fa216fc9b390db4429c8b264fd92b621ca80f863ad91a2e.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P\", revision: \"1.17\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23936, length: 41600, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "fbebc6950f5cc02f5e428997cc6474127e865ec147f0dea393e3649b85ee11c0",
+        "sources": [
+          "ata/ATA_0009/ASUS/1.17/kernel/fbebc6950f5cc02f5e428997cc6474127e865ec147f0dea393e3649b85ee11c0.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P\", revision: \"1.59\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23958, length: 41578, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "54fd86700554c7a204749be76274bb639452a01a68e6bf56a53f03ec1deafbd5",
+        "sources": [
+          "ata/ATA_0009/ASUS/1.59/kernel/54fd86700554c7a204749be76274bb639452a01a68e6bf56a53f03ec1deafbd5.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P\", revision: \"1.50\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23958, length: 41578, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "c5c79e6942b9d35b9908b604aeb1d7d7fd5e8d3ae42927143b669e082fd39e1c",
+        "sources": [
+          "ata/ATA_0009/ASUS/1.50/kernel/c5c79e6942b9d35b9908b604aeb1d7d7fd5e8d3ae42927143b669e082fd39e1c.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P\", revision: \"1.57\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23958, length: 41578, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "0dd6f373a47c254d651f2fb41576c59a08889c4b3afeb831e1b9b204f10e057a",
+        "sources": [
+          "ata/ATA_0009/ASUS/1.57/kernel/0dd6f373a47c254d651f2fb41576c59a08889c4b3afeb831e1b9b204f10e057a.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P\", revision: \"1.40\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23958, length: 41578, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "23966bc15995d391d717b08199e9b3e59dc91e8a7c555c2c5a7449e7511459a7",
+        "sources": [
+          "ata/ATA_0009/ASUS/1.40/kernel/23966bc15995d391d717b08199e9b3e59dc91e8a7c555c2c5a7449e7511459a7.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"8.58\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"OEM_INT\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "db53094f787eb7bacd9deaa3d97438a761088b48975a1bef36c4135f9f64e682",
+        "sources": [
+          "ata/ATA_0009/OEM_INT/8.58/kernel/db53094f787eb7bacd9deaa3d97438a761088b48975a1bef36c4135f9f64e682.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"8.50\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"OEM_INT\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "aaa13c4849a735abb06fd2814d7629c22722789085fddcab059b4ea1fb674887",
+        "sources": [
+          "ata/ATA_0009/OEM_INT/8.50/kernel/aaa13c4849a735abb06fd2814d7629c22722789085fddcab059b4ea1fb674887.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"8.58\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"OEM_EXT2\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "8fff6909cf846eccad7fe19426a485d03c1aa8af51326398a80f4e55958d99f9",
+        "sources": [
+          "ata/ATA_0009/OEM_EXT2/8.58/kernel/8fff6909cf846eccad7fe19426a485d03c1aa8af51326398a80f4e55958d99f9.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-109\", revision: \"8.50\", kind: Kernel, hardware_version: \"ATA 0009\", kernel_version: \"OEM_EXT2\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 23040, length: 512, byte: 255 }, UniformRange { offset: 23974, length: 41562, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "fe7a8f6ca4cb7d9a6cc5e4834a372946eff52db286033f72fb022dee6ad8404d",
+        "sources": [
+          "ata/ATA_0009/OEM_EXT2/8.50/kernel/fe7a8f6ca4cb7d9a6cc5e4834a372946eff52db286033f72fb022dee6ad8404d.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"Memorex\", model: \"True-8X\", revision: \"1.10\", kind: Kernel, hardware_version: \"ATA 0007\", kernel_version: \"MEMOREX\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "7e5e759c8229309f099723487647f481d52b1379f2c40fe12c4cfd42c8b1c1cd",
+        "sources": [
+          "ata/ATA_0007/MEMOREX/1.10/kernel/7e5e759c8229309f099723487647f481d52b1379f2c40fe12c4cfd42c8b1c1cd.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-107D\", revision: \"1.10\", kind: Kernel, hardware_version: \"ATA 0007\", kernel_version: \"GENERAL\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "87a18977ee70599fe0e9e8f37b5151548e4acd8ca3a2caf8812ed80fe9bf1ca1",
+        "sources": [
+          "ata/ATA_0007/GENERAL/1.10/kernel/87a18977ee70599fe0e9e8f37b5151548e4acd8ca3a2caf8812ed80fe9bf1ca1.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-0804P\", revision: \"1.19\", kind: Kernel, hardware_version: \"ATA 0007\", kernel_version: \"ASUS\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "1abcfde7654f5675523e9e68361203224d3286114f52039f7f92013eaa96f738",
+        "sources": [
+          "ata/ATA_0007/ASUS/1.19/kernel/1abcfde7654f5675523e9e68361203224d3286114f52039f7f92013eaa96f738.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-0804P\", revision: \"1.12\", kind: Kernel, hardware_version: \"ATA 0007\", kernel_version: \"ASUS\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "b04b0729002a207670d463a682b0dc6947556eefb5169b5834c1928c7fb0c819",
+        "sources": [
+          "ata/ATA_0007/ASUS/1.12/kernel/b04b0729002a207670d463a682b0dc6947556eefb5169b5834c1928c7fb0c819.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-0804P\", revision: \"1.08\", kind: Kernel, hardware_version: \"ATA 0007\", kernel_version: \"ASUS\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "a0c3c6cf1e1346390c67876d36b2f05532002306aab5f6deab2c806c58d08bdd",
+        "sources": [
+          "ata/ATA_0007/ASUS/1.08/kernel/a0c3c6cf1e1346390c67876d36b2f05532002306aab5f6deab2c806c58d08bdd.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-106D\", revision: \"1.06\", kind: Kernel, hardware_version: \"ATA 0006\", kernel_version: \"PIO_EXT\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 19273, length: 439, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "9d2eb726838c1b2670786d42225e5363b7c24cc05751c9b2eefe3079e556d08f",
+        "sources": [
+          "ata/ATA_0006/PIO_EXT/1.06/kernel/9d2eb726838c1b2670786d42225e5363b7c24cc05751c9b2eefe3079e556d08f.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"DVD\", model: \"DVR-MCC\", revision: \"1.14\", kind: Kernel, hardware_version: \"ATA 0008\", kernel_version: \"MEDION2\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 17637, length: 795, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "7118b3e679d70fcaae87a76c993790826b81848b1a67241977f92859dc3a8b4b",
+        "sources": [
+          "ata/ATA_0008/MEDION2/1.14/kernel/7118b3e679d70fcaae87a76c993790826b81848b1a67241977f92859dc3a8b4b.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1604P\", revision: \"1.10\", kind: Kernel, hardware_version: \"ATA 0008\", kernel_version: \"ASUS\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 17635, length: 797, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "2ed3247dbf73f411062ea825b33108e9b993c0eea447fb33c85c773c74f26e3e",
+        "sources": [
+          "ata/ATA_0008/ASUS/1.10/kernel/2ed3247dbf73f411062ea825b33108e9b993c0eea447fb33c85c773c74f26e3e.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1604P\", revision: \"1.18\", kind: Kernel, hardware_version: \"ATA 0008\", kernel_version: \"ASUS\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 17635, length: 797, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "beb3dcc6206d8c84ede915b18491feef3dfeeb8d771a0f5a177ccb8d9205c249",
+        "sources": [
+          "ata/ATA_0008/ASUS/1.18/kernel/beb3dcc6206d8c84ede915b18491feef3dfeeb8d771a0f5a177ccb8d9205c249.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1604P\", revision: \"1.14\", kind: Kernel, hardware_version: \"ATA 0008\", kernel_version: \"ASUS\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 17635, length: 797, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "d2a951bf894ee2b2279b5460e158c497384af538600490736375cdacce6ca1c9",
+        "sources": [
+          "ata/ATA_0008/ASUS/1.14/kernel/d2a951bf894ee2b2279b5460e158c497384af538600490736375cdacce6ca1c9.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1604P\", revision: \"1.09\", kind: Kernel, hardware_version: \"ATA 0008\", kernel_version: \"ASUS\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 17635, length: 797, byte: 255 }, UniformRange { offset: 19311, length: 401, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "47cd39b04f9a954e9c1e8be477ff6300153ec413ff9fe8220afd770e20e1caf9",
+        "sources": [
+          "ata/ATA_0008/ASUS/1.09/kernel/47cd39b04f9a954e9c1e8be477ff6300153ec413ff9fe8220afd770e20e1caf9.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K15\", revision: \"1.17\", kind: Kernel, hardware_version: \"ATA 0064\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "8346a167dafaa0f2523b94cd96f0da51727ccbff5f10a7fde261e1f3bc18db35",
+        "sources": [
+          "ata/ATA_0064/GENERAL/1.17/kernel/8346a167dafaa0f2523b94cd96f0da51727ccbff5f10a7fde261e1f3bc18db35.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K15\", revision: \"1.11\", kind: Kernel, hardware_version: \"ATA 0064\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "61792869c99b8356e0596165bb997050c36251711a55e66755a2401ed73a6236",
+        "sources": [
+          "ata/ATA_0064/GENERAL/1.11/kernel/61792869c99b8356e0596165bb997050c36251711a55e66755a2401ed73a6236.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K15\", revision: \"8.17\", kind: Kernel, hardware_version: \"ATA 0064\", kernel_version: \"OEM_INT\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "a4646fad0731200e9674dc0c2488a79921df9eeffee9dbcaab534c9af94b7706",
+        "sources": [
+          "ata/ATA_0064/OEM_INT/8.17/kernel/a4646fad0731200e9674dc0c2488a79921df9eeffee9dbcaab534c9af94b7706.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K15\", revision: \"8.11\", kind: Kernel, hardware_version: \"ATA 0064\", kernel_version: \"OEM_INT\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "8585c86e307d319853ca4d3006f0a7bc08cf8379c774b4e2e1ff03c46492522d",
+        "sources": [
+          "ata/ATA_0064/OEM_INT/8.11/kernel/8585c86e307d319853ca4d3006f0a7bc08cf8379c774b4e2e1ff03c46492522d.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 20480,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K12D\", revision: \"1.10\", kind: Kernel, hardware_version: \"ATA 0052\", kernel_version: \"SONYDT\", layout: KernelLegacyLe, payload_offset: 45056, payload_size: 20480, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 4, length: 4092, byte: 255 }, UniformRange { offset: 19273, length: 439, byte: 255 }, UniformRange { offset: 19970, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "3d078cd40bbeec5a51dc90e3aeb3646d87771e0ebdb8a6b850dfb50d31f11b85",
+        "sources": [
+          "ata/ATA_0052/SONYDT/1.10/kernel/3d078cd40bbeec5a51dc90e3aeb3646d87771e0ebdb8a6b850dfb50d31f11b85.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K06\", revision: \"1.05\", kind: Kernel, hardware_version: \"ATA 0070\", kernel_version: \"OEM_EXT\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24664, length: 40872, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "38e985f7924c1b307d3a82d196acccf73d791823fc64b9f690153bd2199d24e5",
+        "sources": [
+          "ata/ATA_0070/OEM_EXT/1.05/kernel/38e985f7924c1b307d3a82d196acccf73d791823fc64b9f690153bd2199d24e5.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K06\", revision: \"1.00\", kind: Kernel, hardware_version: \"ATA 0070\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24664, length: 40872, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "6296886a8de2f24dc1819226788f4ec69ed6d7bbed7bbc16fdac0dd5e2b617e1",
+        "sources": [
+          "ata/ATA_0070/GENERAL/1.00/kernel/6296886a8de2f24dc1819226788f4ec69ed6d7bbed7bbc16fdac0dd5e2b617e1.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P3S\", revision: \"1.24\", kind: Kernel, hardware_version: \"ATA 0012\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24664, length: 40872, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "c9ba2254839ba3cbb6915d68c1213ec8f2a15203462145672927c5962922254c",
+        "sources": [
+          "ata/ATA_0012/ASUS/1.24/kernel/c9ba2254839ba3cbb6915d68c1213ec8f2a15203462145672927c5962922254c.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K16D\", revision: \"1.10\", kind: Kernel, hardware_version: \"ATA 0068\", kernel_version: \"SONYDT\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24344, length: 41192, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "0f94aa9c4cd3eb0956be5a3e07d60c858e4e451c565ba529777c95030fe42ce9",
+        "sources": [
+          "ata/ATA_0068/SONYDT/1.10/kernel/0f94aa9c4cd3eb0956be5a3e07d60c858e4e451c565ba529777c95030fe42ce9.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PLEXTOR\", model: \"PX-608CU\", revision: \"2.00\", kind: Kernel, hardware_version: \"ATA 0068\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24376, length: 41160, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "21dd1a8666ece1a339480fb1d8f79b6bf1d484080bace6c25f4e78a4c6fc5984",
+        "sources": [
+          "ata/ATA_0068/GENERAL/2.00/kernel/21dd1a8666ece1a339480fb1d8f79b6bf1d484080bace6c25f4e78a4c6fc5984.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-K16\", revision: \"1.42\", kind: Kernel, hardware_version: \"ATA 0068\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24376, length: 41160, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "d2ee4998d5fe2d71f292ed8151e39824bd5c8ff607531e2a3faa4993a0bd9ce6",
+        "sources": [
+          "ata/ATA_0068/GENERAL/1.42/kernel/d2ee4998d5fe2d71f292ed8151e39824bd5c8ff607531e2a3faa4993a0bd9ce6.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 16384,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-104\", revision: \"4.20\", kind: Kernel, hardware_version: \"ATA 0004\", kernel_version: \"SONY\", layout: KernelRom, payload_offset: 49152, payload_size: 16384, declared_size: None, unknown_word_0x10: Some(2684628992), uniform_ranges: [UniformRange { offset: 13359, length: 977, byte: 255 }, UniformRange { offset: 15197, length: 419, byte: 255 }, UniformRange { offset: 15874, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "b556a4e6f6ebf3a7d4673a0640741969a3b34eb75857341bfb5796b2540e493c",
+        "sources": [
+          "ata/ATA_0004/SONY/4.20/kernel/b556a4e6f6ebf3a7d4673a0640741969a3b34eb75857341bfb5796b2540e493c.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 16384,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"TEAC\", model: \"DV-W50E\", revision: \"1.30\", kind: Kernel, hardware_version: \"ATA 0004\", kernel_version: \"TEAC\", layout: KernelRom, payload_offset: 49152, payload_size: 16384, declared_size: None, unknown_word_0x10: Some(2684628992), uniform_ranges: [UniformRange { offset: 13359, length: 977, byte: 255 }, UniformRange { offset: 15197, length: 419, byte: 255 }, UniformRange { offset: 15874, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "82a54db5ebec0695e5fa04a3b6d87c940d9ee490b2622fa39a68ebcf6b029129",
+        "sources": [
+          "ata/ATA_0004/TEAC/1.30/kernel/82a54db5ebec0695e5fa04a3b6d87c940d9ee490b2622fa39a68ebcf6b029129.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 16384,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-105\", revision: \"1.21\", kind: Kernel, hardware_version: \"ATA 0004\", kernel_version: \"GENERAL\", layout: KernelRom, payload_offset: 49152, payload_size: 16384, declared_size: None, unknown_word_0x10: Some(2684628992), uniform_ranges: [UniformRange { offset: 13359, length: 977, byte: 255 }, UniformRange { offset: 15197, length: 419, byte: 255 }, UniformRange { offset: 15874, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "c350832783f41d3a912932424fad830e3d6664ca28fadfe825a169d664e09c26",
+        "sources": [
+          "ata/ATA_0004/GENERAL/1.21/kernel/c350832783f41d3a912932424fad830e3d6664ca28fadfe825a169d664e09c26.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 16384,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-105\", revision: \"1.33\", kind: Kernel, hardware_version: \"ATA 0004\", kernel_version: \"GENERAL\", layout: KernelRom, payload_offset: 49152, payload_size: 16384, declared_size: None, unknown_word_0x10: Some(2684628992), uniform_ranges: [UniformRange { offset: 13359, length: 977, byte: 255 }, UniformRange { offset: 15197, length: 419, byte: 255 }, UniformRange { offset: 15874, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "4493f4bfb0222d8c76d3209a31ac405d7a80cc68297fa7cac0bdcf90772fd8a0",
+        "sources": [
+          "ata/ATA_0004/GENERAL/1.33/kernel/4493f4bfb0222d8c76d3209a31ac405d7a80cc68297fa7cac0bdcf90772fd8a0.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 16384,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-105\", revision: \"1.30\", kind: Kernel, hardware_version: \"ATA 0004\", kernel_version: \"GENERAL\", layout: KernelRom, payload_offset: 49152, payload_size: 16384, declared_size: None, unknown_word_0x10: Some(2684628992), uniform_ranges: [UniformRange { offset: 13359, length: 977, byte: 255 }, UniformRange { offset: 15197, length: 419, byte: 255 }, UniformRange { offset: 15874, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "8b949d2305e76aa8a5005d1f0be5492a24a367e96b5b6941bf3dcd4a2dd8503b",
+        "sources": [
+          "ata/ATA_0004/GENERAL/1.30/kernel/8b949d2305e76aa8a5005d1f0be5492a24a367e96b5b6941bf3dcd4a2dd8503b.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 16384,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-0402P\", revision: \"1.30\", kind: Kernel, hardware_version: \"ATA 0004\", kernel_version: \"ASUS\", layout: KernelRom, payload_offset: 49152, payload_size: 16384, declared_size: None, unknown_word_0x10: Some(2684628992), uniform_ranges: [UniformRange { offset: 13075, length: 1261, byte: 255 }, UniformRange { offset: 15167, length: 449, byte: 255 }, UniformRange { offset: 15874, length: 474, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "e7beb30243381db1dd13f197f1f9d705ad5a1fda0d67fbcff0a888b7a8ed9d18",
+        "sources": [
+          "ata/ATA_0004/ASUS/1.30/kernel/e7beb30243381db1dd13f197f1f9d705ad5a1fda0d67fbcff0a888b7a8ed9d18.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110D\", revision: \"1.17\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "17cd5991739ded98cee34ac8a023dac67ef0ea93ffe16ba221a3421b4dcb82c8",
+        "sources": [
+          "ata/ATA_0011/GENERAL/1.17/kernel/17cd5991739ded98cee34ac8a023dac67ef0ea93ffe16ba221a3421b4dcb82c8.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110D\", revision: \"1.22\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "24463f9ed7cecca3c8f4751f00d33d84a00e3ca15c4bb93251e3693888f2a5e1",
+        "sources": [
+          "ata/ATA_0011/GENERAL/1.22/kernel/24463f9ed7cecca3c8f4751f00d33d84a00e3ca15c4bb93251e3693888f2a5e1.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110D\", revision: \"1.41\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "12a6d8618c782e8e385bbe32efbce3028dc4a0a0b692cddacf92418b5eb04237",
+        "sources": [
+          "ata/ATA_0011/GENERAL/1.41/kernel/12a6d8618c782e8e385bbe32efbce3028dc4a0a0b692cddacf92418b5eb04237.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110D\", revision: \"1.37\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "fec88371b4026d18974e0a845385f15fd17c1a5ced4514232b96f07443995cab",
+        "sources": [
+          "ata/ATA_0011/GENERAL/1.37/kernel/fec88371b4026d18974e0a845385f15fd17c1a5ced4514232b96f07443995cab.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110D\", revision: \"1.39\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "44135a123898e9f44f5046e25a60ab355d574f87175e3507eb077719554ce453",
+        "sources": [
+          "ata/ATA_0011/GENERAL/1.39/kernel/44135a123898e9f44f5046e25a60ab355d574f87175e3507eb077719554ce453.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P2\", revision: \"1.17\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "aae73db82d5bfeb694ecb3271fc7df525b1e7b75c7bf8afb0da9e71284f52937",
+        "sources": [
+          "ata/ATA_0011/ASUS/1.17/kernel/aae73db82d5bfeb694ecb3271fc7df525b1e7b75c7bf8afb0da9e71284f52937.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P2\", revision: \"1.41\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "b1a46936ddf55d964a6b8dcfadfa69b7557ce29924e8a6ae1e87c7b115863a1a",
+        "sources": [
+          "ata/ATA_0011/ASUS/1.41/kernel/b1a46936ddf55d964a6b8dcfadfa69b7557ce29924e8a6ae1e87c7b115863a1a.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P2\", revision: \"1.37\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "b0b8cbbb8af6c9436ca94a70c61f5c2b8aea0b3c7257f155c3dec5b278c63b41",
+        "sources": [
+          "ata/ATA_0011/ASUS/1.37/kernel/b0b8cbbb8af6c9436ca94a70c61f5c2b8aea0b3c7257f155c3dec5b278c63b41.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P2\", revision: \"1.39\", kind: Kernel, hardware_version: \"ATA 0011\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "92a0d84d5d47bc1fb432490a0fc99be3e7ee713fae35e088adf4d18535af7b67",
+        "sources": [
+          "ata/ATA_0011/ASUS/1.39/kernel/92a0d84d5d47bc1fb432490a0fc99be3e7ee713fae35e088adf4d18535af7b67.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110\", revision: \"1.41\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "468d97e67d6a81b116f5f9fa61a6ca76250defca3a86c0c63ad0bb156a9b4e08",
+        "sources": [
+          "ata/ATA_0010/GENERAL/1.41/kernel/468d97e67d6a81b116f5f9fa61a6ca76250defca3a86c0c63ad0bb156a9b4e08.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110\", revision: \"1.37\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "76054b9d36e4bbd80715a07a844bb1692108f9491f8e495e3dfcca53689b84b6",
+        "sources": [
+          "ata/ATA_0010/GENERAL/1.37/kernel/76054b9d36e4bbd80715a07a844bb1692108f9491f8e495e3dfcca53689b84b6.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110\", revision: \"1.39\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "0766fca3369c1f406f1ed9f97481758789e096b85519ba6d5395c8e080473c8b",
+        "sources": [
+          "ata/ATA_0010/GENERAL/1.39/kernel/0766fca3369c1f406f1ed9f97481758789e096b85519ba6d5395c8e080473c8b.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110\", revision: \"1.41\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "8a7e0e5a5d44be27c2f594bc9d069f48419a660b1911d686b45fd1e22f2a491e",
+        "sources": [
+          "ata/ATA_0010/PIO_ADV/1.41/kernel/8a7e0e5a5d44be27c2f594bc9d069f48419a660b1911d686b45fd1e22f2a491e.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110\", revision: \"1.37\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "83980fe2e4bfaacfe7da71c01934a94b2dcbe07fca040de197344ca45ae75360",
+        "sources": [
+          "ata/ATA_0010/PIO_ADV/1.37/kernel/83980fe2e4bfaacfe7da71c01934a94b2dcbe07fca040de197344ca45ae75360.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-110\", revision: \"1.39\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"PIO_ADV\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24416, length: 41120, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "1b0975a1ce45fc0bb0b02bbf877ca61adb333dcc726c2a60a5789f73a7626441",
+        "sources": [
+          "ata/ATA_0010/PIO_ADV/1.39/kernel/1b0975a1ce45fc0bb0b02bbf877ca61adb333dcc726c2a60a5789f73a7626441.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P2S\", revision: \"1.41\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "bc05a445289de0e9c867c117191fc2e010bc433c38af5525bbe5539f7d777259",
+        "sources": [
+          "ata/ATA_0010/ASUS/1.41/kernel/bc05a445289de0e9c867c117191fc2e010bc433c38af5525bbe5539f7d777259.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P2S\", revision: \"1.37\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "85e64d61b79cf023e85af0b5cba4c3450e56ed2ca57b2d557e58ec2c3bdba34d",
+        "sources": [
+          "ata/ATA_0010/ASUS/1.37/kernel/85e64d61b79cf023e85af0b5cba4c3450e56ed2ca57b2d557e58ec2c3bdba34d.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"ASUS\", model: \"DRW-1608P2S\", revision: \"1.39\", kind: Kernel, hardware_version: \"ATA 0010\", kernel_version: \"ASUS\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(4294967295), uniform_ranges: [UniformRange { offset: 494, length: 530, byte: 255 }, UniformRange { offset: 1294, length: 754, byte: 255 }, UniformRange { offset: 4230, length: 1914, byte: 255 }, UniformRange { offset: 24064, length: 41472, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "0ede1248a9fc8e496e38a239c704d8ecf4624394ee68562769779b42634f4df7",
+        "sources": [
+          "ata/ATA_0010/ASUS/1.39/kernel/0ede1248a9fc8e496e38a239c704d8ecf4624394ee68562769779b42634f4df7.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-215\", revision: \"1.18\", kind: Kernel, hardware_version: \"SAT 0014\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(543035392), uniform_ranges: [UniformRange { offset: 670, length: 1634, byte: 255 }, UniformRange { offset: 2308, length: 1788, byte: 255 }, UniformRange { offset: 23412, length: 38028, byte: 255 }, UniformRange { offset: 61522, length: 4014, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "b70488abcf361fa49b32b28936d142930e8fe3dbbc3603d32c5f9e18a64b1175",
+        "sources": [
+          "sat/0014/GENERAL/1.18/kernel/b70488abcf361fa49b32b28936d142930e8fe3dbbc3603d32c5f9e18a64b1175.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-215\", revision: \"1.22\", kind: Kernel, hardware_version: \"SAT 0014\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(543035392), uniform_ranges: [UniformRange { offset: 670, length: 1634, byte: 255 }, UniformRange { offset: 2308, length: 1788, byte: 255 }, UniformRange { offset: 23412, length: 38028, byte: 255 }, UniformRange { offset: 61522, length: 4014, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "ac083307702df2bb53a2a5e6bf40aee38ae1718486c89b3e738241b0fef38599",
+        "sources": [
+          "sat/0014/GENERAL/1.22/kernel/ac083307702df2bb53a2a5e6bf40aee38ae1718486c89b3e738241b0fef38599.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PLEXTOR\", model: \"PX-810SA\", revision: \"1.01\", kind: Kernel, hardware_version: \"SAT 0013\", kernel_version: \"PLEXTOR\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(543035392), uniform_ranges: [UniformRange { offset: 670, length: 1634, byte: 255 }, UniformRange { offset: 2308, length: 1788, byte: 255 }, UniformRange { offset: 22760, length: 38680, byte: 255 }, UniformRange { offset: 61522, length: 4014, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "6414b473a7f7d5e1491c21c93fc19c838a442602e0e6c213738ee1418deb3aff",
+        "sources": [
+          "sat/0013/PLEXTOR/1.01/kernel/6414b473a7f7d5e1491c21c93fc19c838a442602e0e6c213738ee1418deb3aff.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVRTD08A\", revision: \"1.54\", kind: Kernel, hardware_version: \"SAT 0076\", kernel_version: \"TOSHIBA\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(543035392), uniform_ranges: [UniformRange { offset: 670, length: 1634, byte: 255 }, UniformRange { offset: 2308, length: 1788, byte: 255 }, UniformRange { offset: 24000, length: 37440, byte: 255 }, UniformRange { offset: 61522, length: 4014, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "407066e7f584ef084459d879986c4c8c2b3d0dbcd14a1e0e10c5a6256219dec1",
+        "sources": [
+          "sat/0076/TOSHIBA/1.54/kernel/407066e7f584ef084459d879986c4c8c2b3d0dbcd14a1e0e10c5a6256219dec1.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-215D\", revision: \"1.18\", kind: Kernel, hardware_version: \"SAT 0814\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(543035392), uniform_ranges: [UniformRange { offset: 670, length: 1634, byte: 255 }, UniformRange { offset: 2308, length: 1788, byte: 255 }, UniformRange { offset: 23400, length: 38040, byte: 255 }, UniformRange { offset: 61522, length: 4014, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "9e200a5669c9f65505d17c4850ba83cd92730b65dc319e513b53b57994efebd6",
+        "sources": [
+          "sat/0814/GENERAL/1.18/kernel/9e200a5669c9f65505d17c4850ba83cd92730b65dc319e513b53b57994efebd6.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 65536,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-215D\", revision: \"1.22\", kind: Kernel, hardware_version: \"SAT 0814\", kernel_version: \"GENERAL\", layout: SparseChecksum, payload_offset: 65536, payload_size: 65536, declared_size: None, unknown_word_0x10: Some(543035392), uniform_ranges: [UniformRange { offset: 670, length: 1634, byte: 255 }, UniformRange { offset: 2308, length: 1788, byte: 255 }, UniformRange { offset: 23400, length: 38040, byte: 255 }, UniformRange { offset: 61522, length: 4014, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "dac16a574dde6862814c3c88989223571a2452e1f624ce1b461f40f6bf0ce0ac",
+        "sources": [
+          "sat/0814/GENERAL/1.22/kernel/dac16a574dde6862814c3c88989223571a2452e1f624ce1b461f40f6bf0ce0ac.enc"
+        ],
+        "status": "unrecognized_contract"
+      },
+      {
+        "details": {
+          "decoded_size": 32768,
+          "dialect": "Some(Dvr)",
+          "family": "None",
+          "handoff": null,
+          "info": "EnvelopeInfo { vendor: \"PIONEER\", model: \"DVR-303\", revision: \"1.78\", kind: Kernel, hardware_version: \"SCSI0001\", kernel_version: \"GENERAL\", layout: KernelRom, payload_offset: 32768, payload_size: 32768, declared_size: None, unknown_word_0x10: Some(87116288), uniform_ranges: [UniformRange { offset: 24012, length: 8692, byte: 255 }], receiver_xor_policy: None }",
+          "marker_policy": "None",
+          "startup": null
+        },
+        "sha256": "200a08faa923c80d52d99357704e58aa3e106d316c01f6d37976178256031b2b",
+        "sources": [
+          "scsi/SCSI0001/GENERAL/1.78/kernel/200a08faa923c80d52d99357704e58aa3e106d316c01f6d37976178256031b2b.enc"
+        ],
+        "status": "outside_modern_kernel_size"
+      }
+    ]
+  }
 }
