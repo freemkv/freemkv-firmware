@@ -634,11 +634,9 @@ impl Mt1959Engine {
         // ---- validate (read-only) ----
         // AKE accept gate — BU40N/desktop (reject-writer detour) or NB-class
         // (shared-`bl` detour). Resolved by `ake_detour`; BU40N matches the
-        // original signature first. `install_shape` picks the correct 4-byte
-        // encoding at the detour site: `WideB` (Thumb-2 wide `B`) for the
-        // BU40N tail-call site so `lr` is preserved through the shared setter,
-        // `WideBl` for NB shared-`bl` sites where OEM already had a `bl` and
-        // `lr = site+4` is the intended return.
+        // original signature first. Every qualified shape uses Thumb-1 BL:
+        // the original writer reaches a source-proven native call join, while
+        // NB replaces the shared native BL itself.
         let (reset_site, ake_bytes, ake_gate, ake_install_shape) =
             self.ake_detour(image, flag_base)?;
 
@@ -738,8 +736,10 @@ impl Mt1959Engine {
         let mut hooks = vec![
             HookReport::applied(
                 "ake",
-                if ake_install_shape == thumb::BranchKind::BWide {
-                    "reject-tail-call"
+                if reset_site == ake_gate as usize + 12
+                    && image.get(reset_site..reset_site + 2) == Some(&[0x01, 0x21])
+                {
+                    "reject-native-call-join"
                 } else {
                     "shared-call"
                 },

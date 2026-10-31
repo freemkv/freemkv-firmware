@@ -563,7 +563,6 @@ impl UhdConversionPlan {
             mediatek_optical::image::analysis::ClassicReadPosition::detect(image, self.state)?;
         let mut a = Asm::new();
         let oem = a.label();
-        let zero = a.label();
         let reject = a.label();
         a.push(8);
         a.ldr_lit(3, flag_address(flags)?);
@@ -575,13 +574,9 @@ impl UhdConversionPlan {
         a.cmp_imm(3, 0xc7);
         a.bne(oem);
         a.pop(8);
-        a.ldrb_imm(1, u16::from(contract.position_register), 2);
-        a.lsrs_imm(1, 1, 6);
-        a.cmp_imm(1, 1);
-        a.bne(zero);
-        tail(&mut a, contract.layer_one);
-        a.bind(zero);
-        tail(&mut a, contract.layer_zero);
+        // Native UHD admits C7 to the complete high-layer decoder. Its layer
+        // 0/1/2/3 cases own their position transforms, cache writes and flags.
+        tail(&mut a, contract.decode.accept());
         a.bind(oem);
         a.pop(8);
         a.cmp_imm(1, 0);
@@ -912,7 +907,7 @@ fn emit_c7_selection(
 ) -> Result<Vec<u8>> {
     emit_c7_selection_relocated(state, flags, replay, accept, reject, None)
 }
-fn emit_c7_selection_relocated(
+pub(super) fn emit_c7_selection_relocated(
     state: u32,
     flags: u32,
     replay: &[u16],

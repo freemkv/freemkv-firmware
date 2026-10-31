@@ -302,11 +302,11 @@ pub(crate) const AKE_GATE_SIG: &[(u16, u16)] = &[
     (0x7AA8, 0xFFFF), // ldrb r0,[r5,#0xa]   AGID byte
     (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID
     (0x2106, 0xFFFF), // movs r1,#6          success: state 6 (authenticated)
-    (0xE000, 0xF800), // b <set_agid_state>
+    (0xE000, 0xF800), // b <shared BL set_agid_state>
     (0x7AA8, 0xFFFF), // ldrb r0,[r5,#0xa]
     (0x0980, 0xFFFF), // lsrs r0,r0,#6       r0 = AGID
     (0x2101, 0xFFFF), // movs r1,#1          reset: state 1  ← detour site (match+12)
-    (0xE000, 0xF800), // b <set_agid_state>
+    (0xE000, 0xF800), // b <shared BL set_agid_state>
 ];
 
 /// NB-class (LG BP50NB40 / BP55EB40 / WP50NB40 portable) variant of the AKE
@@ -2264,20 +2264,20 @@ impl Mt1959Engine {
     }
 
     /// The Raw Read (0x04) flag-gated AKE accept-gate trampoline. Entered by a
-    /// Thumb-2 wide **`B` (`B.W`, T4)** — NOT a `BL` — that replaces the OEM
+    /// Thumb-1 `BL` that replaces the OEM
     /// RESET writer's `movs r1,#1; b <back>` at [`AKE_GATE_SIG`]'s `match+12`
-    /// (see `BranchKind::BWide` at the caller in `mt1959.rs`). On entry
+    /// after source-qualifying its native shared call join. On entry
     /// `r0 = AGID` (set by the preceding `ldrb/lsrs`), which is preserved. The
     /// stub picks the per-AGID state to write: `6` (AKE authenticated → VID
     /// gate open) when `flag[Ake]==STATE_OFF`, else the OEM `1` (auth failed →
     /// reset). It then jumps to `back` — the OEM `set_agid_state(r0, r1)` call
     /// the reset writer branched to — so the store happens through the OEM
-    /// primitive unchanged. `r2` is scratch (dead at `back`); `lr` is the
-    /// OUTER function's own return address, unchanged through this whole
-    /// detour (this is why the install MUST be `B.W`, not `BL` — a `BL`
-    /// would clobber `lr` with `site+4`, and `<back>`'s trailing `bx lr`
-    /// would then land inside the outer function on the entry of an unrelated
-    /// leaf routine, breaking the OEM tail-call semantics).
+    /// primitive unchanged. `back` is a native `BL` instruction, not the leaf
+    /// setter itself: that call defines LR before the setter observes it. Its
+    /// first CMP also replaces incoming flags, and r2 is defined before use.
+    /// The caller's saved return frame is proven by `SavedLink`. Older comments
+    /// incorrectly described this join as a direct tail call; the source-bound
+    /// qualification below deliberately refuses such a layout.
     ///
     /// This is the `04 02` mode: "accept ANY host cert, revoked or not." The host
     /// still drives the real AKE (`0xA3`/`0xA4`) and may present a revoked (or any)
@@ -2322,16 +2322,16 @@ impl Mt1959Engine {
         // vendor-CDB context in 0.8.14 — see the no-rearm-on-SET note in the
         // handler. Do not "upgrade" this call to the wrapper.
         //
-        // Register contract: `lr` here is the OUTER function's return address
-        // (this stub is entered by B.W precisely so `lr` survives), and `blx`
-        // destroys it — so `lr` is saved and restored around the call. Thumb
-        // `pop` cannot write `lr`, hence the pop-into-r2 + `mov lr, r2`. `r0`
-        // (the AGID) is saved because the callee is free to clobber r0-r3.
-        a.push(0x0101); // push {r0, lr}   AGID + the outer return address
+        // Preserve this stub's incoming LR across the nested reset call. The
+        // native join replaces it before the setter observes it; the caller's
+        // actual return address remains in its source-proven saved frame.
+        // Thumb POP cannot write LR, hence pop-into-r2 + MOV LR,r2. The reset
+        // callee may clobber r0-r3, so preserve the AGID as well.
+        a.push(0x0101); // push {r0, lr}
         a.ldr_lit(2, reset | 1); // r2 = aacs_session_reset (Thumb-tagged)
         a.blx(2); // clobbers lr and r0-r3
         a.pop(0x0005); // pop {r0, r2}    r0 = AGID, r2 = saved lr
-        a.mov_reg(14, 2); // mov lr, r2      restore the outer return address
+        a.mov_reg(14, 2); // mov lr, r2      restore this stub's incoming LR
         a.movs_imm(1, 6); // forced: state 6 (AKE authenticated)
         a.bind(done);
         a.ldr_lit(2, back | 1); // -> OEM set_agid_state(r0=agid, r1=state) call
@@ -2850,16 +2850,10 @@ impl Mt1959Engine {
     // end of this file so the type is namable from `crate::engine::core::`.)
 
     /// Resolve the AKE detour site + stub for whichever gate variant this image
-    /// carries. Tries the BU40N/desktop [`AKE_GATE_SIG`] first (so BU40N stays
-    /// byte-identical), then the NB-class [`AKE_GATE_SIG_NB`]. Returns
-    /// `(detour_site, stub_bytes, anchor, install_shape)`. The caller writes the
-    /// detour with `thumb::encode_b_wide` when `install_shape ==
-    /// BranchKind::BWide` (BU40N/desktop tail-call site — `bl` here would
-    /// corrupt the outer function's `lr`) or `thumb::encode_bl` when
-    /// `install_shape == BranchKind::Bl` (NB-class shared-`bl` site —
-    /// the OEM already had a `bl` there, so `lr` is meant to be set to
-    /// `site+4`). Errors (→ RawRead `SignatureNotFound`) only if neither
-    /// variant matches.
+    /// carries. Returns `(detour_site, stub_bytes, anchor, install_shape)`.
+    /// Every supported shape uses Thumb-1 BL: NB replaces a native call, while
+    /// the original writer requires proof of a saved caller frame and a native
+    /// call join which replaces LR before it is observed. Unknown joins refuse.
     pub(crate) fn ake_detour(
         &self,
         image: &[u8],
@@ -2881,15 +2875,9 @@ impl Mt1959Engine {
         // Original (BU40N / BP60NB10 / desktop): detour the reject writer
         // `movs r1,#1; b <back>` (4 bytes at anchor+12).
         //
-        // NOTE on install shape: the OEM instructions here end in an UNCONDITIONAL
-        // `b <back>` — a tail-call. `<back>` is `set_agid_state`, a shared leaf
-        // that returns via `bx lr` (its `lr` was set by the OUTER function's
-        // caller, not by anything at this site). If we install with a `bl` we
-        // clobber `lr` with `reset_site+4`, an address INSIDE the outer function,
-        // and `<back>`'s return then lands at the entry of an unrelated leaf
-        // (`push {r4,lr}` + MMIO clear at 0x04000000 bit 0x10). Install as a
-        // Thumb-2 wide `B` (`B.W` T4) so `lr` flows through unchanged and the
-        // tail-call semantics match OEM exactly.
+        // Historical B.W preserved LR unnecessarily on the reviewed source:
+        // both arms branch to a native BL, not directly to the leaf setter.
+        // Do not generalize that observation to an unqualified firmware.
         if variant == 0 {
             let ake_gate = anchor as u32;
             let reset_site = ake_gate as usize + 12;
@@ -2909,8 +2897,78 @@ impl Mt1959Engine {
                 disp -= 0x800;
             }
             let ake_back = (b_at as i32 + 4 + disp * 2) as u32;
+            let success = thumb::isa::decode_at(image, anchor + 6)
+                .and_then(|instruction| instruction.branch_target())
+                .ok_or_else(|| anyhow!("AKE success writer has no native B16 join"))?;
+            ensure!(
+                success == ake_back,
+                "AKE writers do not share their native call join"
+            );
+            let setter = thumb::decode_bl(image, ake_back as usize)
+                .ok_or_else(|| anyhow!("AKE writer join is not a native BL"))?;
+            ensure!(
+                setter == self.find_vid_gate_setter(image)?,
+                "AKE join does not call the producer-derived AGID setter"
+            );
+            // Complete operand grammar: the setter overwrites incoming flags
+            // and r2, consumes only the preserved AGID in r0 and state in r1,
+            // then returns through the LR defined by the native call join.
+            let common = [
+                (0x2802, 0xffff),
+                (0xd20c, 0xffff),
+                (0x4a00, 0xff00),
+                (0x1880, 0xffff),
+                (0x4a00, 0xff00),
+                (0x0400, 0xffff),
+                (0x6812, 0xffff),
+                (0x0c00, 0xffff),
+                (0x1810, 0xffff),
+                (0x4a00, 0xff00),
+                (0x0200, 0xffff),
+                (0x6812, 0xffff),
+                (0x0a00, 0xffff),
+                (0x1880, 0xffff),
+                (0x7001, 0xffff),
+                (0x4770, 0xffff),
+            ];
+            let short = [
+                (0x2802, 0xffff),
+                (0xd20a, 0xffff),
+                (0x4a00, 0xff00),
+                (0x1880, 0xffff),
+                (0x4a00, 0xff00),
+                (0x6812, 0xffff),
+                (0x1810, 0xffff),
+                (0x4a00, 0xff00),
+                (0x0200, 0xffff),
+                (0x6812, 0xffff),
+                (0x0a00, 0xffff),
+                (0x1880, 0xffff),
+                (0x7001, 0xffff),
+                (0x4770, 0xffff),
+            ];
+            let setter = setter as usize;
+            let literals = if image.get(setter..setter + common.len() * 2).is_some()
+                && matches_sig(image, &common, setter)
+            {
+                [4, 8, 18]
+            } else if image.get(setter..setter + short.len() * 2).is_some()
+                && matches_sig(image, &short, setter)
+            {
+                [4, 8, 14]
+            } else {
+                bail!("AKE native AGID setter operands are unqualified");
+            };
+            for offset in literals {
+                ensure!(
+                    pc_literal(image, setter + offset).is_some(),
+                    "AKE setter literal is out of image"
+                );
+            }
+            mediatek_optical::image::analysis::SavedLink::detect(image, reset_site)
+                .context("AKE writer caller does not prove saved LR and balanced exits")?;
             let bytes = self.build_ake_stub(flag_base, ake_back, reset)?;
-            return Ok((reset_site, bytes, ake_gate, BranchKind::BWide));
+            return Ok((reset_site, bytes, ake_gate, BranchKind::Bl));
         }
         // NB-class: detour the shared `bl set_agid_state` at anchor+12. The
         // OEM already installs a `bl` here — installing our own `bl` is a

@@ -58,8 +58,10 @@ const EXPECT_HANDLER_HEX: &str =
 // HRL rejection preserves R3 through the continuation, including its tail frame.
 // Explicit media refusal compares its known-zero flag, not a possible class byte.
 // VID Gate-A preserves the native writer source/count and all caller arguments.
-const EXPECT_CMAC_1: &str = "55f35ef8888ce00f35f3ab90506599f4";
-const EXPECT_CMAC_15: &str = "c645a54d63c45ef5b4b4b2529c19de78";
+// Source-qualified AKE writer installation is now Thumb-1 BL; the native call
+// join defines the setter's LR, so stub bytes and its allocation stay unchanged.
+const EXPECT_CMAC_1: &str = "3f2d8506d6cb5e276b702703f89ece7a";
+const EXPECT_CMAC_15: &str = "43493f3dc7faa145997229424fd358e9";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -425,50 +427,16 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     );
     assert_eq!(report.de_off, 0x001e_c056, "DE byte offset (1.00)");
 
-    // AKE detour install shape — the load-bearing regression guard for the
-    // 0.8.14 fix. The reject-writer site (`ake_gate + 12` = 0x001365a0 on
-    // BU40N 1.00) originally held `movs r1,#1; b <set_agid_state>` — a
-    // tail-call whose shared setter's `bx lr` returns to the OUTER function's
-    // caller via the caller's own `lr`. Installing a wide `BL` there
-    // clobbers `lr` with `site+4`, so the shared setter's `bx lr` lands at
-    // the entry of an unrelated leaf that clears a bit in MMIO 0x04000000
-    // and disarms drive-side bus-encryption on every reject-arm path. The
-    // correct install is a Thumb-2 wide `B` (`B.W`, T4) — same 4 bytes, but
-    // `lr` is left alone.
-    //
-    // This test decodes the 4 bytes at the detour site and asserts:
-    //   1. They decode as a wide `B.W` (not `BL`).
-    //   2. Their target is exactly `ake_stub_va`.
-    // Together these prove the shape enum (`AkeInstallShape::WideB`) is wired
-    // through `ake_detour` → the emit-time install → and lands byte-correct
-    // in the produced image, so the 0.8.13 boot-time bus-disarm regression
-    // cannot recur silently.
+    // Both native writer arms converge on a BL to the actual AGID setter.
+    // The join, rather than the writer, supplies the setter's return address.
+    // This corrects the old direct-tail interpretation and allows Thumb-1 BL.
     let ake_install_site = report.ake_gate as usize + 12;
-    let install_bytes = &img[ake_install_site..ake_install_site + 4];
     assert_eq!(
-        install_bytes.len(),
-        4,
-        "AKE detour install site 0x{ake_install_site:x} must be 4 bytes"
-    );
-    let decoded_b = thumb_asm::decode_b_wide(img, ake_install_site);
-    let decoded_bl = thumb_asm::decode_bl(img, ake_install_site);
-    assert_eq!(
-        decoded_b,
+        thumb_asm::decode_bl(img, ake_install_site),
         Some(report.ake_stub_va),
-        "AKE install at 0x{ake_install_site:x} must be a wide `B.W` to ake_stub_va=0x{:x} \
-         (bytes = {:02x?}, decode_b_wide = {:?}, decode_bl = {:?})",
-        report.ake_stub_va,
-        install_bytes,
-        decoded_b,
-        decoded_bl,
+        "source-qualified AKE install must be Thumb-1 BL"
     );
-    assert!(
-        decoded_bl.is_none(),
-        "AKE install at 0x{ake_install_site:x} must NOT decode as a `BL` — a `BL` here would \
-         clobber `lr` and re-run an unrelated leaf's MMIO bit-clear on every reject-arm path \
-         (the 0.8.13 regression). decode_bl = {:?}",
-        decoded_bl,
-    );
+    assert!(thumb_asm::decode_b_wide(img, ake_install_site).is_none());
 }
 
 /// The two firmware images the VID (0x03) finders must resolve identically,
@@ -2040,4 +2008,50 @@ fn variant_scan_includes_the_final_complete_pattern() {
         vec![2]
     );
     assert!(crate::engine::core::find_masked_all(&image, &[(0x1234, 0xffff)], 0, 3).is_empty());
+}
+
+/// Native source must establish the call join, setter ABI and saved caller LR;
+/// a signature plus an arbitrary jump target is insufficient for a BL detour.
+#[test]
+fn ake_reject_writer_requires_a_native_call_join_and_setter_operands() {
+    let source = load_base().expect("KAT requires the committed OEM fixture");
+    let engine = Mt1959Engine;
+    let (site, _, anchor, kind) = engine
+        .ake_detour(&source, super::FLAG_TABLE_BASE)
+        .expect("actual OEM join and saved frame qualify");
+    assert_eq!(kind, thumb_asm::BranchKind::Bl);
+    let join = thumb_asm::isa::decode_at(&source, site + 2)
+        .and_then(|instruction| instruction.branch_target())
+        .unwrap() as usize;
+    let setter = thumb_asm::decode_bl(&source, join).unwrap() as usize;
+    assert_eq!(setter as u32, engine.find_vid_gate_setter(&source).unwrap());
+
+    let mut tail = source.clone();
+    tail[join..join + 4].copy_from_slice(&[0x70, 0x47, 0xc0, 0x46]); // bx lr; nop
+    assert!(engine.ake_detour(&tail, super::FLAG_TABLE_BASE).is_err());
+
+    let mut mismatched_join = source.clone();
+    mismatched_join[anchor as usize + 6..anchor as usize + 8].copy_from_slice(&[0, 0xe0]); // success branches elsewhere
+    assert!(engine
+        .ake_detour(&mismatched_join, super::FLAG_TABLE_BASE)
+        .is_err());
+
+    let mut bad_flags = source.clone();
+    bad_flags[setter..setter + 2].copy_from_slice(&[0xc0, 0x46]); // no native cmp
+    assert!(engine
+        .ake_detour(&bad_flags, super::FLAG_TABLE_BASE)
+        .is_err());
+
+    let mut bad_state = source.clone();
+    bad_state[setter + 28..setter + 30].copy_from_slice(&[0x02, 0x70]); // strb r2,[r0]
+    assert!(engine
+        .ake_detour(&bad_state, super::FLAG_TABLE_BASE)
+        .is_err());
+
+    let caller = mediatek_optical::image::analysis::SavedLink::detect(&source, site).unwrap();
+    let mut missing_frame = source;
+    missing_frame[caller.entry()..caller.entry() + 2].copy_from_slice(&[0xc0, 0x46]);
+    assert!(engine
+        .ake_detour(&missing_frame, super::FLAG_TABLE_BASE)
+        .is_err());
 }

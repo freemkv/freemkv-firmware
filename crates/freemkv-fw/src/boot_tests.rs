@@ -351,7 +351,7 @@ fn execute_boot_prefix(bytes: &[u8], base: u32, ram: &mut [u8]) {
     let mut regs = [0u32; 16];
     for pc in (0..bytes.len()).step_by(2) {
         use thumb_asm::isa::Operand;
-        let ins = thumb_asm::isa::decode_at(&bytes, pc).expect("decoded boot instruction");
+        let ins = thumb_asm::isa::decode_at(bytes, pc).expect("decoded boot instruction");
         match ins.mnemonic {
             "push" => {}
             "pop" => break, // argument restore ends the initialization prefix
@@ -359,7 +359,7 @@ fn execute_boot_prefix(bytes: &[u8], base: u32, ram: &mut [u8]) {
                 let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
                     panic!("LDR destination");
                 };
-                regs[usize::from(dest.num())] = thumb_asm::analysis::literal_value(&bytes, pc)
+                regs[usize::from(dest.num())] = thumb_asm::analysis::literal_value(bytes, pc)
                     .expect("initialization prefix loads only literals");
             }
             "mov" => {

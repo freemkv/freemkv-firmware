@@ -19,6 +19,86 @@ use crate::boot::BootSettings;
 use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
+// UH12NS30 JBC5 schedules the first state-pointer load through r7 before
+// adding the session offset. The resulting state byte and CMP/BNE contract
+// are identical to the classic r1-only producer, including their offsets.
+const VID_GATE_SIG_CLASSIC_R7: &[(u16, u16)] = &[
+    (0x7aa8, 0xffff),
+    (0x4900, 0xff00),
+    (0x0980, 0xffff),
+    (0x4f00, 0xff00),
+    (0x1840, 0xffff),
+    (0x6839, 0xffff),
+    (0x0400, 0xffff),
+    (0x0c00, 0xffff),
+    (0x1808, 0xffff),
+    (0x4900, 0xff00),
+    (0x0200, 0xffff),
+    (0x6809, 0xffff),
+    (0x0a00, 0xffff),
+    (0x1840, 0xffff),
+    (0x7800, 0xffff),
+    (0x2806, 0xffff),
+    (0xd100, 0xff00),
+];
+
+// WH16NS48 1.D3 keeps the authenticated response construction between the
+// success and rejection writers (OEM 0x181c08..0x181c6e). Bind both complete
+// response arms, their common call and both state-setter calls below.
+const AKE_GATE_SIG_CLASSIC_SPLIT: &[(u16, u16)] = &[
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2106, 0xffff),
+    (0xf000, 0xf800),
+    (0xf800, 0xf800),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2802, 0xffff),
+    (0xd200, 0xff00),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x1980, 0xffff),
+    (0x6821, 0xffff),
+    (0x0400, 0xffff),
+    (0x0c00, 0xffff),
+    (0x1808, 0xffff),
+    (0x6839, 0xffff),
+    (0x0200, 0xffff),
+    (0x0a00, 0xffff),
+    (0x1840, 0xffff),
+    (0x7801, 0xffff),
+    (0xe000, 0xf800),
+    (0x2100, 0xffff),
+    (0x4800, 0xff00),
+    (0xe000, 0xf800),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2101, 0xffff),
+    (0xf000, 0xf800),
+    (0xf800, 0xf800),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x2802, 0xffff),
+    (0xd200, 0xff00),
+    (0x7aa8, 0xffff),
+    (0x0980, 0xffff),
+    (0x1980, 0xffff),
+    (0x6821, 0xffff),
+    (0x0400, 0xffff),
+    (0x0c00, 0xffff),
+    (0x1808, 0xffff),
+    (0x6839, 0xffff),
+    (0x0200, 0xffff),
+    (0x0a00, 0xffff),
+    (0x1840, 0xffff),
+    (0x7801, 0xffff),
+    (0xe000, 0xf800),
+    (0x2100, 0xffff),
+    (0x4800, 0xff00),
+    (0xf000, 0xf800),
+    (0xf800, 0xf800),
+];
+
 impl Mt1959Engine {
     pub(super) fn emit_media_conversion_classic(
         &self,
@@ -297,7 +377,7 @@ impl Mt1959Engine {
                 speed_stub_va = facts.iter().find(|(k, _)| *k == "speed_stub_va").unwrap().1;
             }
 
-            // Region-free — classic REGION_EMIT_SIG window (proven on classic, the
+            // Region-free — unique native REGION_EMIT_SIG (proven on classic, the
             // same emit `build_modify_classic` ships).
             if let Ok((emitter, va)) = self.emit_region_classic(&mut out, flag_base) {
                 region_emitter = emitter;
@@ -686,10 +766,10 @@ impl Mt1959Engine {
         })
     }
 
-    /// Region-free emission for the MT1939 classic window (mirrors [`Self::emit_region`]
-    /// with the classic `REGION_EMIT_SIG` window, `~0x154000..0x157000`).
+    /// Region-free emission using the unique native RPC emitter grammar.
+    /// Classic application layouts relocate it across the image.
     pub(crate) fn emit_region_classic(&self, out: &mut [u8], flag_base: u32) -> Result<(u32, u32)> {
-        let region_emitter = self.find_region_emitter_in(out, 0x0015_0000, 0x0016_0000)?;
+        let region_emitter = self.find_region_emitter(out)?;
         let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
         let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
@@ -737,7 +817,11 @@ impl Mt1959Engine {
 
         // ---- validate (read-only) ----
         // Classic VID producer Gate-A, required unique.
-        let vid_gate = match masked_matches(image, VID_GATE_SIG_CLASSIC, lo, hi).as_slice() {
+        let mut vid_gates = masked_matches(image, VID_GATE_SIG_CLASSIC, lo, hi);
+        vid_gates.extend(masked_matches(image, VID_GATE_SIG_CLASSIC_R7, lo, hi));
+        vid_gates.sort_unstable();
+        vid_gates.dedup();
+        let vid_gate = match vid_gates.as_slice() {
             [one] => *one,
             hits => bail!(
                 "classic VID gate matched {} time(s) in [0x{lo:x},0x{hi:x}) (want 1)",
@@ -781,18 +865,38 @@ impl Mt1959Engine {
         // find_vid_gate whose window can miss a classic image whose AACS block is
         // relocated (e.g. BE14NU40 1.01 at ~0x180k). Best-effort: never fail the
         // classic Raw-read/AKE emit on an audit anchor.
-        let (vid_producer, scratch) = self.find_vid_producer(image).unwrap_or((0, 0));
+        let vid_output = self.find_vid_producer(image).ok();
 
         // Classic AKE accept gate (04 02), required unique. The reject writer folds
         // the `lsrs` (AGID compute) into the 4 replaced bytes.
-        let ake = match masked_matches(image, AKE_GATE_SIG_CLASSIC, lo, hi).as_slice() {
+        let mut ake_gates: Vec<_> = masked_matches(image, AKE_GATE_SIG_CLASSIC, lo, hi)
+            .into_iter()
+            .map(|gate| (gate, gate + 6))
+            .collect();
+        for gate in masked_matches(image, AKE_GATE_SIG_CLASSIC_SPLIT, lo, hi) {
+            for (branch, target) in [(16, 44), (42, 46), (48, 98), (66, 94), (92, 96)] {
+                let decoded = thumb::isa::decode_at(image, gate + branch)
+                    .and_then(|instruction| instruction.branch_target());
+                if decoded != Some((gate + target) as u32) {
+                    bail!("classic split AKE response branches cross native arms");
+                }
+            }
+            let success =
+                thumb::decode_bl(image, gate + 6).context("classic split AKE success setter")?;
+            let reject =
+                thumb::decode_bl(image, gate + 56).context("classic split AKE reject setter")?;
+            if success != reject {
+                bail!("classic split AKE writers name different state setters");
+            }
+            ake_gates.push((gate, gate + 52));
+        }
+        let (ake, ake_site) = match ake_gates.as_slice() {
             [one] => *one,
             hits => bail!(
                 "classic AKE gate matched {} time(s) in [0x{lo:x},0x{hi:x}) (want 1)",
                 hits.len()
             ),
         };
-        let ake_site = ake + 6;
         let lsrs_hw = u16::from_le_bytes([image[ake_site], image[ake_site + 1]]);
         let movs_hw = u16::from_le_bytes([image[ake_site + 2], image[ake_site + 3]]);
         if lsrs_hw != 0x0980 || movs_hw != 0x2101 {
@@ -801,7 +905,7 @@ impl Mt1959Engine {
                  (got 0x{lsrs_hw:04x} 0x{movs_hw:04x})"
             );
         }
-        let ake_back = (ake + 0xa) as u32; // shared `bl set_agid_state` call site
+        let ake_back = (ake_site + 4) as u32; // native `bl set_agid_state` call site
         let ake_bytes = self.build_ake_stub_classic(flag_base, ake_back)?;
 
         // ---- commit on a working copy (atomic) ----
@@ -833,7 +937,7 @@ impl Mt1959Engine {
         )?;
 
         *out = w;
-        Ok(vec![
+        let mut facts = vec![
             ("gatea_gate", gatea_cmp as u32),
             ("gatea_stub_va", gatea_stub_va),
             ("gatea_authed", gatea_authed),
@@ -841,9 +945,15 @@ impl Mt1959Engine {
             ("ake_stub_va", ake_stub_va),
             ("ake_gate", ake as u32),
             ("deny", gatea_deny),
-            ("scratch", scratch),
-            ("vid_producer", vid_producer),
-        ])
+        ];
+        if let Some((vid_producer, scratch)) = vid_output {
+            facts.extend([("scratch", scratch), ("vid_producer", vid_producer)]);
+        } else {
+            // These helpers use the native producer and never access a clear
+            // VID buffer directly. An unbound optional diagnostic is not RAM 0.
+            facts.push(("scratch_not_used_by_helpers", 1));
+        }
+        Ok(facts)
     }
 
     /// Host-Revocation-List skip emission for the MT1939 **classic** cert path — the
@@ -877,8 +987,11 @@ impl Mt1959Engine {
     ) -> Result<(Vec<u32>, u32)> {
         use super::mt1939::{masked_matches, HRL_LOOKUP_SIG_CLASSIC};
 
-        // ---- locate the classic HRL lookup routine, required unique image-wide ----
-        let hrl = match masked_matches(image, HRL_LOOKUP_SIG_CLASSIC, 0, image.len()).as_slice() {
+        // ---- locate the HRL lookup routine, required unique across native
+        // translation orders. UH12 combines classic boot with modern HRL. ----
+        let mut hrl_routines = masked_matches(image, HRL_LOOKUP_SIG_CLASSIC, 0, image.len());
+        hrl_routines.extend(masked_matches(image, HRL_LOOKUP_SIG, 0, image.len()));
+        let hrl = match hrl_routines.as_slice() {
             [one] => *one as u32,
             hits => bail!(
                 "classic HRL lookup matched {} time(s) image-wide (want 1)",
@@ -942,7 +1055,9 @@ impl Mt1959Engine {
         //      `ldrb r0,[r5,#2]; cmp r0,#0; bne …; movs r0,#0x6f` (the 6F deny). ----
         let t = revoke as usize;
         let head_ok = t + 8 <= image.len()
-            && hw(t) == 0x78A8 // ldrb r0,[r5,#2]   (classic r5; modern head is r4/0x78A0)
+            // The lookup's scheduling and its caller's register allocation are
+            // independent: UH12 has modern lookup order with a classic r5 head.
+            && matches!(hw(t), 0x78a8 | 0x78a0)
             && hw(t + 2) == 0x2800 // cmp  r0,#0
             && (hw(t + 4) & 0xFF00) == 0xD100 // bne  <loop>
             && hw(t + 6) == 0x206F; // movs r0,#0x6f   (6F copy-protection sense)

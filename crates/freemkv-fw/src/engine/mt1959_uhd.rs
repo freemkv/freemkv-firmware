@@ -6,8 +6,8 @@
 //! No incomplete media conversion is installed; physical testing is separate.
 use anyhow::{ensure, Context, Result};
 use mediatek_optical::image::analysis::{
-    LegacyControlTail, LegacyDensityTarget, LegacyIdentityReset, LegacyReverse, LegacyStackDi,
-    SavedLink, UhdArea, UhdAreas, UhdKeyPath,
+    ClassicConsumer, ClassicConsumerKind, LegacyControlTail, LegacyDensityTarget,
+    LegacyIdentityReset, LegacyReverse, LegacyStackDi, SavedLink, UhdArea, UhdAreas, UhdKeyPath,
 };
 use sha2::{Digest, Sha256};
 use thumb_asm::{Asm, Cond};
@@ -72,6 +72,7 @@ pub struct Plan {
     reverse: Option<LegacyReverse>,
     density: Option<LegacyDensityTarget>,
     identity: Option<LegacyIdentityReset>,
+    di_mode: Option<ClassicConsumer>,
     authentication_differences: Vec<Gap>,
     authentication_diagnostic_error: Option<String>,
 }
@@ -99,6 +100,11 @@ impl Plan {
     /// does not qualify the separate controller initialization policy.
     pub fn density_target(&self) -> Option<&LegacyDensityTarget> {
         self.density.as_ref()
+    }
+
+    /// Source-bound initialization selector in the same legacy DI parser.
+    pub fn disc_information_mode(&self) -> Option<&ClassicConsumer> {
+        self.di_mode.as_ref()
     }
 
     /// Native per-disc initializer coordinated with a private identity cache.
@@ -129,6 +135,7 @@ impl Plan {
             reverse: None,
             density: None,
             identity: None,
+            di_mode: None,
             authentication_differences: Vec::new(),
             authentication_diagnostic_error: None,
         };
@@ -154,6 +161,41 @@ impl Plan {
             if role == UhdArea::DiscInformation {
                 match LegacyStackDi::detect(image) {
                     Ok(di) => {
+                        // Admission re-enters this parser with C7. The old
+                        // selector otherwise programs mode7; the native UHD
+                        // counterpart admits C7 to its existing dense-mode arm.
+                        match ClassicConsumer::inspect_kind(
+                            image,
+                            state,
+                            ClassicConsumerKind::DiMode,
+                        ) {
+                            Ok(mode) => {
+                                ensure!(
+                                    mode.caller.entry() == di.caller.entry()
+                                        && mode.selection.site() < di.prevalidation,
+                                    "G01 mode selector is not owned by the DI parser"
+                                );
+                                let selection = &mode.selection;
+                                let site = selection.site();
+                                plan.candidates.push(Candidate {
+                                    gap,
+                                    site,
+                                    original: image[site..site + selection.span()].to_vec(),
+                                    bytes: super::mt1939_uhd::emit_c7_selection_relocated(
+                                        state,
+                                        flags,
+                                        selection.replay(),
+                                        selection.accept(),
+                                        selection.reject(),
+                                        mode.relocated_load,
+                                    )?,
+                                });
+                                plan.di_mode = Some(mode);
+                            }
+                            Err(e) => plan
+                                .pending
+                                .push(format!("G01: native initialization mode contract: {e}")),
+                        }
                         let marker = match LegacyIdentityReset::detect(image) {
                             Ok(reset) => {
                                 let marker = flags
@@ -223,13 +265,13 @@ impl Plan {
                                 .pending
                                 .push(format!("G01: native density target contract: {e}")),
                         }
-                        // The native U identifier also affects controller and
-                        // resident-worker policy. Admission alone does not
-                        // qualify that downstream behavior, nor does it justify
-                        // copying the newer marker onto an older RAM field.
-                        plan.pending.push(
-                            "G01: U-identity downstream controller/worker qualification remains unresolved".into(),
-                        );
+                        // Complete the positively bound software roles above.
+                        // Newer U-marker controller/speed policies are not copied
+                        // onto older hardware: no additional software rejection
+                        // is established by those policy differences. Native
+                        // resident/MMIO completion remains a hardware-test limit.
+                        // Missing DI/mode/density/identity contracts still block
+                        // the entire group through their specific pending entry.
                     }
                     Err(e) => plan.pending.push(format!("G01: native DI contract: {e}")),
                 }

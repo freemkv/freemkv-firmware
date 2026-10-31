@@ -84,13 +84,18 @@ fn normal_classic_modify_installs_complete_group_and_reports_supported_settings(
     plan.verify(original, &report.image, flags).unwrap();
     let patches = plan.prepared_patches(original, flags).unwrap();
     let di = mediatek_optical::image::analysis::ClassicDi::detect(original).unwrap();
-    for at in di.prevalidation..di.layer_store + 2 {
+    for (at, &original_byte) in original
+        .iter()
+        .enumerate()
+        .take(di.layer_store + 2)
+        .skip(di.prevalidation)
+    {
         if !patches
             .iter()
             .any(|p| (p.site..p.site + p.original.len()).contains(&at))
         {
             assert_eq!(
-                report.image[at], original[at],
+                report.image[at], original_byte,
                 "unplanned parser edit at {at:#x}"
             );
         }
