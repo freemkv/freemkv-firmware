@@ -748,8 +748,9 @@ impl Mt1959Engine {
 
         // `Feature::Unrestricted` UHD (AACS 2.0) media accept/refuse: detour the REPORT KEY
         // accept gate's UHD class-3 check (via uhd_gate_detour → find_bd_gate) — the
-        // UHD sibling of the BD arm on the SAME gate. When `flag[Uhd]==STATE_OFF` the
-        // stub forces the OEM deny; unarmed it replays OEM (UHD reads are native).
+        // UHD sibling of the BD arm on the SAME gate. When `flag[Unrestricted]==STATE_OFF` the
+        // stub forces the OEM deny; otherwise it replays the existing class check.
+        // This control does not add media recognition or missing AACS2 workers.
         // Images on the descriptor-classifier gate shape (no class-3 arm) leave it
         // unwired (0). Committed so the free_space order matches build_report (…→ deny → uhd).
         let (uhd_site, uhd_stub_va) = match self.uhd_gate_detour(image, flag_base) {
@@ -884,6 +885,39 @@ impl Mt1959Engine {
         let auth_cell_refusal = auth_cell_stub_va != 0
             && mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()
                 != mediatek_optical::image::analysis::AuthCellVariant::R0StateR1Alternate;
+        // UHD conversion is separate from the raw-read controls above. Each
+        // required media gap must be closed before conversion edits reach output.
+        // G01-G06 matches establish the agreed media definition, not a hardware test.
+        let conversion = super::mt1959_uhd::Plan::inspect(image, flag_base);
+        hooks.push(match conversion {
+            Ok(plan) if !plan.pending().is_empty() => HookReport::unavailable(
+                "uhd-conversion",
+                format!("0 conversion edits: {}", plan.pending().join("; ")),
+            ),
+            Ok(plan) => match plan.apply(image, &mut w) {
+                Ok(()) => HookReport::applied(
+                    "uhd-conversion",
+                    if plan.gaps().is_empty() {
+                        "G01-G06 native media contracts; physical validation pending".to_owned()
+                    } else {
+                        format!(
+                            "complete media group: {}; physical validation pending",
+                            plan.gaps()
+                                .iter()
+                                .map(|g| g.id())
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        )
+                    },
+                ),
+                Err(e) => {
+                    HookReport::unavailable("uhd-conversion", format!("0 conversion edits: {e:#}"))
+                }
+            },
+            Err(e) => {
+                HookReport::unavailable("uhd-conversion", format!("0 conversion edits: {e:#}"))
+            }
+        });
         *out = w;
         Ok(RawReadFacts {
             ake_gate,

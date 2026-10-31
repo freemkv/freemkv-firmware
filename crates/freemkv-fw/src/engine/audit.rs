@@ -362,6 +362,20 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
             }
             LeverId::RawRead => {
+                if l.hooks.iter().any(|h| h.id == "uhd-conversion") {
+                    let check =
+                        super::mt1959_uhd::Plan::inspect(original, super::core::FLAG_TABLE_BASE)
+                            .and_then(|p| p.verify(img));
+                    checks.push(AuditCheck {
+                        lever: name,
+                        what: "UHD conversion atomic group".into(),
+                        ok: check.is_ok(),
+                        detail: match check {
+                            Ok(()) => "complete group or unchanged conversion sites".into(),
+                            Err(e) => format!("{e:#}"),
+                        },
+                    });
+                }
                 let before = checks.len();
                 if let (Some(site), Some(stub)) = (fact(l, "ake_site"), fact(l, "ake_stub_va")) {
                     // AKE install shape depends on the resolved gate variant:

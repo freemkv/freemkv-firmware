@@ -2428,8 +2428,8 @@ impl Mt1959Engine {
     /// boot hook writes `0xFF` at power-on, so `0x00` OFF is never seen at boot):
     ///   * `!= STATE_OFF` (`0xFF` passthrough / `0x01` on): replay `ldrb r0,[r2,#7];
     ///     cmp r0,#3` verbatim, so the caller's `bne` sees the exact OEM flags — UHD
-    ///     acceptance is byte-behaviour-identical to OEM (the drive reads UHD discs
-    ///     natively; ON is accept). Inert (stealth) until armed OFF.
+    ///     acceptance is byte-behaviour-identical to OEM (this hook preserves the native class check; it does not
+    ///     establish detection, reading or complete authentication support). Inert (stealth) until armed OFF.
     ///   * `== STATE_OFF` (`0x00`): after the class replay, force a non-equal compare
     ///     (the already-zero flag compared with one) so the caller's `bne <deny>` IS
     ///     taken and control jumps into the OEM `6F/05` deny block — the drive REFUSES
