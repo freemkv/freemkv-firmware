@@ -1156,7 +1156,7 @@ impl RecoveryFacet for Pioneer {
             total: None,
         });
         let plan = target
-            .bind(evidence, bypass_family_check)
+            .bind_live(evidence, bypass_family_check, dev)
             .map_err(|error| {
                 crate::backend::UpdateFailure::before_write("recovery preparation", error)
             })?;
