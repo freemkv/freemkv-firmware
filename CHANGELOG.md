@@ -568,6 +568,38 @@ version numbers without a recorded build are not invented to fill numeric gaps.
   detours and tighten generated instruction checks. This development version
   preceded the final encryption behavior released in 0.9.0.
 
+## [0.8.13] - Development only; superseded by 0.9.0
+
+### freemkv Modify
+
+- Experiment with restoring bus encryption through the OEM session-rearm path.
+  The final 0.9.0 release removed rearming on a settings change; this entry records
+  the development step, not a supported behavior of current firmware.
+
+## [0.8.12] - Development only; superseded by 0.9.0
+
+### freemkv Modify
+
+- Attempt to restore OEM encryption through session reset. Subsequent development
+  found reset alone insufficient and replaced this approach before 0.9.0.
+
+## [0.8.11] - Development only; superseded by 0.9.0
+
+### freemkv Modify
+
+- Consolidate the AKE and Bus controls into Encryption, separate diagnostic commands
+  from normal feature commands, and protect the saved-settings marker from feature
+  writes. These development changes were consolidated into the 0.9.0 release.
+
+## [0.8.4] – [0.8.10] - Development milestones; superseded by 0.9.0
+
+### freemkv Modify
+
+- Develop the revised encryption command interface, diagnostic commands and saved
+  settings writes. Historical notes record these seven versions as one development
+  series; none was published as a tagged stable release. Individual change lists
+  are not available, so the original grouped history is preserved.
+
 ## [0.8.3] - 2026-09-19
 
 ### freemkv Modify
