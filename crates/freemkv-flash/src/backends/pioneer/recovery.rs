@@ -202,7 +202,7 @@ impl Plan {
     }
     #[cfg(test)]
     pub(crate) fn requires_restoration(&self) -> bool {
-        self.prepared.restoration_kernel_transfer().is_some()
+        self.prepared.final_stage_kernel_transfer().is_some()
     }
     pub(crate) fn execute(&self, dev: &mut WriteDevice<'_>) -> Result<UpdateOutcome> {
         super::flash::execute_prepared(

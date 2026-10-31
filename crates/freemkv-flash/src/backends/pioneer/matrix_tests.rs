@@ -91,10 +91,10 @@ fn every_prepared_package_in_both_directions_within_its_family() {
                 assert_eq!(patched[0xfe], 1);
                 assert_eq!(receive_kernel(prepared.kernel_transfer()), patched);
                 assert_eq!(
-                    prepared.restoration_kernel_transfer().unwrap(),
+                    prepared.final_stage_kernel_transfer().unwrap(),
                     update.kernel_transfer()
                 );
-                let restoration = prepared.restoration_receiver().unwrap();
+                let restoration = prepared.final_stage_receiver().unwrap();
                 assert!(restoration
                     .entry_control(&update.normal().image[..16])
                     .is_ok());
@@ -110,8 +110,8 @@ fn every_prepared_package_in_both_directions_within_its_family() {
                 restore_passes += 1;
             } else {
                 assert_eq!(prepared.kernel_transfer(), update.kernel_transfer());
-                assert!(prepared.restoration_kernel_transfer().is_none());
-                assert!(prepared.restoration_receiver().is_none());
+                assert!(prepared.final_stage_kernel_transfer().is_none());
+                assert!(prepared.final_stage_receiver().is_none());
             }
         }
     }

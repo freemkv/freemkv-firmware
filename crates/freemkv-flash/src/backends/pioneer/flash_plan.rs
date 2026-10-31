@@ -10,7 +10,7 @@
 //!
 //! **Kernel mode is not used** (see [`kernel_mode_required`]). Every flash takes
 //! the ordinary OEM-update route, whose generation lever is the decoded-body
-//! `0xFE` marker. A [`FlashPlan::KernelDowngrade`] is executable: the marker
+//! `0xFE` marker. A [`FlashPlan::KernelMarkerBridge`] is executable: the marker
 //! bridge is fully prepared before any firmware write.
 //!
 //! Gates: Site 1 (a newer receiver rejects an incoming Kernel whose marker is
@@ -159,7 +159,7 @@ pub enum FlashPlan {
     /// a full self-consistent Kernel+Normal pair. Executable: the §15.3 marker
     /// bridge is prepared before writing and executed by the shared stage loop.
     /// (Despite the name it needs no kernel mode; see [`kernel_mode_required`].)
-    KernelDowngrade,
+    KernelMarkerBridge,
     /// Different model in the same family: a full self-consistent foreign
     /// Kernel+Normal pair written via the ordinary OEM-update route (no kernel
     /// mode; see [`kernel_mode_required`]).
@@ -531,12 +531,12 @@ fn classify_same_model(installed: &Installed, target: &Target) -> FlashPlan {
 
     // A same-edition Kernel+Normal bundle: the only runtime special case is
     // Site 1, where a new-generation receiver rejects an `FF`/`00` Kernel (a
-    // KernelDowngrade, prepared as marker-bridge stages).
+    // KernelMarkerBridge, prepared as marker-bridge stages).
     let kernel = target.kernel.expect("has_kernel branch");
     if installed.receiver_new_gen.unwrap_or(false)
         && Generation::from_marker(kernel.marker).site1_rejected()
     {
-        FlashPlan::KernelDowngrade
+        FlashPlan::KernelMarkerBridge
     } else {
         FlashPlan::Plain
     }
@@ -564,7 +564,7 @@ fn classify_crossflash(installed: &Installed, target: &Target) -> FlashPlan {
     if installed.receiver_new_gen.unwrap_or(false)
         && Generation::from_marker(kernel.marker).site1_rejected()
     {
-        FlashPlan::KernelDowngrade
+        FlashPlan::KernelMarkerBridge
     } else {
         FlashPlan::KernelCrossflash
     }

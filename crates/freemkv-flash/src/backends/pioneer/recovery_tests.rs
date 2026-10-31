@@ -695,7 +695,7 @@ fn gated_loader_recovers_erased_marker_with_verified_temporary_then_pristine_ker
     let plan = Plan::from_updates(fixture_pair(true, 1), fixture_pair(false, 0xff)).unwrap();
     assert_eq!(plan.prepared.first_kernel_image()[0xfe], 1);
     assert_eq!(plan.prepared.final_kernel_image()[0xfe], 0xff);
-    let pristine = plan.prepared.restoration_kernel_transfer().unwrap();
+    let pristine = plan.prepared.final_stage_kernel_transfer().unwrap();
     assert_ne!(plan.prepared.kernel_transfer(), pristine);
     let mut drive = Drive {
         updating: true,
@@ -881,9 +881,9 @@ fn real_wx_kernel_mode_recovery_prepares_temporary_and_pristine_passes() {
     let plan = Plan::prepare(&wx, &sj).unwrap();
     assert_eq!(plan.prepared.first_kernel_image()[0xfe], 1);
     assert_eq!(plan.prepared.final_kernel_image()[0xfe], 0xff);
-    assert!(plan.prepared.restoration_kernel_transfer().is_some());
+    assert!(plan.prepared.final_stage_kernel_transfer().is_some());
     let temporary = Envelope::load(plan.prepared.kernel_transfer()).unwrap();
-    let pristine = Envelope::load(plan.prepared.restoration_kernel_transfer().unwrap()).unwrap();
+    let pristine = Envelope::load(plan.prepared.final_stage_kernel_transfer().unwrap()).unwrap();
     assert_eq!(temporary.image, plan.prepared.first_kernel_image());
     assert_eq!(pristine.image, plan.prepared.final_kernel_image());
     assert!(Update::load(
@@ -911,7 +911,7 @@ fn real_wx_kernel_mode_recovery_prepares_temporary_and_pristine_passes() {
         ),
         (
             &drive.writes[finish_positions[0] + 1..finish_positions[1]],
-            plan.prepared.restoration_kernel_transfer().unwrap(),
+            plan.prepared.final_stage_kernel_transfer().unwrap(),
         ),
     ] {
         let actual: Vec<_> = writes

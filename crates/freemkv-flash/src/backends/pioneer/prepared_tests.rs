@@ -543,7 +543,7 @@ fn restoration_success_requires_pristine_readback_and_preserves_normal() {
             result.unwrap();
             assert_eq!(drive.memory, plan.final_kernel_image());
         }
-        assert_eq!(drive.kernel, plan.restoration_kernel_transfer().unwrap());
+        assert_eq!(drive.kernel, plan.final_stage_kernel_transfer().unwrap());
         let normal: Vec<_> = drive
             .writes
             .iter()

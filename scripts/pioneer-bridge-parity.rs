@@ -5,7 +5,7 @@ fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 macro_rules! version {
-    ($name:ident, $lib:ident) => {
+    ($name:ident, $lib:ident, $final_transfer:ident, $final_receiver:ident) => {
         mod $name {
             use super::*;
             use $lib::{envelope::Update,receiver::Receiver};
@@ -23,18 +23,18 @@ macro_rules! version {
                     "initial_normal":hash(plan.normal_transfer()),
                     "first_kernel_image":hash(plan.first_kernel_image()),
                     "final_kernel_image":hash(plan.final_kernel_image()),
-                    "restoration":plan.restoration_kernel_transfer().map(hash),
+                    "restoration":plan.$final_transfer().map(hash),
                     "startup":format!("{:?}",plan.startup_setting()),
                     "settings":format!("{:?}",plan.settings()),
                     "initial_control":hash(&receiver.entry_control(&source.normal().image[..16]).unwrap()),
-                    "final_control":plan.restoration_receiver().map(|r|hash(&r.entry_control(&descriptor).or_else(|_|r.entry_control(&source.normal().image[..16])).unwrap())),
+                    "final_control":plan.$final_receiver().map(|r|hash(&r.entry_control(&descriptor).or_else(|_|r.entry_control(&source.normal().image[..16])).unwrap())),
                 }))
             }
         }
     }
 }
-version!(old, baseline);
-version!(new, candidate);
+version!(old, baseline, restoration_kernel_transfer, restoration_receiver);
+version!(new, candidate, final_stage_kernel_transfer, final_stage_receiver);
 fn main() {
     let list: Vec<Value> =
         serde_json::from_slice(&fs::read(std::env::args().nth(1).unwrap()).unwrap()).unwrap();

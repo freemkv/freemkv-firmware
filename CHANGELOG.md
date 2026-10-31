@@ -9,6 +9,8 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 
 ### freemkv Flash
 
+- Use consistent stage terminology in flashing interfaces and bridge classification.
+
 - Use prepared stages for direct and intermediate firmware updates, including
   downgrade markers, startup settings and receiver-specific transfer formats.
 - Prepare recognized Pioneer Kernel-handoff bridges from firmware evidence,

@@ -248,7 +248,10 @@ fn normal_only_refused_when_installed_tag_unknown() {
 fn same_model_older_across_barrier_is_kernel_downgrade() {
     let inst = installed(0x8A10, true, "23/01/01");
     let tgt = pair_target(0x8A10, "20/06/15", "20/06/15", 0xFF);
-    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::KernelDowngrade);
+    assert_eq!(
+        decide_flash_plan(&inst, &tgt),
+        FlashPlan::KernelMarkerBridge
+    );
 }
 
 #[test]
@@ -389,14 +392,17 @@ fn same_model_is_refused_on_family_mismatch_or_unknown() {
 fn crossflash_across_generation_barrier_is_reported_as_downgrade() {
     let inst = installed(0x8F00, true, "22/01/01");
     let tgt = pair_target(0x8F01, "20/01/01", "20/01/01", 0xFF);
-    assert_eq!(decide_flash_plan(&inst, &tgt), FlashPlan::KernelDowngrade);
+    assert_eq!(
+        decide_flash_plan(&inst, &tgt),
+        FlashPlan::KernelMarkerBridge
+    );
 }
 
 #[test]
 fn kernel_mode_is_never_required() {
     for plan in [
         FlashPlan::Plain,
-        FlashPlan::KernelDowngrade,
+        FlashPlan::KernelMarkerBridge,
         FlashPlan::KernelCrossflash,
         FlashPlan::Refused("x".into()),
     ] {

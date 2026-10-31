@@ -431,7 +431,7 @@ pub(crate) fn routing_warnings(
     use crate::backends::pioneer::flash_plan::FlashPlan as Route;
     match plan {
         Route::Plain | Route::KernelCrossflash => Ok(Vec::new()),
-        Route::KernelDowngrade => Ok(vec![DOWNGRADE_WARNING.to_string()]),
+        Route::KernelMarkerBridge => Ok(vec![DOWNGRADE_WARNING.to_string()]),
         Route::Refused(reason) => bail!("refusing to flash: {reason}"),
     }
 }

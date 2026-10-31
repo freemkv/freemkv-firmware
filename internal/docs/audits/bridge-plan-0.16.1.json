@@ -1,11 +1,18 @@
 {
   "version": "0.16.1",
   "scope": "Flash bridge planning and execution only; UHD modification and diagnosis deferred.",
-  "pioneer_revision": "b76b41ab1043a0969eddf7eb9e4cef6a2827052a",
+  "pioneer_revision": "f835d5b362d74a709740248492272c55fdbc5460",
   "baseline": {
     "application": "v0.15.4",
     "pioneer_revision": "d7ae773da92d37f05fa2740be98cdb6e0281e486",
     "same_dependency_in": "v0.16.0"
+  },
+  "handoff_detection_coverage": {
+    "oem_kernels_checked": 405,
+    "unrecognized_startup_or_programmer_contracts": 0,
+    "self_update_pairs_accepted": 388,
+    "pairs_refused_at_normal_authentication": 17,
+    "scope": "Inspected corpus only; no known unrecognized handoff example within these 405 kernels."
   },
   "design": {
     "flow": [
