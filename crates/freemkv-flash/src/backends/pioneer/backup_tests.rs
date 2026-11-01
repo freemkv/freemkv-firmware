@@ -1820,6 +1820,7 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
     );
     fix(&mut kernel);
     let mut normal = vec![0; 0x2000];
+    crate::startup_checks_fixture(&mut normal);
     normal[..16].copy_from_slice(&id[..16]);
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[24..32].copy_from_slice(b"GENERAL ");

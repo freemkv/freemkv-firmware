@@ -1121,3 +1121,30 @@ fn known_mtk_preflight_keeps_original_transport_cause() {
     );
     assert!(format!("{error:#}").contains("read-only preflight failed"));
 }
+
+#[test]
+fn boot_recovery_with_current_uses_live_receiver() {
+    use crate::backend::RecoveryFacet;
+    let current = image(b"1.00", 1);
+    let mut installed = image(b"BOOT", 1);
+    // Plain boot receiver instruction signature used by mediatek-optical.
+    installed[0x36c4..0x36d2].copy_from_slice(&[
+        0x03, 0x21, 0x09, 0x03, 0x61, 0x18, 0, 0xa8, 0, 0x5d, 0x09, 0x78, 0x88, 0x42,
+    ]);
+    for supplied in [None, Some(current.as_slice())] {
+        let mut dev = MockScsiDevice::echoing().with_firmware_image(installed.clone());
+        assert!(Mtk
+            .identify_with_current(&mut ReadDevice::without_unlocks(&mut dev), supplied)
+            .unwrap()
+            .is_some());
+        assert!(dev.writes.is_empty());
+    }
+    installed[0x36c4] ^= 1;
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(installed);
+    assert!(
+        Mtk.identify_with_current(&mut ReadDevice::without_unlocks(&mut dev), Some(&current))
+            .is_err(),
+        "Current must not substitute for an unrecognized live BOOT receiver"
+    );
+    assert!(dev.writes.is_empty());
+}

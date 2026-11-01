@@ -9,7 +9,10 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 
 ### freemkv Flash
 
-- Fix MediaTek flash planning rejecting a matching Current firmware when its downgrade-enable marker differs from the live drive. Keep identity, build and receiver-change checks in place.
+- Improve Pioneer crossflash compatibility checks.
+- Fix valid modified MediaTek Current firmware being rejected during flash planning.
+- Fix MediaTek recovery handling in boot mode.
+- Improve diagnostic logging for failed or blocked flash and recovery attempts.
 
 ## [0.17.0] - 2026-11-01
 

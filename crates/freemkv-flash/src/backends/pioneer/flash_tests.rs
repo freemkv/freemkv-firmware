@@ -1155,3 +1155,59 @@ fn stage_failure_retains_completion_without_host_progress_callbacks() {
         "errors.temporary_firmware"
     );
 }
+
+#[test]
+fn timeout_snapshot_is_one_bounded_read_even_when_unavailable() {
+    struct Probe {
+        calls: usize,
+        fail: bool,
+    }
+    impl ScsiDevice for Probe {
+        fn command_in(&mut self, _: &[u8], _: usize) -> Result<Vec<u8>> {
+            panic!("unbounded read")
+        }
+        fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+            panic!("diagnostic write")
+        }
+        fn describe(&self) -> String {
+            "timeout probe".into()
+        }
+        fn diagnostic_in(&mut self, cdb: &[u8], len: usize, timeout: u32) -> Result<Vec<u8>> {
+            self.calls += 1;
+            assert_eq!(cdb, &[0x12, 0, 0, 0, 96, 0]);
+            assert_eq!((len, timeout), (96, 5000));
+            if self.fail {
+                anyhow::bail!("still unavailable")
+            }
+            Ok(vec![0; 7]) // Short responses are evidence, not a validated identity.
+        }
+    }
+    for fail in [false, true] {
+        let mut dev = Probe { calls: 0, fail };
+        record_timeout_identity(&mut dev);
+        assert_eq!(dev.calls, 1);
+    }
+}
+
+#[test]
+fn timeout_diagnostic_gate_distinguishes_finish_failure() {
+    use pioneer_optical::receiver::ExecutionError;
+    for timeout in [false, true] {
+        let cause = pioneer_optical::drive::Error::Transport(anyhow!("original cause"));
+        let source = if timeout {
+            UpdateError::ReadyTimeout(cause)
+        } else {
+            UpdateError::Finish(cause)
+        };
+        let error = ExecutionError::AfterStage {
+            completed: 1,
+            source: Box::new(ExecutionError::Flash(FlashError::Update {
+                stage: FlashStage::Initial,
+                source,
+            })),
+        };
+        assert_eq!(is_readiness_timeout(&error), timeout);
+        let reported = execution_error(error, false, 1);
+        assert!(format!("{reported:#}").contains("original cause"));
+    }
+}

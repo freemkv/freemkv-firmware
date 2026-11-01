@@ -33,7 +33,7 @@ result: OK
 --- text (11) ---
 file: <TMP>/info-file/pioneer_bundle_signed_pair.tar
 size: 143 KiB
-sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
+sha256: 1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 family: Pioneer
 firmware model: BDR-TEST
 hardware: SAT FFFE
@@ -47,7 +47,7 @@ MSG      file: <TMP>/info-file/pioneer_bundle_signed_pair.tar
 MSG      size: 143 KiB
 FIELD    File = <TMP>/info-file/pioneer_bundle_signed_pair.tar
 FIELD    Size = 143 KiB
-MSG      sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
+MSG      sha256: 1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 MSG      family: Pioneer
 MSG      firmware model: BDR-TEST
 MSG      hardware: SAT FFFE
@@ -308,7 +308,7 @@ result: OK
 --- text (7) ---
 file: <TMP>/info-file/pioneer_signed_normal.enc
 size: 72.5 KiB
-sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+sha256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 family: Pioneer
 descriptor: model='unknown (not in image)' rev='1.00'
 flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup
@@ -318,7 +318,7 @@ MSG      file: <TMP>/info-file/pioneer_signed_normal.enc
 MSG      size: 72.5 KiB
 FIELD    File = <TMP>/info-file/pioneer_signed_normal.enc
 FIELD    Size = 72.5 KiB
-MSG      sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+MSG      sha256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 MSG      family: Pioneer
 MSG      descriptor: model='unknown (not in image)' rev='1.00'
 MSG      flash: offline OEM plan available for audited models; live flash needs --execute --i-understand-risk and a pre-flash backup

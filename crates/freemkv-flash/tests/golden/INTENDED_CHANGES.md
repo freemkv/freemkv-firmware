@@ -24,6 +24,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 | FMT | Snapshot normalization removes trailing display padding, including empty structured `MSG` rows and terminal prompts. Commands, payload bytes, message content and assertions are unchanged; the historical v0.11.2 snapshots remain untouched. |
 | P10 | Pioneer 0.13.4: the shared optical executor derives the dialect from decoded firmware, binds the live receiver before entry and again after startup migration, and checks target identity plus Kernel and available Normal readback after each pass. OEM vendor identity binds to the loaded firmware ID, and revisions compare the defined four-byte INQUIRY field (including the projected `0.05e` release). Recovery with a supplied Current envelope uses its decoded Kernel signatures, dialect and exact identity to establish an OEM receiver; unsupported probing without Current remains refused. Golden devices now install the transferred Normal, report its tag and revision, and expose programmed bytes for verification. Typed failures retain the underlying transport cause. The corpus also refreshes the earlier optical 0.15.1 receiver-derived `FrontKeyTwoRegion` framing (`6c8c2be`, `9100f74`, `5847fe4`): a 0x1200 Kernel header/key transfer followed by two 0x8000 body transfers at offsets 0x1200 and 0x9200. Flash already used this before the current audit; Recovery now shares that plan. Contiguous Kernel bytes, Normal transfers and control payloads are preserved. |
 | P11 | Pioneer corpus refresh of the prior 0.13.1 Normal preparation fixes (`a20047a`, `3b2a421`, October 19): preserve a valid OEM representation or prepare Normal for its actual receiving Kernel, proving decoded-body equality and receiver-required authentication. The corpus snapshots were last refreshed on October 11 (`9ee1a1d`); valid Normal-only scenarios now reach execution. Authentication gates remain in force, and incompatible Kernel-version or corrupt-body cases still refuse. The 34 newly exercised locally signed Normal transfers use recorded valid authentication blocks in tests, keyed by receiver authentication policy and every byte outside the 0x170..0x1c0 signature/public-key block. Fresh and recorded signatures are both verified; full emitted wire digests remain asserted. Production signing remains random. |
+| P12 | Receiver startup requirements now include persistent-bank checks alongside native word 0x9F. Synthetic Normal fixtures include a valid blank-initialize/select routine, with their deterministic signatures refreshed. Existing successful scenarios change only fixture SHA-256 values and wording that distinguishes the neutral-word policy from a detected target requirement. Commands, ordering, and rollback boundaries remain unchanged. Unsupported storage transitions are tested separately before any writes. |
 | RECOVERY_TRAY | 0.14.5: Pioneer Recovery skips the Flash-only medium guard before its initial and restoration passes; ordinary Flash still rejects a loaded disc. The recorded Recovery execution transcripts omit those two medium-status checks. No write command, payload, ordering, family check or verification is relaxed. |
 | M-LIFECYCLE | MediaTek 0.13.4: immutable receiver plans own authorization, encoding, execution and exact target startup verification. Plan messages describe the receiver-bound sequence; cached evidence is revalidated before entry. Successful mocks now expose the actual programmed descriptor and matching INQUIRY, and synthetic descriptors have a valid vendor and revision. Completion distinguishes verified readback from unavailable readback; structured errors preserve the failed phase and transport cause. |
 | P9 | Pioneer 0.13.4: the UD04 golden mock now returns its real `GENERAL` Kernel tag from vendor identity so the firmware-derived entry preflight can match the captured installed Kernel. Only post-flash identity text in these mock transcripts changes; firmware write commands and payloads do not. |
@@ -201,27 +202,24 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE, MTK_READ_GUIDANCE
 ```
 
 ### Pioneer backup: bounded replay of a UD04
-reason: P4
+reason: P4, P12
 ```diff
 -candidate sha256: d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
-+candidate sha256: f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
++candidate sha256: 59c84c6548af436262d26211ed341629f87fa3f621fccaf008e828b4449c2617
 -UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 +User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 -MSG      candidate sha256: d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
-+MSG      candidate sha256: f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
++MSG      candidate sha256: 59c84c6548af436262d26211ed341629f87fa3f621fccaf008e828b4449c2617
 -FIELD    Backup warning = UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 -MSG      UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 +FIELD    Backup origin = User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 +MSG      User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
 -saved file: 146432 bytes sha256=d9c34ec051a4e0f28ee494444f206b3229bd6d0198847fbc6b999fa65a1c5301
-+saved file: 146432 bytes sha256=f0e27a3ede13d055b8dab88b9379cb4c22f007e6d272658cb0ab660fb4600843
++saved file: 146432 bytes sha256=59c84c6548af436262d26211ed341629f87fa3f621fccaf008e828b4449c2617
 ```
 
 ### Pioneer dump (recover): bounded replay
 reason: PROTO
-The synthetic capture device now reports optical PDT 5 and its actual Kernel tag,
-so backup uses the same valid CDB contract as discovery. Only the captured
-identity sections and their recorded dump/directory hashes change.
 ```diff
 -saved file: 16883069 bytes; body sha256=ad014a01fb01cc08256975884a0a0719617b641fd141025b6bea37e358e6aa5b directory(time masked) sha256=0a005af45c41a0ba8a4a49026e673bdb3d3ba49f362f071fa20a1b4dce5737e9
 +saved file: 16883069 bytes; body sha256=d96dd36548221d3662922fea0da0ff285a1bd2f448babfbd3cb98e2699411cff directory(time masked) sha256=c0e8de22c670c9cfdbc96fec4a7aff6db3881e242c3adf358023e49fa5912e90
@@ -480,12 +478,21 @@ reason: R7, M-CHIP, M-LIFECYCLE, FILE_VALIDATION
 ```
 
 ### check_file pioneer_bundle_signed_pair.tar
-reason: P4
+reason: P4, P12
 ```diff
 -sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
++sha256: 1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 -MSG      sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+MSG      sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
++MSG      sha256: 1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
+```
+
+### check_file pioneer_signed_normal.enc
+reason: P12
+```diff
+-sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
++sha256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
+-MSG      sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
++MSG      sha256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 ```
 
 ### check_file zeros_2mib.bin
@@ -2823,12 +2830,16 @@ reason: PRECHECK
 ```
 
 ### Pioneer dry run: bare signed Normal .enc
-reason: PRECHECK
+reason: PRECHECK, P12
 ```diff
+-SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
++SHA-256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 -Installed-family compatibility is checked against the live backup.
 -DRY RUN: no device I/O or writes.
 +Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 +DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
+-MSG      SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
++MSG      SHA-256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 -MSG      Installed-family compatibility is checked against the live backup.
 -MSG      DRY RUN: no device I/O or writes.
 +MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -2836,16 +2847,16 @@ reason: PRECHECK
 ```
 
 ### Pioneer dry run: bundle verbose
-reason: P4, PRECHECK
+reason: P4, PRECHECK, P12
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -Installed-family compatibility is checked against the live backup.
 +Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 -DRY RUN: no device I/O or writes.
 +DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++MSG      SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -MSG      Installed-family compatibility is checked against the live backup.
 +MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 -MSG      DRY RUN: no device I/O or writes.
@@ -2867,16 +2878,16 @@ reason: P6, PRECHECK
 ```
 
 ### Pioneer dry run: signed Kernel+Normal bundle
-reason: P4, PRECHECK
+reason: P4, PRECHECK, P12
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -Installed-family compatibility is checked against the live backup.
 -DRY RUN: no device I/O or writes.
 +Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 +DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++MSG      SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -MSG      Installed-family compatibility is checked against the live backup.
 -MSG      DRY RUN: no device I/O or writes.
 +MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -9808,12 +9819,21 @@ reason: R7, M-CHIP, M-LIFECYCLE
 ```
 
 ### info_file pioneer_bundle_signed_pair.tar
-reason: P4
+reason: P4, P12
 ```diff
 -sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
++sha256: 1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 -MSG      sha256: 4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
-+MSG      sha256: 0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
++MSG      sha256: 1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
+```
+
+### info_file pioneer_signed_normal.enc
+reason: P12
+```diff
+-sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
++sha256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
+-MSG      sha256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
++MSG      sha256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 ```
 
 ## info_mtk.txt
@@ -12095,16 +12115,16 @@ reason: PRECHECK
 ```
 
 ### Pioneer dry run: disc loaded
-reason: P4, PRECHECK
+reason: P4, PRECHECK, P12
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -Installed-family compatibility is checked against the live backup.
 -DRY RUN: no device I/O or writes.
 +Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 +DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++MSG      SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -MSG      Installed-family compatibility is checked against the live backup.
 -MSG      DRY RUN: no device I/O or writes.
 +MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -12112,16 +12132,16 @@ reason: P4, PRECHECK
 ```
 
 ### Pioneer dry run: tray open
-reason: P4, PRECHECK
+reason: P4, PRECHECK, P12
 ```diff
 -SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -Installed-family compatibility is checked against the live backup.
 -DRY RUN: no device I/O or writes.
 +Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 +DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: cce920f821a3b891c207526d4bfbe63acb6a0e9fd1095bbdb6bd181ff400b2aa
-+MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
++MSG      SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 -MSG      Installed-family compatibility is checked against the live backup.
 -MSG      DRY RUN: no device I/O or writes.
 +MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -32263,7 +32283,7 @@ reason: P10
 ## pioneer_execute.txt
 
 ### Pioneer CLI execute: stdin is not a TTY
-reason: P4, P7, P8, P9, P10, OPERATION_015
+reason: P4, P7, P8, P9, P10, OPERATION_015, P12
 ```diff
 ---- terminal (13) ---
 +--- terminal (35) ---
@@ -32308,18 +32328,22 @@ reason: P4, P7, P8, P9, P10, OPERATION_015
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=250f0552a6ae711f678c646d840213b838fda8060960c8a6422ece55804c09cc -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ### Pioneer execute: Kernel+Normal update
-reason: P4, P7, P8, P9, FMT, P10
+reason: P4, P7, P8, P9, FMT, P10, P12
 ```diff
 ---- text (12) ---
 +--- text (11) ---
@@ -32327,7 +32351,7 @@ reason: P4, P7, P8, P9, FMT, P10
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
++FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      flash complete; drive returned ready.
 -MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
@@ -32345,18 +32369,22 @@ reason: P4, P7, P8, P9, FMT, P10
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=250f0552a6ae711f678c646d840213b838fda8060960c8a6422ece55804c09cc -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ### Pioneer execute: Kernel+Normal update with kernel restoration pass
-reason: P4, P7, P8, P9, FMT, P10
+reason: P4, P7, P8, P9, FMT, P10, P12
 ```diff
 ---- text (17) ---
 +--- text (16) ---
@@ -32364,7 +32392,7 @@ reason: P4, P7, P8, P9, FMT, P10
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
++FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      
 +MSG
@@ -32384,9 +32412,13 @@ reason: P4, P7, P8, P9, FMT, P10
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=c0a16b5e48c7b204741c44fa37f58d6402a2828c64c1aa21a96f3c2e884a1897 -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=e1887edb7ac462db6d799efbb3841854de8cb55146151090ec99089d0fb4056d -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=250f0552a6ae711f678c646d840213b838fda8060960c8a6422ece55804c09cc -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 +IN   cdb=120000002400 alloc=36 -> ok 36
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -32395,18 +32427,22 @@ reason: P4, P7, P8, P9, FMT, P10
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=250f0552a6ae711f678c646d840213b838fda8060960c8a6422ece55804c09cc -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-+saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
++saved pre-flash backup: 146432 bytes sha256=e6b614fe3e8275e0f659d666c6c9fb5658e9308815da789441bc3390486de54d
 ```
 
 ### Pioneer execute: Normal for another Kernel tag, refused after the backup
-reason: P2, PRECHECK, OPERATION_015
+reason: P2, PRECHECK, OPERATION_015, P12
 ```diff
 -result: ERR malformed bundle: Normal declares required-Kernel tag "ID58" but the bundled Kernel's own tag is "GENERAL". These must be equal; a Normal paired with a Kernel of a different ABI generation will soft-brick on Site 2.
 +result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.installed_firmware_mismatch: Normal requires Kernel ID58, but the drive has Kernel GENERAL
@@ -32414,11 +32450,11 @@ reason: P2, PRECHECK, OPERATION_015
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ### Pioneer execute: Normal-only update
-reason: P4, P7, P8, P9, FMT, P10
+reason: P4, P7, P8, P9, FMT, P10, P12
 ```diff
 ---- text (12) ---
 +--- text (11) ---
@@ -32426,7 +32462,7 @@ reason: P4, P7, P8, P9, FMT, P10
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
++FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      flash complete; drive returned ready.
 -MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
@@ -32441,15 +32477,19 @@ reason: P4, P7, P8, P9, FMT, P10
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=250f0552a6ae711f678c646d840213b838fda8060960c8a6422ece55804c09cc -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ### Pioneer execute: disc inserted after the backup
-reason: P2, PRECHECK
+reason: P2, PRECHECK, P12
 ```diff
 -result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 ---- text (5) ---
@@ -32462,13 +32502,13 @@ reason: P2, PRECHECK
 +MSG      backup: saved <TMP>/pioneer-execute/backup_4.tar (146432 bytes)
 +MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ## pioneer_execute_tty.txt
 
 ### Pioneer CLI execute: TTY answers n
-reason: P2, FMT, PRECHECK, OPERATION_015
+reason: P2, FMT, PRECHECK, OPERATION_015, P12
 ```diff
 -result: ERR flash aborted at confirmation prompt
 ---- terminal (8) ---
@@ -32492,11 +32532,11 @@ reason: P2, FMT, PRECHECK, OPERATION_015
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ### Pioneer CLI execute: TTY answers y
-reason: P4, P7, P8, P9, FMT, P10, OPERATION_015
+reason: P4, P7, P8, P9, FMT, P10, OPERATION_015, P12
 ```diff
 ---- terminal (12) ---
 +--- terminal (34) ---
@@ -32541,18 +32581,22 @@ reason: P4, P7, P8, P9, FMT, P10, OPERATION_015
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=4162fad25fff3e997985ddf26e34087ab9fd0265dd85733aaa80672b1539f58d -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=10e74db6597b02a2cc2bf3f2712446058c9272e3ca27e59e0deb8232c8e3309d -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=6df56441da89a5df1c081042e54aec1e9ac5b31c17d80a5e33247efb02dc9007 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=250f0552a6ae711f678c646d840213b838fda8060960c8a6422ece55804c09cc -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ### Pioneer CLI execute: disc inserted after the backup, TTY answers y
-reason: P2, FMT, PRECHECK, OPERATION_015
+reason: P2, FMT, PRECHECK, OPERATION_015, P12
 ```diff
 -result: ERR a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
 ---- terminal (5) ---
@@ -32574,7 +32618,7 @@ reason: P2, FMT, PRECHECK, OPERATION_015
 +This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 +Proceed? [Yes/No]
 -saved pre-flash backup: 146432 bytes sha256=df8c5a7e7a827190ea792e52459e35d17ef69ce966a4e55bbc518262e3a01d33
-+saved pre-flash backup: 146432 bytes sha256=14143236cf5819059969e7815f6e335c132ff92a566fc46655f56e6ae89ed5e1
++saved pre-flash backup: 146432 bytes sha256=629ce7492a467cb595b54caf23c4e60f27b95f978bf920cc4a58cd88f2a79a1d
 ```
 
 ## pioneer_flash_bundle_failures.txt
@@ -32593,7 +32637,7 @@ reason: P4, P5, PRECHECK, OPERATION_015
 ```
 
 ### Pioneer execute: target is a header-only bundle
-reason: P2, PRECHECK
+reason: P2, PRECHECK, P12
 ```diff
 -result: ERR Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
 +result: ERR update failed during compatibility checks (write started: false; temporary firmware: false; completed stages: []): errors.firmware_invalid: Cannot prepare this firmware update [pioneer.update.decode]. No firmware was written. Check that the firmware package is complete and compatible with this drive: Kernel envelope: unsupported firmware envelope layout: unsupported firmware envelope layout
@@ -32601,7 +32645,7 @@ reason: P2, PRECHECK
 +--- scsi transcript (22) ---
 -MEDIUM -> ClosedEmpty
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
-+saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
++saved pre-flash backup: 146432 bytes sha256=e6b614fe3e8275e0f659d666c6c9fb5658e9308815da789441bc3390486de54d
 ```
 
 ### Pioneer execute: target is garbage
@@ -32654,7 +32698,7 @@ reason: P1, PRECHECK
 ```
 
 ### Pioneer execute: target is the installed firmware (no change)
-reason: P4, P7, P8, P9, FMT, P10
+reason: P4, P7, P8, P9, FMT, P10, P12
 ```diff
 ---- text (12) ---
 +--- text (11) ---
@@ -32662,7 +32706,7 @@ reason: P4, P7, P8, P9, FMT, P10
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
++FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      flash complete; drive returned ready.
 -MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
@@ -32680,27 +32724,31 @@ reason: P4, P7, P8, P9, FMT, P10
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3322ba5603d28bfebd97ba3633c0c60f5c9c09ab41c54c12f0c13e0bc6ecf39f -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=23ec2bedd92e6f32f54fcf35b1d633d87df58bc1aeb0d37dc542d65d513b6c60 -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=779a9a4415b19ca050d425d694aa06da6e3e24920108546bfdf2105e09fb9e92 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=487ae0970cb0db11d54874c2c5c4a99c0c04939e70bbece3a8528aba7fad8394 -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=a2d4fc2b731e9335c971975897e4bdf41d8311cf9589c7df88c8ac3a4b609261 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=8b624ad5032c9fb98a553d6b1049ec9a753f980203ccd604f7b841b2ae3d3e21 -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 -saved pre-flash backup: 146432 bytes sha256=182b330e841d53efc18cd4101d538ca02eee4950ac23f10fcb19f8708a2f4ece
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-+saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
++saved pre-flash backup: 146432 bytes sha256=e6b614fe3e8275e0f659d666c6c9fb5658e9308815da789441bc3390486de54d
 ```
 
 ### Pioneer flash: dry-run request
-reason: P4, PRECHECK
+reason: P4, PRECHECK, P12
 ```diff
 -SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
-+SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
++SHA-256: d8c98a5dddd0daccba48be824ff48f83c491514146904a3a2471d3434a7e8ccc
 -Installed-family compatibility is checked against the live backup.
 -DRY RUN: no device I/O or writes.
 +Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
 +DRY RUN: no firmware writes or backup capture. Drive discovery may read identity metadata.
 -MSG      SHA-256: d1a7adddd1fd4834b7920c0ce05374d89f01cc491bd70a05963140368ef28f91
-+MSG      SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
++MSG      SHA-256: d8c98a5dddd0daccba48be824ff48f83c491514146904a3a2471d3434a7e8ccc
 -MSG      Installed-family compatibility is checked against the live backup.
 -MSG      DRY RUN: no device I/O or writes.
 +MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -32719,16 +32767,16 @@ reason: P4
 ```
 
 ### backup_notice + validate_backup: full backup
-reason: P4
+reason: P4, P12
 ```diff
 -Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 -validate_backup: ok, 146432 bytes sha256=4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
 +Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
-+validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
++validate_backup: ok, 146432 bytes sha256=1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 -MSG      Unverified: UNVERIFIED: neither kernel nor normal is recognized OEM (zero placeholders + zeroed signature sentinel). Physical restore and drive acceptance are untested.
 -MSG      validate_backup: ok, 146432 bytes sha256=4a548618a20966d1e295c2634ca095b20bf6a2e8201576a6a757d10cefa0f244
 +MSG      Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
-+MSG      validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
++MSG      validate_backup: ok, 146432 bytes sha256=1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 ```
 
 ### backup_notice + validate_backup: garbage backup
@@ -32799,7 +32847,7 @@ reason: PROTO, F-OVERRIDE
 ```
 
 ### Pioneer recover execute: receiver in kernel mode
-reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
+reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12
 ```diff
 ---- text (0) ---
 ---- events (3) ---
@@ -32814,7 +32862,7 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
 +--- events (6) ---
 +FIELD    Recovery = recovery.family_retained
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
++FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
@@ -32826,9 +32874,13 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=7edb247d4e42466f88e9a6d23b5adeeffa0a9a4ba9e402145024fdc1454c3d67 -> ok
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=7da5846449f5c8098fc3aae5d2ad4f7f97c7e21549f21848305e704412535b2b -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=95915e21d81a5905d7d923e02d0eac2b383fd44e96925a16403e30de79841ad2 -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=5a66845ff574ddd2cf879ecea619ffb8958c916dce3062d8af2d62887ca19f0a -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
@@ -32837,7 +32889,7 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 ```
 
 ### Pioneer recover execute: receiver in normal mode
-reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
+reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12
 ```diff
 ---- text (0) ---
 ---- events (3) ---
@@ -32852,7 +32904,7 @@ reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT FFFE' kernel-tag='GENERAL'
 +--- events (6) ---
 +FIELD    Recovery = recovery.family_retained
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
++FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
@@ -32873,10 +32925,14 @@ reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY
 -OUTS cdb=3b07fe00000000800000 len=32768 sha256=3336283a4db27a5f7dca1f0998b662590c468631398c07e792b8f19b321ac30a -> ok
 -OUTS cdb=3b07fe00800000800000 len=32768 sha256=9003e1d4c6d72710953d34705b6512ed9f1457c82044514139c735d96549e6e0 -> ok
 -OUTS cdb=3b07fe01000000120000 len=4608 sha256=d0cd8659433e7b5a73a0dd592b60b405a86fcfd259bebc875af9eb0ad05a4e7c -> ok
+-OUTS cdb=3b07f000000000800000 len=32768 sha256=7edb247d4e42466f88e9a6d23b5adeeffa0a9a4ba9e402145024fdc1454c3d67 -> ok
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=42cfc7073dc2725681f90a591e5c3a817385cb8b31d3e359c0437348685e83bd -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=72e01d9384c49aa94637cc1b529f20fc419dbbe74edf4f18b121fcc7942344a3 -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=7da5846449f5c8098fc3aae5d2ad4f7f97c7e21549f21848305e704412535b2b -> ok
+-OUTS cdb=3b07f001000000220000 len=8704 sha256=95915e21d81a5905d7d923e02d0eac2b383fd44e96925a16403e30de79841ad2 -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=5a66845ff574ddd2cf879ecea619ffb8958c916dce3062d8af2d62887ca19f0a -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
@@ -32894,7 +32950,7 @@ reason: P10, PRECHECK, PROTO
 ```
 
 ### Pioneer recover execute: write fails on the 2nd command
-reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY
+reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12
 ```diff
 -result: ERR Kernel write failed at 0x8000; firmware may be partial; write was not retried: injected write failure
 ---- text (0) ---
@@ -32909,7 +32965,7 @@ reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY
 +  update mode entered
 +--- events (5) ---
 +FIELD    Recovery = recovery.family_retained
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
++FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
