@@ -5,7 +5,7 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
-## Unreleased
+## [0.17.0] - 2026-11-01
 
 ### freemkv Flash
 
