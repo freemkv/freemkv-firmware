@@ -472,6 +472,94 @@ pub(crate) fn decide_offline(installed: &[u8], target: &[u8]) -> Result<()> {
     authorize_installed(FlashPlan::new(plan), Some(installed)).map(|_| ())
 }
 
+/// Catalogue-only conditional admission. Supplied factory evidence describes
+/// the required original hardware; it is never evidence from a live drive.
+pub(crate) fn decide_offline_for_original(
+    installed: &[u8],
+    target: &[u8],
+    parameters: &[u8],
+) -> Result<()> {
+    let plan = execute_plan(target)?;
+    verify_coverage(installed, plan.kernel.is_some(), true)?;
+    authorize_installed_context(
+        FlashPlan::new(plan),
+        Some(installed),
+        None,
+        Some(parameters),
+    )
+    .map(|_| ())
+}
+
+pub(crate) fn offline_model(bytes: &[u8]) -> Option<String> {
+    let (_, normal) = classify_flash_input(bytes).ok()?;
+    Some(pioneer_optical::envelope::header_info(normal.as_deref()?)?.model)
+}
+
+pub(crate) fn hardware_specific_links(
+    packages: &[&[u8]],
+) -> Vec<crate::crossflash::HardwareSpecificLink> {
+    use pioneer_optical::{production::ProductCode, settings::adaptation::hardware_rules};
+    let keys: Vec<_> = packages.iter().map(|p| offline_prefilter(p)).collect();
+    let models: Vec<_> = packages.iter().map(|p| offline_model(p)).collect();
+    let mut scopes = Vec::new();
+    for rule in hardware_rules() {
+        if !scopes.contains(&rule.hardware) {
+            scopes.push(rule.hardware);
+        }
+    }
+    let mut result = Vec::new();
+    for (i, installed) in packages.iter().enumerate() {
+        let Some(model) = models[i].as_deref().and_then(ProductCode::parse) else {
+            continue;
+        };
+        let sensitive = classify_flash_input(installed)
+            .and_then(|(k, n)| receiver_from_components(k.as_deref(), n.as_deref()))
+            .is_ok_and(|r| r.requires_original_hardware());
+        if !sensitive {
+            continue;
+        }
+        for scope in &scopes {
+            if model.platform_is(scope.platform) {
+                continue;
+            }
+            // A syntactic witness exercises offline preparation only. It is
+            // exported as a requirement, never passed to a device executor.
+            let code = format!(
+                "{}-{}{}",
+                scope.prefix.unwrap_or("BDR"),
+                scope.platform,
+                scope.suffix.unwrap_or("")
+            );
+            if code.len() > 16 || ProductCode::parse(&code).is_none() {
+                continue;
+            }
+            let mut parameters = [0xff; pioneer_optical::production::PARAMETERS_LEN];
+            parameters[0x84..0x88].copy_from_slice(b"kw01");
+            parameters[0x90..0xa0].fill(b' ');
+            parameters[0x90..0x90 + code.len()].copy_from_slice(code.as_bytes());
+            for (j, target) in packages.iter().enumerate() {
+                if i == j || !keys[i].may_admit(&keys[j]) {
+                    continue;
+                }
+                if decide_offline_for_original(installed, target, &parameters).is_ok()
+                    && decide_offline(installed, target).is_err()
+                {
+                    result.push(crate::crossflash::HardwareSpecificLink {
+                        installed: i,
+                        target: j,
+                        hardware: crate::crossflash::HardwareRequirement {
+                            platform: scope.platform.into(),
+                            prefix: scope.prefix.map(Into::into),
+                            suffix: scope.suffix.map(Into::into),
+                        },
+                    });
+                }
+            }
+        }
+    }
+    result
+}
+
 /// The routing facts the offline crossflash pre-filter compares: the family
 /// the family gate compares, the controller id (SAT), and whether the package
 /// is Normal-only.
@@ -528,6 +616,15 @@ fn authorize_installed_inner(
     installed: Option<&[u8]>,
     dev: Option<&mut ReadDevice<'_>>,
 ) -> Result<AuthorizedPlan> {
+    authorize_installed_context(plan, installed, dev, None)
+}
+
+fn authorize_installed_context(
+    plan: FlashPlan,
+    installed: Option<&[u8]>,
+    dev: Option<&mut ReadDevice<'_>>,
+    original: Option<&[u8]>,
+) -> Result<AuthorizedPlan> {
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
@@ -537,7 +634,9 @@ fn authorize_installed_inner(
     let mut receiver =
         receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
     if receiver.requires_original_hardware() {
-        if let Some(dev) = dev {
+        if let Some(parameters) = original {
+            receiver = receiver.with_original_parameters(parameters);
+        } else if let Some(dev) = dev {
             receiver = receiver.with_original_parameters(&original_parameters(dev)?);
         }
     }

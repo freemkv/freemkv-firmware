@@ -171,6 +171,25 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             .unwrap();
     }
     let native_ud03 = ud03_archive.into_inner().unwrap();
+    let extra = crate::crossflash::hardware_specific_links(
+        crate::crossflash::Platform::Pioneer,
+        &[&installed, &native_ud04, &native_ud03],
+    );
+    assert_eq!(extra.len(), 2);
+    for (source, destination) in [(1, 0), (2, 0)] {
+        assert!(extra.iter().any(|route| {
+            route.installed == source
+                && route.target == destination
+                && route.hardware.platform == "UD02"
+                && route.hardware.prefix.is_none()
+                && route.hardware.suffix.is_none()
+        }));
+    }
+    // Ordinary UD02-to-UD04 stays in Cross Flash. The extra routes neither
+    // authorize native UD04 hardware nor create UD02-hardware-to-UD03 support.
+    assert!(!extra
+        .iter()
+        .any(|route| route.installed == 0 || route.target == 2));
     for original in ["BDR-UD02TBD", "BDU-UD02ABC", "BDR-UD02FAN"] {
         for (target, allowed, profile) in [
             (&native_ud04, true, Some("pioneer.ud02-to-ud04-1.14")),

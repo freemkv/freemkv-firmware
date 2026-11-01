@@ -29,6 +29,37 @@ pub struct Decision {
     pub reason: Option<String>,
 }
 
+/// Original factory hardware required by an additional catalogue route.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct HardwareRequirement {
+    /// Exact platform token; firmware branding does not establish it.
+    pub platform: String,
+    /// Optional factory product prefix restriction.
+    pub prefix: Option<String>,
+    /// Optional factory product variant restriction.
+    pub suffix: Option<String>,
+}
+
+/// Additional route conditional on original hardware, never an ordinary link.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct HardwareSpecificLink {
+    /// Installed package index.
+    pub installed: usize,
+    /// Destination package index.
+    pub target: usize,
+    /// Factory evidence the live app must independently confirm.
+    pub hardware: HardwareRequirement,
+}
+
+/// Discover extra routes using the same preparation gates with explicit
+/// original-hardware context. Ordinary links and their statistics are unchanged.
+pub fn hardware_specific_links(
+    platform: Platform,
+    packages: &[&[u8]],
+) -> Vec<HardwareSpecificLink> {
+    crate::backend::registry::hardware_specific_links(platform, packages)
+}
+
 /// Classify typed errors, never message text. Unknown evidence is a hard no.
 pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> CompatibilityStatus {
     loop {
@@ -192,7 +223,7 @@ impl Prefilter {
     /// same-controller flash (a crossflash needs a Kernel). MediaTek: a
     /// same-model image (the image model contains the drive's) skips the family
     /// gate, so it stays a candidate.
-    fn may_admit(&self, target: &Prefilter) -> bool {
+    pub(crate) fn may_admit(&self, target: &Prefilter) -> bool {
         use crate::firmware_comparison::FamilyRelationship;
         // Both fingerprints came from current backend analyzers in this process.
         let namespace = |platform| match platform {

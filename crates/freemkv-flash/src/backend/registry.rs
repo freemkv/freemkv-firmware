@@ -15,6 +15,16 @@ use crate::platform::ScsiDevice;
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
+pub(crate) fn hardware_specific_links(
+    platform: crate::crossflash::Platform,
+    packages: &[&[u8]],
+) -> Vec<crate::crossflash::HardwareSpecificLink> {
+    match platform {
+        crate::crossflash::Platform::Pioneer => pioneer::hardware_specific_links(packages),
+        crate::crossflash::Platform::Mediatek => Vec::new(),
+    }
+}
+
 /// Origin evidence is supplied by protocol file analysis, not the front end.
 pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
     pioneer::file_info::file_origin(bytes)

@@ -10,7 +10,9 @@
 //! for one pair (refusal reason, or "admitted").
 
 use anyhow::{Context, Result};
-use freemkv_flash::crossflash::{admits, classified_links, decide, CompatibilityStatus, Platform};
+use freemkv_flash::crossflash::{
+    admits, classified_links, decide, hardware_specific_links, CompatibilityStatus, Platform,
+};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -30,7 +32,7 @@ fn main() -> std::process::ExitCode {
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
-        println!("Usage: freemkv-crossflash <package directory>\n       freemkv-crossflash --why [--json] <installed> <target>");
+        println!("Usage: freemkv-crossflash <package directory>\n       freemkv-crossflash --hardware-specific <package directory>\n       freemkv-crossflash --why [--json] <installed> <target>");
         return Ok(());
     }
     if let [flag, json, installed, target] = args.as_slice() {
@@ -50,23 +52,39 @@ fn run() -> Result<()> {
             return why(Path::new(installed), Path::new(target));
         }
     }
-    let [root] = args.as_slice() else {
-        return Err(anyhow::anyhow!(
-            "usage: freemkv-crossflash <package directory>\n       \
+    let (root, hardware_only) = match args.as_slice() {
+        [root] => (root, false),
+        [flag, root] if flag == "--hardware-specific" => (root, true),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "usage: freemkv-crossflash <package directory>\n       \
+             freemkv-crossflash --hardware-specific <package directory>\n       \
              freemkv-crossflash --why [--json] <installed> <target>"
-        )
-        .context(freemkv_flash::user_error::IssueCode::CommandOptions));
+            )
+            .context(freemkv_flash::user_error::IssueCode::CommandOptions))
+        }
     };
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut conditional: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut future: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut hardware_specific: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
     for (dir, ext, platform) in [
         ("pioneer", "tar", Platform::Pioneer),
         ("mediatek", "tar", Platform::Mediatek),
     ] {
         let (ids, bytes) = read_packages(&Path::new(root).join(dir), ext)?;
         let refs: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
-        let found = classified_links(platform, &refs);
+        for link in hardware_specific_links(platform, &refs) {
+            hardware_specific
+                .entry(ids[link.installed].clone())
+                .or_default()
+                .push(serde_json::json!({"target": ids[link.target], "hardware": link.hardware}));
+        }
+        let found = if hardware_only {
+            Vec::new()
+        } else {
+            classified_links(platform, &refs)
+        };
         eprintln!("{dir}: {} packages, {} links", ids.len(), found.len());
         for (i, j, status) in found {
             let graph = match status {
@@ -88,6 +106,7 @@ fn run() -> Result<()> {
         "links": out,
         "future": future,
         "conditional": conditional,
+        "hardware_specific": hardware_specific,
     });
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())
