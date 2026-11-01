@@ -257,8 +257,18 @@ pub(crate) fn find_receiver_with_current(
     let identity = match detection.conclusion {
         Conclusion::Detected(Evidence::Pioneer(evidence)) => evidence.identity().clone(),
         Conclusion::Ambiguous => anyhow::bail!("ambiguous firmware protocol; no firmware written"),
-        Conclusion::Unknown if current.is_some() => match detection.pioneer_identity {
-            Some(id) if id.revision() == "0000" => id,
+        Conclusion::Unknown => match detection.pioneer_identity {
+            Some(id) if id.revision() == "0000" => {
+                if current.is_none() {
+                    return Err(crate::backend::CurrentFirmwareRequired {
+                        source: anyhow::anyhow!(
+                            "Loader revision 0000 has incomplete protocol identity; a validated Current firmware reference is required before recovery"
+                        ),
+                    }
+                    .into());
+                }
+                id
+            }
             _ => return Ok(None),
         },
         _ => return Ok(None),

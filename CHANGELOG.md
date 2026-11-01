@@ -5,6 +5,15 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.17.1] - 2026-11-01
+
+### freemkv Flash
+
+- Improve Pioneer crossflash compatibility checks.
+- Fix valid modified MediaTek Current firmware being rejected during flash planning.
+- Fix MediaTek recovery handling in boot mode.
+- Improve diagnostic logging for failed or blocked flash and recovery attempts.
+
 ## [0.17.0] - 2026-11-01
 
 ### freemkv Modify

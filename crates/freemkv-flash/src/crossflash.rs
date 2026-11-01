@@ -33,6 +33,12 @@ pub struct Decision {
 pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> CompatibilityStatus {
     loop {
         if matches!(
+            error.downcast_ref::<pioneer_optical::startup::bank::Error>(),
+            Some(pioneer_optical::startup::bank::Error::ConversionRequired { .. })
+        ) {
+            return CompatibilityStatus::SoftNo;
+        }
+        if matches!(
             error.downcast_ref::<pioneer_optical::image::KernelHandoffError>(),
             Some(pioneer_optical::image::KernelHandoffError::Mismatch { .. })
         ) {

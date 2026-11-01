@@ -68,6 +68,14 @@ pub(crate) fn kernel_handoff_fixture(kernel: &mut [u8]) {
     kernel[0xe100..0xe108].copy_from_slice(&[0xf9, 0x80, 3, 9, 0x5e, 0x40, 0, 0x20]);
 }
 
+#[cfg(test)]
+pub(crate) fn startup_checks_fixture(normal: &mut [u8]) {
+    // Synthetic blank-initialize/select code, matching the startup behavior
+    // assumed by the transport mocks. This is never a production firmware.
+    let code = include_bytes!("test-fixtures/pioneer-startup.bin");
+    normal[0x17e0..0x17e0 + code.len()].copy_from_slice(code);
+}
+
 pub mod package;
 
 /// Shared user-interface message catalogs; never used to translate diagnostic logs.

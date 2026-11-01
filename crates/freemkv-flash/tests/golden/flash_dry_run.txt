@@ -1219,7 +1219,7 @@ result: OK
 --- text (7) ---
 == Pioneer offline transfer plan ==
 stated model: BD-RW   BDR-TEST
-SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -1227,7 +1227,7 @@ DRY RUN: no firmware writes or backup capture. Drive discovery may read identity
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
-MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+MSG      SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -1239,7 +1239,7 @@ result: OK
 --- text (15) ---
 == Pioneer offline transfer plan ==
 stated model: BD-RW   BDR-TEST
-SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -1255,7 +1255,7 @@ DRY RUN: no firmware writes or backup capture. Drive discovery may read identity
 --- events (15) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
-MSG      SHA-256: 6a6dc03f3d4ed0ff9a59e540c5842d1d3ee0456ffa659e15fd1ffa205bebef23
+MSG      SHA-256: df2da8b3ec78f996b2c5f15cdfe9098e7059cf288e07008623be3e4bd3e8eba6
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -1281,7 +1281,7 @@ result: OK
 --- text (7) ---
 == Pioneer offline transfer plan ==
 stated model: BD-RW   BDR-TEST
-SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+SHA-256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 Validated envelope integrity and transfer framing; 5 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -1289,7 +1289,7 @@ DRY RUN: no firmware writes or backup capture. Drive discovery may read identity
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-TEST
-MSG      SHA-256: 7ba51eecb84b77cc2c5a644534bc899e643c3ad25fe07a081501ff9074c6ce2f
+MSG      SHA-256: 238850d2092076883bd7b86db13a9e9b25e9fc87f794b85b4fce0e17d884cc7d
 MSG      Validated envelope integrity and transfer framing; 5 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.

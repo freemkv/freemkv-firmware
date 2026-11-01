@@ -91,10 +91,10 @@ result: OK
 result: OK
 --- text (2) ---
 Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
-validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
+validate_backup: ok, 146432 bytes sha256=1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 --- events (2) ---
 MSG      Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
-MSG      validate_backup: ok, 146432 bytes sha256=0eeb7fc9d8ad9999b4958417c763c72061dc452f77e9793459f906de01fa524d
+MSG      validate_backup: ok, 146432 bytes sha256=1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
 
 === verify_preflash_backup: Kernel-only (partial) backup vs Kernel+Normal bundle ===
 result: ERR pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.

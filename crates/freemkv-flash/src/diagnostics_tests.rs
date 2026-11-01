@@ -336,3 +336,47 @@ fn log_write_failure_surfaces_health_without_failing_the_operation() {
     std::fs::remove_file(&paths[1]).unwrap();
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn recovery_current_reference_refusal_publishes_a_persistent_log() {
+    let path = Arc::new(Mutex::new(None));
+    let captured = path.clone();
+    let directory = std::env::temp_dir().join(format!("freemkv-loader-log-{}", new_operation_id()));
+    let result: Result<()> = crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(PathBuf::from(value));
+                    }
+                }
+            }
+        },
+        || {
+            run_at(&directory, "recovery preparation", || {
+                Err(crate::backend::UpdateFailure::before_write(
+                    "recovery precheck",
+                    crate::backend::CurrentFirmwareRequired {
+                        source: anyhow::anyhow!(
+                            "Loader revision 0000 has incomplete protocol identity"
+                        ),
+                    }
+                    .into(),
+                ))
+            })
+        },
+    );
+    assert!(result
+        .unwrap_err()
+        .is::<crate::backend::CurrentFirmwareRequired>());
+    let path = path
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("GUI must receive the log path");
+    let text = std::fs::read_to_string(path).unwrap();
+    assert!(text.contains("recovery preparation"));
+    assert!(text.contains("Loader revision 0000"));
+    assert!(text.contains("impact=Blocked"));
+    std::fs::remove_dir_all(directory).unwrap();
+}

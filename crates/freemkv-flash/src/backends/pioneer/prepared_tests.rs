@@ -235,6 +235,7 @@ pub(super) fn pair(gated: bool, marker: u8) -> Update {
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
     let mut normal = vec![0; 0x2000];
+    crate::startup_checks_fixture(&mut normal);
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);

@@ -125,6 +125,7 @@ fn fixture_pair_class_with_model(
     tweak(&mut kernel);
     balance(&mut kernel);
     let mut normal = vec![0; 0x2000];
+    crate::startup_checks_fixture(&mut normal);
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
@@ -149,6 +150,40 @@ fn fixture_pair_class_with_model(
     )
     .unwrap();
     Update::load(&encoded.kernel, &encoded.normal).unwrap()
+}
+
+#[test]
+fn startup_format_refusal_is_shared_by_catalog_and_preparation() {
+    use crate::crossflash::{decide, CompatibilityStatus, Platform};
+    let source = fixture_pair(false, 1);
+    let mut normal = source.normal().image.clone();
+    for at in [0x180a, 0x190a] {
+        normal[at..at + 4].copy_from_slice(&0xfedc4322u32.to_be_bytes());
+    }
+    balance(&mut normal);
+    let mut target_normal = source.normal().repack(&normal).unwrap();
+    let mut key = [0; 20];
+    key[19] = 5;
+    SigningKey::from_bytes(key)
+        .unwrap()
+        .sign_normal(&mut target_normal)
+        .unwrap();
+    let target = Update::load(source.kernel_transfer(), &target_normal).unwrap();
+    let source = archive(&source, false);
+    let target = archive(&target, false);
+    let decision = decide(Platform::Pioneer, &source, &target);
+    assert_eq!(decision.status, CompatibilityStatus::SoftNo);
+    assert!(decision
+        .reason
+        .unwrap()
+        .contains("pioneer.startup.bank_conversion_required"));
+    let error = Plan::prepare(&source, &target)
+        .err()
+        .expect("startup format must refuse preparation");
+    assert!(error.chain().any(|e| matches!(
+        e.downcast_ref::<pioneer_optical::startup::bank::Error>(),
+        Some(pioneer_optical::startup::bank::Error::ConversionRequired { .. })
+    )));
 }
 
 #[test]
@@ -2414,4 +2449,28 @@ fn composed_bridge_warnings_describe_the_final_stage_without_assuming_two_passes
     assert!(!warnings
         .iter()
         .any(|warning| warning.contains("A second update")));
+}
+
+#[test]
+fn partial_loader_identity_requests_current_without_authorizing_io() {
+    let mut inquiry = vec![b' '; pioneer_optical::INQUIRY_LEN];
+    inquiry[0] = 5;
+    inquiry[8..16].copy_from_slice(b"PIONEER ");
+    inquiry[16..32].copy_from_slice(b"BD-RW   BDR-213U");
+    inquiry[32..36].copy_from_slice(b"0000");
+    let mut dev = UnsupportedDrive {
+        inquiry,
+        vendor_identity: vec![0; pioneer_optical::IDENTITY_LEN],
+        vendor_reads: 0,
+        writes: 0,
+    };
+    let error = find_receiver_with_current(&mut dev, None).unwrap_err();
+    assert!(error.is::<crate::backend::CurrentFirmwareRequired>());
+    assert_eq!(dev.vendor_reads, 1);
+    assert_eq!(dev.writes, 0);
+    dev.inquiry[32..36].copy_from_slice(b"1.02");
+    assert!(find_receiver_with_current(&mut dev, None)
+        .unwrap()
+        .is_none());
+    assert_eq!(dev.writes, 0);
 }

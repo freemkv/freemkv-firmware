@@ -28,7 +28,9 @@ impl RecoveryFacet for Mtk {
         current: Option<&[u8]>,
     ) -> Result<Option<RecoveryTarget>> {
         use crate::backend::detection::{self, Conclusion, Evidence};
-        match detection::detect(dev)?.conclusion {
+        let detected = detection::detect(dev)?;
+        let boot = detected.identity.revision == "BOOT";
+        match detected.conclusion {
             Conclusion::Detected(Evidence::Mediatek(_)) => {}
             Conclusion::Ambiguous => {
                 anyhow::bail!("ambiguous firmware protocol; no firmware written")
@@ -43,7 +45,15 @@ impl RecoveryFacet for Mtk {
                     mediatek_optical::envelope::Envelope::load(current).map_err(|e| {
                         anyhow::Error::new(e).context(crate::user_error::IssueCode::CurrentInvalid)
                     })?;
-                recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
+                if boot {
+                    // Current describes an application, not the active BOOT receiver.
+                    // Validate the file above, but derive the receiver from live code;
+                    // prepare still checks target integrity and chip compatibility.
+                    crate::diagnostics::record("MediaTek BOOT recovery: using live boot receiver evidence; Current application reference is not used for receiver binding");
+                    recovery::Receiver::identify(&mut reads)
+                } else {
+                    recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
+                }
             }
             None => recovery::Receiver::identify(&mut reads),
         };

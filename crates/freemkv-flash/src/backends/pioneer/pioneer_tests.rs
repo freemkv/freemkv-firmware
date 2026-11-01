@@ -1098,6 +1098,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
     let signer = SigningKey::from_bytes(scalar).unwrap();
     for len in [0x2000usize, 0x3000, 0x8000] {
         let mut normal = vec![0; len];
+        crate::startup_checks_fixture(&mut normal);
         normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
         normal[20..24].copy_from_slice(&(len as u32).to_be_bytes());
         normal[0x400..0x41e].copy_from_slice(&[
