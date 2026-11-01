@@ -109,9 +109,19 @@ impl Mt1959Engine {
         let result = super::mt1939_uhd::UhdConversionPlan::inspect(source)
             .and_then(|plan| plan.apply(source, out, flags));
         match result {
-            Ok(count) => (HookReport::applied("uhd-conversion",
-                format!("complete media group: classic {count} source-bound helpers; software qualification pending")),count as u32),
-            Err(e) => (HookReport::unavailable("uhd-conversion",format!("0 conversion edits: {e:#}")),0),
+            Ok(count) => (
+                HookReport::applied(
+                    "uhd-conversion",
+                    format!(
+                        "complete media group: classic {count} source-bound helpers; software qualification pending"
+                    ),
+                ),
+                count as u32,
+            ),
+            Err(e) => (
+                HookReport::unavailable("uhd-conversion", format!("0 conversion edits: {e:#}")),
+                0,
+            ),
         }
     }
     /// Thumb-1 selector detour: choose the native maximum only when enabled.
@@ -624,7 +634,7 @@ impl Mt1959Engine {
 
         // Region-free — REGION_EMIT_SIG transfers to classic in a higher window.
         // Structurally valid + self-verifies → produced unconditionally.
-        levers.push(if cap.region_lockable {
+        levers.push({
             match self.emit_region_classic(&mut out, flag_base) {
                 Ok((emitter, va)) => LeverReport::applied(
                     LeverId::RegionFree,
@@ -632,8 +642,6 @@ impl Mt1959Engine {
                 ),
                 Err(e) => LeverReport::missed(LeverId::RegionFree, format!("{e:#}")),
             }
-        } else {
-            LeverReport::not_applicable(LeverId::RegionFree, "no region lever on this model")
         });
 
         // Raw read — classic MT1939 `04 01` (Gate-A bare-read) + `04 02` (AKE
@@ -649,7 +657,7 @@ impl Mt1959Engine {
         // valid HRL patch and diverges from CREATE. Both effects are represented
         // by the composite RawRead lever; when only HRL resolves, its facts still
         // make the applied detour visible to the structural auditor.
-        levers.push(if cap.bd_aacs {
+        levers.push({
             let rawread = self.emit_rawread_classic(image, &mut out, flag_base);
             let hrl = self.emit_hrl_classic(image, &mut out, flag_base);
             let append_hrl_facts =
@@ -681,8 +689,6 @@ impl Mt1959Engine {
                     LeverReport::missed(LeverId::RawRead, format!("{rawread_error:#}"))
                 }
             }
-        } else {
-            LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
         });
 
         let (conversion, count) = self.emit_media_conversion_classic(image, &mut out, flag_base);
@@ -867,6 +873,7 @@ impl Mt1959Engine {
             );
         }
         let ake_back = (ake_site + 4) as u32; // native `bl set_agid_state` call site
+        self.find_transition_state_setter(image)?;
         let ake_bytes = self.build_ake_stub_classic(flag_base, ake_back)?;
 
         // ---- commit on a working copy (atomic) ----

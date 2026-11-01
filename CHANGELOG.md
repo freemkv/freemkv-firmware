@@ -5,6 +5,20 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.17.0] - 2026-11-01
+
+### freemkv Modify
+
+- Repair UHD disc-information handling, geometry and capacity calculations in supported classic MT1939 firmware, and apply source-validated UHD repairs to older MT1959 firmware. Preserve native UHD handling in newer MT1959 firmware.
+- Fix Modify skipping supported features because of drive-model capability labels. Detect support from validated firmware instructions, and report settings on already-modified firmware from its verified installed support record.
+- Clear stale authentication when Encryption changes from Off to On or OEM, including when settings are reset.
+- Correct the host setting values for maximum read speed and region-free DVD responses. Region-free reports DVD RPC-1; Blu-ray region forcing is not implemented.
+- Validate modified outputs for 123 OEM firmware inputs in software. Physical UHD reads, layer transitions and settings persistence still require hardware testing.
+
+### freemkv Flash
+
+- Allow matching Pioneer BDX-PR1ML and BDR-211M SAT 8801 platforms to share a hardware family. Preserve all other hardware evidence, raw register values and the existing settings requirements.
+
 ## [0.16.2] - 2026-11-01
 
 ### freemkv Flash

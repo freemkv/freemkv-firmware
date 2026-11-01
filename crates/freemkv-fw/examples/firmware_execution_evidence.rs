@@ -14,7 +14,17 @@ fn digest(bytes: &[u8]) -> String {
 fn native_contracts(data: &[u8]) -> Value {
     use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
     let areas = UhdAreas::inspect(data);
-    json!({"state":areas.media_state_address().ok(),"state_error":areas.media_state_address().err().map(|e|format!("{e:?}")),
+    let response = match ResponseIo::inspect(data) {
+        Ok(io) => json!({"status":"source-bound", "writer":io.writer(),
+            "buffer_offset":io.buffer_offset(), "commit":io.commit().entry(),
+            "length_cell":io.commit().length_cell()}),
+        Err(error) => json!({"status":"not-bound", "reason":format!("{error:?}")}),
+    };
+    let core = engine::mt1959::Mt1959Engine;
+    let nv = json!({"home":core.find_nv_block(data).ok(),
+        "program":core.find_flash_program(data).ok(),
+        "dram_base_cell":core.find_nv_dram_base(data).ok()});
+    json!({"response":response,"nv":nv,"state":areas.media_state_address().ok(),"state_error":areas.media_state_address().err().map(|e|format!("{e:?}")),
         "roles":UhdArea::ALL.iter().map(|&role|match areas.area(role) {
             Ok(c)=>json!({"role":format!("{role:?}"),"status":"source-bound","site":c.site(),"length":c.length(),
                 "variant":c.variant(),"selects_c7":c.selects_c7(),"coefficient_continuation":c.coefficient_continuation(),
@@ -218,6 +228,17 @@ fn main() -> Result<()> {
         let patches: Vec<(String, usize, Vec<u8>, Vec<u8>)> = if classic {
             let plan = engine::mt1939_uhd::UhdConversionPlan::inspect(original)?;
             plan.require_complete_conversion()?;
+            if let Ok(geometry) = engine::mt1939_geometry::GeometryPlan::inspect(original) {
+                let o = geometry.operands();
+                for patch in geometry.prepared_patches(original, flags)? {
+                    metadata.insert(patch.site, json!({"kind":"classic_geometry",
+                        "operands":{"state":o.state,"di":o.di,"translation":o.translation,
+                            "copy_leaf":o.copy_leaf,"word_reader":o.word_reader,"bypass":o.bypass,
+                            "status":o.status,"descriptor":o.descriptor,"last_physical":o.last_physical,
+                            "layer_one_end":o.layer_one_end,"normalize":o.normalize,"end_cell":o.end_cell},
+                        "source_sha256":digest(original)}));
+                }
+            }
             contracts["conversion_state"] = json!(plan.state_address());
             macro_rules! routing { ($items:expr)=>{for c in $items {
                 metadata.insert(c.site,json!({"kind":"selection","accept":c.accept,"reject":c.reject,

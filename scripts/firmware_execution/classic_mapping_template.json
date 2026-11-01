@@ -1,0 +1,353 @@
+{
+  "source_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+  "entry": 765098,
+  "end": 765264,
+  "instructions": [
+    {
+      "offset": 0,
+      "bytes": "b14a",
+      "literal": 33558348
+    },
+    {
+      "offset": 2,
+      "bytes": "1168"
+    },
+    {
+      "offset": 4,
+      "bytes": "8842"
+    },
+    {
+      "offset": 6,
+      "bytes": "1ad9"
+    },
+    {
+      "offset": 8,
+      "bytes": "1168"
+    },
+    {
+      "offset": 10,
+      "bytes": "401a"
+    },
+    {
+      "offset": 12,
+      "bytes": "1168"
+    },
+    {
+      "offset": 14,
+      "bytes": "401e"
+    },
+    {
+      "offset": 16,
+      "bytes": "ae4a",
+      "literal": 67108863
+    },
+    {
+      "offset": 18,
+      "bytes": "ae4b",
+      "literal": 33558352
+    },
+    {
+      "offset": 20,
+      "bytes": "511a"
+    },
+    {
+      "offset": 22,
+      "bytes": "1a68"
+    },
+    {
+      "offset": 24,
+      "bytes": "521a"
+    },
+    {
+      "offset": 26,
+      "bytes": "521c"
+    },
+    {
+      "offset": 28,
+      "bytes": "9042"
+    },
+    {
+      "offset": 30,
+      "bytes": "0dd3"
+    },
+    {
+      "offset": 32,
+      "bytes": "1968"
+    },
+    {
+      "offset": 34,
+      "bytes": "801a"
+    },
+    {
+      "offset": 36,
+      "bytes": "ab4a",
+      "literal": 134217727
+    },
+    {
+      "offset": 38,
+      "bytes": "ab4b",
+      "literal": 33558356
+    },
+    {
+      "offset": 40,
+      "bytes": "511a"
+    },
+    {
+      "offset": 42,
+      "bytes": "1a68"
+    },
+    {
+      "offset": 44,
+      "bytes": "521a"
+    },
+    {
+      "offset": 46,
+      "bytes": "521c"
+    },
+    {
+      "offset": 48,
+      "bytes": "9042"
+    },
+    {
+      "offset": 50,
+      "bytes": "03d3"
+    },
+    {
+      "offset": 52,
+      "bytes": "1968"
+    },
+    {
+      "offset": 54,
+      "bytes": "801a"
+    },
+    {
+      "offset": 56,
+      "bytes": "a84a",
+      "literal": 201326591
+    },
+    {
+      "offset": 58,
+      "bytes": "511a"
+    },
+    {
+      "offset": 60,
+      "bytes": "4018"
+    },
+    {
+      "offset": 62,
+      "bytes": "7047"
+    },
+    {
+      "offset": 64,
+      "bytes": "a14a",
+      "literal": 33558348
+    },
+    {
+      "offset": 66,
+      "bytes": "30b5"
+    },
+    {
+      "offset": 68,
+      "bytes": "1368"
+    },
+    {
+      "offset": 70,
+      "bytes": "5b1c"
+    },
+    {
+      "offset": 72,
+      "bytes": "a549",
+      "literal": 33558404
+    },
+    {
+      "offset": 74,
+      "bytes": "9842"
+    },
+    {
+      "offset": 76,
+      "bytes": "25d9"
+    },
+    {
+      "offset": 78,
+      "bytes": "1368"
+    },
+    {
+      "offset": 80,
+      "bytes": "8968"
+    },
+    {
+      "offset": 82,
+      "bytes": "591a"
+    },
+    {
+      "offset": 84,
+      "bytes": "a34b",
+      "literal": 4293918721
+    },
+    {
+      "offset": 86,
+      "bytes": "9d4c",
+      "literal": 33558352
+    },
+    {
+      "offset": 88,
+      "bytes": "c918"
+    },
+    {
+      "offset": 90,
+      "bytes": "2368"
+    },
+    {
+      "offset": 92,
+      "bytes": "9b4d",
+      "literal": 67108863
+    },
+    {
+      "offset": 94,
+      "bytes": "1268"
+    },
+    {
+      "offset": 96,
+      "bytes": "5b1c"
+    },
+    {
+      "offset": 98,
+      "bytes": "9842"
+    },
+    {
+      "offset": 100,
+      "bytes": "18d9"
+    },
+    {
+      "offset": 102,
+      "bytes": "2368"
+    },
+    {
+      "offset": 104,
+      "bytes": "aa1a"
+    },
+    {
+      "offset": 106,
+      "bytes": "9a1a"
+    },
+    {
+      "offset": 108,
+      "bytes": "9a4b",
+      "literal": 33558356
+    },
+    {
+      "offset": 110,
+      "bytes": "5118"
+    },
+    {
+      "offset": 112,
+      "bytes": "1a68"
+    },
+    {
+      "offset": 114,
+      "bytes": "491c"
+    },
+    {
+      "offset": 116,
+      "bytes": "521c"
+    },
+    {
+      "offset": 118,
+      "bytes": "9042"
+    },
+    {
+      "offset": 120,
+      "bytes": "2268"
+    },
+    {
+      "offset": 122,
+      "bytes": "954d",
+      "literal": 134217727
+    },
+    {
+      "offset": 124,
+      "bytes": "08d9"
+    },
+    {
+      "offset": 126,
+      "bytes": "1c68"
+    },
+    {
+      "offset": 128,
+      "bytes": "aa1a"
+    },
+    {
+      "offset": 130,
+      "bytes": "a21a"
+    },
+    {
+      "offset": 132,
+      "bytes": "5118"
+    },
+    {
+      "offset": 134,
+      "bytes": "1a68"
+    },
+    {
+      "offset": 136,
+      "bytes": "491c"
+    },
+    {
+      "offset": 138,
+      "bytes": "934b",
+      "literal": 201326591
+    },
+    {
+      "offset": 140,
+      "bytes": "9a1a"
+    },
+    {
+      "offset": 142,
+      "bytes": "00e0"
+    },
+    {
+      "offset": 144,
+      "bytes": "aa1a"
+    },
+    {
+      "offset": 146,
+      "bytes": "801a"
+    },
+    {
+      "offset": 148,
+      "bytes": "4018"
+    },
+    {
+      "offset": 150,
+      "bytes": "30bd"
+    },
+    {
+      "offset": 152,
+      "bytes": "fae7"
+    },
+    {
+      "offset": 154,
+      "bytes": "8968"
+    },
+    {
+      "offset": 156,
+      "bytes": "401a"
+    },
+    {
+      "offset": 158,
+      "bytes": "0121"
+    },
+    {
+      "offset": 160,
+      "bytes": "0905"
+    },
+    {
+      "offset": 162,
+      "bytes": "401a"
+    },
+    {
+      "offset": 164,
+      "bytes": "30bd"
+    }
+  ]
+}

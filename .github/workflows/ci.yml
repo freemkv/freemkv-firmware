@@ -52,7 +52,7 @@ jobs:
           if base and set(base) != {'0'}:
               result = subprocess.run(['git', 'diff', '--name-only', base, 'HEAD'], capture_output=True, text=True)
               if result.returncode == 0:
-                  changed = any(not path.startswith('.github/') for path in result.stdout.splitlines())
+                  changed = any(not path.startswith('.github/') or path == '.github/workflows/ci.yml' or path.startswith('.github/scripts/') for path in result.stdout.splitlines())
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('code_changed=' + str(changed).lower() + '\n')
           PYCODE
@@ -140,8 +140,10 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint" -shellcheck=''
           python3 .github/scripts/test_promote_qa.py
+          python3 .github/scripts/test_verify_dev.py
         working-directory: freemkv-firmware
-      - if: needs.resolve-msrv.outputs.code_changed == 'true' && !inputs.coverage_only
+      - name: Lint Rust targets
+        if: needs.resolve-msrv.outputs.code_changed == 'true' && !inputs.coverage_only
         run: cargo +stable clippy --all-targets --all-features -- -D warnings
         working-directory: freemkv-firmware
 
@@ -168,32 +170,6 @@ jobs:
       # Includes the CMAC-verify T0 proof against a committed stock image.
       - run: cargo test --tests
         working-directory: freemkv-firmware
-      - name: Execute MediaTek hook contracts on an independent ARM CPU
-        working-directory: freemkv-firmware
-        run: |
-          python3 -m venv "$RUNNER_TEMP/hook-cpu"
-          "$RUNNER_TEMP/hook-cpu/bin/python" -m pip install --only-binary=:all: unicorn==2.1.4
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hook-execution.py --fw target/debug/freemkv-fw
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-runtime-execution.py --fw target/debug/freemkv-fw
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-integrity-routing.py
-          FREEMKV_BASE_ROLE_CORPUS="$PWD/crates/freemkv-fw/tests/fixtures/native-response-inputs.json" \
-            FREEMKV_BASE_ROLE_HOARD="$PWD/crates/freemkv-fw/tests/fixtures" \
-            FREEMKV_BASE_ROLE_OUTPUT="$RUNNER_TEMP/native-response-contracts.json" \
-            cargo test -p freemkv-fw --lib native_response_contract_corpus
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-native-response-execution.py \
-            --contracts "$RUNNER_TEMP/native-response-contracts.json" \
-            --inventory crates/freemkv-fw/tests/fixtures/native-response-inputs.json \
-            --hoard crates/freemkv-fw/tests/fixtures \
-            --output "$RUNNER_TEMP/native-response-cpu.json"
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-program-routing.py
-          cargo build -p freemkv-fw --example mtk_receiver_evidence
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hrl-execution.py --fw target/debug/freemkv-fw --builder target/debug/examples/mtk_receiver_evidence
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-region-execution.py --fw target/debug/freemkv-fw --builder target/debug/examples/mtk_receiver_evidence
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-encryption-execution.py --fw target/debug/freemkv-fw --builder target/debug/examples/mtk_receiver_evidence
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-frame-execution.py --candidate-builder target/debug/examples/mtk_receiver_evidence
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-dispatch.py --candidate-builder target/debug/examples/mtk_receiver_evidence
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-speed.py --builder target/debug/examples/mtk_receiver_evidence
-          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/audit-mtk-speed-policy.py --builder target/debug/examples/mtk_receiver_evidence
 
   # cargo-deny — audits the RESOLVED graph (RUSTSEC advisories, licence
   # allow-list, source/ban hygiene) against the committed Cargo.lock + deny.toml.

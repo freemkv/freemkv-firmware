@@ -215,6 +215,7 @@ pub fn for_family(fam: ChipFamily) -> Result<Box<dyn Engine>> {
 #[path = "engine_tests.rs"]
 mod tests;
 
+pub mod mt1939_geometry;
 pub mod mt1939_uhd;
 #[cfg(test)]
 pub use mt1939_uhd as mt1939_research;

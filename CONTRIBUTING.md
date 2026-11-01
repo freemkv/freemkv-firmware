@@ -29,3 +29,19 @@ The website publishes reviewed notes from marketing's
 ## License
 
 MIT
+
+
+## Dev and QA validation
+
+Dev runs debug Rust tests, format/lint checks, dependency checks and repository
+guards. QA requires a successful dev push with an executed lint step for the
+**identical Git tree**, including manifests, lockfile and CI definitions. A
+skipped lint, manual coverage run or changed tree cannot supply this proof.
+
+QA owns release-mode tests on Linux, macOS and Windows, exhaustive MediaTek
+CPU contract execution, the committed OEM firmware corpus, native GUI tests
+and distribution package smoke tests. The former debug CPU duplicate and QA
+Linux Clippy duplicate are removed; the QA release checks remain intact.
+Physical drive testing remains separate. QA-built packages continue to be
+promoted at release without rebuilding. Version 0.17.0 is not released by this
+CI change.

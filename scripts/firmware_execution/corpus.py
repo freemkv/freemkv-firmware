@@ -36,6 +36,8 @@ def source_files(repo):
                      list((repo/'scripts/firmware_execution').glob('*.py'))+
                      list((repo/'scripts/firmware_execution').glob('*.json'))+
                      list((repo/'scripts/firmware_execution').glob('*.txt'))+
+                     list((repo/'scripts').glob('audit-mtk-*.py'))+
+                     [repo/'scripts/build-mtk-disc-fixtures.py']+
                      list((repo/'crates/freemkv-flash/locales').glob('*.json'))+
                      [repo/'crates/freemkv-fw/examples/firmware_execution_evidence.rs']))
     return {str(p.relative_to(repo)):sha(p.read_bytes()) for p in paths}
@@ -70,7 +72,7 @@ def source_snapshot(repo, receipt, output, dependency_root):
 
 
 def process(row, options):
-    hoard,output,builder,fw,cli,only_conversion,only_ordinary,producer_only,require_conversion=options
+    hoard,output,builder,fw,cli,only_conversion,only_ordinary,producer_only,require_conversion,disc_options=options
     result={'path':row['path'],'input_sha256':row['sha256'],
             'identified_family':row.get('identified_family'),'catalogue_patched':row.get('catalogue_patched'),
             'inventory_bytes':row.get('bytes'),'requested_conversion_goal_qualified':False,'conversion_cpu_qualification':'unqualified: no production output executed','catalogue_identity':row.get('catalogue_identity'),'status':'failed','stages':[],'coverage_gaps':[]}
@@ -137,6 +139,21 @@ def process(row, options):
                     stage['status']='failed'
                     stage['error']='Installed conversion helper lacks complete generated instruction/conditional-edge coverage'
             result['stages'].append(stage)
+        if disc_options:
+            from disc import audit_image, load_fixtures, read_json
+            fixture_path, worker_path, fixture_binding, worker_digest = disc_options
+            try:
+                fixtures = load_fixtures(fixture_path)
+                assert fixtures['binding'] == fixture_binding, 'disc fixtures changed during run'
+                assert sha(Path(worker_path).read_bytes()) == worker_digest, 'disc worker receipt changed during run'
+                workers = {r['source_sha256']:r for r in read_json(worker_path)['images']}
+                stage = audit_image(folder, fixtures, workers)
+            except Exception as error:
+                stage = {'stage':'captured-disc-geometry','status':'failed','cases':0,'error':str(error)}
+            result['stages'].append(stage)
+        else:
+            result['stages'].append({'stage':'captured-disc-geometry','status':'not-requested','cases':0,
+                'coverage_gaps':['Captured disc tests require --disc-fixtures and --disc-worker-receipt.']})
         stages.TRACE_SINK.close();stages.TRACE_SINK=None
         result['trace_sha256']=sha(trace_path.read_bytes())
         result['trace_file']=str(trace_path)
@@ -210,6 +227,8 @@ def main():
     p.add_argument('--builder',type=Path,required=True);p.add_argument('--fw',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True);p.add_argument('--workers',type=int,default=4)
     p.add_argument('--baseline-receipt',type=Path,help='Optional JSON or JSON.gz prior receipt for exact canonical/output preservation comparisons; CPU failures remain failures')
+    p.add_argument('--disc-fixtures',type=Path,help='Compact captured-DI/ISO fixture directory; execute all bound OEM and modified geometry contracts')
+    p.add_argument('--disc-worker-receipt',type=Path,help='Source-bound DI worker receipt (JSON or JSON.gz); required with --disc-fixtures')
     p.add_argument('--dependency-commit',default='45e5a98b6085e938986456b098434720dd8ae368',help='Explicit expected mediatek-optical commit; verified against its Cargo.lock package source')
     p.add_argument('--only-ordinary',action='store_true',help='Focused ordinary hook run; conversion helpers are explicitly not-requested')
     p.add_argument('--only-conversion',action='store_true',help='Focused installed conversion helper run; every omitted ordinary hook is explicitly not-requested')
@@ -219,6 +238,13 @@ def main():
     p.add_argument('--no-cli',action='store_true',help='API output only; records absence of CLI comparison')
     args=p.parse_args();repo=Path(__file__).resolve().parents[2]
     assert not(args.only_conversion and args.only_ordinary),'choose only one focused mode'
+    assert bool(args.disc_fixtures) == bool(args.disc_worker_receipt), 'supply both disc fixture and worker receipt paths'
+    disc_options = None
+    if args.disc_fixtures:
+        from disc import load_fixtures
+        fixtures = load_fixtures(args.disc_fixtures)
+        disc_options = (str(args.disc_fixtures.resolve()), str(args.disc_worker_receipt.resolve()),
+                        fixtures['binding'], sha(args.disc_worker_receipt.read_bytes()))
     build_binding=None
     if args.build:
         assert args.builder.resolve()==repo/'target/release/examples/firmware_execution_evidence' and args.fw.resolve()==repo/'target/release/freemkv-fw','--build requires the local release artifacts'
@@ -269,6 +295,8 @@ def main():
         'related_prepared_helper_receipts':{str(p.relative_to(repo)):sha(p.read_bytes()) for p in (repo/'internal/docs/audits').glob('*prepared-helper-cpu*.json')},
         'native_policy_oracle_receipts':{str(p.relative_to(repo)):sha(p.read_bytes()) for p in (repo/'internal/docs/audits').glob('mt1959-native-*policy-20261031.json')},
         'inventory_sha256':sha(args.inventory.read_bytes()),
+        'disc_fixture_binding':disc_options[2] if disc_options else None,
+        'disc_worker_receipt_sha256':disc_options[3] if disc_options else None,
         'baseline_receipt_sha256':sha(args.baseline_receipt.read_bytes()) if args.baseline_receipt else None,
         'builder_sha256':sha(args.builder.read_bytes()),'cli_sha256':sha(args.fw.read_bytes()),
         'build_binding':build_binding,'cli_comparison_enabled':not args.no_cli,'expected_images':len(inventory),'images':[]}
@@ -276,7 +304,7 @@ def main():
         assert build_binding['source_files_sha256']==sha(json.dumps(receipt['source_files'],sort_keys=True).encode()),'source changed between build and run binding'
         assert build_binding['dependency_source_files_sha256']==sha(json.dumps(receipt['dependency_source_files'],sort_keys=True).encode()),'dependency source changed between build and run binding'
     receipt['source_snapshot']=source_snapshot(repo,receipt,args.output,dependency_root)
-    options=(str(args.hoard.resolve()),str(args.output.resolve()),str(args.builder.resolve()),str(args.fw.resolve()),not args.no_cli,args.only_conversion,args.only_ordinary,args.producer_only,args.require_installed_conversion)
+    options=(str(args.hoard.resolve()),str(args.output.resolve()),str(args.builder.resolve()),str(args.fw.resolve()),not args.no_cli,args.only_conversion,args.only_ordinary,args.producer_only,args.require_installed_conversion,disc_options)
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures={pool.submit(process,row,options):row for row in inventory}
         for f in as_completed(futures):

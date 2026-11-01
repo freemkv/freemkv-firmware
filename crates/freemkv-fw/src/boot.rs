@@ -65,9 +65,15 @@ impl BootFeature {
                 ("off", "Off — bypass", 0),
             ],
             // These are the encodings consumed by build_speed_stub/build_region_stub.
-            // The older ABI's SPEED_MAX/REGION_FREE constants do not match those stubs.
-            Self::Speed => &[("oem", "OEM behavior", 255), ("uncapped", "Uncapped", 1)],
-            Self::Region => &[("oem", "OEM behavior", 255), ("free", "Region-free", 1)],
+            // Keep runtime commands and boot choices on the same wire values.
+            Self::Speed => &[
+                ("oem", "OEM behavior", 255),
+                ("uncapped", "Uncapped", crate::abi::SPEED_MAX),
+            ],
+            Self::Region => &[
+                ("oem", "OEM behavior", 255),
+                ("free", "Region-free", crate::abi::REGION_FREE),
+            ],
         }
     }
 }

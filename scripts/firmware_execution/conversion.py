@@ -312,6 +312,10 @@ def compare(stage,c,contracts):
     contract=c.get('contract')
     if not contract:
         stage.result['status']='unqualified';stage.result['coverage_gaps'].append('Missing independent installed conversion contract');return
+    if contract['kind'] == 'classic_geometry':
+        from geometry_guards import compare as geometry_compare
+        geometry_compare(stage, c, contract, contracts)
+        return
     from legacy import identity_reset,density,reverse
     stage.hoard=contracts['_hoard']
     fn={'selection':selection,'di':di,'legacy_di_admission':legacy_di,'legacy_di_layers':legacy_di,'read_position_decode':read_position,'calibration':calibration,

@@ -151,6 +151,15 @@ impl UhdConversionPlan {
         if let Some(c) = self.parameter_candidate(image, flags)?.hook {
             patches.push(UhdPatch::routing(c));
         }
+        // The classic non-stack DI worker drops the third record and its
+        // initializer omits UHD geometry. Both repairs belong to this atomic
+        // group. Incompatible source code must fail, not silently omit a repair.
+        // Early sources can use a stack parser but the same classic
+        // copy/geometry substrate. Parser layout cannot exclude that repair.
+        let geometry = super::mt1939_geometry::GeometryPlan::inspect(image);
+        if geometry.is_ok() || self.classic_application && !self.stack_di {
+            patches.extend(geometry?.prepared_patches(image, flags)?);
+        }
         patches.sort_by_key(|c| c.site);
         for pair in patches.windows(2) {
             ensure!(
@@ -1059,6 +1068,13 @@ mod tests {
             patches.len()
         );
         plan.verify(CLASSIC, &output, 0x0200f000).unwrap();
+        for role in ["DiRecordLifetime", "DiscGeometry"] {
+            let repair = patches.iter().find(|p| p.role == role).unwrap();
+            let mut omitted = output.clone();
+            omitted[repair.site..repair.site + repair.original.len()]
+                .copy_from_slice(&repair.original);
+            assert!(plan.verify(CLASSIC, &omitted, 0x0200f000).is_err());
+        }
         let mut corrupt = output.clone();
         corrupt[patches[0].site] ^= 1;
         assert!(plan.verify(CLASSIC, &corrupt, 0x0200f000).is_err());
