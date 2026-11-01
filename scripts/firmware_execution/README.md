@@ -60,6 +60,35 @@ They require passing production auth, DI and native-math contracts. Conversion m
 
 No finite set of RAM-input executions proves all firmware paths, optical acquisition, native/resident/MMIO workers, dynamic branch targets, physical layer boundaries, real AACS completion or successful physical UHD reads. Complete conversion is qualified only if a production group is installed and every required contract is independently established; an unavailable conversion hook remains unavailable.
 
+## Media-recognition expectations
+
+`test_media_recognition.py` checks explicit mock disc-information records against
+the installed binary and the held native BU40N parser. Its expected UHD behavior
+comes from executing the native byte-13 U/1 and U/5 recognizer, format dispatcher and
+layer store. It does not infer expected success from the patched instructions.
+This catches a missing valid variant even when every installed detour verifies.
+The original 0.17.0 BE14NU40 1.01 and BH16NS48 1.02 test binaries fail the U/1
+cases; their U/5 and ordinary-media preservation cases pass.
+
+Run once per source/output pair; optionally select the exact delivered test BIN:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 \
+MT_UHD_CPU_FIXTURE_DIR=/path/to/source-bound-output \
+MT_UHD_TEST_BIN=/path/to/delivered-test.bin \
+MT_CPU_HOARD=/path/to/hoard \
+python3 -m unittest discover -s scripts/firmware_execution \
+  -p test_media_recognition.py -v
+```
+
+The matrix includes BD-ROM/recordable/rewritable identifiers, both UHD byte-13 variants,
+layer fields, invalid versions/layers, malformed prefixes and OEM/Off/invalid
+settings. CD/DVD headers are negative inputs to the BD parser. The separate
+`test_read_control_inputs.py` includes declared CD/DVD/BD/UHD state bytes and
+executes the native controller store path against supplied controller words.
+These are bounded software expectations: acquisition, readiness and physical
+sector delivery remain separate stages and are never replaced with success.
+
 ## Captured-disc regression
 
 The optional `--disc-fixtures <directory>` and `--disc-worker-receipt <receipt>`

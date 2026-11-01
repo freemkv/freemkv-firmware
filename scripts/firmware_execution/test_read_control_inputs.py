@@ -52,7 +52,9 @@ class ReadControlInputs(unittest.TestCase):
         flags=self.contracts['base']['flags']
         controller=self.controller;state_cell=self.contract['state']
         for setting in (0,1,2,255):
-            for state in (0,0xc0,0xc4,0xc7,0xc8,0xcc,0xf8):
+            # Include declared CD/DVD as well as BD/UHD media-state inputs.
+            # These exercise the actual controller store path, not acquisition.
+            for state in (0,0x40,0x44,0xc0,0xc4,0xc7,0xc8,0xcc,0xf8):
                 for seed in (0,0xffffffff,0xa55a3cc3,0x12345678):
                     active=setting==1 and state==0xc7
                     old_state=0xc8 if active else state

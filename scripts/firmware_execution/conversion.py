@@ -179,10 +179,10 @@ def di(stage,c,contract,contracts):
                                     kw=inputs(setting,state,identifier,density,layers,attribute,v)
                                     old=stage.execute(False,site,{replay},**kw)
                                     new=stage.execute(True,site,{replay,fmt},**kw)
-                                    accepted=setting==1 and identifier==ord('U') and density==5 and layers in (2,3) and oracle[state,attribute]
+                                    accepted=setting==1 and identifier==ord('U') and (density==1 or density==5 and layers in (2,3)) and oracle[state,attribute]
                                     require(new['target']==(fmt if accepted else replay),'DI admission disagrees with native attribute oracle/media grammar')
                                     if accepted:
-                                        expected={2:0xc7,3:0xc8}[layers]
+                                        expected=0xc0 if density==1 else {2:0xc7,3:0xc8}[layers]
                                         require(new['memory'][str(state_cell)]==bytes([expected]).hex(),'DI layer identity assignment')
                                         require(new['registers'][2]==expected,'DI state argument changed')
                                         require(new['registers'][contract['one_register']]==1,'DI native format argument not one')

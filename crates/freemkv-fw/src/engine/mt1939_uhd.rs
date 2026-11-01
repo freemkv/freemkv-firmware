@@ -99,7 +99,10 @@ impl UhdConversionPlan {
                 })
                 .collect()
         } else {
-            let di = build_di_prevalidation_candidate(image, flags, false, true)?;
+            // The native BU40N parser accepts both U/1 (ordinary ROM geometry)
+            // and U/5 (C7/C8 geometry). Keep their shared native format/layer
+            // handler; treating only U/5 as valid rejects the U/1 variant.
+            let di = build_di_prevalidation_candidate(image, flags, true, true)?;
             vec![UhdPatch {
                 role: "DiscInformation".into(),
                 site: di.contract.prevalidation,
