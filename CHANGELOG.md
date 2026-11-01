@@ -5,6 +5,12 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.17.1] - 2026-11-01
+
+### freemkv Flash
+
+- Fix MediaTek flash planning rejecting a matching Current firmware when its downgrade-enable marker differs from the live drive. Keep identity, build and receiver-change checks in place.
+
 ## [0.17.0] - 2026-11-01
 
 ### freemkv Modify

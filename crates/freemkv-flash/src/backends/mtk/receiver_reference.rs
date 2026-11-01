@@ -140,6 +140,26 @@ mod tests {
         assert_eq!(live.writes, 0);
     }
     #[test]
+    fn modified_current_binds_across_de_marker_without_writes() {
+        let mut current = image();
+        current[layout::DESCRIPTOR.start + 0x56] = 0xde;
+        let current = mediatek_optical::image::cmac::resign(&current).unwrap();
+        let mut live = Restricted {
+            image: current.clone(),
+            writes: 0,
+        };
+        live.image[layout::DESCRIPTOR.start + 0x56] = 0xff;
+        let reference = detect_device(&mut live, &current).unwrap();
+        reference.revalidate(&mut live).unwrap();
+        live.image[layout::DESCRIPTOR.start + 0x56] = 0xde;
+        assert!(reference.revalidate(&mut live).is_err());
+        live.image[layout::DESCRIPTOR.start + 0x56] = 0xff;
+        live.image[layout::DESCRIPTOR.start + 0x40] ^= 1;
+        assert!(detect_device(&mut live, &current).is_err());
+        assert_eq!(live.writes, 0);
+    }
+
+    #[test]
     fn stale_current_reference_is_rejected_and_revalidated() {
         let image = image();
         let mut live = Restricted {
