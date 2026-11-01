@@ -149,33 +149,23 @@ jobs:
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-classic-speed.py --builder target/release/examples/mtk_receiver_evidence
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/audit-mtk-speed-policy.py --builder target/release/examples/mtk_receiver_evidence
 
-  # clippy's output is target-dependent: cfg-gated code only gets linted on the
-  # target it compiles for. Linting solely on the dev host is how a lint that CI
-  # rejects reaches a push. clippy runs on stable (matches ci.yml's lint job);
-  # build/test stay on the MSRV pin.
-  cross-lint:
+  # Reuse dev's lint proof for the exact tree, including the CI definition.
+  # A skipped lint job or coverage-only/manual run cannot qualify the candidate.
+  dev-proof:
     if: ${{ !inputs.native_only }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: freemkv-firmware
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
-          path: freemkv-firmware
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: freemkv-firmware
-          cache-on-failure: true
-      - name: Install GTK4 + libadwaita development headers
-        working-directory: .
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+          fetch-depth: 0
+      - name: Verify source-matched dev CI and executed lint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 .github/scripts/verify_dev.py
 
   # freemkv-fw claims it can modify (create + re-verify) 100% of the FORGEABLE
   # firmware images we hold — "forgeable" meaning a plaintext MediaTek MT1959
