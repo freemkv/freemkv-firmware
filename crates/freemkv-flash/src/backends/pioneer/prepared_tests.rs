@@ -111,6 +111,141 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
         format!("{:x}", Sha256::digest(normal.image.as_slice())),
         "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815"
     );
+
+    struct FactoryOnly {
+        parameters: Vec<u8>,
+        reads: usize,
+        writes: usize,
+    }
+    impl ScsiDevice for FactoryOnly {
+        fn describe(&self) -> String {
+            "factory-route software fixture".into()
+        }
+        fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
+            assert_eq!(command, pioneer_optical::production::parameters());
+            assert_eq!(len, self.parameters.len());
+            self.reads += 1;
+            Ok(self.parameters.clone())
+        }
+        fn command_out(&mut self, _command: &[u8], _data: &[u8]) -> Result<()> {
+            self.writes += 1;
+            bail!("preparation must never write")
+        }
+    }
+    let factory_drive = |code: &str| {
+        let mut parameters = vec![0xff; pioneer_optical::production::PARAMETERS_LEN];
+        parameters[0x84..0x88].copy_from_slice(b"kw01");
+        parameters[0x90..0x9f].fill(b' ');
+        parameters[0x90..0x90 + code.len()].copy_from_slice(code.as_bytes());
+        FactoryOnly {
+            parameters,
+            reads: 0,
+            writes: 0,
+        }
+    };
+    let mut ud03_archive = tar::Builder::new(Vec::new());
+    for (name, bytes) in [
+        (
+            "kernel.enc",
+            component(
+                "kernel",
+                "36d0e3542a34a653250295f86d489d5e1e4f7931043351d856f27e57477d72ae",
+                "oem/pioneer/sat/8510/ID19/1.03",
+            ),
+        ),
+        (
+            "normal.enc",
+            component(
+                "normal",
+                "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
+                "oem/pioneer/sat/8510/ID19/1.03",
+            ),
+        ),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        ud03_archive
+            .append_data(&mut header, name, bytes.as_slice())
+            .unwrap();
+    }
+    let native_ud03 = ud03_archive.into_inner().unwrap();
+    for original in ["BDR-UD02TBD", "BDU-UD02ABC", "BDR-UD02FAN"] {
+        for (target, allowed, profile) in [
+            (&native_ud04, true, Some("pioneer.ud02-to-ud04-1.14")),
+            (&native_ud03, false, None),
+            (&installed, true, Some("pioneer.ud02-stock-return-1.00")),
+        ] {
+            let mut drive = factory_drive(original);
+            let authorized = authorize_installed_inner(
+                FlashPlan::new(execute_plan(target).unwrap()),
+                Some(&native_ud04),
+                Some(&mut ReadDevice::for_backend(&mut drive, &Pioneer)),
+            );
+            assert_eq!(authorized.is_ok(), allowed, "{original}: ordinary Flash");
+            if let Ok(authorized) = authorized {
+                let prepared: &Prepared = authorized.state().unwrap();
+                let plan = prepared.complete.as_ref().unwrap();
+                assert_eq!(plan.settings().adaptation_id(), profile);
+                assert!(plan.settings().requires_original_hardware());
+                if profile == Some("pioneer.ud02-stock-return-1.00") {
+                    assert!(plan.settings().requirements().is_empty());
+                }
+            }
+            for bypass in [false, true] {
+                let receiver = RecoveryTarget::new(
+                    "software fixture".into(),
+                    Some(recovery::Current::load(&native_ud04).unwrap()),
+                );
+                let recovered = RecoveryFacet::prepare(
+                    &Pioneer,
+                    &mut ReadDevice::for_backend(&mut drive, &Pioneer),
+                    &receiver,
+                    None,
+                    target,
+                    bypass,
+                );
+                assert_eq!(
+                    recovered.is_ok(),
+                    allowed,
+                    "{original}: Recovery, override={bypass}"
+                );
+            }
+            assert_eq!(drive.reads, 3);
+            assert_eq!(drive.writes, 0);
+        }
+    }
+    // Supplied but invalid factory identity must never fall back to the
+    // installed firmware's branding, even with Recovery's family override.
+    for code in ["", "UNKNOWN", "BDR-UD02 TBD"] {
+        for target in [&native_ud04, &native_ud03, &installed] {
+            let mut drive = factory_drive(code);
+            assert!(authorize_installed_inner(
+                FlashPlan::new(execute_plan(target).unwrap()),
+                Some(&native_ud04),
+                Some(&mut ReadDevice::for_backend(&mut drive, &Pioneer)),
+            )
+            .is_err());
+            for bypass in [false, true] {
+                let receiver = RecoveryTarget::new(
+                    "invalid factory fixture".into(),
+                    Some(recovery::Current::load(&native_ud04).unwrap()),
+                );
+                assert!(RecoveryFacet::prepare(
+                    &Pioneer,
+                    &mut ReadDevice::for_backend(&mut drive, &Pioneer),
+                    &receiver,
+                    None,
+                    target,
+                    bypass,
+                )
+                .is_err());
+            }
+            assert_eq!(drive.reads, 3);
+            assert_eq!(drive.writes, 0);
+        }
+    }
 }
 
 #[test]

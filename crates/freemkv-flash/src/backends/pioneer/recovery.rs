@@ -42,13 +42,24 @@ impl Target {
         Ok(Self { update, reencoded })
     }
 
+    #[cfg(test)]
     pub(crate) fn bind(self, current: &Current, bypass_family_check: bool) -> Result<Plan> {
+        self.bind_with_original(current, bypass_family_check, None)
+    }
+
+    pub(crate) fn bind_with_original(
+        self,
+        current: &Current,
+        bypass_family_check: bool,
+        parameters: Option<&[u8]>,
+    ) -> Result<Plan> {
         Plan::assemble_policy(
             &current.kernel,
             &current.normal,
             self.update,
             self.reencoded,
             bypass_family_check,
+            parameters,
         )
     }
 }
@@ -67,6 +78,9 @@ pub(super) fn captured_current(capture: Result<Vec<u8>>) -> Result<Current> {
 }
 
 impl Current {
+    pub(crate) fn requires_original_hardware(&self) -> Result<bool> {
+        Ok(Receiver::detect_with_kernel(&self.normal, &self.kernel)?.requires_original_hardware())
+    }
     pub(crate) fn load(bytes: &[u8]) -> Result<Self> {
         let (kernel, normal) = classify_flash_input(bytes)
             .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
@@ -150,7 +164,7 @@ impl Plan {
         target: Update,
         reencoded: bool,
     ) -> Result<Self> {
-        Self::assemble_policy(kernel, normal, target, reencoded, false)
+        Self::assemble_policy(kernel, normal, target, reencoded, false, None)
     }
 
     fn assemble_policy(
@@ -159,9 +173,13 @@ impl Plan {
         target: Update,
         reencoded: bool,
         bypass_family_check: bool,
+        parameters: Option<&[u8]>,
     ) -> Result<Self> {
-        let receiver = Receiver::detect_with_kernel(normal, kernel)
+        let mut receiver = Receiver::detect_with_kernel(normal, kernel)
             .context("Current firmware receiver requirements are unsupported")?;
+        if let Some(parameters) = parameters {
+            receiver = receiver.with_original_parameters(parameters);
+        }
         #[cfg(test)]
         let control = receiver.entry_control(&normal.image[..16])?;
         let target_model = target.normal().info().model.clone();

@@ -509,14 +509,38 @@ pub(crate) fn authorize_installed(
     plan: FlashPlan,
     installed: Option<&[u8]>,
 ) -> Result<AuthorizedPlan> {
+    authorize_installed_inner(plan, installed, None)
+}
+
+fn original_parameters(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
+    let mut bytes = [0; pioneer_optical::production::PARAMETERS_LEN];
+    let count = crate::standard::with_device(dev, |device| device.parameters(&mut bytes))
+        .map_err(|error| anyhow!("reading original factory hardware: {error}"))?;
+    anyhow::ensure!(
+        count == bytes.len(),
+        "original factory parameter response is incomplete; no firmware was written"
+    );
+    Ok(bytes.to_vec())
+}
+
+fn authorize_installed_inner(
+    plan: FlashPlan,
+    installed: Option<&[u8]>,
+    dev: Option<&mut ReadDevice<'_>>,
+) -> Result<AuthorizedPlan> {
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
     let (installed_kernel, installed_normal) = classify_flash_input(installed.context(
         "installed firmware backup is required to recover the receiver control key; refusing update entry"
     ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
-    let receiver =
+    let mut receiver =
         receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
+    if receiver.requires_original_hardware() {
+        if let Some(dev) = dev {
+            receiver = receiver.with_original_parameters(&original_parameters(dev)?);
+        }
+    }
     if kernel.is_none() {
         // Validate both sides as independent images before comparing their
         // tags. Pair validation would call an installed-drive mismatch a
@@ -1011,11 +1035,11 @@ impl FlashFacet for Pioneer {
 
     fn authorize(
         &self,
-        _dev: &mut ReadDevice<'_>,
+        dev: &mut ReadDevice<'_>,
         plan: FlashPlan,
         backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan> {
-        authorize_installed(plan, backup.map(|b| b.bytes()))
+        authorize_installed_inner(plan, backup.map(|b| b.bytes()), Some(dev))
     }
 
     fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<UpdateOutcome> {
@@ -1118,8 +1142,13 @@ impl RecoveryFacet for Pioneer {
             done: None,
             total: None,
         });
+        let parameters = if evidence.requires_original_hardware()? {
+            Some(original_parameters(dev)?)
+        } else {
+            None
+        };
         let plan = target
-            .bind(evidence, bypass_family_check)
+            .bind_with_original(evidence, bypass_family_check, parameters.as_deref())
             .map_err(|error| {
                 crate::backend::UpdateFailure::before_write("recovery preparation", error)
             })?;
