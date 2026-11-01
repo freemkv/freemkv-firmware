@@ -16,7 +16,6 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 ### freemkv Flash
 
 - Allow matching Pioneer BDX-PR1ML and BDR-211M SAT 8801 platforms to share a hardware family. Preserve all other hardware evidence, raw register values and the existing settings requirements.
-- Retain a research backlog for FE8F, FE94, FE9D, FE9F and FEC0; their individual bit functions remain unresolved.
 
 ## [0.16.2] - 2026-11-01
 
