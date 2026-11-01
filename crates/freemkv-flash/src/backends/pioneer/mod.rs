@@ -496,34 +496,6 @@ pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
     }
 }
 
-fn original_hardware_needed<T>(
-    result: &Result<T, pioneer_optical::receiver::PreparationError>,
-) -> bool {
-    matches!(
-        result,
-        Err(pioneer_optical::receiver::PreparationError::Adaptation(
-            pioneer_optical::settings::adaptation::Error::OriginalRequired
-        ))
-    )
-}
-
-fn read_original_parameters(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
-    use crate::platform::ScsiDevice;
-    let parameters = dev
-        .command_in(
-            &pioneer_optical::production::parameters(),
-            pioneer_optical::production::PARAMETERS_LEN,
-        )
-        .map_err(|e| crate::user_error::explain(e, crate::user_error::IssueCode::Connection))?;
-    if parameters.len() != pioneer_optical::production::PARAMETERS_LEN {
-        return Err(
-            anyhow!("original hardware parameter response was incomplete")
-                .context(crate::user_error::IssueCode::Connection),
-        );
-    }
-    Ok(parameters)
-}
-
 /// The library plan the receiver accepted.
 struct Prepared {
     complete: Option<pioneer_optical::receiver::PreparedUpdate>,
@@ -537,21 +509,13 @@ pub(crate) fn authorize_installed(
     plan: FlashPlan,
     installed: Option<&[u8]>,
 ) -> Result<AuthorizedPlan> {
-    authorize_installed_inner(plan, installed, None)
-}
-
-fn authorize_installed_inner(
-    plan: FlashPlan,
-    installed: Option<&[u8]>,
-    live: Option<&mut ReadDevice<'_>>,
-) -> Result<AuthorizedPlan> {
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
     let (installed_kernel, installed_normal) = classify_flash_input(installed.context(
         "installed firmware backup is required to recover the receiver control key; refusing update entry"
     ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
-    let mut receiver =
+    let receiver =
         receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
     if kernel.is_none() {
         // Validate both sides as independent images before comparing their
@@ -601,14 +565,7 @@ fn authorize_installed_inner(
             } else {
                 flash_plan::check_loaded_receiver(&target)
             };
-            let mut prepared = receiver.prepare(target.clone());
-            if original_hardware_needed(&prepared) {
-                if let Some(dev) = live {
-                    let parameters = read_original_parameters(dev)?;
-                    receiver = receiver.with_original_parameters(&parameters);
-                    prepared = receiver.prepare(target);
-                }
-            }
+            let prepared = receiver.prepare(target.clone());
             let prepared = prepared.map(|complete| (Some(complete), None));
             (prepared, facts, check)
         }
@@ -619,14 +576,7 @@ fn authorize_installed_inner(
             let source = pioneer_optical::envelope::Envelope::load_with_kernel(normal, k)?;
             let facts = flash_plan::target_from_loaded(None, &source, None, normal)?;
             let bytes = normal_prepare::prepare(k, &source, normal)?;
-            let mut prepared = receiver.prepare_normal(&bytes);
-            if original_hardware_needed(&prepared) {
-                if let Some(dev) = live {
-                    let parameters = read_original_parameters(dev)?;
-                    receiver = receiver.with_original_parameters(&parameters);
-                    prepared = receiver.prepare_normal(&bytes);
-                }
-            }
+            let prepared = receiver.prepare_normal(&bytes);
             let prepared = prepared.map(|normal| (None, Some(normal)));
             (prepared, facts, Ok(()))
         }
@@ -1061,11 +1011,11 @@ impl FlashFacet for Pioneer {
 
     fn authorize(
         &self,
-        dev: &mut ReadDevice<'_>,
+        _dev: &mut ReadDevice<'_>,
         plan: FlashPlan,
         backup: Option<&SavedBackup>,
     ) -> Result<AuthorizedPlan> {
-        authorize_installed_inner(plan, backup.map(|b| b.bytes()), Some(dev))
+        authorize_installed(plan, backup.map(|b| b.bytes()))
     }
 
     fn execute(&self, dev: &mut WriteDevice<'_>, plan: &AuthorizedPlan) -> Result<UpdateOutcome> {
