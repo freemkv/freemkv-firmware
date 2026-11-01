@@ -119,20 +119,20 @@ fn state_sentinels_are_pinned() {
 }
 
 #[test]
-fn feature_value_consts_are_pinned_to_the_locked_spec() {
-    // Speed: OFF (0x00) means the limiter is off, i.e. run uncapped at max.
-    assert_eq!(SPEED_MAX, 0x00);
-    assert_eq!(SPEED_MAX, STATE_OFF);
+fn feature_value_consts_match_emitted_controls() {
+    // Both emitted speed implementations enable the native maximum on 0x01.
+    assert_eq!(SPEED_MAX, 0x01);
+    assert_eq!(SPEED_MAX, STATE_ON);
 
-    // Region low-nibble scheme: DVD 1..8 = 0x01..=0x08, BD A/B/C = 0x0A..=0x0C,
-    // region-free = 0x0F, and 0x00 (locked) is the OFF leg.
-    assert_eq!(REGION_DVD_BASE, 0x00);
-    assert_eq!(REGION_DVD_BASE + 1, 0x01); // DVD region 1
-    assert_eq!(REGION_DVD_BASE + 8, 0x08); // DVD region 8
+    // DVD override bytes must not collide with the region-free state.
+    // BD bytes remain reserved legacy experiments, not implemented controls.
+    assert_eq!(REGION_DVD_BASE, 0x10);
+    assert_eq!(REGION_DVD_BASE + 1, 0x11); // DVD region 1
+    assert_eq!(REGION_DVD_BASE + 8, 0x18); // DVD region 8
     assert_eq!(REGION_BD_A, 0x0A);
     assert_eq!(REGION_BD_B, 0x0B);
     assert_eq!(REGION_BD_C, 0x0C);
-    assert_eq!(REGION_FREE, 0x0F);
+    assert_eq!(REGION_FREE, 0x01);
 }
 
 #[test]
@@ -159,7 +159,7 @@ fn build_set_cdb_carries_feature_and_state() {
     assert_eq!(cdb[CDB_FEATURE], 0x01);
     assert_eq!(cdb[CDB_STATE], 0x80);
 
-    // Region force-BD-A (BD regions now live in the 0x0A..=0x0C low-nibble block).
+    // Raw legacy experimental bytes retain their wire encoding.
     let cdb = build_set_cdb(Feature::Region, REGION_BD_A);
     assert_eq!(cdb[CDB_FEATURE], 0x02);
     assert_eq!(cdb[CDB_STATE], 0x0A);

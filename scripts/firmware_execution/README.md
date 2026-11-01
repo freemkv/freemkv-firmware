@@ -1,4 +1,4 @@
-Current readiness and remaining dependency are recorded in [the status report](../../internal/docs/audits/mt1939-plus-earliest1959-status-20261031.md). The earliest image is deliberately refused; a conditional helper pass is not complete conversion readiness.
+Current hardware-test scope is the fixed 123 retained OEM inputs: 29 classic MT1939, 12 older MT1959 and 82 newer MT1959. See [the hardware-test assessment](../../internal/docs/audits/mediatek-123-hardware-test-readiness-20261101.md). The older historical refusal report is not the current patch status.
 
 The acceptance entry point is `corpus.py`. It accounts for every record in the supplied inventory, constructs outputs using the production `modify_with_defaults` API, compares the shipping CLI output bytes, and executes bounded OEM/patched hook traces with Unicorn's ARM926 model and an additional Thumb-1 legality check. It never flashes hardware.
 
@@ -59,3 +59,32 @@ They require passing production auth, DI and native-math contracts. Conversion m
 `run.py` is the earlier two-stage runner retained for reproducibility. Its media profiles repeat CDB gate tests and do not establish optical-path coverage. Use `corpus.py` for the broader acceptance record.
 
 No finite set of RAM-input executions proves all firmware paths, optical acquisition, native/resident/MMIO workers, dynamic branch targets, physical layer boundaries, real AACS completion or successful physical UHD reads. Complete conversion is qualified only if a production group is installed and every required contract is independently established; an unavailable conversion hook remains unavailable.
+
+## Captured-disc regression
+
+The optional `--disc-fixtures <directory>` and `--disc-worker-receipt <receipt>`
+arguments add independently captured disc-information/capacity checks and compact
+read-only ISO metadata/boundary fixtures to the normal corpus run. Both arguments
+are required together. `build-mtk-disc-fixtures.py --help` describes collection;
+private captures and ISO data are not included in this repository.
+
+The stage executes actual source-owned DI copy, initialization, capacity and
+bidirectional address code where it can be bound. It preserves OEM/Off behavior
+and checks modified On against independent captured capacities. Native optical
+acquisition, MMIO completion and sector delivery are not simulated. Missing
+resident backing remains explicitly unqualified, never a successful result.
+Classic repair selection uses instruction signatures and source relationships;
+reference addresses in test fixtures are not production lookup tables.
+
+For fixture and omission/corruption mutation checks, run:
+
+```sh
+MT_DISC_FIXTURES="$DISC_FIXTURES" MT_DISC_OUTPUTS="$CORPUS_OUTPUTS" \
+MT_DISC_WORKERS="$DI_WORKER_RECEIPT" \
+python3 -m unittest discover -s scripts/firmware_execution -p test_disc.py
+```
+
+The fixture loader checks hashes, DI/capacity consistency and content associations.
+ISO logical sectors never manufacture physical disc-information records. The
+mutation suite detects omitted geometry repairs, corrupt mapper branches and an
+incorrect capacity-normalization consumer even if initialization still agrees.

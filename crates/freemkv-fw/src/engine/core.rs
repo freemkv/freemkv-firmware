@@ -28,7 +28,7 @@ use super::lever::{LeverId, LeverReport, ModifyReport, Validation};
 use super::mt1959::Mt1959Engine;
 use crate::abi;
 use crate::boot::BootSettings;
-use crate::family::{Capability, ChipInfo, MediaClass};
+use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, BranchKind, CommandRecord};
 
 // The wire frame (opcode / mode / knock / identity sense) is defined once in
@@ -1143,6 +1143,131 @@ impl Mt1959Engine {
         target.ok_or_else(|| anyhow!("VID gate-setter (movs r1,#1; bl) not found in the producer"))
     }
 
+    /// Pure native AGID byte setter, safe to call without a mailbox/rearm worker.
+    /// Bind every operand and the complete return before using it on a settings
+    /// transition. Both the handler and Encryption installation require this
+    /// contract, so an unqualified source cannot ship only half the behavior.
+    pub(super) fn find_transition_state_setter(&self, image: &[u8]) -> Result<u32> {
+        let address = self.find_vid_gate_setter(image)?;
+        let at = address as usize;
+        let variants: &[(&[Option<u16>], usize, usize)] = &[
+            (
+                &[
+                    Some(0x2802),
+                    Some(0xd20c),
+                    None,
+                    Some(0x1880),
+                    None,
+                    Some(0x0400),
+                    Some(0x6812),
+                    Some(0x0c00),
+                    Some(0x1810),
+                    None,
+                    Some(0x0200),
+                    Some(0x6812),
+                    Some(0x0a00),
+                    Some(0x1880),
+                    Some(0x7001),
+                    Some(0x4770),
+                ],
+                8,
+                18,
+            ),
+            (
+                &[
+                    Some(0x2802),
+                    Some(0xd20a),
+                    None,
+                    Some(0x1880),
+                    None,
+                    Some(0x6812),
+                    Some(0x1810),
+                    None,
+                    Some(0x0200),
+                    Some(0x6812),
+                    Some(0x0a00),
+                    Some(0x1880),
+                    Some(0x7001),
+                    Some(0x4770),
+                ],
+                8,
+                14,
+            ),
+            (
+                &[
+                    Some(0x2802),
+                    Some(0xd20b),
+                    None,
+                    Some(0x3a3c),
+                    Some(0x1880),
+                    None,
+                    Some(0x6812),
+                    Some(0x1810),
+                    None,
+                    Some(0x0200),
+                    Some(0x6812),
+                    Some(0x0a00),
+                    Some(0x1880),
+                    Some(0x7001),
+                    Some(0x4770),
+                ],
+                10,
+                16,
+            ),
+            (
+                &[
+                    Some(0x2802),
+                    Some(0xd20d),
+                    None,
+                    Some(0x3a3c),
+                    Some(0x1880),
+                    None,
+                    Some(0x0400),
+                    Some(0x6812),
+                    Some(0x0c00),
+                    Some(0x1810),
+                    None,
+                    Some(0x0200),
+                    Some(0x6812),
+                    Some(0x0a00),
+                    Some(0x1880),
+                    Some(0x7001),
+                    Some(0x4770),
+                ],
+                10,
+                20,
+            ),
+        ];
+        for &(grammar, first, second) in variants {
+            let Some(body) = image.get(at..at + grammar.len() * 2) else {
+                continue;
+            };
+            if !grammar
+                .iter()
+                .zip(body.as_chunks::<2>().0)
+                .all(|(op, bytes)| {
+                    let actual = u16::from_le_bytes([bytes[0], bytes[1]]);
+                    op.map_or(actual & 0xff00 == 0x4a00, |expected| actual == expected)
+                })
+            {
+                continue;
+            }
+            pc_literal(image, at + 4).context("AGID offset literal outside image")?;
+            let first = pc_literal(image, at + first).context("AGID first relocation literal")?;
+            let second =
+                pc_literal(image, at + second).context("AGID second relocation literal")?;
+            ensure!(
+                first != second
+                    && [first, second]
+                        .iter()
+                        .all(|&cell| (0x01ff_0000..0x0204_0000).contains(&cell) && cell % 4 == 0),
+                "AGID setter relocation owners are not distinct aligned RAM cells"
+            );
+            return Ok(address);
+        }
+        bail!("AGID transition setter has no qualified complete byte-write grammar")
+    }
+
     /// The OEM VID producer's per-AGID **session struct** base (`0x02000d38` on
     /// 1.00). The producer reads the active AGID from `byte[base+0xa] >> 6`
     /// (top two bits) and bails if it is ≥ 2, so a standalone producer call
@@ -1546,6 +1671,9 @@ impl Mt1959Engine {
              0x{FLASHWRITE_ALLOW_LO:x}..0x{FLASHWRITE_ALLOW_HI:x}"
         );
         let id_len = identity.len() as u8;
+        // Base-only images can lack AACS. Installing Encryption separately
+        // requires this same contract in both raw-read emission paths.
+        let transition_setter = self.find_transition_state_setter(image).ok();
 
         let mut a = Asm::new();
         let tail = a.label();
@@ -1709,6 +1837,10 @@ impl Mt1959Engine {
         a.push(0x01F0); // push {r4,r5,r6,r7,lr}
         a.ldr_lit(7, writer | 1);
         a.ldrb_imm(4, 3, abi::CDB_VERB as u16); // r4 = verb = cdb[4]
+        if transition_setter.is_some() {
+            a.ldr_lit(5, flag_base + abi::Feature::Encryption as u32);
+            a.ldrb_imm(5, 5, 0); // old Encryption state, held until settings change
+        }
 
         // SET: flag[cdb[5]=feature] = cdb[6]=state. r3=CDB base, r4=verb preserved.
         a.cmp_imm(4, abi::Verb::Set as u8);
@@ -1735,21 +1867,10 @@ impl Mt1959Engine {
         a.adds_reg(0, 0, 1); // r0 = &flag[feature]
         a.ldrb_imm(1, 3, abi::CDB_STATE as u16); // r1 = state (cdb[6])
         a.strb_imm(1, 0, 0); // flag[feature] = state
-                             // No rearm-on-SET. Image-wide BL scan (0.8.14) proved the OEM re-arms
-                             // bus-encryption ONLY via its non-BL disc-insert path (a hardware/ISR
-                             // event), never through a `bl <aacs_session_rearm>` — the sole caller
-                             // of that wrapper is inside the cold-boot init at 0x0013d444, and there
-                             // is no `blx <thumb-tagged>` dispatch either (the wrapper's VA is not
-                             // present as a 32-bit literal anywhere in the image). Firing the
-                             // wrapper from a vendor-CDB SET context couples its session_reset +
-                             // subsystem re-init side-effects into the shared engine data path and
-                             // wedges every subsequent vendor CDB, even when re-arming an already-
-                             // armed engine (i.e. with no medium). The AKE detour handles both
-                             // directions of `Feature::Encryption` in software on the next data
-                             // read regardless of the hardware arm state, so SET only needs to
-                             // record the flag — hardware re-arms bus-enc itself when the disc-insert
-                             // ISR runs. The `find_aacs_session_rearm` finder stays (its KAT still
-                             // exercises it) for the record; nothing bakes it into the handler.
+                             // Never call the session-rearm wrapper from vendor-CDB context: that
+                             // path wedged hardware in the earlier investigation. The common clear
+                             // path below invalidates stale bypass authentication using only the
+                             // source-proven byte setter when Encryption leaves Off.
         a.b(clr); // return a zeroed buffer
         a.bind(not_set);
 
@@ -1779,6 +1900,9 @@ impl Mt1959Engine {
         // source = the flag table we just filled). This clears the slot-0 marker to
         // 0xFF, so the NV is indistinguishable from never-saved; op=1 RMW preserves
         // the OEM region record at +0x4B0. Unlike SAVE, we do NOT stamp the marker.
+        if transition_setter.is_some() {
+            a.push(0x0060); // preserve old Encryption across staging's r5/r6 use
+        }
         emit_flash_write(
             &mut a,
             nv_dram_base_ptr,
@@ -1787,6 +1911,9 @@ impl Mt1959Engine {
             SAVE_LEN,
             flash_program,
         );
+        if transition_setter.is_some() {
+            a.pop(0x0060);
+        }
         a.b(clr);
         // RESET_TO_DEFAULTS (0x01): restore the baked DEFAULTS to RAM (slots 0..=7).
         a.bind(reset_defaults);
@@ -1823,6 +1950,30 @@ impl Mt1959Engine {
         // Clear CLEAR_LEN bytes so no stale buffer data leaks (all data verbs
         // lead with their payload; the remainder stays zero).
         a.bind(clr);
+        if let Some(setter) = transition_setter {
+            let check_transition = a.label();
+            let unchanged = a.label();
+            a.cmp_imm(4, abi::Verb::Set as u8);
+            a.beq(check_transition);
+            a.cmp_imm(4, abi::Verb::Reset as u8);
+            a.bne(unchanged); // GET, identity and debug dispatch never invalidate
+            a.bind(check_transition);
+            a.cmp_imm(5, abi::STATE_OFF);
+            a.bne(unchanged);
+            a.ldr_lit(0, flag_base + abi::Feature::Encryption as u32);
+            a.ldrb_imm(0, 0, 0);
+            a.cmp_imm(0, abi::STATE_OFF);
+            a.beq(unchanged);
+            a.push(0x0008); // align the native calls; retain the live CDB pointer
+            a.ldr_lit(6, setter | 1);
+            for agid in 0..2 {
+                a.movs_imm(0, agid);
+                a.movs_imm(1, 1); // native unauthenticated state
+                a.blx(6);
+            }
+            a.pop(0x0008);
+            a.bind(unchanged);
+        }
         a.movs_imm(5, 0);
         a.bind(clr_loop);
         a.cmp_imm(5, CLEAR_LEN);
@@ -3197,8 +3348,7 @@ impl Mt1959Engine {
     /// freemkv-modified (idempotent re-entry). The image is returned
     /// **byte-identical** (it is already a valid, signed freemkv image), so
     /// `modify(modify(x)) == modify(x)`. Levers are marked `AlreadyPresent`
-    /// (capability-gated ones `NotApplicable`) to mirror what a fresh modify
-    /// produced.
+    /// using the verified installed support record, independently of model labels.
     pub(crate) fn already_present_report(
         &self,
         image: &[u8],
@@ -3208,21 +3358,38 @@ impl Mt1959Engine {
     ) -> ModifyReport {
         let mut levers = Vec::new();
         levers.push(LeverReport::already(LeverId::Identity, vec![]));
-        levers.push(if cap.media_class >= MediaClass::Bd || cap.bd_aacs {
-            LeverReport::already(LeverId::Speed, vec![])
-        } else {
-            LeverReport::not_applicable(LeverId::Speed, "no BD read-ramp on this model")
-        });
-        levers.push(if cap.region_lockable {
-            LeverReport::already(LeverId::RegionFree, vec![])
-        } else {
-            LeverReport::not_applicable(LeverId::RegionFree, "no region lever on this model")
-        });
-        levers.push(if cap.bd_aacs {
-            LeverReport::already(LeverId::RawRead, vec![])
-        } else {
-            LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
-        });
+        use crate::boot::BootFeature;
+        let installed = crate::boot::inspect(image);
+        let setting_report = |lever, features: &[BootFeature]| match &installed {
+            Ok(Some((_, support))) => {
+                if features.iter().any(|&feature| support.supports(feature)) {
+                    LeverReport::already(lever, vec![])
+                } else {
+                    LeverReport::not_applicable(
+                        lever,
+                        "verified installed image has no corresponding setting support",
+                    )
+                }
+            }
+            Ok(None) => LeverReport::missed(lever, "installed setting support record unavailable"),
+            Err(error) => LeverReport::missed(
+                lever,
+                format!("installed setting support verification: {error:#}"),
+            ),
+        };
+        levers.push(setting_report(LeverId::Speed, &[BootFeature::Speed]));
+        levers.push(setting_report(LeverId::RegionFree, &[BootFeature::Region]));
+        // RawRead is the existing composite lever. Individual installed support
+        // remains available through BootSupport; a partial composite does not
+        // imply that every Unrestricted/Encryption/HRL setting is supported.
+        levers.push(setting_report(
+            LeverId::RawRead,
+            &[
+                BootFeature::Unrestricted,
+                BootFeature::Encryption,
+                BootFeature::Hrl,
+            ],
+        ));
         levers.push(if !chip.descriptor_present {
             LeverReport::not_applicable(
                 LeverId::DowngradeEnable,

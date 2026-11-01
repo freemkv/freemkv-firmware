@@ -15,7 +15,7 @@ use super::lever::{HookReport, LeverId, LeverReport, Validation};
 use super::{CreateReport, Engine, ModifyReport};
 use crate::abi;
 use crate::boot::BootSettings;
-use crate::family::{self, Capability, ChipInfo, MediaClass};
+use crate::family::{self, Capability, ChipInfo};
 use thumb_asm::{self as thumb, CommandTable};
 
 /// The MT1959 platform engine.
@@ -446,8 +446,8 @@ impl Mt1959Engine {
             ],
         ));
 
-        // Speed (read-ramp ceiling) — BD capability.
-        levers.push(if cap.media_class >= MediaClass::Bd || cap.bd_aacs {
+        // Speed applicability is established by its source instruction contract.
+        levers.push({
             match self.emit_speed(image, &mut out, flag_base) {
                 Ok((gate, va)) => LeverReport::applied(
                     LeverId::Speed,
@@ -455,12 +455,10 @@ impl Mt1959Engine {
                 ),
                 Err(e) => LeverReport::missed(LeverId::Speed, format!("{e:#}")),
             }
-        } else {
-            LeverReport::not_applicable(LeverId::Speed, "no BD read-ramp on this model")
         });
 
         // Region-free (RPC-1) — DVD or BD.
-        levers.push(if cap.region_lockable {
+        levers.push({
             match self.emit_region(image, &mut out, flag_base) {
                 Ok((emitter, va)) => LeverReport::applied(
                     LeverId::RegionFree,
@@ -468,12 +466,10 @@ impl Mt1959Engine {
                 ),
                 Err(e) => LeverReport::missed(LeverId::RegionFree, format!("{e:#}")),
             }
-        } else {
-            LeverReport::not_applicable(LeverId::RegionFree, "no region lever on this model")
         });
 
         // Raw read / clear VID (VID gate + AKE accept + deny reset) — AACS/BD.
-        let raw_read = if cap.bd_aacs {
+        let raw_read = {
             match self.emit_rawread(image, &mut out, flag_base) {
                 Ok(f) => {
                     if let Some(identity) = f.boot_identity {
@@ -548,8 +544,6 @@ impl Mt1959Engine {
                 }
                 Err(e) => LeverReport::missed(LeverId::RawRead, format!("{e:#}")),
             }
-        } else {
-            LeverReport::not_applicable(LeverId::RawRead, "no AACS/BD on this model")
         };
         levers.push(raw_read);
 
@@ -658,6 +652,7 @@ impl Mt1959Engine {
         flag_base: u32,
     ) -> Result<RawReadFacts> {
         // ---- validate (read-only) ----
+        self.find_transition_state_setter(image)?;
         // AKE accept gate — BU40N/desktop (reject-writer detour) or NB-class
         // (shared-`bl` detour). Resolved by `ake_detour`; BU40N matches the
         // original signature first. Every qualified shape uses Thumb-1 BL:

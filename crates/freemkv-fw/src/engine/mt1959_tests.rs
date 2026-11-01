@@ -13,6 +13,116 @@ use crate::engine::lever::{LeverOutcome, LeverReport};
 use crate::family::MediaClass;
 
 #[test]
+fn installed_report_uses_verified_settings_instead_of_model_labels() {
+    let source = fixture();
+    let (built, _) =
+        crate::api::modify_with_defaults(&source, &crate::boot::BootSettings::standard()).unwrap();
+    let chip = crate::family::detect_chip(&source).unwrap();
+    let labels = crate::family::Capability {
+        family: chip.family,
+        media_class: MediaClass::Cd,
+        bd_aacs: false,
+        region_lockable: false,
+    };
+    let report = Mt1959Engine.already_present_report(&built.image, &chip, &labels, "MT1959");
+    assert_eq!(report.image, built.image);
+    for id in [LeverId::Speed, LeverId::RegionFree, LeverId::RawRead] {
+        assert!(matches!(
+            lever(&report, id).outcome,
+            LeverOutcome::AlreadyPresent
+        ));
+    }
+    // A marker/label cannot invent installed support on an unmodified image.
+    let unbound = Mt1959Engine.already_present_report(&source, &chip, &labels, "MT1959");
+    for id in [LeverId::Speed, LeverId::RegionFree, LeverId::RawRead] {
+        assert!(matches!(
+            lever(&unbound, id).outcome,
+            LeverOutcome::SignatureNotFound { .. }
+        ));
+    }
+    // Synthetic installed records exercise reduced advertised support without
+    // removing real hooks. Re-signing is necessary: unverified metadata must
+    // never authorize an AlreadyPresent result.
+    let record = built
+        .image
+        .windows(16)
+        .position(|bytes| bytes == b"freemkv.boot.v3\0")
+        .unwrap();
+    for (mask, expected) in [
+        (0, [false, false, false]),
+        (8, [true, false, false]),
+        (16, [false, true, false]),
+        (2, [false, false, true]),
+        (4, [false, false, true]),
+        (1, [false, false, true]),
+    ] {
+        let mut partial = built.image.clone();
+        partial[record + 23] = mask;
+        let partial = freemkv_flash::cmac::resign(&partial).unwrap();
+        let report = Mt1959Engine.already_present_report(&partial, &chip, &labels, "MT1959");
+        assert_eq!(report.image, partial);
+        for (id, present) in [LeverId::Speed, LeverId::RegionFree, LeverId::RawRead]
+            .into_iter()
+            .zip(expected)
+        {
+            assert_eq!(
+                matches!(lever(&report, id).outcome, LeverOutcome::AlreadyPresent),
+                present
+            );
+            if !present {
+                assert!(matches!(
+                    lever(&report, id).outcome,
+                    LeverOutcome::NotApplicable { .. }
+                ));
+            }
+        }
+    }
+    let mut unverified = built.image.clone();
+    unverified[record + 23] ^= 8;
+    let report = Mt1959Engine.already_present_report(&unverified, &chip, &labels, "MT1959");
+    for id in [LeverId::Speed, LeverId::RegionFree, LeverId::RawRead] {
+        assert!(matches!(
+            lever(&report, id).outcome,
+            LeverOutcome::SignatureNotFound { .. }
+        ));
+    }
+}
+
+#[test]
+fn mediatek_patch_output_is_independent_of_model_capability_labels() {
+    for (image, classic) in [
+        (
+            include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin").as_slice(),
+            false,
+        ),
+        (
+            include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin").as_slice(),
+            true,
+        ),
+    ] {
+        let chip = crate::family::detect_chip(image).unwrap();
+        let cap = crate::family::capability_for(&chip.model, chip.family);
+        let contradictory = crate::family::Capability {
+            family: chip.family,
+            media_class: MediaClass::Cd,
+            bd_aacs: false,
+            region_lockable: false,
+        };
+        let build = |labels: &crate::family::Capability| {
+            if classic {
+                Mt1959Engine.build_modify_classic(image, &chip, labels)
+            } else {
+                Mt1959Engine.build_modify(image, &chip, labels)
+            }
+        };
+        let expected = build(&cap).unwrap();
+        let actual = build(&contradictory).unwrap();
+        assert_eq!(actual.image, expected.image);
+        assert_eq!(actual.applied_count(), expected.applied_count());
+    }
+}
+
+#[test]
 fn uh12_oem_allocation_failure_builds_through_the_normal_modify_api() {
     use sha2::{Digest, Sha256};
     let original = include_bytes!("../../tests/fixtures/UH12NS40_OEM_1.03.bin");
@@ -240,69 +350,7 @@ fn refusal<T>(r: Result<T>, must_refuse: &str) -> String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Capability gate for the Speed lever (`media_class >= Bd || bd_aacs`).
-// ---------------------------------------------------------------------------
-
-/// The Speed lever is in scope for anything BD-class *or* AACS-capable. A drive
-/// whose capability row says BD media but leaves `bd_aacs` clear (the ordering
-/// half of the gate) must still get the read-ramp unlock: turning the `||` into
-/// an `&&`, or flipping the `>=`, would silently ship a BD drive with the ramp
-/// ceiling still in place and report it as "n/a" rather than skipped.
-#[test]
-fn speed_lever_is_in_scope_for_bd_media_even_when_the_aacs_bit_is_clear() {
-    let img = fixture();
-    let rep = Mt1959Engine
-        .build_modify(&img, &bu40n_chip(), &cap(MediaClass::Bd, false, true))
-        .expect("base is modifiable");
-    let sp = lever(&rep, LeverId::Speed);
-    assert_eq!(
-        sp.outcome,
-        LeverOutcome::Applied,
-        "BD media alone puts the read-ramp lever in scope; got {:?}",
-        sp.outcome
-    );
-    assert!(
-        fact(sp, "speed_stub_va").unwrap_or(0) != 0,
-        "an Applied Speed lever must report the trampoline it actually injected"
-    );
-}
-
-/// The mirror case: AACS capability alone (sub-BD media class) also puts Speed
-/// in scope, so neither side of the `||` may be dropped.
-#[test]
-fn speed_lever_is_in_scope_for_an_aacs_model_below_bd_media_class() {
-    let img = fixture();
-    let rep = Mt1959Engine
-        .build_modify(&img, &bu40n_chip(), &cap(MediaClass::Dvd, true, true))
-        .expect("base is modifiable");
-    assert_eq!(
-        lever(&rep, LeverId::Speed).outcome,
-        LeverOutcome::Applied,
-        "the AACS half of the Speed scope gate must stand on its own"
-    );
-}
-
-/// And a CD-class, non-AACS model has no read ramp at all: the lever must report
-/// NotApplicable rather than patching a gate that does not belong to this drive.
-/// (Inverting the `>=` would patch exactly the models that must not be touched.)
-#[test]
-fn speed_lever_is_out_of_scope_for_a_cd_only_non_aacs_model() {
-    let img = fixture();
-    let rep = Mt1959Engine
-        .build_modify(&img, &bu40n_chip(), &cap(MediaClass::Cd, false, false))
-        .expect("base is still modifiable (Identity always applies)");
-    let sp = lever(&rep, LeverId::Speed);
-    assert!(
-        matches!(sp.outcome, LeverOutcome::NotApplicable { .. }),
-        "a CD-only non-AACS model has no BD read ramp to unlock; got {:?}",
-        sp.outcome
-    );
-    assert!(
-        sp.facts.is_empty(),
-        "an out-of-scope lever must not report grounded facts it never produced"
-    );
-}
+// Model-label independence is covered by the production-output comparison above.
 
 // ---------------------------------------------------------------------------
 // Graceful-degrade boundary: a feature detour that DID land must be reported.

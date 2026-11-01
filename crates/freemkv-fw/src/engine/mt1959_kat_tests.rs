@@ -28,8 +28,7 @@ const EXPECT_HANDLER_VA: u32 = 0x0015_3968;
 /// The golden identity is fixed so release version bumps do not change the oracle.
 /// Changes to emitted code still require reviewing the handler and CMAC snapshots.
 const KAT_IDENTITY: &[u8] = b"freemkv 0.10.2";
-const EXPECT_HANDLER_HEX: &str =
-    "aa4b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0a24b1847f0b5a24f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab04700246de00d2c03d1587a3070002467e00f2c04d1954e0420b047002460e000245ee0f0b5904f1c79022c0bd190485979012900d254e0072900d351e04018997901704de0042c4bd19879ff2823d18748ff21017041708170c17001714171817184480668844805687619804801783170417871708178b170c178f17001793171417971718179b17128467b49072201237b4da84724e001280fd17448ff210170ff214170ff2181700121c17001210171ff214171ff21817112e06c4e6f4a1178ff2900d1e9e7517871709178b170d178f17011793171517971719179b171ffe70025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a5d4908705a4886420ad35c48864207d25948314601220123564da847044600e0574c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13b48012101703b4806683b4805687619374801783170417871708178b170c178f17001793171417971718179b1712846324907220123324da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad121485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ca600250e2d04d22846715db8470135f8e70c4e0e250122072a05d2b15c2846b84701350132f7e740200e4908800e480f4a9047f0bd380d00025bad090075200a0019d41300400e0002780c00027c0c000200a01e002bda1300500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e31302e32";
+const EXPECT_HANDLER_HEX: &str = "b64b58780e280dd19878c02803d1d878de2800d12ce09878de2803d1d878b92800d101e0ae4b1847f0b5ae4f1c795e793602987936183602d87936183602187a36180c2c05d101252e43587ab047002471e00d2c03d1587a307000246be00f2c04d1a14e0420b047002464e0002462e0f0b59c4f1c799d4d2d78022c0bd19c485979012900d256e0072900d353e04018997901704fe0042c4dd19879ff2825d19348ff21017041708170c17001714171817160b48f4806688f48056876198c4801783170417871708178b170c178f17001793171417971718179b1712846874907220123864da84760bc24e001280fd17f48ff210170ff214170ff2181700121c17001210171ff214171ff21817112e0774e7a4a1178ff2900d1e9e7517871709178b170d178f17011793171517971719179b171ffe7022c01d0042c0ed1002d0cd16a480078002808d008b46d4e00200121b04701200121b04708bc0025402d04d228460021b8470135f8e70a2c42d15e793602987936183602d87936183602187a3618587a604908705c4886420ad35e48864207d25c48314601220123584da847044600e05a4c350e00202946b84735022d0e01202946b84735042d0e02202946b84735062d0e03202946b847250e04202946b84725022d0e05202946b84725042d0e06202946b84725062d0e07202946b8476ae00b2c31d13d48012101703c4806683c4805687619394801783170417871708178b170c178f17001793171417971718179b1712846344907220123334da8470446250e00202946b84725022d0e01202946b84725042d0e02202946b84725062d0e03202946b84736e0032c0ad123485979012906d3072904d2401801780020b84729e0092c11d15e793602987936183602d87936183602187a36180025402d1ad22846715db8470135f8e7012c13d11ea600250e2d04d22846715db8470135f8e70e4e0e250122072a05d2b15c2846b84701350132f7e74020114908801148114a9047f0bd0000380d00025bad090075200a0019d41300460e0002400e0002780c00027c0c000200a01e002bda1300f9ad0c00500e000200b01e0055464552720c000290af000081810900667265656d6b7620302e31302e32";
 // Re-signed CMAC stored digests that must change (entry index -> stored hex).
 //
 // NOTE: the injected band (3C handler + every stub) and the OEM-code detours all fall
@@ -60,8 +59,13 @@ const EXPECT_HANDLER_HEX: &str =
 // VID Gate-A preserves the native writer source/count and all caller arguments.
 // Source-qualified AKE writer installation is now Thumb-1 BL; the native call
 // join defines the setter's LR, so stub bytes and its allocation stay unchanged.
-const EXPECT_CMAC_1: &str = "3f2d8506d6cb5e276b702703f89ece7a";
-const EXPECT_CMAC_15: &str = "43493f3dc7faa145997229424fd358e9";
+// Encryption Off-to-On/OEM now invalidates both native AGID states. Reviewed
+// changes: old flag capture, preserved RESET_TO_OEM frame, guarded native byte
+// setters, and shifted literal/stub placement. Independent execution covers
+// 21,648 settings cases over 123 inputs; 12 broken-code mutations are rejected.
+// PROGRAM completion remains outside those execution checks.
+const EXPECT_CMAC_1: &str = "06db4da6c329bfc693f9017b439a0f2c";
+const EXPECT_CMAC_15: &str = "adbafbc21c3374e983bce1bdc52981fa";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -1999,4 +2003,38 @@ fn ake_reject_writer_requires_a_native_call_join_and_setter_operands() {
     assert!(engine
         .ake_detour(&missing_frame, super::FLAG_TABLE_BASE)
         .is_err());
+}
+
+#[test]
+fn encryption_installation_requires_the_complete_transition_setter() {
+    use crate::engine::lever::LeverId;
+    let source = load_base().expect("committed OEM fixture");
+    let setter = Mt1959Engine.find_transition_state_setter(&source).unwrap() as usize;
+    for (offset, replacement) in [
+        (0, 0x2803u16), // changes the native two-AGID bound
+        (28, 0x8001),   // halfword store would overwrite a neighboring state
+        (30, 0x46c0),   // loses the native return
+    ] {
+        let mut mutated = source.clone();
+        mutated[setter + offset..setter + offset + 2].copy_from_slice(&replacement.to_le_bytes());
+        assert!(Mt1959Engine.find_transition_state_setter(&mutated).is_err());
+        let report = Mt1959Engine
+            .modify(&mutated)
+            .expect("independent base features remain available");
+        let raw = report
+            .levers
+            .iter()
+            .find(|lever| lever.id == LeverId::RawRead)
+            .unwrap();
+        assert!(
+            !raw.outcome.is_effective(),
+            "bypass must not install without invalidation"
+        );
+    }
+    let mut non_ram = source.clone();
+    let instruction = setter + 8;
+    let op = u16::from_le_bytes(non_ram[instruction..instruction + 2].try_into().unwrap());
+    let pool = ((instruction + 4) & !3) + usize::from(op & 0xff) * 4;
+    non_ram[pool..pool + 4].copy_from_slice(&0x0400_0000u32.to_le_bytes());
+    assert!(Mt1959Engine.find_transition_state_setter(&non_ram).is_err());
 }

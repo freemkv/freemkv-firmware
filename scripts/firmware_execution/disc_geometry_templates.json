@@ -1,0 +1,2566 @@
+{
+  "schema": 1,
+  "fixture_manifest_sha256": "688bc35163821fd55eb84a1aac521626f56f45a9930a681268e9b003f2d2d9b2",
+  "qualification": "Only instructions visited by captured DI geometry initialization. Relocated calls execute normally with strict supplied-memory bounds; unvisited paths are not qualified.",
+  "templates": [
+    {
+      "source_sha256": "43c484dccc37ccb36183e970c5a4f28e90d6ccb530c0efd3bd8f96943ba7dfe3",
+      "config": {
+        "label": "BH16NS48 1.02",
+        "entry": 759948,
+        "descriptor": 33528832,
+        "end_cell": 33558040,
+        "state": 33529299,
+        "status": 33557268,
+        "controls": [
+          [
+            33557980,
+            1
+          ],
+          [
+            33533894,
+            1
+          ],
+          [
+            33557253,
+            1
+          ]
+        ],
+        "outputs": [
+          [
+            33534036,
+            1
+          ],
+          [
+            33558040,
+            4
+          ],
+          [
+            33534073,
+            1
+          ],
+          [
+            33528608,
+            48
+          ],
+          [
+            33558340,
+            2
+          ],
+          [
+            33533890,
+            1
+          ],
+          [
+            33533974,
+            1
+          ],
+          [
+            33528832,
+            64
+          ],
+          [
+            33558348,
+            4
+          ],
+          [
+            33558352,
+            4
+          ],
+          [
+            33558404,
+            16
+          ],
+          [
+            33557426,
+            1
+          ]
+        ]
+      },
+      "instructions": [
+        {
+          "offset": 0,
+          "bytes": "f8b5"
+        },
+        {
+          "offset": 2,
+          "bytes": "3448",
+          "literal": 33534036
+        },
+        {
+          "offset": 4,
+          "bytes": "0025"
+        },
+        {
+          "offset": 6,
+          "bytes": "0570"
+        },
+        {
+          "offset": 8,
+          "bytes": "3348",
+          "literal": 33558040
+        },
+        {
+          "offset": 10,
+          "bytes": "0560"
+        },
+        {
+          "offset": 12,
+          "bytes": "3348",
+          "literal": 33534073
+        },
+        {
+          "offset": 14,
+          "bytes": "0570"
+        },
+        {
+          "offset": 16,
+          "bytes": "1a4e",
+          "literal": 33528608
+        },
+        {
+          "offset": 18,
+          "bytes": "f581"
+        },
+        {
+          "offset": 20,
+          "bytes": "3248",
+          "literal": 33558340
+        },
+        {
+          "offset": 22,
+          "bytes": "0127"
+        },
+        {
+          "offset": 24,
+          "bytes": "0780"
+        },
+        {
+          "offset": 26,
+          "bytes": "0078"
+        },
+        {
+          "offset": 28,
+          "bytes": "3149",
+          "literal": 33533890
+        },
+        {
+          "offset": 30,
+          "bytes": "0870"
+        },
+        {
+          "offset": 32,
+          "bytes": "3200"
+        },
+        {
+          "offset": 34,
+          "bytes": "0e32"
+        },
+        {
+          "offset": 36,
+          "bytes": "1078"
+        },
+        {
+          "offset": 38,
+          "bytes": "304b",
+          "literal": 33533974
+        },
+        {
+          "offset": 40,
+          "bytes": "1870"
+        },
+        {
+          "offset": 42,
+          "bytes": "3048",
+          "literal": 33557980
+        },
+        {
+          "offset": 44,
+          "bytes": "0078"
+        },
+        {
+          "offset": 46,
+          "bytes": "0028"
+        },
+        {
+          "offset": 48,
+          "bytes": "79d1"
+        },
+        {
+          "offset": 50,
+          "bytes": "2f48",
+          "literal": 33533894
+        },
+        {
+          "offset": 52,
+          "bytes": "0078"
+        },
+        {
+          "offset": 54,
+          "bytes": "0028"
+        },
+        {
+          "offset": 56,
+          "bytes": "03d1"
+        },
+        {
+          "offset": 58,
+          "bytes": "2e48",
+          "literal": 33557253
+        },
+        {
+          "offset": 60,
+          "bytes": "0078"
+        },
+        {
+          "offset": 62,
+          "bytes": "0028"
+        },
+        {
+          "offset": 64,
+          "bytes": "01d0"
+        },
+        {
+          "offset": 70,
+          "bytes": "114c",
+          "literal": 33529299
+        },
+        {
+          "offset": 72,
+          "bytes": "2078"
+        },
+        {
+          "offset": 74,
+          "bytes": "0009"
+        },
+        {
+          "offset": 76,
+          "bytes": "0e28"
+        },
+        {
+          "offset": 78,
+          "bytes": "06d0"
+        },
+        {
+          "offset": 80,
+          "bytes": "2348",
+          "literal": 33558340
+        },
+        {
+          "offset": 82,
+          "bytes": "0780"
+        },
+        {
+          "offset": 84,
+          "bytes": "f781"
+        },
+        {
+          "offset": 86,
+          "bytes": "0078"
+        },
+        {
+          "offset": 88,
+          "bytes": "0870"
+        },
+        {
+          "offset": 90,
+          "bytes": "1078"
+        },
+        {
+          "offset": 92,
+          "bytes": "1870"
+        },
+        {
+          "offset": 94,
+          "bytes": "0b4c",
+          "literal": 33529299
+        },
+        {
+          "offset": 96,
+          "bytes": "2078"
+        },
+        {
+          "offset": 98,
+          "bytes": "0009"
+        },
+        {
+          "offset": 100,
+          "bytes": "0c28"
+        },
+        {
+          "offset": 102,
+          "bytes": "e3d1"
+        },
+        {
+          "offset": 104,
+          "bytes": "2348",
+          "literal": 33557268
+        },
+        {
+          "offset": 106,
+          "bytes": "0078"
+        },
+        {
+          "offset": 108,
+          "bytes": "8007"
+        },
+        {
+          "offset": 110,
+          "bytes": "7ad5"
+        },
+        {
+          "offset": 112,
+          "bytes": "224b",
+          "literal": 33530372
+        },
+        {
+          "offset": 114,
+          "bytes": "45e0"
+        },
+        {
+          "offset": 256,
+          "bytes": "1868"
+        },
+        {
+          "offset": 258,
+          "bytes": "f84a",
+          "literal": 33558000
+        },
+        {
+          "offset": 260,
+          "bytes": "0c30"
+        },
+        {
+          "offset": 262,
+          "bytes": "1168"
+        },
+        {
+          "offset": 264,
+          "bytes": "0002"
+        },
+        {
+          "offset": 266,
+          "bytes": "000a"
+        },
+        {
+          "offset": 268,
+          "bytes": "4018"
+        },
+        {
+          "offset": 270,
+          "bytes": "0078"
+        },
+        {
+          "offset": 272,
+          "bytes": "0009"
+        },
+        {
+          "offset": 274,
+          "bytes": "0128"
+        },
+        {
+          "offset": 276,
+          "bytes": "03d1"
+        },
+        {
+          "offset": 286,
+          "bytes": "f24b",
+          "literal": 33530372
+        },
+        {
+          "offset": 288,
+          "bytes": "1868"
+        },
+        {
+          "offset": 290,
+          "bytes": "0b30"
+        },
+        {
+          "offset": 292,
+          "bytes": "00e0"
+        },
+        {
+          "offset": 296,
+          "bytes": "1368"
+        },
+        {
+          "offset": 298,
+          "bytes": "0102"
+        },
+        {
+          "offset": 300,
+          "bytes": "090a"
+        },
+        {
+          "offset": 302,
+          "bytes": "c918"
+        },
+        {
+          "offset": 304,
+          "bytes": "0978"
+        },
+        {
+          "offset": 306,
+          "bytes": "ee4c",
+          "literal": 33528832
+        },
+        {
+          "offset": 308,
+          "bytes": "2170"
+        },
+        {
+          "offset": 310,
+          "bytes": "411c"
+        },
+        {
+          "offset": 312,
+          "bytes": "1268"
+        },
+        {
+          "offset": 314,
+          "bytes": "0902"
+        },
+        {
+          "offset": 316,
+          "bytes": "090a"
+        },
+        {
+          "offset": 318,
+          "bytes": "8918"
+        },
+        {
+          "offset": 320,
+          "bytes": "0978"
+        },
+        {
+          "offset": 322,
+          "bytes": "6170"
+        },
+        {
+          "offset": 324,
+          "bytes": "0930"
+        },
+        {
+          "offset": 326,
+          "bytes": "0090"
+        },
+        {
+          "offset": 328,
+          "bytes": "eef727f8"
+        },
+        {
+          "offset": 332,
+          "bytes": "e849",
+          "literal": 33558040
+        },
+        {
+          "offset": 334,
+          "bytes": "0860"
+        },
+        {
+          "offset": 336,
+          "bytes": "0098"
+        },
+        {
+          "offset": 338,
+          "bytes": "001d"
+        },
+        {
+          "offset": 340,
+          "bytes": "0090"
+        },
+        {
+          "offset": 342,
+          "bytes": "eef720f8"
+        },
+        {
+          "offset": 346,
+          "bytes": "6060"
+        },
+        {
+          "offset": 348,
+          "bytes": "0098"
+        },
+        {
+          "offset": 350,
+          "bytes": "001d"
+        },
+        {
+          "offset": 352,
+          "bytes": "eef71bf8"
+        },
+        {
+          "offset": 356,
+          "bytes": "00e0"
+        },
+        {
+          "offset": 360,
+          "bytes": "a060"
+        },
+        {
+          "offset": 362,
+          "bytes": "a068"
+        },
+        {
+          "offset": 364,
+          "bytes": "401c"
+        },
+        {
+          "offset": 366,
+          "bytes": "a060"
+        },
+        {
+          "offset": 368,
+          "bytes": "207a"
+        },
+        {
+          "offset": 370,
+          "bytes": "1f21"
+        },
+        {
+          "offset": 372,
+          "bytes": "0843"
+        },
+        {
+          "offset": 374,
+          "bytes": "2072"
+        },
+        {
+          "offset": 376,
+          "bytes": "de48",
+          "literal": 33529299
+        },
+        {
+          "offset": 378,
+          "bytes": "0078"
+        },
+        {
+          "offset": 380,
+          "bytes": "cc21"
+        },
+        {
+          "offset": 382,
+          "bytes": "0840"
+        },
+        {
+          "offset": 384,
+          "bytes": "c428"
+        },
+        {
+          "offset": 386,
+          "bytes": "07d1"
+        },
+        {
+          "offset": 388,
+          "bytes": "d84b",
+          "literal": 33530372
+        },
+        {
+          "offset": 390,
+          "bytes": "1868"
+        },
+        {
+          "offset": 392,
+          "bytes": "8830"
+        },
+        {
+          "offset": 394,
+          "bytes": "eef706f8"
+        },
+        {
+          "offset": 398,
+          "bytes": "c008"
+        },
+        {
+          "offset": 400,
+          "bytes": "e060"
+        },
+        {
+          "offset": 402,
+          "bytes": "00e0"
+        },
+        {
+          "offset": 404,
+          "bytes": "e560"
+        },
+        {
+          "offset": 406,
+          "bytes": "a068"
+        },
+        {
+          "offset": 408,
+          "bytes": "d749",
+          "literal": 33558348
+        },
+        {
+          "offset": 410,
+          "bytes": "0860"
+        },
+        {
+          "offset": 412,
+          "bytes": "6068"
+        },
+        {
+          "offset": 414,
+          "bytes": "d349",
+          "literal": 33528832
+        },
+        {
+          "offset": 416,
+          "bytes": "1831"
+        },
+        {
+          "offset": 418,
+          "bytes": "c860"
+        },
+        {
+          "offset": 420,
+          "bytes": "4860"
+        },
+        {
+          "offset": 422,
+          "bytes": "d348",
+          "literal": 33529299
+        },
+        {
+          "offset": 424,
+          "bytes": "0078"
+        },
+        {
+          "offset": 426,
+          "bytes": "cc21"
+        },
+        {
+          "offset": 428,
+          "bytes": "0840"
+        },
+        {
+          "offset": 430,
+          "bytes": "c428"
+        },
+        {
+          "offset": 432,
+          "bytes": "09d1"
+        },
+        {
+          "offset": 434,
+          "bytes": "cf4a",
+          "literal": 33558040
+        },
+        {
+          "offset": 436,
+          "bytes": "1068"
+        },
+        {
+          "offset": 438,
+          "bytes": "d149",
+          "literal": 33558352
+        },
+        {
+          "offset": 440,
+          "bytes": "0860"
+        },
+        {
+          "offset": 442,
+          "bytes": "1068"
+        },
+        {
+          "offset": 444,
+          "bytes": "fff719ff"
+        },
+        {
+          "offset": 448,
+          "bytes": "401c"
+        },
+        {
+          "offset": 450,
+          "bytes": "1060"
+        },
+        {
+          "offset": 452,
+          "bytes": "03e0"
+        },
+        {
+          "offset": 454,
+          "bytes": "ca49",
+          "literal": 33558040
+        },
+        {
+          "offset": 456,
+          "bytes": "0868"
+        },
+        {
+          "offset": 458,
+          "bytes": "401c"
+        },
+        {
+          "offset": 460,
+          "bytes": "0860"
+        },
+        {
+          "offset": 462,
+          "bytes": "8220"
+        },
+        {
+          "offset": 464,
+          "bytes": "7072"
+        },
+        {
+          "offset": 466,
+          "bytes": "cb48",
+          "literal": 33558404
+        },
+        {
+          "offset": 468,
+          "bytes": "8560"
+        },
+        {
+          "offset": 470,
+          "bytes": "b562"
+        },
+        {
+          "offset": 472,
+          "bytes": "f562"
+        },
+        {
+          "offset": 474,
+          "bytes": "ca49",
+          "literal": 33557426
+        },
+        {
+          "offset": 476,
+          "bytes": "0878"
+        },
+        {
+          "offset": 478,
+          "bytes": "3843"
+        },
+        {
+          "offset": 480,
+          "bytes": "0870"
+        },
+        {
+          "offset": 482,
+          "bytes": "0120"
+        },
+        {
+          "offset": 484,
+          "bytes": "f8bd"
+        }
+      ]
+    },
+    {
+      "source_sha256": "dd03cdae194de03a710b5f6e88dfedf421fd20667a3cc9ec58e828bd769ab2ed",
+      "config": {
+        "label": "BC-12D2HT 3.00",
+        "entry": 767790,
+        "descriptor": 33528800,
+        "end_cell": 33557592,
+        "state": 33529248,
+        "status": 33557262,
+        "controls": [
+          [
+            33557528,
+            1
+          ],
+          [
+            33535441,
+            1
+          ],
+          [
+            33557252,
+            1
+          ]
+        ],
+        "outputs": [
+          [
+            33535612,
+            1
+          ],
+          [
+            33557592,
+            4
+          ],
+          [
+            33535653,
+            1
+          ],
+          [
+            33528656,
+            48
+          ],
+          [
+            33557856,
+            2
+          ],
+          [
+            33535438,
+            1
+          ],
+          [
+            33535550,
+            1
+          ],
+          [
+            33528800,
+            64
+          ],
+          [
+            33557864,
+            4
+          ],
+          [
+            33557868,
+            4
+          ],
+          [
+            33557872,
+            4
+          ],
+          [
+            33557924,
+            16
+          ],
+          [
+            33557437,
+            1
+          ]
+        ]
+      },
+      "instructions": [
+        {
+          "offset": 0,
+          "bytes": "f8b5"
+        },
+        {
+          "offset": 2,
+          "bytes": "c349",
+          "literal": 33535612
+        },
+        {
+          "offset": 4,
+          "bytes": "0020"
+        },
+        {
+          "offset": 6,
+          "bytes": "0870"
+        },
+        {
+          "offset": 8,
+          "bytes": "c34e",
+          "literal": 33557592
+        },
+        {
+          "offset": 10,
+          "bytes": "3060"
+        },
+        {
+          "offset": 12,
+          "bytes": "c349",
+          "literal": 33535653
+        },
+        {
+          "offset": 14,
+          "bytes": "0870"
+        },
+        {
+          "offset": 16,
+          "bytes": "c349",
+          "literal": 33528656
+        },
+        {
+          "offset": 18,
+          "bytes": "c881"
+        },
+        {
+          "offset": 20,
+          "bytes": "c348",
+          "literal": 33557856
+        },
+        {
+          "offset": 22,
+          "bytes": "0127"
+        },
+        {
+          "offset": 24,
+          "bytes": "0780"
+        },
+        {
+          "offset": 26,
+          "bytes": "0278"
+        },
+        {
+          "offset": 28,
+          "bytes": "c249",
+          "literal": 33535438
+        },
+        {
+          "offset": 30,
+          "bytes": "0a70"
+        },
+        {
+          "offset": 32,
+          "bytes": "bf4b",
+          "literal": 33528656
+        },
+        {
+          "offset": 34,
+          "bytes": "c14c",
+          "literal": 33535550
+        },
+        {
+          "offset": 36,
+          "bytes": "0e33"
+        },
+        {
+          "offset": 38,
+          "bytes": "1a78"
+        },
+        {
+          "offset": 40,
+          "bytes": "2270"
+        },
+        {
+          "offset": 42,
+          "bytes": "c04a",
+          "literal": 33557528
+        },
+        {
+          "offset": 44,
+          "bytes": "1578"
+        },
+        {
+          "offset": 46,
+          "bytes": "aa4a",
+          "literal": 33529248
+        },
+        {
+          "offset": 48,
+          "bytes": "002d"
+        },
+        {
+          "offset": 50,
+          "bytes": "03d0"
+        },
+        {
+          "offset": 60,
+          "bytes": "bd4d",
+          "literal": 33535441
+        },
+        {
+          "offset": 62,
+          "bytes": "2d78"
+        },
+        {
+          "offset": 64,
+          "bytes": "002d"
+        },
+        {
+          "offset": 66,
+          "bytes": "03d1"
+        },
+        {
+          "offset": 68,
+          "bytes": "bc4d",
+          "literal": 33557252
+        },
+        {
+          "offset": 70,
+          "bytes": "2d78"
+        },
+        {
+          "offset": 72,
+          "bytes": "002d"
+        },
+        {
+          "offset": 74,
+          "bytes": "01d0"
+        },
+        {
+          "offset": 80,
+          "bytes": "1578"
+        },
+        {
+          "offset": 82,
+          "bytes": "2d09"
+        },
+        {
+          "offset": 84,
+          "bytes": "0e2d"
+        },
+        {
+          "offset": 86,
+          "bytes": "06d0"
+        },
+        {
+          "offset": 88,
+          "bytes": "0780"
+        },
+        {
+          "offset": 90,
+          "bytes": "b04d",
+          "literal": 33528656
+        },
+        {
+          "offset": 92,
+          "bytes": "ef81"
+        },
+        {
+          "offset": 94,
+          "bytes": "0078"
+        },
+        {
+          "offset": 96,
+          "bytes": "0870"
+        },
+        {
+          "offset": 98,
+          "bytes": "1878"
+        },
+        {
+          "offset": 100,
+          "bytes": "2070"
+        },
+        {
+          "offset": 102,
+          "bytes": "1078"
+        },
+        {
+          "offset": 104,
+          "bytes": "0009"
+        },
+        {
+          "offset": 106,
+          "bytes": "0c28"
+        },
+        {
+          "offset": 108,
+          "bytes": "e5d1"
+        },
+        {
+          "offset": 110,
+          "bytes": "b248",
+          "literal": 33557262
+        },
+        {
+          "offset": 112,
+          "bytes": "0078"
+        },
+        {
+          "offset": 114,
+          "bytes": "8007"
+        },
+        {
+          "offset": 116,
+          "bytes": "7ad5"
+        },
+        {
+          "offset": 118,
+          "bytes": "b14d",
+          "literal": 33530616
+        },
+        {
+          "offset": 120,
+          "bytes": "2868"
+        },
+        {
+          "offset": 122,
+          "bytes": "b149",
+          "literal": 33557548
+        },
+        {
+          "offset": 124,
+          "bytes": "0c30"
+        },
+        {
+          "offset": 126,
+          "bytes": "0968"
+        },
+        {
+          "offset": 128,
+          "bytes": "0002"
+        },
+        {
+          "offset": 130,
+          "bytes": "000a"
+        },
+        {
+          "offset": 132,
+          "bytes": "4018"
+        },
+        {
+          "offset": 134,
+          "bytes": "0078"
+        },
+        {
+          "offset": 136,
+          "bytes": "0009"
+        },
+        {
+          "offset": 138,
+          "bytes": "0128"
+        },
+        {
+          "offset": 140,
+          "bytes": "03d1"
+        },
+        {
+          "offset": 150,
+          "bytes": "2868"
+        },
+        {
+          "offset": 152,
+          "bytes": "0b30"
+        },
+        {
+          "offset": 154,
+          "bytes": "0302"
+        },
+        {
+          "offset": 156,
+          "bytes": "1b0a"
+        },
+        {
+          "offset": 158,
+          "bytes": "5b18"
+        },
+        {
+          "offset": 160,
+          "bytes": "1b78"
+        },
+        {
+          "offset": 162,
+          "bytes": "a84c",
+          "literal": 33528800
+        },
+        {
+          "offset": 164,
+          "bytes": "2370"
+        },
+        {
+          "offset": 166,
+          "bytes": "431c"
+        },
+        {
+          "offset": 168,
+          "bytes": "1b02"
+        },
+        {
+          "offset": 170,
+          "bytes": "1b0a"
+        },
+        {
+          "offset": 172,
+          "bytes": "5918"
+        },
+        {
+          "offset": 174,
+          "bytes": "0978"
+        },
+        {
+          "offset": 176,
+          "bytes": "6170"
+        },
+        {
+          "offset": 178,
+          "bytes": "894a",
+          "literal": 33529248
+        },
+        {
+          "offset": 180,
+          "bytes": "1278"
+        },
+        {
+          "offset": 182,
+          "bytes": "c821"
+        },
+        {
+          "offset": 184,
+          "bytes": "9143"
+        },
+        {
+          "offset": 186,
+          "bytes": "03d0"
+        },
+        {
+          "offset": 188,
+          "bytes": "874a",
+          "literal": 33529248
+        },
+        {
+          "offset": 190,
+          "bytes": "1178"
+        },
+        {
+          "offset": 192,
+          "bytes": "c729"
+        },
+        {
+          "offset": 194,
+          "bytes": "04d1"
+        },
+        {
+          "offset": 196,
+          "bytes": "6178"
+        },
+        {
+          "offset": 198,
+          "bytes": "0907"
+        },
+        {
+          "offset": 200,
+          "bytes": "090f"
+        },
+        {
+          "offset": 202,
+          "bytes": "2031"
+        },
+        {
+          "offset": 204,
+          "bytes": "6170"
+        },
+        {
+          "offset": 206,
+          "bytes": "0930"
+        },
+        {
+          "offset": 208,
+          "bytes": "0090"
+        },
+        {
+          "offset": 210,
+          "bytes": "f0f720fa"
+        },
+        {
+          "offset": 214,
+          "bytes": "3060"
+        },
+        {
+          "offset": 216,
+          "bytes": "0098"
+        },
+        {
+          "offset": 218,
+          "bytes": "001d"
+        },
+        {
+          "offset": 220,
+          "bytes": "0090"
+        },
+        {
+          "offset": 222,
+          "bytes": "f0f71afa"
+        },
+        {
+          "offset": 226,
+          "bytes": "6060"
+        },
+        {
+          "offset": 228,
+          "bytes": "0098"
+        },
+        {
+          "offset": 230,
+          "bytes": "001d"
+        },
+        {
+          "offset": 232,
+          "bytes": "f0f715fa"
+        },
+        {
+          "offset": 236,
+          "bytes": "a060"
+        },
+        {
+          "offset": 238,
+          "bytes": "a068"
+        },
+        {
+          "offset": 240,
+          "bytes": "401c"
+        },
+        {
+          "offset": 242,
+          "bytes": "a060"
+        },
+        {
+          "offset": 244,
+          "bytes": "207a"
+        },
+        {
+          "offset": 246,
+          "bytes": "1f21"
+        },
+        {
+          "offset": 248,
+          "bytes": "0843"
+        },
+        {
+          "offset": 250,
+          "bytes": "2072"
+        },
+        {
+          "offset": 252,
+          "bytes": "7748",
+          "literal": 33529248
+        },
+        {
+          "offset": 254,
+          "bytes": "0178"
+        },
+        {
+          "offset": 256,
+          "bytes": "c820"
+        },
+        {
+          "offset": 258,
+          "bytes": "8843"
+        },
+        {
+          "offset": 260,
+          "bytes": "03d0"
+        },
+        {
+          "offset": 262,
+          "bytes": "7449",
+          "literal": 33529248
+        },
+        {
+          "offset": 264,
+          "bytes": "0878"
+        },
+        {
+          "offset": 266,
+          "bytes": "c728"
+        },
+        {
+          "offset": 268,
+          "bytes": "03d1"
+        },
+        {
+          "offset": 270,
+          "bytes": "2868"
+        },
+        {
+          "offset": 272,
+          "bytes": "f830"
+        },
+        {
+          "offset": 274,
+          "bytes": "07e0"
+        },
+        {
+          "offset": 278,
+          "bytes": "0878"
+        },
+        {
+          "offset": 280,
+          "bytes": "cc21"
+        },
+        {
+          "offset": 282,
+          "bytes": "0840"
+        },
+        {
+          "offset": 284,
+          "bytes": "c428"
+        },
+        {
+          "offset": 286,
+          "bytes": "05d1"
+        },
+        {
+          "offset": 288,
+          "bytes": "2868"
+        },
+        {
+          "offset": 290,
+          "bytes": "8830"
+        },
+        {
+          "offset": 292,
+          "bytes": "f0f7f7f9"
+        },
+        {
+          "offset": 296,
+          "bytes": "c008"
+        },
+        {
+          "offset": 298,
+          "bytes": "00e0"
+        },
+        {
+          "offset": 302,
+          "bytes": "e060"
+        },
+        {
+          "offset": 304,
+          "bytes": "a068"
+        },
+        {
+          "offset": 306,
+          "bytes": "6e49",
+          "literal": 33557864
+        },
+        {
+          "offset": 308,
+          "bytes": "0860"
+        },
+        {
+          "offset": 310,
+          "bytes": "6068"
+        },
+        {
+          "offset": 312,
+          "bytes": "8349",
+          "literal": 33528800
+        },
+        {
+          "offset": 314,
+          "bytes": "1831"
+        },
+        {
+          "offset": 316,
+          "bytes": "c860"
+        },
+        {
+          "offset": 318,
+          "bytes": "4860"
+        },
+        {
+          "offset": 320,
+          "bytes": "6648",
+          "literal": 33529248
+        },
+        {
+          "offset": 322,
+          "bytes": "0278"
+        },
+        {
+          "offset": 324,
+          "bytes": "c821"
+        },
+        {
+          "offset": 326,
+          "bytes": "6d4c",
+          "literal": 33557868
+        },
+        {
+          "offset": 328,
+          "bytes": "9143"
+        },
+        {
+          "offset": 330,
+          "bytes": "02d0"
+        },
+        {
+          "offset": 332,
+          "bytes": "0178"
+        },
+        {
+          "offset": 334,
+          "bytes": "c729"
+        },
+        {
+          "offset": 336,
+          "bytes": "0dd1"
+        },
+        {
+          "offset": 338,
+          "bytes": "3068"
+        },
+        {
+          "offset": 340,
+          "bytes": "6c49",
+          "literal": 33557872
+        },
+        {
+          "offset": 342,
+          "bytes": "0860"
+        },
+        {
+          "offset": 344,
+          "bytes": "2868"
+        },
+        {
+          "offset": 346,
+          "bytes": "8c30"
+        },
+        {
+          "offset": 348,
+          "bytes": "f0f7dbf9"
+        },
+        {
+          "offset": 352,
+          "bytes": "401c"
+        },
+        {
+          "offset": 354,
+          "bytes": "2060"
+        },
+        {
+          "offset": 356,
+          "bytes": "3068"
+        },
+        {
+          "offset": 358,
+          "bytes": "fff741ff"
+        },
+        {
+          "offset": 362,
+          "bytes": "0be0"
+        },
+        {
+          "offset": 366,
+          "bytes": "0078"
+        },
+        {
+          "offset": 368,
+          "bytes": "cc21"
+        },
+        {
+          "offset": 370,
+          "bytes": "0840"
+        },
+        {
+          "offset": 372,
+          "bytes": "c428"
+        },
+        {
+          "offset": 374,
+          "bytes": "3068"
+        },
+        {
+          "offset": 376,
+          "bytes": "04d1"
+        },
+        {
+          "offset": 378,
+          "bytes": "2060"
+        },
+        {
+          "offset": 380,
+          "bytes": "3068"
+        },
+        {
+          "offset": 382,
+          "bytes": "fff7fbfe"
+        },
+        {
+          "offset": 386,
+          "bytes": "ffe7"
+        },
+        {
+          "offset": 388,
+          "bytes": "401c"
+        },
+        {
+          "offset": 390,
+          "bytes": "3060"
+        },
+        {
+          "offset": 392,
+          "bytes": "6549",
+          "literal": 33528656
+        },
+        {
+          "offset": 394,
+          "bytes": "8220"
+        },
+        {
+          "offset": 396,
+          "bytes": "4872"
+        },
+        {
+          "offset": 398,
+          "bytes": "594a",
+          "literal": 33557924
+        },
+        {
+          "offset": 400,
+          "bytes": "0020"
+        },
+        {
+          "offset": 402,
+          "bytes": "9060"
+        },
+        {
+          "offset": 404,
+          "bytes": "8862"
+        },
+        {
+          "offset": 406,
+          "bytes": "c862"
+        },
+        {
+          "offset": 408,
+          "bytes": "6c49",
+          "literal": 33557437
+        },
+        {
+          "offset": 410,
+          "bytes": "0878"
+        },
+        {
+          "offset": 412,
+          "bytes": "3843"
+        },
+        {
+          "offset": 414,
+          "bytes": "0870"
+        },
+        {
+          "offset": 416,
+          "bytes": "0120"
+        },
+        {
+          "offset": 418,
+          "bytes": "f8bd"
+        },
+        {
+          "offset": -122,
+          "bytes": "d94a",
+          "literal": 33557864
+        },
+        {
+          "offset": -120,
+          "bytes": "30b5"
+        },
+        {
+          "offset": -118,
+          "bytes": "1368"
+        },
+        {
+          "offset": -116,
+          "bytes": "5b1c"
+        },
+        {
+          "offset": -114,
+          "bytes": "d949",
+          "literal": 33557924
+        },
+        {
+          "offset": -112,
+          "bytes": "9842"
+        },
+        {
+          "offset": -110,
+          "bytes": "25d9"
+        },
+        {
+          "offset": -108,
+          "bytes": "1368"
+        },
+        {
+          "offset": -106,
+          "bytes": "8968"
+        },
+        {
+          "offset": -104,
+          "bytes": "591a"
+        },
+        {
+          "offset": -102,
+          "bytes": "d74b",
+          "literal": 4293918721
+        },
+        {
+          "offset": -100,
+          "bytes": "d84c",
+          "literal": 33557868
+        },
+        {
+          "offset": -98,
+          "bytes": "c918"
+        },
+        {
+          "offset": -96,
+          "bytes": "2368"
+        },
+        {
+          "offset": -94,
+          "bytes": "d74d",
+          "literal": 67108863
+        },
+        {
+          "offset": -92,
+          "bytes": "1268"
+        },
+        {
+          "offset": -90,
+          "bytes": "5b1c"
+        },
+        {
+          "offset": -88,
+          "bytes": "9842"
+        },
+        {
+          "offset": -86,
+          "bytes": "18d9"
+        },
+        {
+          "offset": -84,
+          "bytes": "2368"
+        },
+        {
+          "offset": -82,
+          "bytes": "aa1a"
+        },
+        {
+          "offset": -80,
+          "bytes": "9a1a"
+        },
+        {
+          "offset": -78,
+          "bytes": "d44b",
+          "literal": 33557872
+        },
+        {
+          "offset": -76,
+          "bytes": "5118"
+        },
+        {
+          "offset": -74,
+          "bytes": "1a68"
+        },
+        {
+          "offset": -72,
+          "bytes": "491c"
+        },
+        {
+          "offset": -70,
+          "bytes": "521c"
+        },
+        {
+          "offset": -68,
+          "bytes": "9042"
+        },
+        {
+          "offset": -66,
+          "bytes": "2268"
+        },
+        {
+          "offset": -64,
+          "bytes": "d24d",
+          "literal": 134217727
+        },
+        {
+          "offset": -62,
+          "bytes": "08d9"
+        },
+        {
+          "offset": -60,
+          "bytes": "1c68"
+        },
+        {
+          "offset": -58,
+          "bytes": "aa1a"
+        },
+        {
+          "offset": -56,
+          "bytes": "a21a"
+        },
+        {
+          "offset": -54,
+          "bytes": "5118"
+        },
+        {
+          "offset": -52,
+          "bytes": "1a68"
+        },
+        {
+          "offset": -50,
+          "bytes": "491c"
+        },
+        {
+          "offset": -48,
+          "bytes": "cf4b",
+          "literal": 201326591
+        },
+        {
+          "offset": -46,
+          "bytes": "9a1a"
+        },
+        {
+          "offset": -44,
+          "bytes": "00e0"
+        },
+        {
+          "offset": -42,
+          "bytes": "aa1a"
+        },
+        {
+          "offset": -40,
+          "bytes": "801a"
+        },
+        {
+          "offset": -38,
+          "bytes": "4018"
+        },
+        {
+          "offset": -36,
+          "bytes": "30bd"
+        },
+        {
+          "offset": -34,
+          "bytes": "fae7"
+        },
+        {
+          "offset": -32,
+          "bytes": "8968"
+        },
+        {
+          "offset": -30,
+          "bytes": "401a"
+        },
+        {
+          "offset": -28,
+          "bytes": "0121"
+        },
+        {
+          "offset": -26,
+          "bytes": "0905"
+        },
+        {
+          "offset": -24,
+          "bytes": "401a"
+        },
+        {
+          "offset": -22,
+          "bytes": "30bd"
+        }
+      ],
+      "physical_to_logical_offset": -122
+    },
+    {
+      "source_sha256": "84fecc2930d63cd4da8aa4759f63550d1eb1a642343d29adf1e370a2a861347e",
+      "config": {
+        "label": "Earlier classic initializer layout",
+        "entry": 715408,
+        "descriptor": 33528752,
+        "end_cell": 33558064,
+        "state": 33529185,
+        "status": 33557266,
+        "controls": [
+          [
+            33558000,
+            1
+          ],
+          [
+            33533390,
+            1
+          ],
+          [
+            33557252,
+            1
+          ]
+        ],
+        "outputs": [
+          [
+            33533532,
+            1
+          ],
+          [
+            33558064,
+            4
+          ],
+          [
+            33533573,
+            1
+          ],
+          [
+            33528608,
+            48
+          ],
+          [
+            33558324,
+            2
+          ],
+          [
+            33533386,
+            1
+          ],
+          [
+            33533474,
+            1
+          ],
+          [
+            33528752,
+            64
+          ],
+          [
+            33558340,
+            4
+          ],
+          [
+            33558344,
+            4
+          ],
+          [
+            33558396,
+            16
+          ],
+          [
+            33557442,
+            1
+          ]
+        ]
+      },
+      "instructions": [
+        {
+          "offset": 0,
+          "bytes": "f8b5"
+        },
+        {
+          "offset": 2,
+          "bytes": "de48",
+          "literal": 33533532
+        },
+        {
+          "offset": 4,
+          "bytes": "0025"
+        },
+        {
+          "offset": 6,
+          "bytes": "0570"
+        },
+        {
+          "offset": 8,
+          "bytes": "dd48",
+          "literal": 33558064
+        },
+        {
+          "offset": 10,
+          "bytes": "0560"
+        },
+        {
+          "offset": 12,
+          "bytes": "dd48",
+          "literal": 33533573
+        },
+        {
+          "offset": 14,
+          "bytes": "0570"
+        },
+        {
+          "offset": 16,
+          "bytes": "dd4e",
+          "literal": 33528608
+        },
+        {
+          "offset": 18,
+          "bytes": "f581"
+        },
+        {
+          "offset": 20,
+          "bytes": "dd48",
+          "literal": 33558324
+        },
+        {
+          "offset": 22,
+          "bytes": "0127"
+        },
+        {
+          "offset": 24,
+          "bytes": "0780"
+        },
+        {
+          "offset": 26,
+          "bytes": "0078"
+        },
+        {
+          "offset": 28,
+          "bytes": "dc49",
+          "literal": 33533386
+        },
+        {
+          "offset": 30,
+          "bytes": "0870"
+        },
+        {
+          "offset": 32,
+          "bytes": "3200"
+        },
+        {
+          "offset": 34,
+          "bytes": "0e32"
+        },
+        {
+          "offset": 36,
+          "bytes": "1078"
+        },
+        {
+          "offset": 38,
+          "bytes": "db4b",
+          "literal": 33533474
+        },
+        {
+          "offset": 40,
+          "bytes": "1870"
+        },
+        {
+          "offset": 42,
+          "bytes": "db48",
+          "literal": 33558000
+        },
+        {
+          "offset": 44,
+          "bytes": "0078"
+        },
+        {
+          "offset": 46,
+          "bytes": "0028"
+        },
+        {
+          "offset": 48,
+          "bytes": "7ad1"
+        },
+        {
+          "offset": 50,
+          "bytes": "da48",
+          "literal": 33533390
+        },
+        {
+          "offset": 52,
+          "bytes": "0078"
+        },
+        {
+          "offset": 54,
+          "bytes": "0028"
+        },
+        {
+          "offset": 56,
+          "bytes": "03d1"
+        },
+        {
+          "offset": 58,
+          "bytes": "d948",
+          "literal": 33557252
+        },
+        {
+          "offset": 60,
+          "bytes": "0078"
+        },
+        {
+          "offset": 62,
+          "bytes": "0028"
+        },
+        {
+          "offset": 64,
+          "bytes": "01d0"
+        },
+        {
+          "offset": 70,
+          "bytes": "c64c",
+          "literal": 33529185
+        },
+        {
+          "offset": 72,
+          "bytes": "2078"
+        },
+        {
+          "offset": 74,
+          "bytes": "0009"
+        },
+        {
+          "offset": 76,
+          "bytes": "0e28"
+        },
+        {
+          "offset": 78,
+          "bytes": "06d0"
+        },
+        {
+          "offset": 80,
+          "bytes": "ce48",
+          "literal": 33558324
+        },
+        {
+          "offset": 82,
+          "bytes": "0780"
+        },
+        {
+          "offset": 84,
+          "bytes": "f781"
+        },
+        {
+          "offset": 86,
+          "bytes": "0078"
+        },
+        {
+          "offset": 88,
+          "bytes": "0870"
+        },
+        {
+          "offset": 90,
+          "bytes": "1078"
+        },
+        {
+          "offset": 92,
+          "bytes": "1870"
+        },
+        {
+          "offset": 94,
+          "bytes": "c04c",
+          "literal": 33529185
+        },
+        {
+          "offset": 96,
+          "bytes": "2078"
+        },
+        {
+          "offset": 98,
+          "bytes": "0009"
+        },
+        {
+          "offset": 100,
+          "bytes": "0c28"
+        },
+        {
+          "offset": 102,
+          "bytes": "6dd1"
+        },
+        {
+          "offset": 104,
+          "bytes": "ce48",
+          "literal": 33557266
+        },
+        {
+          "offset": 106,
+          "bytes": "0078"
+        },
+        {
+          "offset": 108,
+          "bytes": "8007"
+        },
+        {
+          "offset": 110,
+          "bytes": "70d5"
+        },
+        {
+          "offset": 112,
+          "bytes": "cd4b",
+          "literal": 33530268
+        },
+        {
+          "offset": 114,
+          "bytes": "1868"
+        },
+        {
+          "offset": 116,
+          "bytes": "cd49",
+          "literal": 33558024
+        },
+        {
+          "offset": 118,
+          "bytes": "0c30"
+        },
+        {
+          "offset": 120,
+          "bytes": "0968"
+        },
+        {
+          "offset": 122,
+          "bytes": "0002"
+        },
+        {
+          "offset": 124,
+          "bytes": "000a"
+        },
+        {
+          "offset": 126,
+          "bytes": "4018"
+        },
+        {
+          "offset": 128,
+          "bytes": "0078"
+        },
+        {
+          "offset": 130,
+          "bytes": "0009"
+        },
+        {
+          "offset": 132,
+          "bytes": "0128"
+        },
+        {
+          "offset": 134,
+          "bytes": "03d1"
+        },
+        {
+          "offset": 144,
+          "bytes": "c54b",
+          "literal": 33530268
+        },
+        {
+          "offset": 146,
+          "bytes": "1868"
+        },
+        {
+          "offset": 148,
+          "bytes": "0b30"
+        },
+        {
+          "offset": 150,
+          "bytes": "0202"
+        },
+        {
+          "offset": 152,
+          "bytes": "120a"
+        },
+        {
+          "offset": 154,
+          "bytes": "5218"
+        },
+        {
+          "offset": 156,
+          "bytes": "1278"
+        },
+        {
+          "offset": 158,
+          "bytes": "c44c",
+          "literal": 33528752
+        },
+        {
+          "offset": 160,
+          "bytes": "2270"
+        },
+        {
+          "offset": 162,
+          "bytes": "421c"
+        },
+        {
+          "offset": 164,
+          "bytes": "1202"
+        },
+        {
+          "offset": 166,
+          "bytes": "120a"
+        },
+        {
+          "offset": 168,
+          "bytes": "5118"
+        },
+        {
+          "offset": 170,
+          "bytes": "0978"
+        },
+        {
+          "offset": 172,
+          "bytes": "6170"
+        },
+        {
+          "offset": 174,
+          "bytes": "0930"
+        },
+        {
+          "offset": 176,
+          "bytes": "0090"
+        },
+        {
+          "offset": 178,
+          "bytes": "eff751ff"
+        },
+        {
+          "offset": 182,
+          "bytes": "b249",
+          "literal": 33558064
+        },
+        {
+          "offset": 184,
+          "bytes": "0860"
+        },
+        {
+          "offset": 186,
+          "bytes": "0098"
+        },
+        {
+          "offset": 188,
+          "bytes": "001d"
+        },
+        {
+          "offset": 190,
+          "bytes": "0090"
+        },
+        {
+          "offset": 192,
+          "bytes": "eff74aff"
+        },
+        {
+          "offset": 196,
+          "bytes": "6060"
+        },
+        {
+          "offset": 198,
+          "bytes": "0098"
+        },
+        {
+          "offset": 200,
+          "bytes": "001d"
+        },
+        {
+          "offset": 202,
+          "bytes": "eff745ff"
+        },
+        {
+          "offset": 206,
+          "bytes": "a060"
+        },
+        {
+          "offset": 208,
+          "bytes": "a068"
+        },
+        {
+          "offset": 210,
+          "bytes": "401c"
+        },
+        {
+          "offset": 212,
+          "bytes": "a060"
+        },
+        {
+          "offset": 214,
+          "bytes": "207a"
+        },
+        {
+          "offset": 216,
+          "bytes": "1f21"
+        },
+        {
+          "offset": 218,
+          "bytes": "0843"
+        },
+        {
+          "offset": 220,
+          "bytes": "2072"
+        },
+        {
+          "offset": 222,
+          "bytes": "a048",
+          "literal": 33529185
+        },
+        {
+          "offset": 224,
+          "bytes": "0078"
+        },
+        {
+          "offset": 226,
+          "bytes": "cc21"
+        },
+        {
+          "offset": 228,
+          "bytes": "0840"
+        },
+        {
+          "offset": 230,
+          "bytes": "c428"
+        },
+        {
+          "offset": 232,
+          "bytes": "07d1"
+        },
+        {
+          "offset": 234,
+          "bytes": "af4b",
+          "literal": 33530268
+        },
+        {
+          "offset": 236,
+          "bytes": "1868"
+        },
+        {
+          "offset": 238,
+          "bytes": "8830"
+        },
+        {
+          "offset": 240,
+          "bytes": "eff732ff"
+        },
+        {
+          "offset": 244,
+          "bytes": "c008"
+        },
+        {
+          "offset": 246,
+          "bytes": "e060"
+        },
+        {
+          "offset": 248,
+          "bytes": "00e0"
+        },
+        {
+          "offset": 250,
+          "bytes": "e560"
+        },
+        {
+          "offset": 252,
+          "bytes": "a068"
+        },
+        {
+          "offset": 254,
+          "bytes": "9d49",
+          "literal": 33558340
+        },
+        {
+          "offset": 256,
+          "bytes": "0860"
+        },
+        {
+          "offset": 258,
+          "bytes": "6068"
+        },
+        {
+          "offset": 260,
+          "bytes": "aa49",
+          "literal": 33528752
+        },
+        {
+          "offset": 262,
+          "bytes": "1831"
+        },
+        {
+          "offset": 264,
+          "bytes": "c860"
+        },
+        {
+          "offset": 266,
+          "bytes": "4860"
+        },
+        {
+          "offset": 268,
+          "bytes": "9448",
+          "literal": 33529185
+        },
+        {
+          "offset": 270,
+          "bytes": "0078"
+        },
+        {
+          "offset": 272,
+          "bytes": "cc21"
+        },
+        {
+          "offset": 274,
+          "bytes": "0840"
+        },
+        {
+          "offset": 276,
+          "bytes": "c428"
+        },
+        {
+          "offset": 278,
+          "bytes": "0bd1"
+        },
+        {
+          "offset": 280,
+          "bytes": "994a",
+          "literal": 33558064
+        },
+        {
+          "offset": 282,
+          "bytes": "1068"
+        },
+        {
+          "offset": 284,
+          "bytes": "a549",
+          "literal": 33558344
+        },
+        {
+          "offset": 286,
+          "bytes": "0860"
+        },
+        {
+          "offset": 288,
+          "bytes": "1068"
+        },
+        {
+          "offset": 290,
+          "bytes": "fff766ff"
+        },
+        {
+          "offset": 294,
+          "bytes": "00e0"
+        },
+        {
+          "offset": 298,
+          "bytes": "401c"
+        },
+        {
+          "offset": 300,
+          "bytes": "1060"
+        },
+        {
+          "offset": 302,
+          "bytes": "03e0"
+        },
+        {
+          "offset": 304,
+          "bytes": "9349",
+          "literal": 33558064
+        },
+        {
+          "offset": 306,
+          "bytes": "0868"
+        },
+        {
+          "offset": 308,
+          "bytes": "401c"
+        },
+        {
+          "offset": 310,
+          "bytes": "0860"
+        },
+        {
+          "offset": 312,
+          "bytes": "8220"
+        },
+        {
+          "offset": 314,
+          "bytes": "7072"
+        },
+        {
+          "offset": 316,
+          "bytes": "9e48",
+          "literal": 33558396
+        },
+        {
+          "offset": 318,
+          "bytes": "8560"
+        },
+        {
+          "offset": 320,
+          "bytes": "b562"
+        },
+        {
+          "offset": 322,
+          "bytes": "f562"
+        },
+        {
+          "offset": 324,
+          "bytes": "9d49",
+          "literal": 33557442
+        },
+        {
+          "offset": 326,
+          "bytes": "0878"
+        },
+        {
+          "offset": 328,
+          "bytes": "3843"
+        },
+        {
+          "offset": 330,
+          "bytes": "0870"
+        },
+        {
+          "offset": 332,
+          "bytes": "0120"
+        },
+        {
+          "offset": 334,
+          "bytes": "f8bd"
+        }
+      ]
+    }
+  ]
+}
