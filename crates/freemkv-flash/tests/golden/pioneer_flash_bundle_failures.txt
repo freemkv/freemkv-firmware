@@ -73,7 +73,7 @@ IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
 IN   cdb=120000006000 alloc=96 -> ok 96
-saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
+saved pre-flash backup: 146432 bytes sha256=e6b614fe3e8275e0f659d666c6c9fb5658e9308815da789441bc3390486de54d
 
 === Pioneer execute: target is garbage ===
 result: ERR update failed during package and receiver checks (write started: false; temporary firmware: false; completed stages: []): flash input is neither a valid Pioneer bundle nor a Normal .enc: failed to read entire block
@@ -105,7 +105,7 @@ MSG        reading kernel...
 MSG        verifying kernel...
 MSG      backup: saved <TMP>/pioneer-failures/backup_3.tar (146432 bytes)
 MSG      This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
-FIELD    Startup setting = target word 0x9f = FFFF (neutral default for target firmware)
+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 MSG
 MSG      EXECUTING flash — do not power off or disconnect the drive...
 MSG        update mode entered
@@ -154,9 +154,9 @@ IN   cdb=120000006000 alloc=96 -> ok 96
 OUTS cdb=3b07fe00000000800000 len=32768 sha256=487ae0970cb0db11d54874c2c5c4a99c0c04939e70bbece3a8528aba7fad8394 -> ok
 OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 OUTS cdb=3b07fe01000000120000 len=4608 sha256=a2d4fc2b731e9335c971975897e4bdf41d8311cf9589c7df88c8ac3a4b609261 -> ok
-OUTS cdb=3b07f000000000800000 len=32768 sha256=779a9a4415b19ca050d425d694aa06da6e3e24920108546bfdf2105e09fb9e92 -> ok
+OUTS cdb=3b07f000000000800000 len=32768 sha256=8b624ad5032c9fb98a553d6b1049ec9a753f980203ccd604f7b841b2ae3d3e21 -> ok
 OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
-OUTS cdb=3b07f001000000220000 len=8704 sha256=9bed69dae7a6312d9affca34fc985335c18ea78e281895e414fd6cb89c20f51f -> ok
+OUTS cdb=3b07f001000000220000 len=8704 sha256=b489018b8dcd85c73565437d6bdc62614d42ca68e86508c13f0192ef3c0e7fcb -> ok
 OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
 IN   cdb=030000001200 alloc=18 -> ok 18
 IN   cdb=4a000000100000000800 alloc=8 -> ok 8
@@ -169,14 +169,14 @@ IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-saved pre-flash backup: 146432 bytes sha256=f9e960018ce04d4d6479fa6b056a0ee7e87e0eac6ed2cb9afee03bcb41469152
+saved pre-flash backup: 146432 bytes sha256=e6b614fe3e8275e0f659d666c6c9fb5658e9308815da789441bc3390486de54d
 
 === Pioneer flash: dry-run request ===
 result: OK
 --- text (7) ---
 == Pioneer offline transfer plan ==
 stated model: BD-RW   BDR-UD04
-SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
+SHA-256: d8c98a5dddd0daccba48be824ff48f83c491514146904a3a2471d3434a7e8ccc
 Validated envelope integrity and transfer framing; 8 data-out commands.
 Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.
@@ -184,7 +184,7 @@ DRY RUN: no firmware writes or backup capture. Drive discovery may read identity
 --- events (7) ---
 MSG      == Pioneer offline transfer plan ==
 MSG      stated model: BD-RW   BDR-UD04
-MSG      SHA-256: 9962b4b7dfc6fcc56b711214606b7fe85e5ede32ec0535a2f2628eccb7ad5307
+MSG      SHA-256: d8c98a5dddd0daccba48be824ff48f83c491514146904a3a2471d3434a7e8ccc
 MSG      Validated envelope integrity and transfer framing; 8 data-out commands.
 MSG      Live execution reads the receiver descriptor and control word; offline control bytes are illustrative only.
 MSG      Package checks passed. Drive compatibility is still pending; it is checked against the pre-flash backup before confirmation or writing.

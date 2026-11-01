@@ -131,6 +131,9 @@ pub(super) fn execute_with_sleep(
         PreparedFlash::Normal(plan) => plan.execute(io, &mut runtime),
     }
     .map_err(|error| {
+        if is_readiness_timeout(&error) {
+            shared.with(record_timeout_identity);
+        }
         crate::diagnostics::record(format!("UPDATE VERIFICATION: {}", runtime.verification));
         execution_error(error, bridge_required, runtime.completed_stages)
             .context(runtime.verification.clone())
@@ -167,8 +170,46 @@ pub(super) fn execute_with_sleep(
     ))
 }
 
+fn is_readiness_timeout(error: &pioneer_optical::receiver::ExecutionError<anyhow::Error>) -> bool {
+    use pioneer_optical::receiver::ExecutionError;
+    match error {
+        ExecutionError::AfterStage { source, .. } => is_readiness_timeout(source),
+        ExecutionError::Startup(error) => match error.as_ref() {
+            pioneer_optical::startup::migration::Error::Flash { source, .. } => {
+                is_readiness_timeout(source)
+            }
+            _ => false,
+        },
+        ExecutionError::Flash(pioneer_optical::receiver::FlashError::Update {
+            source: pioneer_optical::drive::UpdateError::ReadyTimeout(_),
+            ..
+        }) => true,
+        _ => false,
+    }
+}
+
+// A timeout remains a failed update. This snapshot is diagnostic evidence only;
+// it neither retries the update nor treats an INQUIRY response as readiness.
+fn record_timeout_identity(dev: &mut dyn crate::platform::ScsiDevice) {
+    let result = dev.diagnostic_in(&[0x12, 0, 0, 0, 96, 0], 96, 5_000);
+    match result {
+        Ok(bytes) => crate::diagnostics::record(format!(
+            "Pioneer readiness timeout INQUIRY snapshot: returned={} raw={bytes:02x?}; startup remains unconfirmed",
+            bytes.len()
+        )),
+        Err(error) => crate::diagnostics::record(format!(
+            "Pioneer readiness timeout INQUIRY unavailable: {error:#}; original update failure retained"
+        )),
+    }
+}
+
 fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
     use pioneer_optical::settings::update::Effect;
+    if let Some(startup) = plan.startup_plan() {
+        for check in startup.target_checks().iter() {
+            crate::diagnostics::record(format!("Pioneer startup check: {check:?}"));
+        }
+    }
     if let Some(id) = plan.adaptation_id() {
         crate::diagnostics::record(format!("Pioneer settings adaptation: {id}; original factory mechanism and live prerequisites must match before writing"));
     }
@@ -200,7 +241,7 @@ pub(super) fn report_startup_setting(setting: pioneer_optical::startup::Setting)
     let source = if setting.explicit {
         "required by target firmware"
     } else {
-        "neutral default for target firmware"
+        "neutral startup policy; target comparison not established"
     };
     let text = format!(
         "target word {:#04x} = {:04X} ({source})",
@@ -217,7 +258,11 @@ where
     let code = error.code();
     let issue = if matches!(
         code,
-        "pioneer.settings.compatibility_unresolved" | "pioneer.settings.conversion_unavailable"
+        "pioneer.settings.compatibility_unresolved"
+            | "pioneer.settings.conversion_unavailable"
+            | "pioneer.startup.bank_unknown_installed"
+            | "pioneer.startup.bank_unknown_target"
+            | "pioneer.startup.bank_conversion_required"
     ) {
         crate::user_error::IssueCode::SettingsUnresolved
     } else {

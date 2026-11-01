@@ -838,14 +838,14 @@ fn balance(bytes: &mut [u8]) {
 /// stamped verbatim, which yields a valid, reproducible signed package.
 fn pair_signature(kind: &str, gated: bool, marker: u8) -> Vec<u8> {
     const SIGS: &[(&str, &str)] = &[
-        ("prepared-false-0", "7e0fb87a8ea5a55f27852efec98386a0515200479efb265fe66f850a4fd0453ec12cd7b63d2a3eac0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("prepared-false-1", "46ec2e64062aab8fec15610d982085eae4676e19d550f8891557ca571e19122ed38d0fb8340813430b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("prepared-true-1", "122f0f061321f44c4397e76c055e37cbad74684669b2a8f8d2f548a55fdc5b3b629a1b585f929f400b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("recovery-false-0", "0ae0c342876bc56c5c7b22a3cbad27af2a9c40d1d005fac83ec41a4dcac9e977216b78533a3d99730b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-false-0", "aba1c238f66b975894719ec1dcb6d775f519a3f759e97921ca84d4c8e1493da06953151817a1578a0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-true-1", "a6a5415bf199e26648cc663a675f15cd284169819d34180e42fb135118b03cdd64df43e65a03266e0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-id58-false-0", "0e65b6f79d1be3d7cd5d06fd798d594ea8379e03b58c9b403e530e77f8da04eaecb72ea17ff42eac0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("recovery-false-1", "2278bd5b92f436c734cc5fe2ab2556744ae26459520f2d36a905c6f11329795dbb5471f4aaecef980b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-false-0", "05923da2785f09b86e472e9ed01ccf55780c8f9ed55dd298c367ebec0e17736f850d1663960ae65e0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-false-1", "c4e4616400e79367b32f91bd86ff3be1a835f6634e1cfa357da2222c6d0c45c1822c836c8f77e75a0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-true-1", "94e603f35c61d3c72fccc0c7eb25e22b096c236f0a0618ed605e66132f6985ea93f8b4a602148c7c0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-false-0", "b261e04c66510d551d53d303907ffdcb87e850d16d498630e82813232170364b5ab19716a0a1e64c0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-false-0", "971336f25f92fb3dc7696a3f3048060e7da45c495099a3b1d9c30a69c6cf57dbde9ca379360c14180b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-true-1", "a5833e2f11fd3c16442f8c58ff24620d18aa2d4a536b6ac89bef346d5b13398e3620c88caa701b990b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-id58-false-0", "65a62c8799f2501976e44e7935c87e1eb45b3804728b835f098a4d0f8c50b1e19ddb221f935457ea0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-false-1", "238f8ee95e4e3df8126d980fa28824a7bddd93ad06f5f9a0ce6e69b6c3dae52a98aadedfe1862af40b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
     ];
     let key = format!("{kind}-{gated}-{marker}");
     let (_, hex) = SIGS
@@ -888,6 +888,7 @@ fn fixture_pair(gated: bool, marker: u8) -> Update {
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
     let mut normal = vec![0; 0x2000];
+    crate::startup_checks_fixture(&mut normal);
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
@@ -1059,6 +1060,7 @@ fn prepared_pair(gated: bool, marker: u8) -> Update {
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
     let mut normal = vec![0; 0x2000];
+    crate::startup_checks_fixture(&mut normal);
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
@@ -1122,6 +1124,7 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
     put(&mut kernel, 0x400, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6");
     fix(&mut kernel);
     let mut normal = vec![0; 0x2000];
+    crate::startup_checks_fixture(&mut normal);
     normal[..16].copy_from_slice(&id[..16]);
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[24..32].copy_from_slice(b"GENERAL ");
@@ -2869,6 +2872,7 @@ const PIONEER_REASONS: &[&str] = &[
     "P9",
     "P10",
     "P11",
+    "P12",
     "RECOVERY_TRAY",
     "FMT",
 ];
