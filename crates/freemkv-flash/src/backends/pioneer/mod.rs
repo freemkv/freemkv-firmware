@@ -502,7 +502,10 @@ pub(crate) fn hardware_specific_links(
     let keys: Vec<_> = packages.iter().map(|p| offline_prefilter(p)).collect();
     let models: Vec<_> = packages.iter().map(|p| offline_model(p)).collect();
     let mut scopes = Vec::new();
-    for rule in hardware_rules() {
+    let Ok(rules) = hardware_rules() else {
+        return Vec::new();
+    };
+    for rule in rules {
         if !scopes.contains(&rule.hardware) {
             scopes.push(rule.hardware);
         }

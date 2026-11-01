@@ -74,7 +74,7 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             &installed
         )
         .status,
-        crate::crossflash::CompatibilityStatus::HardNo
+        crate::crossflash::CompatibilityStatus::Yes
     );
     // Both paths prepare the same certified pair without any factory-SKU read.
     let current = recovery::Current::load(&installed).unwrap();
@@ -175,25 +175,13 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
         crate::crossflash::Platform::Pioneer,
         &[&installed, &native_ud04, &native_ud03],
     );
-    assert_eq!(extra.len(), 2);
-    for (source, destination) in [(1, 0), (2, 0)] {
-        assert!(extra.iter().any(|route| {
-            route.installed == source
-                && route.target == destination
-                && route.hardware.platform == "UD02"
-                && route.hardware.prefix.is_none()
-                && route.hardware.suffix.is_none()
-        }));
-    }
-    // Ordinary UD02-to-UD04 stays in Cross Flash. The extra routes neither
-    // authorize native UD04 hardware nor create UD02-hardware-to-UD03 support.
-    assert!(!extra
-        .iter()
-        .any(|route| route.installed == 0 || route.target == 2));
+    // The reviewed native inverse now supplies an ordinary route. Hardware-
+    // specific OEM-return duplicates must disappear for this exact pair.
+    assert!(extra.is_empty());
     for original in ["BDR-UD02TBD", "BDU-UD02ABC", "BDR-UD02FAN"] {
         for (target, allowed, profile) in [
             (&native_ud04, true, Some("pioneer.ud02-to-ud04-1.14")),
-            (&native_ud03, false, None),
+            (&native_ud03, true, Some("pioneer.ud02-to-ud03-1.03")),
             (&installed, true, Some("pioneer.ud02-stock-return-1.00")),
         ] {
             let mut drive = factory_drive(original);
@@ -235,6 +223,44 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             assert_eq!(drive.writes, 0);
         }
     }
+    for original in ["BDR-UD03FAL", "BDR-UD04ABC"] {
+        let mut drive = factory_drive(original);
+        let authorized = authorize_installed_inner(
+            FlashPlan::new(execute_plan(&installed).unwrap()),
+            Some(&native_ud04),
+            Some(&mut ReadDevice::for_backend(&mut drive, &Pioneer)),
+        )
+        .unwrap();
+        let prepared: &Prepared = authorized.state().unwrap();
+        let complete = prepared.complete.as_ref().unwrap();
+        assert_eq!(
+            complete.settings().adaptation_id(),
+            Some(if original == "BDR-UD03FAL" {
+                "pioneer.ud03-to-ud02-1.00-packed"
+            } else {
+                "pioneer.ud04-to-ud02-1.00"
+            })
+        );
+        assert!(complete.settings().requirements().is_empty());
+        for bypass in [false, true] {
+            let receiver = RecoveryTarget::new(
+                "native inverse software fixture".into(),
+                Some(recovery::Current::load(&native_ud04).unwrap()),
+            );
+            let recovered = RecoveryFacet::prepare(
+                &Pioneer,
+                &mut ReadDevice::for_backend(&mut drive, &Pioneer),
+                &receiver,
+                None,
+                &installed,
+                bypass,
+            )
+            .unwrap();
+            let _ = recovered;
+        }
+        assert_eq!(drive.reads, 3);
+        assert_eq!(drive.writes, 0);
+    }
     // Supplied but invalid factory identity must never fall back to the
     // installed firmware's branding, even with Recovery's family override.
     for code in ["", "UNKNOWN", "BDR-UD02 TBD"] {
@@ -263,6 +289,31 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             }
             assert_eq!(drive.reads, 3);
             assert_eq!(drive.writes, 0);
+        }
+    }
+}
+
+#[test]
+fn held_native_inverse_rules_preserve_existing_oem_brand_crossflashes() {
+    let Ok(root) = std::env::var("PIONEER_CATALOGUE_FIXTURES") else {
+        return;
+    };
+    let read =
+        |sha: &str| std::fs::read(std::path::Path::new(&root).join(format!("{sha}.tar"))).unwrap();
+    let installed = read("349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6");
+    for target in [
+        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
+        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
+        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038",
+    ] {
+        let target = read(target);
+        decide_offline(&installed, &target).unwrap();
+        for original in ["BDR-UD03FAL", "BDR-UD04ABC"] {
+            let mut parameters = vec![0xff; pioneer_optical::production::PARAMETERS_LEN];
+            parameters[0x84..0x88].copy_from_slice(b"kw01");
+            parameters[0x90..0x9f].fill(b' ');
+            parameters[0x90..0x90 + original.len()].copy_from_slice(original.as_bytes());
+            decide_offline_for_original(&installed, &target, &parameters).unwrap();
         }
     }
 }
