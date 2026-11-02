@@ -1744,7 +1744,7 @@ fn failed_job_offers_log_export_next_to_the_error() {
             || failure.text.contains("did not write firmware")
     );
     assert!(failure.text.contains("Save a diagnostic report"));
-    assert_eq!(failure.save_log.text, "Save Log…");
+    assert_eq!(results.save_log.text, "Save Log…");
     assert_eq!(results.view_log.text, "View Log");
     assert_eq!(crate::localization::english(&app.status), failure.text);
     assert!(app.log.iter().any(|line| line.contains("Backup failed")));
@@ -2764,7 +2764,7 @@ fn failed_update_without_saved_log_keeps_cause_and_recovery_advice_accessible() 
         app.logging_warning = Some("Diagnostic log could not be saved".into());
         let failure = app.view().results.unwrap().failure.unwrap();
         assert!(failure.text.contains("restore the captured backup"));
-        assert!(failure.save_log.enabled);
+        assert!(app.view().results.unwrap().save_log.enabled);
         assert!(app.view().results.unwrap().view_log.enabled);
         app.dispatch(Input::ViewLog);
         assert!(app.diagnostics_open);

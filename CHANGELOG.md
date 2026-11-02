@@ -5,6 +5,17 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.17.2] - 2026-11-02
+
+### freemkv Flash
+
+- Preserve original hardware settings across supported Pioneer firmware changes, including the reviewed UD02/UD03/UD04 adaptations and returns to OEM firmware.
+- Fix Pioneer recovery being incorrectly blocked by a settings check for a different hardware family.
+- Add Save Log after successful operations.
+- Give the macOS Flash window more vertical room.
+- Report ordinary and hardware-dependent firmware routes through one planner, including exact original-hardware checks in the firmware finder.
+- Keep the existing hardware-family filters unchanged.
+
 ## [0.17.1] - 2026-11-01
 
 ### freemkv Flash
