@@ -414,6 +414,7 @@ pub struct Results {
     pub failure: Option<Failure>,
     pub notice: Option<String>,
     pub view_log: Button,
+    pub save_log: Button,
     pub submit_report: Button,
 }
 
@@ -421,7 +422,6 @@ pub struct Results {
 pub struct Failure {
     pub text: String,
     pub severity: workflow::IssueSeverity,
-    pub save_log: Button,
 }
 
 /// A drive-information card. `column` places it in a two-column layout; a single column
@@ -681,12 +681,12 @@ fn translate_view(view: &mut View) {
         });
         if let Some(failure) = &mut results.failure {
             translate(language, &mut failure.text);
-            translate_button(language, &mut failure.save_log);
         }
         if let Some(notice) = &mut results.notice {
             translate(language, notice);
         }
         translate_button(language, &mut results.view_log);
+        translate_button(language, &mut results.save_log);
         translate_button(language, &mut results.submit_report);
     }
     if let Some(confirm) = &mut view.confirm {
@@ -3333,6 +3333,8 @@ impl App {
         let analysis = matches!(self.task, Task::Inspect | Task::Compare);
         let info = self.result_task == Task::Info && self.info_result && !self.rows.is_empty();
         let concise = matches!(self.task, Task::Flash | Task::Recovery);
+        let log_available =
+            self.diagnostic_log.is_some() || self.failure.is_some() || self.has_origin_error();
         Results {
             open_results: (analysis && self.analysis.is_some())
                 .then(|| Button::new("ui.open_results", Input::OpenResults, true)),
@@ -3352,7 +3354,6 @@ impl App {
                     workflow::IssueSeverity::Error,
                     workflow::UserError::severity,
                 ),
-                save_log: Button::new("action.save_log", Input::Choose(Pick::DiagnosticLog), true),
             }),
             notice: match (&self.logging_warning, &self.diagnostic_notice) {
                 (Some(warning), Some(notice)) => Some(crate::localization::message(
@@ -3362,10 +3363,11 @@ impl App {
                 (Some(warning), None) => Some(warning.clone()),
                 (None, notice) => notice.clone(),
             },
-            view_log: Button::new(
-                "action.view_log",
-                Input::ViewLog,
-                self.diagnostic_log.is_some() || self.failure.is_some() || self.has_origin_error(),
+            view_log: Button::new("action.view_log", Input::ViewLog, log_available),
+            save_log: Button::new(
+                "action.save_log",
+                Input::Choose(Pick::DiagnosticLog),
+                log_available,
             ),
             submit_report: if self.report_rx.is_some() {
                 Button::new(

@@ -11,7 +11,7 @@
 
 use anyhow::{Context, Result};
 use freemkv_flash::crossflash::{
-    admits, classified_links, decide, hardware_specific_links, CompatibilityStatus, Platform,
+    classified_routes, decide, CompatibilityStatus, Platform, RouteRequirement, RouteStatus,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -32,7 +32,7 @@ fn main() -> std::process::ExitCode {
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
-        println!("Usage: freemkv-crossflash <package directory>\n       freemkv-crossflash --hardware-specific <package directory>\n       freemkv-crossflash --why [--json] <installed> <target>");
+        println!("Usage: freemkv-crossflash <package directory>\n       freemkv-crossflash --why [--json] <installed> <target>");
         return Ok(());
     }
     if let [flag, json, installed, target] = args.as_slice() {
@@ -52,61 +52,47 @@ fn run() -> Result<()> {
             return why(Path::new(installed), Path::new(target));
         }
     }
-    let (root, hardware_only) = match args.as_slice() {
-        [root] => (root, false),
-        [flag, root] if flag == "--hardware-specific" => (root, true),
-        _ => {
-            return Err(anyhow::anyhow!(
-                "usage: freemkv-crossflash <package directory>\n       \
-             freemkv-crossflash --hardware-specific <package directory>\n       \
-             freemkv-crossflash --why [--json] <installed> <target>"
-            )
-            .context(freemkv_flash::user_error::IssueCode::CommandOptions))
-        }
+    let [root] = args.as_slice() else {
+        return Err(anyhow::anyhow!(
+            "usage: freemkv-crossflash <package directory> or --why [--json] <installed> <target>"
+        )
+        .context(freemkv_flash::user_error::IssueCode::CommandOptions));
     };
-    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut conditional: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut future: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut hardware_specific: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
+    let mut groups: BTreeMap<(String, RouteStatus, Vec<RouteRequirement>), Vec<String>> =
+        BTreeMap::new();
+    let mut evaluated_packages = Vec::new();
     for (dir, ext, platform) in [
         ("pioneer", "tar", Platform::Pioneer),
         ("mediatek", "tar", Platform::Mediatek),
     ] {
         let (ids, bytes) = read_packages(&Path::new(root).join(dir), ext)?;
         let refs: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
-        for link in hardware_specific_links(platform, &refs) {
-            hardware_specific
-                .entry(ids[link.installed].clone())
-                .or_default()
-                .push(serde_json::json!({"target": ids[link.target], "hardware": link.hardware}));
-        }
-        let found = if hardware_only {
-            Vec::new()
-        } else {
-            classified_links(platform, &refs)
-        };
-        eprintln!("{dir}: {} packages, {} links", ids.len(), found.len());
-        for (i, j, status) in found {
-            let graph = match status {
-                CompatibilityStatus::Yes => &mut out,
-                CompatibilityStatus::Conditional => &mut conditional,
-                CompatibilityStatus::SoftNo => &mut future,
-                CompatibilityStatus::HardNo => continue,
-            };
-            graph
-                .entry(ids[i].clone())
+        let found = classified_routes(platform, &refs);
+        eprintln!(
+            "{dir}: {} packages, {} route alternatives",
+            ids.len(),
+            found.len()
+        );
+        evaluated_packages.extend(ids.iter().cloned());
+        for (i, j, route) in found {
+            groups
+                .entry((ids[i].clone(), route.status, route.requirements))
                 .or_default()
                 .push(ids[j].clone());
         }
     }
+    evaluated_packages.sort();
+    evaluated_packages.dedup();
+    let groups: Vec<_> = groups.into_iter().map(|((source,status,requirements),mut targets)| {
+        targets.sort(); targets.dedup();
+        serde_json::json!({"source":source,"status":status,"requirements":requirements,"targets":targets})
+    }).collect();
     let doc = serde_json::json!({
-        "format": "freemkv-crossflash-links",
-        "version": 2,
+        "format": "freemkv-crossflash-routes",
+        "version": 1,
         "freemkv_flash": env!("CARGO_PKG_VERSION"),
-        "links": out,
-        "future": future,
-        "conditional": conditional,
-        "hardware_specific": hardware_specific,
+        "evaluated_packages": evaluated_packages,
+        "groups": groups,
     });
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())
@@ -118,9 +104,25 @@ fn why(installed: &Path, target: &Path) -> Result<()> {
     let installed = read(installed)?;
     let target = read(target)?;
     let platform = platform(&target);
-    match admits(platform, &installed, &target) {
-        Ok(()) => println!("admitted"),
-        Err(e) => println!("refused: {e:#}"),
+    let decision = decide(platform, &installed, &target);
+    match decision.status {
+        CompatibilityStatus::Yes => println!("admitted"),
+        CompatibilityStatus::Conditional => {
+            println!(
+                "conditional: {}",
+                decision
+                    .reason
+                    .as_deref()
+                    .unwrap_or("live requirements apply")
+            );
+            for route in decision.routes {
+                println!("  requires {}", serde_json::to_string(&route.requirements)?);
+            }
+        }
+        _ => println!(
+            "refused: {}",
+            decision.reason.as_deref().unwrap_or("no supported route")
+        ),
     }
     Ok(())
 }

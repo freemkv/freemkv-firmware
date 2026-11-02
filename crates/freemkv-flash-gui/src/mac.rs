@@ -45,7 +45,7 @@ use crate::ui::{
 };
 
 const W: f64 = 900.0;
-const H: f64 = 760.0;
+const H: f64 = 820.0;
 const PAD: f64 = 20.0;
 /// Reserved action tags for controls built once (the rest are allocated per rebuild).
 const TAG_REFRESH: isize = 1;
@@ -1257,9 +1257,7 @@ impl Controller {
         }
         let actions = stack(mtm, false, 8.0);
         actions.addArrangedSubview(&self.button(&r.view_log));
-        if let Some(f) = &r.failure {
-            actions.addArrangedSubview(&self.button(&f.save_log));
-        }
+        actions.addArrangedSubview(&self.button(&r.save_log));
         actions.addArrangedSubview(&self.button(&r.submit_report));
         results.addArrangedSubview(&actions);
     }
@@ -1967,7 +1965,7 @@ pub fn run() {
         NSApplicationActivationPolicy::Regular
     });
     let window = new_window(mtm, &model.view().title, W, H);
-    window.setContentMinSize(NSSize::new(760.0, 640.0));
+    window.setContentMinSize(NSSize::new(760.0, 700.0));
     let c = Controller::new(mtm, model);
     build_menus(mtm, &app, &c, c.view().language);
     *c.ivars().window.borrow_mut() = Some(window.clone());

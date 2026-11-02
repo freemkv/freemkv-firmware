@@ -15,32 +15,29 @@ use crate::platform::ScsiDevice;
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
-pub(crate) fn hardware_specific_links(
+pub(crate) fn offline_routes(
     platform: crate::crossflash::Platform,
-    packages: &[&[u8]],
-) -> Vec<crate::crossflash::HardwareSpecificLink> {
+    installed: &[u8],
+    target: &[u8],
+) -> Result<crate::crossflash::Evaluation> {
     match platform {
-        crate::crossflash::Platform::Pioneer => pioneer::hardware_specific_links(packages),
-        crate::crossflash::Platform::Mediatek => Vec::new(),
+        crate::crossflash::Platform::Pioneer => pioneer::offline_routes(installed, target),
+        crate::crossflash::Platform::Mediatek => {
+            mtk::decide_offline(installed, target)?;
+            Ok(crate::crossflash::Evaluation {
+                routes: vec![crate::crossflash::Route {
+                    status: crate::crossflash::RouteStatus::Allowed,
+                    requirements: Vec::new(),
+                }],
+                reason: None,
+            })
+        }
     }
 }
 
 /// Origin evidence is supplied by protocol file analysis, not the front end.
 pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
     pioneer::file_info::file_origin(bytes)
-}
-
-/// The whole `flash` decision with no device (see [`crate::crossflash`]).
-pub(crate) fn decide_offline(
-    platform: crate::crossflash::Platform,
-    installed: &[u8],
-    target: &[u8],
-) -> Result<()> {
-    use crate::crossflash::Platform;
-    match platform {
-        Platform::Pioneer => pioneer::decide_offline(installed, target),
-        Platform::Mediatek => mtk::decide_offline(installed, target),
-    }
 }
 
 /// The routing facts [`crate::crossflash`] pre-filters pairs on.

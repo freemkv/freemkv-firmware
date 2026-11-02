@@ -540,9 +540,7 @@ fn results_ui(
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         button(ui, &results.view_log, out);
-        if let Some(failure) = &results.failure {
-            button(ui, &failure.save_log, out);
-        }
+        button(ui, &results.save_log, out);
         button(ui, &results.submit_report, out);
     });
 }
