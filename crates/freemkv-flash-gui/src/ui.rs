@@ -1206,17 +1206,24 @@ impl App {
         );
         self.refresh(drives);
         for event in events.lock().unwrap().drain(..) {
-            match event {
-                Event::Report(report) => {
-                    for (label, value) in report.gui_fields() {
-                        if label == DIAGNOSTIC_FIELD {
-                            self.diagnostic_log = Some(value.into());
-                        }
+            self.discovery_event(event);
+        }
+    }
+
+    fn discovery_event(&mut self, event: Event) {
+        match event {
+            Event::Report(report) => {
+                for (label, value) in report.gui_fields() {
+                    if label == DIAGNOSTIC_FIELD
+                        && self.failure.is_none()
+                        && !self.has_origin_error()
+                    {
+                        self.diagnostic_log = Some(value.into());
                     }
                 }
-                Event::Message(line) => self.log.push(line),
-                _ => {}
             }
+            Event::Message(line) => self.log.push(line),
+            _ => {}
         }
     }
 

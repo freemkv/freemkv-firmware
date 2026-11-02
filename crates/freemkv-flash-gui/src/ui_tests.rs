@@ -1907,6 +1907,43 @@ fn drive_info_on_a_missing_device_fails_gracefully() {
 // ── diagnostics ───────────────────────────────────────────────────────────
 
 #[test]
+fn discovery_after_failed_recovery_keeps_the_failure_diagnostic() {
+    let path = std::env::temp_dir().join(format!(
+        "freemkv-recovery-log-{}.log",
+        workflow::new_operation_id()
+    ));
+    std::fs::write(&path, "operation=\"recovery execution\"\nRESULT: error\n").unwrap();
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.result_task = Task::Recovery;
+    app.failure = Some("Recovery failed; startup not verified".into());
+    app.diagnostic_log = Some(path.clone());
+
+    app.discovery_event(field_event("Diagnostic log", "/tmp/discovery.log"));
+    assert_eq!(app.diagnostic_log.as_ref(), Some(&path));
+    assert!(app
+        .diagnostic_text()
+        .unwrap()
+        .contains("recovery execution"));
+
+    app.diagnostic_log = None;
+    app.discovery_event(field_event("Diagnostic log", "/tmp/discovery.log"));
+    assert!(app.diagnostic_log.is_none());
+    assert!(app
+        .diagnostic_text()
+        .unwrap()
+        .contains("startup not verified"));
+
+    app.failure = None;
+    app.discovery_event(field_event("Diagnostic log", "/tmp/discovery.log"));
+    assert_eq!(
+        app.diagnostic_log,
+        Some(PathBuf::from("/tmp/discovery.log"))
+    );
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn diagnostic_viewer_and_export_show_the_same_full_log() {
     let path =
         std::env::temp_dir().join(format!("freemkv-gui-diagnostic-{}.log", std::process::id()));
