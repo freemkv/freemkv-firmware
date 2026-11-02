@@ -1013,3 +1013,150 @@ fn real_207m_to_pr1ml_flash_uses_a0_without_code_surface_match() {
     );
     assert_eq!(drive.memory, plan.final_kernel_image());
 }
+
+#[test]
+fn held_oem_branded_routes_retain_exact_prepared_hardware_requirements() {
+    let Ok(root) = std::env::var("PIONEER_CATALOGUE_FIXTURES") else {
+        return;
+    };
+    struct FactoryFixture {
+        code: &'static str,
+        reads: usize,
+        writes: usize,
+    }
+    impl ScsiDevice for FactoryFixture {
+        fn describe(&self) -> String {
+            "factory parameter software fixture".into()
+        }
+        fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
+            assert_eq!(command, pioneer_optical::production::parameters());
+            assert_eq!(len, pioneer_optical::production::PARAMETERS_LEN);
+            self.reads += 1;
+            let mut bytes = vec![0xff; len];
+            bytes[0x84..0x88].copy_from_slice(b"kw01");
+            bytes[0x90..0x9f].fill(b' ');
+            bytes[0x90..0x90 + self.code.len()].copy_from_slice(self.code.as_bytes());
+            Ok(bytes)
+        }
+        fn command_out(&mut self, _command: &[u8], _data: &[u8]) -> Result<()> {
+            self.writes += 1;
+            bail!("preparation must never write")
+        }
+    }
+    let read =
+        |sha: &str| std::fs::read(std::path::Path::new(&root).join(format!("{sha}.tar"))).unwrap();
+    let pairs: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("oem_route_pairs.json")).unwrap();
+    for pair in pairs {
+        let installed = read(pair["source"].as_str().unwrap());
+        let target = read(pair["target"].as_str().unwrap());
+        let decision =
+            crate::crossflash::decide(crate::crossflash::Platform::Pioneer, &installed, &target);
+        if pair["expected"] == "hard_no" {
+            assert_eq!(
+                decision.status,
+                crate::crossflash::CompatibilityStatus::HardNo,
+                "{pair}"
+            );
+            assert!(decision.routes.is_empty());
+            for platform in ["UD02", "UD03", "UD04"] {
+                let scope = pioneer_optical::settings::adaptation::hardware_rules()
+                    .unwrap()
+                    .iter()
+                    .find(|r| r.hardware.platform == platform)
+                    .unwrap()
+                    .hardware;
+                let error = authorize_installed_context(
+                    FlashPlan::new(execute_plan(&target).unwrap()),
+                    Some(&installed),
+                    None,
+                    Some(scope),
+                )
+                .err()
+                .unwrap();
+                assert!(
+                    error.chain().any(|e| matches!(
+                        e.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
+                        Some(pioneer_optical::settings::adaptation::Error::Guard)
+                    )),
+                    "{pair}: {error:#}"
+                );
+            }
+            for code in ["BDR-UD02TBD", "BDR-UD03FAL", "BDR-UD04ABC"] {
+                let mut factory = FactoryFixture {
+                    code,
+                    reads: 0,
+                    writes: 0,
+                };
+                let error = authorize_installed_inner(
+                    FlashPlan::new(execute_plan(&target).unwrap()),
+                    Some(&installed),
+                    Some(&mut ReadDevice::for_backend(&mut factory, &Pioneer)),
+                )
+                .err()
+                .unwrap();
+                assert!(
+                    error.chain().any(|e| matches!(
+                        e.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
+                        Some(pioneer_optical::settings::adaptation::Error::Guard)
+                    )),
+                    "live {code}: {pair}: {error:#}"
+                );
+                assert_eq!(factory.reads, 1);
+                assert_eq!(factory.writes, 0);
+            }
+            // This old no-context success still needs a live guard. Dropping
+            // that guard was the former ordinary catalogue false positive.
+            let old = authorize_installed(
+                FlashPlan::new(execute_plan(&target).unwrap()),
+                Some(&installed),
+            )
+            .unwrap();
+            let prepared: &Prepared = old.state().unwrap();
+            let settings = prepared.normal.as_ref().unwrap().settings();
+            assert!(settings.requires_original_hardware());
+            assert!(settings.original_hardware_scope().is_err());
+            continue;
+        }
+        assert_eq!(
+            decision.status,
+            crate::crossflash::CompatibilityStatus::Conditional,
+            "{pair}"
+        );
+        let expected: Vec<_> = ["UD03", "UD04"]
+            .into_iter()
+            .map(|platform| crate::crossflash::Route {
+                status: crate::crossflash::RouteStatus::Conditional,
+                requirements: vec![crate::crossflash::RouteRequirement::OriginalHardware {
+                    platform: platform.into(),
+                    prefix: None,
+                    suffix: None,
+                }],
+            })
+            .collect();
+        assert_eq!(decision.routes, expected, "{pair}");
+        for platform in ["UD03", "UD04"] {
+            let scope = pioneer_optical::settings::adaptation::hardware_rules()
+                .unwrap()
+                .iter()
+                .find(|r| r.hardware.platform == platform)
+                .unwrap()
+                .hardware;
+            let authorized = authorize_installed_context(
+                FlashPlan::new(execute_plan(&target).unwrap()),
+                Some(&installed),
+                None,
+                Some(scope),
+            )
+            .unwrap();
+            let prepared: &Prepared = authorized.state().unwrap();
+            let settings = match &prepared.complete {
+                Some(plan) => plan.settings(),
+                None => prepared.normal.as_ref().unwrap().settings(),
+            };
+            assert!(settings.requires_original_hardware());
+            assert_eq!(settings.original_hardware_scope().unwrap(), Some(scope));
+            assert_eq!(settings.adaptation_id(), None);
+        }
+    }
+}
