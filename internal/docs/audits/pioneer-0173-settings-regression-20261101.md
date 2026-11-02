@@ -30,7 +30,7 @@ The fixed answers retain distinct FEDC4321 and FEDC4322 bank contracts, ordinary
 Mandatory local corpus invocation (missing corpus fails, never silently skips):
 
 ```sh
-export PIONEER_SETTINGS_HOARD=/Users/matthew/Developer/firmware-extractor/hoard
+export PIONEER_SETTINGS_HOARD=$HOME/Developer/firmware-extractor/hoard
 cargo test -p freemkv-flash --lib customer_212u_101_to_213u_102_recovery_prepares_without_bank_conversion_refusal -- --ignored
 cargo test -p freemkv-flash --lib held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path -- --ignored
 ```
@@ -74,12 +74,12 @@ Hosted QA currently provisions only the committed OEM fixtures. It has no privat
 Validation order after adding the native guard fixture: compile the Rust application test target, execute `native_213u_guard_known_answers` (1 passed), then execute only the two-archive customer provenance test (1 passed, including the 146-byte fixture comparison), then explicitly execute the desired native-boot gate (failed, exit 101). Logs: `/tmp/fmkv-pioneer-0173-native-kat.log`, `/tmp/fmkv-pioneer-0173-native-fixture-provenance.log`, `/tmp/fmkv-pioneer-0173-native-boot-red.log`. No full-hoard QA was started in this phase.
 
 
-Local inventory on 2026-11-01: hoard `/Users/matthew/Developer/firmware-extractor/hoard` contains all 723 indexed package paths (668 branded PIONEER). Index SHA256 is `b89a2e24618f4ba04b78b192c2308a27d32b59078fa6d29e27a741e0ae30197a`. This is availability evidence, not a firmware test pass or archive-content hash verification. No full family transcript baseline was found in the inspected repository, temporary or freemkv cache locations. The `v0.11.2` tag does not contain this corpus harness; its documented historical baseline required an adapted harness. A separately established baseline must be restored or generated with independently pinned old code before local full-hoard signoff. Candidate-generated output must never supply its own baseline.
+Local inventory on 2026-11-01: hoard `$HOME/Developer/firmware-extractor/hoard` contains all 723 indexed package paths (668 branded PIONEER). Index SHA256 is `b89a2e24618f4ba04b78b192c2308a27d32b59078fa6d29e27a741e0ae30197a`. This is availability evidence, not a firmware test pass or archive-content hash verification. No full family transcript baseline was found in the inspected repository, temporary or freemkv cache locations. The `v0.11.2` tag does not contain this corpus harness; its documented historical baseline required an adapted harness. A separately established baseline must be restored or generated with independently pinned old code before local full-hoard signoff. Candidate-generated output must never supply its own baseline.
 
 After compilation and all mandatory Rust KATs pass, and an independent baseline is available, the full local comparison command is:
 
 ```sh
-FREEMKV_PIONEER_CORPUS=/Users/matthew/Developer/firmware-extractor/hoard \
+FREEMKV_PIONEER_CORPUS=$HOME/Developer/firmware-extractor/hoard \
 FREEMKV_PIONEER_CORPUS_BASELINE=/absolute/path/to/independently-established-baseline \
 FREEMKV_PIONEER_CORPUS_OUT=/absolute/path/to/new-candidate-transcripts \
 cargo test --release --locked -p freemkv-flash --lib \
@@ -90,7 +90,7 @@ The placeholder baseline is intentionally not a claimed available artifact. No f
 
 ## Reproducible released-code baseline preparation
 
-The regression baseline is now **released 0.17.2**, not the historical 0.11.2 comparison. An isolated checkout exists at `/Users/matthew/Developer/freemkv/.worktrees/pioneer-baseline-0172`, detached at `96f222cf85bded408d83622477676e54f37c5fa4`. Its only modification is the test-only patch `.github/scripts/pioneer_0172_baseline_capture.patch`; Cargo.lock and production code remain the released versions, including Pioneer dependency `5051f06025b74e4e840a236951a7a3461a1dc98b`. The patch creates the distinct ignored Rust capture test `golden_corpus_tests::pioneer_0172_baseline_capture`. It never uses candidate code to generate expected output.
+The regression baseline is now **released 0.17.2**, not the historical 0.11.2 comparison. An isolated checkout exists at `$HOME/Developer/freemkv/.worktrees/pioneer-baseline-0172`, detached at `96f222cf85bded408d83622477676e54f37c5fa4`. Its only modification is the test-only patch `.github/scripts/pioneer_0172_baseline_capture.patch`; Cargo.lock and production code remain the released versions, including Pioneer dependency `5051f06025b74e4e840a236951a7a3461a1dc98b`. The patch creates the distinct ignored Rust capture test `golden_corpus_tests::pioneer_0172_baseline_capture`. It never uses candidate code to generate expected output.
 
 Recreate that harness from the candidate checkout with:
 
@@ -104,7 +104,7 @@ Compilation only passed with `CARGO_TARGET_DIR=/tmp/fmkv-pioneer-0173-target car
 **Only after candidate compilation, examples and every mandatory KAT pass**, execute this in the released-code checkout, reserving the shared target first:
 
 ```sh
-FREEMKV_PIONEER_CORPUS=/Users/matthew/Developer/firmware-extractor/hoard \
+FREEMKV_PIONEER_CORPUS=$HOME/Developer/firmware-extractor/hoard \
 FREEMKV_PIONEER_CORPUS_OUT=/tmp/fmkv-pioneer-0172-baseline \
 CARGO_TARGET_DIR=/tmp/fmkv-pioneer-0173-target \
 cargo test --locked -p freemkv-flash --lib \

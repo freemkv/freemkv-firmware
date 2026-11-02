@@ -26,7 +26,7 @@ def command(*args):
 
 def same_shipping_source(base, head='HEAD'):
     changed = command('git', 'diff', '--name-only', base, head, '--').splitlines()
-    return all(p.startswith('.github/') or p in QA_ONLY for p in changed)
+    return all(p.startswith(('.github/', 'internal/docs/')) or p in QA_ONLY for p in changed)
 
 
 def eligible(run, artifacts):
