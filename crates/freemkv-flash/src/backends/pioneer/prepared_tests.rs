@@ -1074,6 +1074,10 @@ fn held_oem_branded_routes_retain_exact_prepared_hardware_requirements() {
                 )
                 .err()
                 .unwrap();
+                assert_eq!(
+                    crate::user_error::UserError::of(&error).id,
+                    "errors.settings_unresolved"
+                );
                 assert!(
                     error.chain().any(|e| matches!(
                         e.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
@@ -1095,6 +1099,10 @@ fn held_oem_branded_routes_retain_exact_prepared_hardware_requirements() {
                 )
                 .err()
                 .unwrap();
+                assert_eq!(
+                    crate::user_error::UserError::of(&error).id,
+                    "errors.settings_unresolved"
+                );
                 assert!(
                     error.chain().any(|e| matches!(
                         e.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
