@@ -2,6 +2,28 @@ use super::*;
 use std::sync::{Arc, Mutex};
 
 #[test]
+fn log_name_has_readable_utc_datetime_and_unique_suffix() {
+    let directory = std::env::temp_dir().join(format!("freemkv-log-name-{}", new_operation_id()));
+    let (first, first_log) = create_log(&directory, "freemkv-flash").unwrap();
+    let (second, second_log) = create_log(&directory, "freemkv-flash").unwrap();
+    let name = first.file_name().unwrap().to_str().unwrap();
+    let now = time::OffsetDateTime::now_utc();
+    assert!(name.starts_with(&format!(
+        "freemkv-flash-{:04}-{:02}-{:02}_",
+        now.year(),
+        u8::from(now.month()),
+        now.day()
+    )));
+    assert!(name.contains('Z'));
+    assert!(name.ends_with(".log"));
+    assert_ne!(first, second);
+    drop((first_log, second_log));
+    std::fs::remove_file(first).unwrap();
+    std::fs::remove_file(second).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
+#[test]
 fn entry_failure_log_records_zero_payload_without_claiming_programming() {
     use crate::backend::{UpdateFailure, UpdateProgress};
     let directory = std::env::temp_dir().join(format!("freemkv-entry-log-{}", new_operation_id()));

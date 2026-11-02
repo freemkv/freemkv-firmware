@@ -189,10 +189,16 @@ fn create_log(directory: &Path, application: &str) -> io::Result<(PathBuf, Log)>
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     std::fs::create_dir_all(directory)?;
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
+    let now = time::OffsetDateTime::now_utc();
+    let stamp = format!(
+        "{:04}-{:02}-{:02}_{:02}-{:02}-{:02}Z",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second()
+    );
     let path = directory.join(format!(
         "{application}-{stamp}-{}-{}.log",
         std::process::id(),
