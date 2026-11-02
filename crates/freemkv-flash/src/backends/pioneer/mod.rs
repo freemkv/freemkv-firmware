@@ -478,7 +478,7 @@ pub(crate) fn decide_offline(installed: &[u8], target: &[u8]) -> Result<()> {
 pub(crate) fn offline_routes(
     installed: &[u8],
     target: &[u8],
-) -> Result<Vec<crate::crossflash::Route>> {
+) -> Result<crate::crossflash::Evaluation> {
     let input = execute_plan(target)?;
     verify_coverage(installed, input.kernel.is_some(), true)?;
     let (kernel, normal) = classify_flash_input(installed)?;

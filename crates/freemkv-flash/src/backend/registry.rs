@@ -19,15 +19,18 @@ pub(crate) fn offline_routes(
     platform: crate::crossflash::Platform,
     installed: &[u8],
     target: &[u8],
-) -> Result<Vec<crate::crossflash::Route>> {
+) -> Result<crate::crossflash::Evaluation> {
     match platform {
         crate::crossflash::Platform::Pioneer => pioneer::offline_routes(installed, target),
         crate::crossflash::Platform::Mediatek => {
             mtk::decide_offline(installed, target)?;
-            Ok(vec![crate::crossflash::Route {
-                status: crate::crossflash::RouteStatus::Allowed,
-                requirements: Vec::new(),
-            }])
+            Ok(crate::crossflash::Evaluation {
+                routes: vec![crate::crossflash::Route {
+                    status: crate::crossflash::RouteStatus::Allowed,
+                    requirements: Vec::new(),
+                }],
+                reason: None,
+            })
         }
     }
 }

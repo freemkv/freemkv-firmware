@@ -333,7 +333,7 @@ fn held_native_inverse_rules_preserve_existing_oem_brand_crossflashes() {
     ] {
         let target = read(target);
         decide_offline(&installed, &target).unwrap();
-        let routes = offline_routes(&installed, &target).unwrap();
+        let routes = offline_routes(&installed, &target).unwrap().routes;
         for platform in ["UD03", "UD04"] {
             assert!(routes.iter().any(|r| r.requirements
                 == vec![crate::crossflash::RouteRequirement::OriginalHardware {
