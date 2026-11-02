@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-chipset"
-version = "0.12.4"
+version = "0.17.2"
 dependencies = [
  "anyhow",
  "mediatek-optical",
@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "freemkv-flash"
-version = "0.12.4"
+version = "0.17.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -299,6 +299,7 @@ dependencies = [
  "flate2",
  "freemkv-chipset",
  "getrandom 0.3.4",
+ "libc",
  "libfreemkv",
  "mediatek-optical",
  "pioneer-optical",
@@ -450,13 +451,13 @@ checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
 name = "mediatek-optical"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0744d502728363a83039c1610175a9b7ba4bbcd360f0977a8cef94447f20942"
+version = "1.2.0"
+source = "git+https://github.com/MattJackson/mediatek-optical?rev=21031df434cff7fb2a4efbaa54a824b245933a95#21031df434cff7fb2a4efbaa54a824b245933a95"
 dependencies = [
  "aes",
  "cmac",
  "sha2",
+ "thumb-asm",
 ]
 
 [[package]]
@@ -523,8 +524,8 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pioneer-optical"
-version = "0.15.1"
-source = "git+https://github.com/MattJackson/pioneer-optical.git?rev=9100f74493deb487dc71a92422aef7ecbff12471#9100f74493deb487dc71a92422aef7ecbff12471"
+version = "1.5.0"
+source = "git+https://github.com/MattJackson/pioneer-optical?rev=af92ba5186fcfded23026b5918e4932ba188e4d5#af92ba5186fcfded23026b5918e4932ba188e4d5"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
@@ -533,6 +534,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "serde",
+ "serde_json",
  "sha1",
  "sha2",
 ]
@@ -728,6 +730,11 @@ checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "thumb-asm"
+version = "0.14.1"
+source = "git+https://github.com/MattJackson/thumb-asm?rev=0d9b37aa76c964949256146ce9be0cfbe4f823a0#0d9b37aa76c964949256146ce9be0cfbe4f823a0"
 
 [[package]]
 name = "toml"
