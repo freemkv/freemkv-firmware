@@ -14,13 +14,13 @@
 //! against `tests/golden/pioneer_corpus.txt`; without it, CI checks that file's
 //! parity with its v0.11.2 copy. The ignored `pioneer_corpus_full` writes every
 //! family to `FREEMKV_PIONEER_CORPUS_OUT` and fails on any difference from a
-//! v0.11.2 run in `FREEMKV_PIONEER_CORPUS_BASELINE` not in [`known_class`].
+//! released v0.17.2 run in `FREEMKV_PIONEER_CORPUS_BASELINE`. Every difference fails.
 //!
 //! ```text
 //! FREEMKV_PIONEER_CORPUS=<corpus> cargo test --release -p freemkv-flash \
 //!     golden_pioneer_corpus < /dev/null
 //! FREEMKV_PIONEER_CORPUS=<corpus> FREEMKV_PIONEER_CORPUS_OUT=<dir> \
-//!     FREEMKV_PIONEER_CORPUS_BASELINE=<v0.11.2 dir> cargo test --release \
+//!     FREEMKV_PIONEER_CORPUS_BASELINE=<v0.17.2 dir> cargo test --release \
 //!     -p freemkv-flash pioneer_corpus_full -- --ignored < /dev/null
 //! ```
 //!
@@ -858,15 +858,68 @@ fn known_class(ops: &[String]) -> Option<&'static str> {
     super::only_recover_hint_dropped(ops).then_some("P3")
 }
 
-/// Every family in the corpus, one file each; compared with a v0.11.2 run.
+/// Every family in the corpus, one file each; compared with released v0.17.2.
 #[test]
 #[ignore = "set FREEMKV_PIONEER_CORPUS and FREEMKV_PIONEER_CORPUS_OUT"]
 fn pioneer_corpus_full() {
     let root = corpus_root().expect("FREEMKV_PIONEER_CORPUS");
+    let base = PathBuf::from(
+        std::env::var_os(BASELINE)
+            .expect("FREEMKV_PIONEER_CORPUS_BASELINE: independent baseline required"),
+    );
+    assert!(
+        base.is_dir(),
+        "baseline directory must exist: {}",
+        base.display()
+    );
+    let receipt: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(base.join("_baseline_provenance.json"))
+            .expect("baseline provenance required"),
+    )
+    .unwrap();
+    assert_eq!(
+        receipt["source_commit"],
+        "96f222cf85bded408d83622477676e54f37c5fa4"
+    );
+    assert_eq!(
+        receipt["pioneer_optical_revision"],
+        "5051f06025b74e4e840a236951a7a3461a1dc98b"
+    );
+    assert_eq!(
+        receipt["cargo_lock_sha256"],
+        "547bbbef3142d7d4d9bc6c68f65554dbf48e45ebf70c756d0369b6bf658f2cdf"
+    );
+    assert_eq!(
+        receipt["capture_harness_sha256"],
+        "50495967274c055d329fd1f50e94539dc61917feaf41c94f1e235850cf203b6f"
+    );
+    assert_eq!(
+        receipt["hoard_index_sha256"],
+        sha(&std::fs::read(root.join("index/packages.json")).unwrap())
+    );
     let out = PathBuf::from(std::env::var_os(OUT).expect("FREEMKV_PIONEER_CORPUS_OUT"));
-    std::fs::create_dir_all(&out).unwrap();
+    std::fs::create_dir(&out).expect("candidate transcript destination must be new");
     let packages = index(&root);
     let (units, skipped) = units(&packages);
+    assert!(
+        !units.is_empty(),
+        "full Pioneer corpus contains no eligible families"
+    );
+    assert_ne!(
+        std::fs::canonicalize(&out).unwrap(),
+        std::fs::canonicalize(&base).unwrap(),
+        "candidate output must not overwrite the independent baseline"
+    );
+    for unit in &units {
+        let name = file_name(&unit.name);
+        let bytes = std::fs::read(base.join(&name))
+            .unwrap_or_else(|_| panic!("missing baseline for {}", unit.name));
+        assert_eq!(
+            receipt["transcript_sha256"][&name],
+            sha(&bytes),
+            "baseline transcript changed: {name}"
+        );
+    }
     for (unit, record) in units.iter().zip(records(&units)) {
         std::fs::write(out.join(file_name(&unit.name)), record).unwrap();
     }
@@ -876,9 +929,6 @@ fn pioneer_corpus_full() {
     }
     std::fs::write(out.join("_families_without_kernel_and_normal.txt"), summary).unwrap();
 
-    let Some(base) = std::env::var_os(BASELINE).map(PathBuf::from) else {
-        return;
-    };
     let mut report = String::new();
     let mut regressions = 0;
     for unit in &units {
@@ -907,10 +957,10 @@ fn pioneer_corpus_full() {
             if ops.is_empty() {
                 continue;
             }
-            let class = known_class(&ops).unwrap_or_else(|| {
-                regressions += 1;
-                "UNEXPLAINED"
-            });
+            regressions += 1;
+            // Historical classifications are diagnostic only; no differences
+            // from the pinned release are automatically accepted.
+            let class = known_class(&ops).unwrap_or("UNEXPLAINED");
             let _ = writeln!(report, "\n### {title}\nclass: {class}\n```diff");
             for op in &ops {
                 let _ = writeln!(report, "{op}");
@@ -921,6 +971,6 @@ fn pioneer_corpus_full() {
     std::fs::write(out.join("_differences.md"), &report).unwrap();
     assert_eq!(
         regressions, 0,
-        "differences from v0.11.2 of no known class:\n{report}"
+        "differences from released v0.17.2 require review:\n{report}"
     );
 }

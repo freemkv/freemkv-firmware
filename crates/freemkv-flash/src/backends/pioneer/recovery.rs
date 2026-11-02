@@ -118,6 +118,11 @@ impl Current {
 
 impl Plan {
     #[cfg(test)]
+    pub(super) fn prepared_for_tests(&self) -> &PreparedUpdate {
+        &self.prepared
+    }
+
+    #[cfg(test)]
     pub(crate) fn with_family_override(
         current: &Current,
         target: &[u8],

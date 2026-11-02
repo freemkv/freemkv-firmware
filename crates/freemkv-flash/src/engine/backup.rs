@@ -26,7 +26,7 @@ pub(super) fn save_backup(
 /// Publish validated bytes without ever replacing an existing destination.
 /// The validator determines whether the artifact is a proven rollback or a
 /// clearly labeled research candidate; this function claims neither.
-pub(super) fn save_validated(
+pub(crate) fn save_validated(
     path: &Path,
     bytes: &[u8],
     validate: impl Fn(&[u8]) -> Result<()>,
@@ -68,9 +68,14 @@ pub(super) fn save_validated_with_replace(
         NEXT_TEMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let temp = path.with_file_name(temp_name);
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
         .open(&temp)
         .with_context(|| format!("creating temporary backup {}", temp.display()))?;
     let result = (|| -> Result<usize> {
@@ -145,16 +150,19 @@ fn publish_no_clobber(
     if link(temp, path).is_ok() {
         return Ok(());
     }
-    let mut destination = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .with_context(|| {
-            format!(
-                "creating backup {} (existing backups are never overwritten)",
-                path.display()
-            )
-        })?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut destination = options.open(path).with_context(|| {
+        format!(
+            "creating backup {} (existing backups are never overwritten)",
+            path.display()
+        )
+    })?;
     let result = (|| -> Result<()> {
         let mut source = std::fs::File::open(temp)?;
         std::io::copy(&mut source, &mut destination)?;

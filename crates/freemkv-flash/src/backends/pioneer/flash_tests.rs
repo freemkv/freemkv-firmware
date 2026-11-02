@@ -4,6 +4,65 @@ use crate::platform::ScsiDevice;
 use pioneer_optical::drive::{execute_update, UpdateTransfer};
 
 #[test]
+fn source_readback_mismatch_before_writes_remains_preflight_evidence() {
+    use pioneer_optical::receiver::ExecutionError;
+    let error = execution_error(
+        ExecutionError::BeforeWrite(Box::new(ExecutionError::NormalMismatch {
+            stage: FlashStage::Initial,
+            address: 0x410010,
+        })),
+        false,
+        0,
+    );
+    let failure = error
+        .downcast_ref::<crate::backend::UpdateFailure>()
+        .unwrap();
+    assert!(!failure.write_started);
+    assert!(!failure.temporary_firmware);
+    assert_eq!(failure.progress, crate::backend::UpdateProgress::Preflight);
+    assert!(failure.completed_stages.is_empty());
+    assert!(format!("{error:#}").contains("0x410010"));
+}
+
+#[test]
+fn bank_transition_failures_preserve_temporary_normal_and_backup_guidance() {
+    use pioneer_optical::receiver::ExecutionError;
+    for (temporary, bank_started, completed) in
+        [(false, false, 0), (true, false, 0), (true, true, 1)]
+    {
+        let source = Box::new(ExecutionError::Plan("original bank failure"));
+        let error = ExecutionError::BankTransition {
+            temporary_firmware: temporary,
+            bank_write_started: bank_started,
+            phase: "bank-transition-test",
+            source: if completed == 0 {
+                source
+            } else {
+                Box::new(ExecutionError::AfterStage { completed, source })
+            },
+        };
+        let error = execution_error(error, false, 0);
+        let failure = error
+            .downcast_ref::<crate::backend::UpdateFailure>()
+            .unwrap();
+        assert_eq!(failure.temporary_firmware, temporary);
+        // An already installed bridge is recovery state, not evidence that
+        // this invocation attempted a write.
+        assert_eq!(failure.write_started, bank_started);
+        assert_eq!(failure.completed_stages.len(), completed);
+        let message = format!("{error:#}");
+        assert!(message.contains("original bank failure"));
+        assert_eq!(message.contains("temporary Normal firmware"), temporary);
+        assert!(!message.contains("temporary Kernel may remain"));
+        if temporary {
+            assert!(message.contains("saved bridge archive and drive data backup"));
+        } else {
+            assert_eq!(failure.progress, crate::backend::UpdateProgress::Preflight);
+        }
+    }
+}
+
+#[test]
 fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
     let source = || anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
     for error in [

@@ -194,6 +194,94 @@ fn startup_format_refusal_is_shared_by_catalog_and_preparation() {
     )));
 }
 
+// Native bank guard, capacity calculation, startup call pair, and rejection
+// wrappers extracted byte-for-byte from the two customer transition images.
+// The surrounding receiver is synthetic; this is not a flashable OEM image.
+fn pair_with_customer_bank_contract(profile: &str) -> Update {
+    let original = fixture_pair(false, 1);
+    let fixtures: serde_json::Value = serde_json::from_str(include_str!(
+        "../../test-fixtures/pioneer-212u-213u-bank-contracts.json"
+    ))
+    .unwrap();
+    let mut normal = original.normal().image.clone();
+    for fragment in fixtures[profile]["fragments"].as_array().unwrap() {
+        let offset = fragment["offset"].as_u64().unwrap() as usize;
+        let hex = fragment["bytes"].as_str().unwrap();
+        let (pairs, remainder) = hex.as_bytes().as_chunks::<2>();
+        assert!(
+            remainder.is_empty(),
+            "native fixture hex must contain complete bytes"
+        );
+        let bytes: Vec<u8> = pairs
+            .iter()
+            .map(|v| u8::from_str_radix(std::str::from_utf8(v).unwrap(), 16).unwrap())
+            .collect();
+        let required = (offset + bytes.len() + 4).next_multiple_of(0x100);
+        if normal.len() < required {
+            normal.resize(required, 0);
+        }
+        normal[offset..offset + bytes.len()].copy_from_slice(&bytes);
+    }
+    let size = normal.len() as u32;
+    normal[20..24].copy_from_slice(&size.to_be_bytes());
+    balance(&mut normal);
+    let mut encoded = original.normal().repack_resized_normal(&normal).unwrap();
+    let mut key = [0; 20];
+    key[19] = 5;
+    SigningKey::from_bytes(key)
+        .unwrap()
+        .sign_normal(&mut encoded)
+        .unwrap();
+    Update::load(original.kernel_transfer(), &encoded).unwrap()
+}
+
+#[test]
+fn pioneer_212u_213u_bank_contract_regression() {
+    use pioneer_optical::startup::bank::{self, Addresses, Contract, Storage, Validation};
+    let source = pair_with_customer_bank_contract("212u-1.01");
+    let target = pair_with_customer_bank_contract("213u-1.02");
+    let source_banks = bank::analyze_pair(&source.normal().image, Some(&source.kernel().image));
+    let target_banks = bank::analyze_pair(&target.normal().image, Some(&target.kernel().image));
+    assert_eq!(
+        source_banks,
+        Some(Storage::Versioned(Contract {
+            magic: 0xfedc4321,
+            addresses: Addresses::Capacity {
+                when_one: [0x5efffa, 0x5ffffa],
+                otherwise: [0x7dfffa, 0x7efffa]
+            },
+            validation: Validation::RejectMismatch,
+        }))
+    );
+    assert_eq!(
+        target_banks,
+        Some(Storage::Versioned(Contract {
+            magic: 0xfedc4322,
+            addresses: Addresses::Capacity {
+                when_one: [0x5f3ffa, 0x5ffffa],
+                otherwise: [0x7dbffa, 0x7e7ffa]
+            },
+            validation: Validation::RejectMismatch,
+        }))
+    );
+    assert!(bank::check(source_banks, target_banks).is_err());
+    let source_bytes = archive(&source, false);
+    let target_bytes = archive(&target, false);
+    let current = Current::load(&source_bytes).unwrap();
+    assert!(Target::load(&target_bytes)
+        .unwrap()
+        .bind(&current, false)
+        .is_err());
+    let error = Target::load(&target_bytes)
+        .unwrap()
+        .bind(&current, true)
+        .err()
+        .expect("family override must not authorize an unproven bank conversion");
+    assert!(format!("{error:#}").contains("pioneer.startup.bank_conversion_required"));
+    // These real code fragments are surrounded by synthetic firmware. They
+    // cannot impersonate the complete audited OEM pair or authorize conversion.
+}
+
 #[test]
 fn unsigned_targets_are_signed_only_for_transfer_and_invalid_signatures_still_fail() {
     let pair = fixture_pair(false, 1);

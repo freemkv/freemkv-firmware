@@ -3,11 +3,232 @@ use pioneer_optical::receiver::PreparedUpdate;
 
 const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 
+#[path = "bypass_transaction_tests.rs"]
+mod bypass_transaction_tests;
+
+#[path = "native_startup_tests.rs"]
+mod native_startup_tests;
+
+// Release regression: run explicitly with PIONEER_SETTINGS_HOARD pointing at
+// the retained corpus. Unlike an environment-gated early return, a missing
+// corpus is an error when this test is requested. The source is checked against
+// every memory-read hash in the customer's 0.17.2 failure log before preparation.
 #[test]
-fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() {
-    let Ok(root) = std::env::var("PIONEER_SETTINGS_HOARD") else {
-        return;
+#[ignore = "requires retained Pioneer OEM corpus; mandatory for settings release sign-off"]
+fn customer_212u_101_to_213u_102_recovery_prepares_without_bank_conversion_refusal() {
+    use sha2::{Digest, Sha256};
+    let root = std::path::PathBuf::from(
+        std::env::var("PIONEER_SETTINGS_HOARD").expect("PIONEER_SETTINGS_HOARD is required"),
+    );
+    let read = |path: &str, expected: &str| {
+        let bytes = std::fs::read(root.join(path)).unwrap();
+        assert_eq!(format!("{:x}", Sha256::digest(&bytes)), expected);
+        bytes
     };
+    let installed = read(
+        "packages/pioneer/8F01/ID83/1.01/276c667ac1383c3aac110cbb433bd8627e49d626ac7c2136b1fa9dd29ecd11a7.installer.tar",
+        "276c667ac1383c3aac110cbb433bd8627e49d626ac7c2136b1fa9dd29ecd11a7",
+    );
+    let target = read(
+        "packages/pioneer/9201/ID58/1.02/967c3e42c65ae54802d9b6e1480e3fdf5f70b5de0d875da65731ab8567065415.installer.tar",
+        "967c3e42c65ae54802d9b6e1480e3fdf5f70b5de0d875da65731ab8567065415",
+    );
+    let (kernel, normal) = classify_flash_input(&installed).unwrap();
+    let kernel = Envelope::load(&kernel.unwrap()).unwrap();
+    let normal = Envelope::load_with_kernel(&normal.unwrap(), &kernel).unwrap();
+    let chunks: std::collections::BTreeMap<String, String> = serde_json::from_str(include_str!(
+        "../../test-fixtures/pioneer-212u-101-customer-readback.json"
+    ))
+    .unwrap();
+    assert_eq!(chunks.len(), 62);
+    for (location, expected) in chunks {
+        let (address, len) = location.split_once(':').unwrap();
+        let address = usize::from_str_radix(address, 16).unwrap();
+        let len: usize = len.parse().unwrap();
+        let (image, base) = if address < 0x410000 {
+            (kernel.image.as_slice(), 0x400000)
+        } else {
+            (normal.image.as_slice(), 0x410000)
+        };
+        let offset = address - base;
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&image[offset..offset + len])),
+            expected,
+            "retained OEM code differs from customer readback at {location}"
+        );
+    }
+    let (target_kernel, target_normal) = classify_flash_input(&target).unwrap();
+    let target_kernel = Envelope::load(&target_kernel.unwrap()).unwrap();
+    let target_normal =
+        Envelope::load_with_kernel(&target_normal.unwrap(), &target_kernel).unwrap();
+    assert_eq!(
+        include_bytes!("../../test-fixtures/pioneer-213u-bank-guard.bin").as_slice(),
+        &target_normal.image[0x1409e8..0x140a7a]
+    );
+    let fixtures: serde_json::Value = serde_json::from_str(include_str!(
+        "../../test-fixtures/pioneer-212u-213u-bank-contracts.json"
+    ))
+    .unwrap();
+    for (name, image) in [
+        ("212u-1.01", &normal.image),
+        ("213u-1.02", &target_normal.image),
+    ] {
+        assert_eq!(
+            format!("{:x}", Sha256::digest(image)),
+            fixtures[name]["decoded_sha256"]
+        );
+        for fragment in fixtures[name]["fragments"].as_array().unwrap() {
+            let at = fragment["offset"].as_u64().unwrap() as usize;
+            let hex = fragment["bytes"].as_str().unwrap();
+            let actual: String = image[at..at + hex.len() / 2]
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            assert_eq!(
+                actual, hex,
+                "native CI fixture differs from {name} at {at:#x}"
+            );
+        }
+    }
+    let programmer = pioneer_optical::startup::bank::programmer::discover(&normal.image)
+        .expect("exact source OEM must bind native programmer evidence");
+    assert_eq!(
+        (
+            programmer.erase_entry(),
+            programmer.program_entry(),
+            programmer.sector_size()
+        ),
+        (0x4f0, 0x53c, 0x10000)
+    );
+    assert_eq!(programmer.runtime_interval(), (0x4be, 0x28c));
+    assert!(programmer.matches_runtime(&normal.image[0x16e8fc..0x16eb88]));
+    let layout = pioneer_optical::startup::bank::conversion::LayoutPair::discover(
+        &normal.image,
+        &target_normal.image,
+    )
+    .expect("exact OEM images must bind the offline converter");
+    let make_bank = |sequence: u16| {
+        let mut bank: Vec<u8> = (0..0x10000)
+            .map(|i| ((i * 13 + i / 257) % 251) as u8)
+            .collect();
+        bank[0xfff8..0xfffa].copy_from_slice(&0x8765u16.to_be_bytes());
+        bank[0xfffa..0xfffe].copy_from_slice(&0xfedc4321u32.to_be_bytes());
+        bank[0xfffe..].copy_from_slice(&sequence.to_be_bytes());
+        bank
+    };
+    let banks = [make_bank(7), make_bank(8)];
+    let converted = layout.convert([&banks[0], &banks[1]]).unwrap();
+    assert_eq!(converted.receipt().authoritative_bank(), 1);
+    assert_eq!(
+        *converted.footer_to_commit_last(),
+        [0x87, 0x65, 0xfe, 0xdc, 0x43, 0x22, 0, 8]
+    );
+    native_startup_tests::converted_record_reaches_native_acceptance(
+        converted.body_before_commit(),
+        converted.footer_to_commit_last(),
+    );
+    // The host may acknowledge a bank capture only after durable, exact
+    // published readback. Failure to save must not yield a receipt.
+    let captured = pioneer_optical::startup::bank::backup::BankBackup::capture(
+        &normal.image,
+        &target_normal.image,
+        [&banks[0], &banks[1]],
+        0x5e0000,
+        0x5f0000,
+    )
+    .unwrap();
+    let dir = std::env::temp_dir().join(crate::diagnostics::new_operation_id());
+    std::fs::create_dir(&dir).unwrap();
+    let path = dir.join("banks.bin");
+    let saved = super::bank_backup::persist_at(&path, &captured).unwrap();
+    assert!(captured.accepts(&saved));
+    assert_eq!(std::fs::read(&path).unwrap(), captured.bytes());
+    assert!(super::bank_backup::persist_at(&path, &captured).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), captured.bytes());
+    assert!(super::bank_backup::persist_at(&dir.join("missing/banks.bin"), &captured).is_err());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+    let current = recovery::Current::load(&installed).unwrap();
+    let result = recovery::Target::load(&target)
+        .unwrap()
+        .bind(&current, true);
+    assert!(
+        result.is_ok(),
+        "customer recovery preparation failed: {:#}",
+        result.err().unwrap()
+    );
+    let plan = result.unwrap();
+    let prepared = plan.prepared_for_tests();
+    assert_eq!(
+        prepared.pending_bridge(),
+        Some(pioneer_optical::receiver::BridgeKind::PersistentBanks)
+    );
+    let startup = prepared
+        .startup_setting()
+        .expect("preserve target startup policy");
+    assert_eq!(
+        (startup.parameter, startup.value, startup.explicit),
+        (0x9f, 0xffff, false)
+    );
+    assert!(prepared.settings().adaptation_id().is_none());
+    assert!(prepared.settings().requirements().is_empty());
+}
+
+// Literal routing answers are independent of the production resolver. The
+// full corpus KAT below additionally checks the resulting transformed bytes.
+#[test]
+fn pioneer_crossflash_transition_routing_known_answers() {
+    use pioneer_optical::production::ProductCode;
+    use pioneer_optical::settings::routing::{Decision, Table};
+    let table = Table::new(pioneer_optical::settings::adaptation::hardware_rules().unwrap());
+    for (source, target, expected) in [
+        ("BDR-212U", "BDR-213U", Decision::Unscoped),
+        ("BDR-213U", "BDR-212U", Decision::Unscoped),
+        (
+            "BDR-UD02TBD",
+            "BDR-UD04",
+            Decision::Profile("pioneer.ud02-to-ud04-1.14"),
+        ),
+        (
+            "BDR-UD04ABC",
+            "BDR-UD02",
+            Decision::Profile("pioneer.ud04-to-ud02-1.00"),
+        ),
+        (
+            "BDR-UD03FAL",
+            "BDR-UD02",
+            Decision::Profile("pioneer.ud03-to-ud02-1.00"),
+        ),
+        ("BDR-UD02TBD", "BDR-UD02", Decision::OriginalPlatform),
+        ("BDR-UD02TBD", "BDR-213U", Decision::UnsupportedDestination),
+        ("BDR-UD020TBD", "BDR-UD04", Decision::Unscoped),
+    ] {
+        assert_eq!(
+            table.resolve(
+                ProductCode::parse(source).unwrap(),
+                ProductCode::parse(target).unwrap()
+            ),
+            expected,
+            "{source} -> {target}"
+        );
+    }
+    for invalid in ["", "UNKNOWN", "BDR-UD02 TBD"] {
+        assert!(ProductCode::parse(invalid).is_none(), "{invalid:?}");
+    }
+}
+
+#[test]
+#[ignore = "requires retained Pioneer OEM corpus; mandatory for settings release sign-off"]
+fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() {
+    let root = std::env::var("PIONEER_SETTINGS_HOARD")
+        .expect("mandatory corpus KAT requires PIONEER_SETTINGS_HOARD");
     let root = std::path::Path::new(&root);
     let component = |kind: &str, sha: &str, directory: &str| {
         std::fs::read(root.join(directory).join(kind).join(format!("{sha}.enc"))).unwrap()
@@ -845,6 +1066,28 @@ fn pair_with_normal_readback(marker: u8) -> Update {
     .unwrap();
     assert!(update.kernel().normal_layout().is_ok());
     update
+}
+
+#[test]
+fn temporary_bank_bridge_backup_is_usable_current_and_rejects_wrong_pair() {
+    let bridge = pair(false, 1);
+    let bytes = super::backup::assemble_tar(&[
+        bridge.kernel_transfer().to_vec(),
+        bridge.normal_transfer().to_vec(),
+    ])
+    .unwrap();
+    let dir = std::env::temp_dir().join(crate::diagnostics::new_operation_id());
+    std::fs::create_dir(&dir).unwrap();
+    let path = dir.join("bridge.tar");
+    assert!(super::bank_backup::persist_bridge_at(&path, &bytes, &pair(false, 0)).is_err());
+    assert!(!path.exists());
+    super::bank_backup::persist_bridge_at(&path, &bytes, &bridge).unwrap();
+    let saved = std::fs::read(&path).unwrap();
+    assert_eq!(saved, bytes);
+    recovery::Current::load(&saved).expect("saved bridge must be usable as Current for recovery");
+    assert!(super::bank_backup::persist_bridge_at(&path, &bytes, &bridge).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), saved);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

@@ -126,7 +126,7 @@ fn append_envelope(tar: &mut tar::Builder<Vec<u8>>, bytes: &[u8]) -> Result<()> 
 }
 
 /// Assemble a backup `.tar` from one or more built component envelopes.
-fn assemble_tar(components: &[Vec<u8>]) -> Result<Vec<u8>> {
+pub(super) fn assemble_tar(components: &[Vec<u8>]) -> Result<Vec<u8>> {
     let mut tar = tar::Builder::new(Vec::new());
     for bytes in components {
         append_envelope(&mut tar, bytes)?;

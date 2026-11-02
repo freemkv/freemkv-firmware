@@ -5,6 +5,14 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.17.3] - 2026-11-02
+
+### freemkv Flash
+
+- Support the audited BDR-212U 1.01 to BDR-213U 1.02 crossflash with a guarded startup-record conversion, verified drive-data backups, and a saved temporary-firmware recovery archive.
+- Preserve startup parameter changes and refuse unvalidated persistent-record conversions, including when the hardware-family check is bypassed.
+- Add Rust known-answer tests for native startup, record preservation, interrupted writes, recovery and restoration.
+
 ## [0.17.2] - 2026-11-02
 
 ### freemkv Flash

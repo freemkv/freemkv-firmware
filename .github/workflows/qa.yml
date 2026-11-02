@@ -185,7 +185,8 @@ jobs:
   #     cargo +1.94 test -p freemkv-fw --test corpus_create_verify -- --nocapture
   forge-corpus:
     if: ${{ !inputs.native_only }}
-    needs: resolve-msrv
+    # Corpus QA starts only after dev proof and all release compile/tests pass.
+    needs: [resolve-msrv, dev-proof, release-tests]
     runs-on: ubuntu-latest
     defaults:
       run:

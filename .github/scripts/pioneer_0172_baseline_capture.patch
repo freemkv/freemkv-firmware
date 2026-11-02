@@ -1,0 +1,107 @@
+diff --git a/crates/freemkv-flash/src/golden_corpus_tests.rs b/crates/freemkv-flash/src/golden_corpus_tests.rs
+index e4e1a67..9142e71 100644
+--- a/crates/freemkv-flash/src/golden_corpus_tests.rs
++++ b/crates/freemkv-flash/src/golden_corpus_tests.rs
+@@ -858,69 +858,49 @@ fn known_class(ops: &[String]) -> Option<&'static str> {
+     super::only_recover_hint_dropped(ops).then_some("P3")
+ }
+ 
+-/// Every family in the corpus, one file each; compared with a v0.11.2 run.
++/// Capture released 0.17.2 answers only; never run this in the candidate checkout.
+ #[test]
+-#[ignore = "set FREEMKV_PIONEER_CORPUS and FREEMKV_PIONEER_CORPUS_OUT"]
+-fn pioneer_corpus_full() {
++#[ignore = "baseline capture only: requires pinned 0.17.2 checkout and local hoard"]
++fn pioneer_0172_baseline_capture() {
++    assert_eq!(env!("CARGO_PKG_VERSION"), "0.17.2");
+     let root = corpus_root().expect("FREEMKV_PIONEER_CORPUS");
++    let index_bytes = std::fs::read(root.join("index/packages.json")).unwrap();
++    let index_hash = sha(&index_bytes);
++    assert_eq!(
++        index_hash, "b89a2e24618f4ba04b78b192c2308a27d32b59078fa6d29e27a741e0ae30197a",
++        "hoard inventory changed; review and repin baseline inputs"
++    );
+     let out = PathBuf::from(std::env::var_os(OUT).expect("FREEMKV_PIONEER_CORPUS_OUT"));
+-    std::fs::create_dir_all(&out).unwrap();
++    std::fs::create_dir(&out).expect("baseline destination must be new");
+     let packages = index(&root);
+     let (units, skipped) = units(&packages);
++    assert!(!units.is_empty(), "empty baseline corpus");
++    let mut answers = BTreeMap::new();
+     for (unit, record) in units.iter().zip(records(&units)) {
+-        std::fs::write(out.join(file_name(&unit.name)), record).unwrap();
++        let name = file_name(&unit.name);
++        answers.insert(name.clone(), sha(record.as_bytes()));
++        std::fs::write(out.join(name), record).unwrap();
+     }
+     let mut summary = String::new();
+     for (name, reason) in &skipped {
+         let _ = writeln!(summary, "{name}: not covered: {reason}");
+     }
+     std::fs::write(out.join("_families_without_kernel_and_normal.txt"), summary).unwrap();
+-
+-    let Some(base) = std::env::var_os(BASELINE).map(PathBuf::from) else {
+-        return;
+-    };
+-    let mut report = String::new();
+-    let mut regressions = 0;
+-    for unit in &units {
+-        let file = file_name(&unit.name);
+-        let now = std::fs::read_to_string(out.join(&file)).unwrap();
+-        let then = std::fs::read_to_string(base.join(&file))
+-            .unwrap_or_else(|_| panic!("no baseline {file}"));
+-        let (now, then) = (sections(&now), sections(&then));
+-        let mut titles: Vec<&String> = now.iter().chain(&then).map(|(t, _)| t).collect();
+-        titles.sort();
+-        titles.dedup();
+-        for title in titles {
+-            let find = |set: &[(String, Vec<String>)]| -> Vec<String> {
+-                set.iter()
+-                    .find(|(t, _)| t == title)
+-                    .map(|(_, l)| l.clone())
+-                    .unwrap_or_default()
+-            };
+-            let (b, c) = (find(&then), find(&now));
+-            let b: Vec<&str> = b.iter().map(String::as_str).collect();
+-            let c: Vec<&str> = c.iter().map(String::as_str).collect();
+-            let ops: Vec<String> = diff_ops(&b, &c)
+-                .into_iter()
+-                .map(|(sign, line)| format!("{sign}{line}"))
+-                .collect();
+-            if ops.is_empty() {
+-                continue;
+-            }
+-            let class = known_class(&ops).unwrap_or_else(|| {
+-                regressions += 1;
+-                "UNEXPLAINED"
+-            });
+-            let _ = writeln!(report, "\n### {title}\nclass: {class}\n```diff");
+-            for op in &ops {
+-                let _ = writeln!(report, "{op}");
+-            }
+-            report.push_str("```\n");
+-        }
+-    }
+-    std::fs::write(out.join("_differences.md"), &report).unwrap();
+-    assert_eq!(
+-        regressions, 0,
+-        "differences from v0.11.2 of no known class:\n{report}"
+-    );
++    let receipt = serde_json::json!({
++        "release": "v0.17.2",
++        "source_commit": "96f222cf85bded408d83622477676e54f37c5fa4",
++        "pioneer_optical_revision": "5051f06025b74e4e840a236951a7a3461a1dc98b",
++        "cargo_lock_sha256": sha(include_bytes!("../../../Cargo.lock")),
++        "capture_harness_sha256": sha(include_bytes!("golden_corpus_tests.rs")),
++        "hoard_index_sha256": index_hash,
++        "package_count": packages.len(),
++        "tested_family_count": units.len(),
++        "skipped_family_count": skipped.len(),
++        "transcript_sha256": answers,
++    });
++    std::fs::write(
++        out.join("_baseline_provenance.json"),
++        serde_json::to_vec_pretty(&receipt).unwrap(),
++    )
++    .unwrap();
+ }

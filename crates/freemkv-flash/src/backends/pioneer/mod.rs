@@ -21,6 +21,7 @@ use crate::platform::ScsiDevice;
 
 /// Offline reconstruction of Pioneer backup candidates from captured images.
 pub mod backup;
+mod bank_backup;
 /// Read-only validation of extractor-produced Pioneer firmware bundles.
 pub mod bundle;
 /// Pioneer's `info` rows and read-only settings.
@@ -392,12 +393,17 @@ const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware genera
 /// User-visible requirements come from the prepared stages, not model names.
 fn bridge_warnings(plan: &pioneer_optical::receiver::PreparedUpdate) -> Vec<String> {
     use pioneer_optical::receiver::BridgeKind;
+    const BANK_TRANSITION: &str = "This update first saves the drive data and a recovery copy of the temporary firmware. Keep these files until the requested firmware has started and verification completes.";
     let mut warnings = Vec::new();
+    if plan.pending_bridge() == Some(BridgeKind::PersistentBanks) {
+        warnings.push(BANK_TRANSITION.to_string());
+    }
     for stage in plan.stages() {
         let warning = match stage.bridge() {
             Some(BridgeKind::ReceiverMarker) if plan.stages().len() == 2 => DOWNGRADE_WARNING,
             Some(BridgeKind::ReceiverMarker) => "The update includes a temporary accepted Kernel marker. The final stage restores the requested Kernel and verifies its bytes. Keep the backup and diagnostic log until all stages complete.",
             Some(BridgeKind::KernelHandoff) => "This update installs a temporary firmware bridge before the requested target. Each stage must start and pass verification before the next begins. This bridge requires hardware qualification; keep the backup and diagnostic log.",
+            Some(BridgeKind::PersistentBanks) => BANK_TRANSITION,
             None => continue,
         };
         if !warnings.iter().any(|existing| existing == warning) {

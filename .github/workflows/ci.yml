@@ -167,6 +167,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
+      - name: Compile and test Rust examples
+        run: cargo test --locked --examples
+        working-directory: freemkv-firmware
+      - name: Test pinned Pioneer Rust examples and native-code KATs
+        run: python3 .github/scripts/test_pioneer_dependency_examples.py
+        working-directory: freemkv-firmware
+      - name: Mandatory Pioneer settings Rust KATs (no skips)
+        run: python3 .github/scripts/test_pioneer_settings_kats.py
+        working-directory: freemkv-firmware
       # Includes the CMAC-verify T0 proof against a committed stock image.
       - run: cargo test --tests
         working-directory: freemkv-firmware
