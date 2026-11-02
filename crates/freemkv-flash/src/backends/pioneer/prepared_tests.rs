@@ -65,7 +65,7 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             &native_ud04
         )
         .status,
-        crate::crossflash::CompatibilityStatus::Yes
+        crate::crossflash::CompatibilityStatus::Conditional
     );
     assert_eq!(
         crate::crossflash::decide(
@@ -74,7 +74,7 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             &installed
         )
         .status,
-        crate::crossflash::CompatibilityStatus::Yes
+        crate::crossflash::CompatibilityStatus::Conditional
     );
     // Both paths prepare the same certified pair without any factory-SKU read.
     let current = recovery::Current::load(&installed).unwrap();
@@ -171,13 +171,38 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
             .unwrap();
     }
     let native_ud03 = ud03_archive.into_inner().unwrap();
-    let extra = crate::crossflash::hardware_specific_links(
+    let routes = crate::crossflash::classified_routes(
         crate::crossflash::Platform::Pioneer,
         &[&installed, &native_ud04, &native_ud03],
     );
-    // The reviewed native inverse now supplies an ordinary route. Hardware-
-    // specific OEM-return duplicates must disappear for this exact pair.
-    assert!(extra.is_empty());
+    for source in 0..3 {
+        for target in 0..3 {
+            if source == target {
+                continue;
+            }
+            let actual: Vec<_> = routes
+                .iter()
+                .filter(|(i, j, _)| *i == source && *j == target)
+                .map(|(_, _, r)| r)
+                .collect();
+            assert_eq!(
+                actual.len(),
+                3,
+                "every reviewed original platform gets a separate alternative"
+            );
+            for (route, platform) in actual.iter().zip(["UD02", "UD03", "UD04"]) {
+                assert_eq!(route.status, crate::crossflash::RouteStatus::Conditional);
+                assert_eq!(
+                    route.requirements,
+                    vec![crate::crossflash::RouteRequirement::OriginalHardware {
+                        platform: platform.into(),
+                        prefix: None,
+                        suffix: None
+                    }]
+                );
+            }
+        }
+    }
     for original in ["BDR-UD02TBD", "BDU-UD02ABC", "BDR-UD02FAN"] {
         for (target, allowed, profile) in [
             (&native_ud04, true, Some("pioneer.ud02-to-ud04-1.14")),
@@ -308,12 +333,14 @@ fn held_native_inverse_rules_preserve_existing_oem_brand_crossflashes() {
     ] {
         let target = read(target);
         decide_offline(&installed, &target).unwrap();
-        for original in ["BDR-UD03FAL", "BDR-UD04ABC"] {
-            let mut parameters = vec![0xff; pioneer_optical::production::PARAMETERS_LEN];
-            parameters[0x84..0x88].copy_from_slice(b"kw01");
-            parameters[0x90..0x9f].fill(b' ');
-            parameters[0x90..0x90 + original.len()].copy_from_slice(original.as_bytes());
-            decide_offline_for_original(&installed, &target, &parameters).unwrap();
+        let routes = offline_routes(&installed, &target).unwrap();
+        for platform in ["UD03", "UD04"] {
+            assert!(routes.iter().any(|r| r.requirements
+                == vec![crate::crossflash::RouteRequirement::OriginalHardware {
+                    platform: platform.into(),
+                    prefix: None,
+                    suffix: None
+                }]));
         }
     }
 }
