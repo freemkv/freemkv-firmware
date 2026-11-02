@@ -11,6 +11,7 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 
 - Preserve original hardware settings across supported Pioneer firmware changes, including the reviewed UD02/UD03/UD04 adaptations and returns to OEM firmware.
 - Fix Pioneer recovery being incorrectly blocked by a settings check for a different hardware family.
+- Show settings guidance when a Pioneer firmware change has no reviewed settings mapping.
 - Add Save Log after successful operations.
 - Give the macOS Flash window more vertical room.
 - Report ordinary and hardware-dependent firmware routes through one planner, including exact original-hardware checks in the firmware finder.
