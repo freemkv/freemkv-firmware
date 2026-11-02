@@ -763,11 +763,11 @@ impl Shell {
         if let Some(n) = &r.notice {
             self.results.append(&widgets::label(n, &["caption"]));
         }
-        let mut actions = vec![r.view_log.clone()];
-        if let Some(f) = &r.failure {
-            actions.push(f.save_log.clone());
-        }
-        actions.push(r.submit_report.clone());
+        let actions = vec![
+            r.view_log.clone(),
+            r.save_log.clone(),
+            r.submit_report.clone(),
+        ];
         self.results.append(&self.button_row(&actions));
     }
 

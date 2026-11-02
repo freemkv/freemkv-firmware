@@ -1184,10 +1184,7 @@ impl Shell {
                 _ => Tone::Error,
             },
         );
-        match &r.failure {
-            Some(f) => self.save_log.bind(&f.save_log),
-            None => self.save_log.unbind(),
-        }
+        self.save_log.bind(&r.save_log);
         set_text(&self.notice, r.notice.as_deref().unwrap_or(""));
         self.view_log.bind(&r.view_log);
         self.submit_report.bind(&r.submit_report);
@@ -1359,9 +1356,7 @@ impl Shell {
         }
         let mut l = col.line(s.px(lay::ROW_H));
         put(&self.view_log.btn, l.take(self.button_w(s, &r.view_log)));
-        if let Some(f) = &r.failure {
-            put(&self.save_log.btn, l.take(self.button_w(s, &f.save_log)));
-        }
+        put(&self.save_log.btn, l.take(self.button_w(s, &r.save_log)));
         put(
             &self.submit_report.btn,
             l.take(self.button_w(s, &r.submit_report)),

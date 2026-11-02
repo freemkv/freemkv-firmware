@@ -1257,9 +1257,7 @@ impl Controller {
         }
         let actions = stack(mtm, false, 8.0);
         actions.addArrangedSubview(&self.button(&r.view_log));
-        if let Some(f) = &r.failure {
-            actions.addArrangedSubview(&self.button(&f.save_log));
-        }
+        actions.addArrangedSubview(&self.button(&r.save_log));
         actions.addArrangedSubview(&self.button(&r.submit_report));
         results.addArrangedSubview(&actions);
     }
