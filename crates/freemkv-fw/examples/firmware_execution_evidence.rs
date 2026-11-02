@@ -247,6 +247,7 @@ fn main() -> Result<()> {
             }}; }
             routing!(plan.routing_candidates(original, flags)?);
             routing!(plan.auxiliary_candidates(original, flags)?);
+            routing!(plan.read_control_tail_candidates(original, flags)?);
             routing!(plan.completion_candidates(original, flags)?);
             routing!(plan.position_candidates(original, flags)?);
             routing!(plan.position_setup_candidates(original, flags)?);

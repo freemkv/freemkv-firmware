@@ -33,6 +33,12 @@ def source_inputs(data,c,state):
         require(immediate in (0,0xc8),'unknown native selector immediate')
         registers[regno(parts[0])]=(0xc8&~state) if immediate==0 else state
     else:raise AssertionError('unknown native selector: '+ins.mnemonic+' '+ins.op_str)
+    if c.get('role')=='ReadControllerRequest':
+        # The displaced native store is STRB R5,[R4]. Its operands come from
+        # the source-bound request prefix, independently of selector R6.
+        require(bytes(c['original_bytes'])[2:4]==bytes.fromhex('2570'),
+                'ReadControllerRequest displaced store differs')
+        registers[4]=RAM;registers[5]=0
     if c.get('role')=='ReadControl':
         region=c['contract']['region_start'];load=region-10
         require(load>=0,'ReadControl prelude missing')
@@ -122,10 +128,13 @@ def selection(stage,c,contract):
                         memory.append((address,struct.pack('<I',word)))
                     kw={'settings':{3:setting},'registers':registers,'initial_nzcv':cv,
                         'memory':memory,'strict_reads':True}
+                    if c.get('role')=='ReadControllerRequest':
+                        kw.update(allow_writes=[(RAM,RAM+1)],observe_memory=[(RAM,1)])
                     old=stage.execute(False,site,stops,**kw);new=stage.execute(True,site,stops,**kw)
                     expected=c7_accept if setting==1 and state==0xc7 else old['target']
                     require(new['target']==expected,'C7/On native C8 selection contract')
                     unchanged(old,new)
+                    require(old['memory']==new['memory'],'displaced native store changed')
                     return old,new
                 stage.case([setting,state,cv,word],case)
     stage.result['scope']='Every state byte; isolated native selector operands; exact live GPR/NZCV/SP comparison'

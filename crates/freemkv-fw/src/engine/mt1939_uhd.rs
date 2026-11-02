@@ -121,6 +121,11 @@ impl UhdConversionPlan {
                 .map(UhdPatch::routing),
         );
         patches.extend(
+            self.read_control_tail_candidates(image, flags)?
+                .into_iter()
+                .map(UhdPatch::routing),
+        );
+        patches.extend(
             self.completion_candidates(image, flags)?
                 .into_iter()
                 .map(UhdPatch::routing),
@@ -228,6 +233,10 @@ impl UhdConversionPlan {
                 (
                     "auxiliary native selectors",
                     ClassicConsumer::inspect_rom(image, state).map(|_| ()),
+                ),
+                (
+                    "read-control parameter and request selectors",
+                    ClassicReadControlTail::inspect(image, state).map(|_| ()),
                 ),
                 (
                     "position scaling",
@@ -411,6 +420,56 @@ impl UhdConversionPlan {
                 })
             })
             .collect()
+    }
+    /// Extend both later selectors in the bound read-control caller. Patching
+    /// only its first controller-bit check leaves C7 with ordinary parameters.
+    pub fn read_control_tail_candidates(
+        &self,
+        image: &[u8],
+        flags: u32,
+    ) -> Result<Vec<UhdRoutingCandidate<ReadControlTailRole>>> {
+        ensure!(
+            <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
+            "source state changed"
+        );
+        let c =
+            mediatek_optical::image::analysis::ClassicReadControlTail::inspect(image, self.state)?;
+        [
+            (
+                ReadControlTailRole::ReadParameters,
+                c.region,
+                c.parameters,
+                c.callers[0].clone(),
+            ),
+            (
+                ReadControlTailRole::ReadControllerRequest,
+                c.region,
+                c.request,
+                c.callers[1].clone(),
+            ),
+        ]
+        .into_iter()
+        .map(|(area, region_start, selection, caller)| {
+            let site = selection.site();
+            Ok(UhdRoutingCandidate {
+                area,
+                region_start,
+                calculation_end: None,
+                site,
+                original: image[site..site + selection.span()].to_vec(),
+                accept: selection.accept(),
+                reject: selection.reject(),
+                bytes: emit_c7_selection(
+                    self.state,
+                    flags,
+                    selection.replay(),
+                    selection.accept(),
+                    selection.reject(),
+                )?,
+                caller,
+            })
+        })
+        .collect()
     }
     /// Bind and emit native controller/completion roles after the original hook group.
     pub fn completion_candidates(
@@ -786,6 +845,14 @@ pub struct UhdParameterCandidate {
     /// Absent when the complete native getter is state-independent.
     pub hook:
         Option<UhdRoutingCandidate<mediatek_optical::image::analysis::ClassicParameterVariant>>,
+}
+/// Later native selectors in the read-control caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadControlTailRole {
+    /// Six arguments supplied to the native parameter writer.
+    ReadParameters,
+    /// Request, subtype and parameter word supplied to native setup.
+    ReadControllerRequest,
 }
 /// A candidate detour with exact replay bytes and both native continuations.
 /// Includes the native saved-link contract needed before installing a branch.
