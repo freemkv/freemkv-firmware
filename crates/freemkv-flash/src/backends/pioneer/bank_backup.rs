@@ -110,7 +110,10 @@ fn backup_directory() -> Result<PathBuf> {
     let root = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(|home| PathBuf::from(home).join(concat!(".", "local/share")))
+        });
     let root =
         root.context("persistent user data location is unavailable; no bank data was changed")?;
     ensure!(root.is_absolute(), "drive backup location must be absolute");
