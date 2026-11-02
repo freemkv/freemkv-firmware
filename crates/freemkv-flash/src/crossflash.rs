@@ -27,11 +27,72 @@ pub struct Decision {
     pub status: CompatibilityStatus,
     /// Explanation for a refusal; absent for an admitted transfer.
     pub reason: Option<String>,
+    /// Prepared alternatives; empty for an unlisted refusal.
+    pub routes: Vec<Route>,
 }
+
+/// A live prerequisite attached to a specific prepared route. Requirements
+/// within one route are AND; separate routes for the same pair are OR.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RouteRequirement {
+    /// Real factory hardware, independently checked before any write.
+    OriginalHardware {
+        /// Complete factory platform token.
+        platform: String,
+        /// Optional exact product prefix.
+        prefix: Option<String>,
+        /// Optional exact product suffix.
+        suffix: Option<String>,
+    },
+}
+
+/// A prepared alternative for one explicit installed/target pair.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+pub struct Route {
+    /// Allowed, conditional, or future.
+    pub status: RouteStatus,
+    /// Every listed prerequisite must hold for this alternative.
+    pub requirements: Vec<RouteRequirement>,
+}
+
+/// Catalogue route availability, separate from legacy diagnostic verdicts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RouteStatus {
+    /// Prepared without any extra hardware predicate.
+    Allowed,
+    /// Prepared with explicit live prerequisites.
+    Conditional,
+    /// A known transition awaits an implemented adapter.
+    Future,
+}
+
+/// Internal planner result keeps typed refusal explanations with its routes.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Evaluation {
+    pub(crate) routes: Vec<Route>,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug)]
+struct RouteRefusal {
+    status: CompatibilityStatus,
+    reason: String,
+}
+impl std::fmt::Display for RouteRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.reason)
+    }
+}
+impl std::error::Error for RouteRefusal {}
 
 /// Classify typed errors, never message text. Unknown evidence is a hard no.
 pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> CompatibilityStatus {
     loop {
+        if let Some(refusal) = error.downcast_ref::<RouteRefusal>() {
+            return refusal.status;
+        }
         if matches!(
             error.downcast_ref::<pioneer_optical::startup::bank::Error>(),
             Some(pioneer_optical::startup::bank::Error::ConversionRequired { .. })
@@ -59,15 +120,50 @@ pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> C
 
 /// Run the same complete admission checks as Flash and retain refusal kind.
 pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
-    match admits(platform, installed, target) {
-        Ok(()) => Decision {
-            status: CompatibilityStatus::Yes,
-            reason: None,
-        },
-        Err(error) => Decision {
-            status: refusal_status(error.as_ref()),
-            reason: Some(format!("{error:#}")),
-        },
+    match evaluate(platform, installed, target) {
+        Ok(Evaluation { mut routes, reason }) => {
+            routes.sort();
+            routes.dedup();
+            let status = if routes.iter().any(|r| r.status == RouteStatus::Allowed) {
+                CompatibilityStatus::Yes
+            } else if routes.iter().any(|r| r.status == RouteStatus::Conditional) {
+                CompatibilityStatus::Conditional
+            } else {
+                CompatibilityStatus::SoftNo
+            };
+            Decision {
+                status,
+                reason: match status {
+                    CompatibilityStatus::Conditional => Some(
+                        "original factory hardware must satisfy a listed route before any write"
+                            .into(),
+                    ),
+                    CompatibilityStatus::SoftNo => reason,
+                    _ => None,
+                },
+                routes,
+            }
+        }
+        Err(error) => {
+            let mut status = refusal_status(error.as_ref());
+            // Missing evidence without a fully prepared predicate is not a route.
+            if status == CompatibilityStatus::Conditional {
+                status = CompatibilityStatus::HardNo;
+            }
+            let routes = if status == CompatibilityStatus::SoftNo {
+                vec![Route {
+                    status: RouteStatus::Future,
+                    requirements: Vec::new(),
+                }]
+            } else {
+                Vec::new()
+            };
+            Decision {
+                status,
+                reason: Some(format!("{error:#}")),
+                routes,
+            }
+        }
     }
 }
 
@@ -82,7 +178,7 @@ pub enum Platform {
 
 /// Whether `flash` admits `target` on a drive whose installed firmware is
 /// `installed` (refusal reason on `Err`).
-pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()> {
+fn evaluate(platform: Platform, installed: &[u8], target: &[u8]) -> Result<Evaluation> {
     if platform == Platform::Mediatek {
         let installed_package = (installed.get(257..262) == Some(b"ustar"))
             .then(|| crate::mediatek_package::Package::parse(installed))
@@ -95,22 +191,129 @@ pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()>
             .map_or(installed, |p| p.firmware());
         if let Some(package) = &target_package {
             if let Some(intermediate) = package.intermediate() {
-                crate::backend::registry::decide_offline(platform, installed, intermediate)?;
-                return crate::backend::registry::decide_offline(
+                let first =
+                    crate::backend::registry::offline_routes(platform, installed, intermediate)?;
+                let second = crate::backend::registry::offline_routes(
                     platform,
                     intermediate,
                     package.firmware(),
-                );
+                )?;
+                let mut reasons: Vec<_> = [first.reason, second.reason]
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                reasons.sort();
+                reasons.dedup();
+                return Ok(Evaluation {
+                    routes: compose_routes(&first.routes, &second.routes),
+                    reason: (!reasons.is_empty()).then(|| reasons.join("; ")),
+                });
             }
-            return crate::backend::registry::decide_offline(
+            return crate::backend::registry::offline_routes(
                 platform,
                 installed,
                 package.firmware(),
             );
         }
-        return crate::backend::registry::decide_offline(platform, installed, target);
+        return crate::backend::registry::offline_routes(platform, installed, target);
     }
-    crate::backend::registry::decide_offline(platform, installed, target)
+    crate::backend::registry::offline_routes(platform, installed, target)
+}
+
+/// Every alternative of one stage combines with every alternative of the next.
+/// Stage prerequisites accumulate as AND; alternative combinations remain OR.
+fn compose_routes(first: &[Route], second: &[Route]) -> Vec<Route> {
+    let mut routes = Vec::new();
+    for a in first {
+        for b in second {
+            let mut requirements = a.requirements.clone();
+            requirements.extend(b.requirements.iter().cloned());
+            requirements.sort();
+            requirements.dedup();
+            let status = if a.status == RouteStatus::Future || b.status == RouteStatus::Future {
+                RouteStatus::Future
+            } else if requirements.is_empty() {
+                RouteStatus::Allowed
+            } else {
+                RouteStatus::Conditional
+            };
+            routes.push(Route {
+                status,
+                requirements,
+            });
+        }
+    }
+    routes.sort();
+    routes.dedup();
+    routes
+}
+
+/// Every context ran all common admission gates. Only a typed adapter refusal
+/// deferred by that pipeline becomes Future, with that context's predicates.
+/// One failed alternative cannot erase another successful or future route.
+pub(crate) fn collect_routes(
+    contexts: impl IntoIterator<Item = (Vec<RouteRequirement>, Result<Vec<RouteRequirement>>)>,
+) -> Result<Evaluation> {
+    let mut routes = Vec::new();
+    let mut reasons = Vec::new();
+    let mut refusals = Vec::new();
+    for (context, result) in contexts {
+        let (status, mut requirements) = match result {
+            Ok(requirements) => (
+                if requirements.is_empty() {
+                    RouteStatus::Allowed
+                } else {
+                    RouteStatus::Conditional
+                },
+                requirements,
+            ),
+            Err(error) if refusal_status(error.as_ref()) == CompatibilityStatus::SoftNo => {
+                reasons.push(format!("{error:#}"));
+                (RouteStatus::Future, context)
+            }
+            Err(error) => {
+                refusals.push(error);
+                continue;
+            }
+        };
+        requirements.sort();
+        requirements.dedup();
+        routes.push(Route {
+            status,
+            requirements,
+        });
+    }
+    routes.sort();
+    routes.dedup();
+    if routes.is_empty() {
+        refusals.sort_by_key(|error| format!("{error:#}"));
+        return Err(refusals
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| anyhow::anyhow!("no supported original-hardware context")));
+    }
+    reasons.sort();
+    reasons.dedup();
+    Ok(Evaluation {
+        routes,
+        reason: (!reasons.is_empty()).then(|| reasons.join("; ")),
+    })
+}
+
+/// Whether a fully prepared route has no additional live prerequisites.
+/// Conditional routes are available through [`decide`], with exact predicates.
+pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()> {
+    let decision = decide(platform, installed, target);
+    if decision.status == CompatibilityStatus::Yes {
+        return Ok(());
+    }
+    Err(RouteRefusal {
+        status: decision.status,
+        reason: decision
+            .reason
+            .unwrap_or_else(|| "no admitted route".into()),
+    }
+    .into())
 }
 
 /// Every admitted `(installed, target)` pair of distinct packages, as indices
@@ -124,10 +327,7 @@ pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
 }
 
 /// Admitted and known future-adapter candidates; hard refusals stay unlisted.
-pub fn classified_links(
-    platform: Platform,
-    packages: &[&[u8]],
-) -> Vec<(usize, usize, CompatibilityStatus)> {
+pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize, Route)> {
     let keys: Vec<Prefilter> = packages
         .iter()
         .map(|p| Prefilter::of(platform, p))
@@ -138,7 +338,7 @@ pub fn classified_links(
         .collect();
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     let chunk = candidates.len().div_ceil(workers).max(1);
-    let mut admitted: Vec<(usize, usize, CompatibilityStatus)> = std::thread::scope(|scope| {
+    let mut admitted: Vec<(usize, usize, Route)> = std::thread::scope(|scope| {
         let handles: Vec<_> = candidates
             .chunks(chunk)
             .map(|pairs| {
@@ -146,9 +346,11 @@ pub fn classified_links(
                     pairs
                         .iter()
                         .copied()
-                        .filter_map(|(i, j)| {
-                            let status = decide(platform, packages[i], packages[j]).status;
-                            (status != CompatibilityStatus::HardNo).then_some((i, j, status))
+                        .flat_map(|(i, j)| {
+                            decide(platform, packages[i], packages[j])
+                                .routes
+                                .into_iter()
+                                .map(move |route| (i, j, route))
                         })
                         .collect::<Vec<_>>()
                 })
@@ -159,8 +361,28 @@ pub fn classified_links(
             .flat_map(|h| h.join().expect("crossflash worker panicked"))
             .collect()
     });
-    admitted.sort_unstable_by_key(|&(i, j, _)| (i, j));
+    admitted.sort_unstable_by(|a, b| (a.0, a.1, &a.2).cmp(&(b.0, b.1, &b.2)));
     admitted
+}
+
+/// Compatibility projection of the unified route evaluator.
+pub fn classified_links(
+    platform: Platform,
+    packages: &[&[u8]],
+) -> Vec<(usize, usize, CompatibilityStatus)> {
+    let mut pairs = std::collections::BTreeMap::new();
+    for (i, j, route) in classified_routes(platform, packages) {
+        let status = match route.status {
+            RouteStatus::Allowed => CompatibilityStatus::Yes,
+            RouteStatus::Conditional => CompatibilityStatus::Conditional,
+            RouteStatus::Future => CompatibilityStatus::SoftNo,
+        };
+        pairs.entry((i, j)).or_insert(status);
+    }
+    pairs
+        .into_iter()
+        .map(|((i, j), status)| (i, j, status))
+        .collect()
 }
 
 /// What decides, without the full gates, that a pair can never be admitted.
@@ -192,7 +414,7 @@ impl Prefilter {
     /// same-controller flash (a crossflash needs a Kernel). MediaTek: a
     /// same-model image (the image model contains the drive's) skips the family
     /// gate, so it stays a candidate.
-    fn may_admit(&self, target: &Prefilter) -> bool {
+    pub(crate) fn may_admit(&self, target: &Prefilter) -> bool {
         use crate::firmware_comparison::FamilyRelationship;
         // Both fingerprints came from current backend analyzers in this process.
         let namespace = |platform| match platform {
@@ -237,5 +459,87 @@ mod adaptation_tests {
         for error in [Error::OriginalMismatch, Error::Guard, Error::Registry] {
             assert_eq!(refusal_status(&error), CompatibilityStatus::HardNo);
         }
+    }
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+    fn hardware(platform: &str, prefix: Option<&str>) -> RouteRequirement {
+        RouteRequirement::OriginalHardware {
+            platform: platform.into(),
+            prefix: prefix.map(Into::into),
+            suffix: None,
+        }
+    }
+    #[test]
+    fn intermediate_stages_preserve_and_requirements_and_or_alternatives() {
+        let broad = hardware("UD02", None);
+        let narrow = hardware("UD02", Some("BDR"));
+        let first = [Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![broad.clone()],
+        }];
+        let second = [
+            Route {
+                status: RouteStatus::Allowed,
+                requirements: vec![],
+            },
+            Route {
+                status: RouteStatus::Conditional,
+                requirements: vec![narrow.clone()],
+            },
+        ];
+        let result = compose_routes(&first, &second);
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![broad.clone()]
+        }));
+        assert!(result.contains(&Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![broad, narrow]
+        }));
+    }
+    #[test]
+    fn future_and_hard_refusal_context_order_cannot_erase_a_route() {
+        use pioneer_optical::startup::bank::{Error, Storage};
+        let contexts = || {
+            vec![
+                (
+                    vec![hardware("UD02", None)],
+                    Err(Error::ConversionRequired {
+                        installed: Storage::KernelSequences {
+                            sequences: [1, 2],
+                            bases: [3, 4],
+                        },
+                        target: Storage::KernelSequences {
+                            sequences: [5, 6],
+                            bases: [7, 8],
+                        },
+                    }
+                    .into()),
+                ),
+                (
+                    vec![hardware("UD03", None)],
+                    Err(pioneer_optical::settings::adaptation::Error::OriginalMismatch.into()),
+                ),
+            ]
+        };
+        let forward = collect_routes(contexts()).unwrap();
+        let reverse = collect_routes(contexts().into_iter().rev()).unwrap();
+        assert_eq!(forward, reverse);
+        assert!(forward
+            .reason
+            .as_deref()
+            .unwrap()
+            .contains("persistent bank format"));
+        assert_eq!(
+            forward.routes,
+            vec![Route {
+                status: RouteStatus::Future,
+                requirements: vec![hardware("UD02", None)]
+            }]
+        );
     }
 }

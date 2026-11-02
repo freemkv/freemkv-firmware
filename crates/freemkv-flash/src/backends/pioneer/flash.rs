@@ -260,6 +260,7 @@ where
         code,
         "pioneer.settings.compatibility_unresolved"
             | "pioneer.settings.conversion_unavailable"
+            | "pioneer.settings.adaptation_guard_failed"
             | "pioneer.startup.bank_unknown_installed"
             | "pioneer.startup.bank_unknown_target"
             | "pioneer.startup.bank_conversion_required"

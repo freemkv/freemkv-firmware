@@ -844,39 +844,57 @@ fn report_exports_match_0_11_2() {
 
 #[test]
 fn diagnostic_log_exports_match_0_11_2() {
-    let log = temp("diagnostic.log");
-    std::fs::write(&log, "SCSI result: status=0x02\nRESULT: error\n").unwrap();
-    let mut app = pioneer_app();
-    press(&mut app, "Read drive information");
-    let row = report::Row::gui(
-        "field",
-        "Diagnostic log",
-        log.display().to_string().as_str().into(),
-    );
-    let worker = app.worker.clone().unwrap();
-    worker.send(Msg::Event(Event::Report(row.into()))).unwrap();
-    finish(&mut app, Err("drive refused".into()));
+    for failed in [false, true] {
+        let log = temp("diagnostic.log");
+        std::fs::write(
+            &log,
+            if failed {
+                "RESULT: error\n"
+            } else {
+                "RESULT: success\n"
+            },
+        )
+        .unwrap();
+        let mut app = pioneer_app();
+        press(&mut app, "Read drive information");
+        let row = report::Row::gui(
+            "field",
+            "Diagnostic log",
+            log.display().to_string().as_str().into(),
+        );
+        let worker = app.worker.clone().unwrap();
+        worker.send(Msg::Event(Event::Report(row.into()))).unwrap();
+        finish(
+            &mut app,
+            if failed {
+                Err("drive refused".into())
+            } else {
+                Ok(())
+            },
+        );
 
-    let results = app.view().results.unwrap();
-    let failure = results.failure.expect("a failure offers the log");
-    assert_eq!(failure.save_log.text, "Save Log…");
-    assert_eq!(
-        app.dispatch(results.view_log.input),
-        [Effect::OpenPath(log.clone())]
-    );
+        let results = app.view().results.unwrap();
+        assert_eq!(results.failure.is_some(), failed);
+        assert!(results.save_log.enabled);
+        assert_eq!(results.save_log.text, "Save Log…");
+        assert_eq!(
+            app.dispatch(results.view_log.input),
+            [Effect::OpenPath(log.clone())]
+        );
 
-    let text = std::fs::read_to_string(&log).unwrap();
-    assert_eq!(
-        app.dispatch(Input::CopyDiagnostics),
-        [Effect::CopyText(text.clone())]
-    );
-    let saved = app.dispatch(failure.save_log.input);
-    assert_eq!(save_name(&saved), v0_11_2::DIAGNOSTIC_LOG);
-    let out = temp("exported.log");
-    app.dispatch(Input::Chosen(Pick::DiagnosticLog, out.clone()));
-    assert_eq!(std::fs::read_to_string(&out).unwrap(), text);
-    std::fs::remove_file(&out).unwrap();
-    std::fs::remove_file(&log).unwrap();
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            app.dispatch(Input::CopyDiagnostics),
+            [Effect::CopyText(text.clone())]
+        );
+        let saved = app.dispatch(results.save_log.input);
+        assert_eq!(save_name(&saved), v0_11_2::DIAGNOSTIC_LOG);
+        let out = temp("exported.log");
+        app.dispatch(Input::Chosen(Pick::DiagnosticLog, out.clone()));
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), text);
+        std::fs::remove_file(&out).unwrap();
+        std::fs::remove_file(&log).unwrap();
+    }
 }
 
 // ── settings ──────────────────────────────────────────────────────────────

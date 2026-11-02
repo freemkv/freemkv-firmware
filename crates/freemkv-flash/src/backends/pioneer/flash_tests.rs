@@ -1129,6 +1129,30 @@ fn settings_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
 }
 
 #[test]
+fn adaptation_guard_is_settings_refusal_and_other_categories_are_preserved() {
+    use pioneer_optical::{receiver::PreparationError, settings::adaptation::Error};
+    let report = super::preparation_error(PreparationError::Adaptation(Error::Guard));
+    assert_eq!(
+        crate::user_error::UserError::of(&report).id,
+        "errors.settings_unresolved"
+    );
+    assert_eq!(
+        crate::crossflash::refusal_status(report.as_ref()),
+        crate::crossflash::CompatibilityStatus::HardNo
+    );
+    assert!(report
+        .chain()
+        .any(|e| matches!(e.downcast_ref::<Error>(), Some(Error::Guard))));
+    for (error, expected) in [
+        (Error::Registry, "errors.unexpected"),
+        (Error::Representation, "errors.unsupported_firmware"),
+    ] {
+        let report = super::preparation_error(PreparationError::Adaptation(error));
+        assert_eq!(crate::user_error::UserError::of(&report).id, expected);
+    }
+}
+
+#[test]
 fn stage_failure_retains_completion_without_host_progress_callbacks() {
     use pioneer_optical::receiver::ExecutionError;
     let error = execution_error(

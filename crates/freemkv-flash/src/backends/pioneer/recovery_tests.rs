@@ -177,6 +177,14 @@ fn startup_format_refusal_is_shared_by_catalog_and_preparation() {
         .reason
         .unwrap()
         .contains("pioneer.startup.bank_conversion_required"));
+    let legacy = crate::crossflash::admits(Platform::Pioneer, &source, &target).unwrap_err();
+    assert_eq!(
+        crate::crossflash::refusal_status(legacy.as_ref()),
+        CompatibilityStatus::SoftNo
+    );
+    assert!(legacy
+        .to_string()
+        .contains("pioneer.startup.bank_conversion_required"));
     let error = Plan::prepare(&source, &target)
         .err()
         .expect("startup format must refuse preparation");
