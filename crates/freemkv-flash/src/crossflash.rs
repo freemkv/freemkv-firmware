@@ -75,9 +75,24 @@ pub(crate) struct Evaluation {
     pub(crate) reason: Option<String>,
 }
 
+#[derive(Debug)]
+struct RouteRefusal {
+    status: CompatibilityStatus,
+    reason: String,
+}
+impl std::fmt::Display for RouteRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.reason)
+    }
+}
+impl std::error::Error for RouteRefusal {}
+
 /// Classify typed errors, never message text. Unknown evidence is a hard no.
 pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> CompatibilityStatus {
     loop {
+        if let Some(refusal) = error.downcast_ref::<RouteRefusal>() {
+            return refusal.status;
+        }
         if matches!(
             error.downcast_ref::<pioneer_optical::startup::bank::Error>(),
             Some(pioneer_optical::startup::bank::Error::ConversionRequired { .. })
@@ -288,15 +303,17 @@ pub(crate) fn collect_routes(
 /// Whether a fully prepared route has no additional live prerequisites.
 /// Conditional routes are available through [`decide`], with exact predicates.
 pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()> {
-    let routes = evaluate(platform, installed, target)?;
-    anyhow::ensure!(
-        routes
-            .routes
-            .iter()
-            .any(|r| r.status == RouteStatus::Allowed && r.requirements.is_empty()),
-        pioneer_optical::settings::adaptation::Error::OriginalRequired
-    );
-    Ok(())
+    let decision = decide(platform, installed, target);
+    if decision.status == CompatibilityStatus::Yes {
+        return Ok(());
+    }
+    Err(RouteRefusal {
+        status: decision.status,
+        reason: decision
+            .reason
+            .unwrap_or_else(|| "no admitted route".into()),
+    }
+    .into())
 }
 
 /// Every admitted `(installed, target)` pair of distinct packages, as indices
