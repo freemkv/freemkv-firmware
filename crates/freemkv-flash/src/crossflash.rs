@@ -54,6 +54,37 @@ pub struct Route {
     pub status: RouteStatus,
     /// Every listed prerequisite must hold for this alternative.
     pub requirements: Vec<RouteRequirement>,
+    /// Prepared for the source firmware’s native product scope. This catalogue
+    /// classification never removes live original-hardware requirements.
+    pub native_supported: bool,
+}
+
+/// Attach catalogue provenance from a codec-validated source OEM descriptor.
+/// This does not authorize an update or remove any original-hardware guard.
+pub(crate) fn bind_native_product(
+    routes: &mut [Route],
+    native: Option<pioneer_optical::production::ProductCode<'_>>,
+) {
+    for route in routes {
+        route.native_supported = route.status != RouteStatus::Future
+            && route
+                .requirements
+                .iter()
+                .all(|requirement| match requirement {
+                    RouteRequirement::OriginalHardware {
+                        platform,
+                        prefix,
+                        suffix,
+                    } => native.is_some_and(|product| {
+                        pioneer_optical::settings::routing::ProductSelector {
+                            platform,
+                            prefix: prefix.as_deref(),
+                            suffix: suffix.as_deref(),
+                        }
+                        .matches(product)
+                    }),
+                });
+    }
 }
 
 /// Catalogue route availability, separate from legacy diagnostic verdicts.
@@ -152,6 +183,7 @@ pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
             }
             let routes = if status == CompatibilityStatus::SoftNo {
                 vec![Route {
+                    native_supported: false,
                     status: RouteStatus::Future,
                     requirements: Vec::new(),
                 }]
@@ -238,6 +270,7 @@ fn compose_routes(first: &[Route], second: &[Route]) -> Vec<Route> {
                 RouteStatus::Conditional
             };
             routes.push(Route {
+                native_supported: a.native_supported && b.native_supported,
                 status,
                 requirements,
             });
@@ -279,6 +312,7 @@ pub(crate) fn collect_routes(
         requirements.sort();
         requirements.dedup();
         routes.push(Route {
+            native_supported: status == RouteStatus::Allowed,
             status,
             requirements,
         });
@@ -473,19 +507,77 @@ mod route_tests {
         }
     }
     #[test]
+    fn native_conversion_wins_and_removal_exposes_hardware_return() {
+        for source in ["BDR-UD02", "BDR-UD03", "BDR-UD04"] {
+            let mut routes: Vec<_> = ["UD02", "UD03", "UD04"]
+                .into_iter()
+                .map(|platform| Route {
+                    status: RouteStatus::Conditional,
+                    requirements: vec![hardware(platform, None)],
+                    native_supported: false,
+                })
+                .collect();
+            let guards: Vec<_> = routes.iter().map(|r| r.requirements.clone()).collect();
+            bind_native_product(
+                &mut routes,
+                pioneer_optical::production::ProductCode::parse(source),
+            );
+            assert_eq!(routes.iter().filter(|r| r.native_supported).count(), 1);
+            assert_eq!(
+                routes
+                    .iter()
+                    .map(|r| r.requirements.clone())
+                    .collect::<Vec<_>>(),
+                guards
+            );
+            let native = routes.remove(routes.iter().position(|r| r.native_supported).unwrap());
+            assert!(routes.iter().all(|r| !r.native_supported));
+            assert!(routes.iter().all(|r| r.status == RouteStatus::Conditional));
+            routes.push(native);
+            assert!(routes.iter().any(|r| r.native_supported));
+        }
+    }
+
+    #[test]
+    fn native_classification_requires_complete_product_scope_and_prepared_route() {
+        let mut routes = vec![Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![hardware("UD02", Some("BDU"))],
+            native_supported: false,
+        }];
+        bind_native_product(
+            &mut routes,
+            pioneer_optical::production::ProductCode::parse("BDR-UD02"),
+        );
+        assert!(!routes[0].native_supported);
+        bind_native_product(&mut routes, None);
+        assert!(!routes[0].native_supported);
+        routes[0].requirements = vec![hardware("UD02", Some("BDR"))];
+        routes[0].status = RouteStatus::Future;
+        bind_native_product(
+            &mut routes,
+            pioneer_optical::production::ProductCode::parse("BDR-UD02"),
+        );
+        assert!(!routes[0].native_supported);
+    }
+
+    #[test]
     fn intermediate_stages_preserve_and_requirements_and_or_alternatives() {
         let broad = hardware("UD02", None);
         let narrow = hardware("UD02", Some("BDR"));
         let first = [Route {
+            native_supported: false,
             status: RouteStatus::Conditional,
             requirements: vec![broad.clone()],
         }];
         let second = [
             Route {
+                native_supported: false,
                 status: RouteStatus::Allowed,
                 requirements: vec![],
             },
             Route {
+                native_supported: false,
                 status: RouteStatus::Conditional,
                 requirements: vec![narrow.clone()],
             },
@@ -493,10 +585,12 @@ mod route_tests {
         let result = compose_routes(&first, &second);
         assert_eq!(result.len(), 2);
         assert!(result.contains(&Route {
+            native_supported: false,
             status: RouteStatus::Conditional,
             requirements: vec![broad.clone()]
         }));
         assert!(result.contains(&Route {
+            native_supported: false,
             status: RouteStatus::Conditional,
             requirements: vec![broad, narrow]
         }));
@@ -537,6 +631,7 @@ mod route_tests {
         assert_eq!(
             forward.routes,
             vec![Route {
+                native_supported: false,
                 status: RouteStatus::Future,
                 requirements: vec![hardware("UD02", None)]
             }]

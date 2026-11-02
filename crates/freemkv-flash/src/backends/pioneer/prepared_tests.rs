@@ -411,8 +411,32 @@ fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() 
                 3,
                 "every reviewed original platform gets a separate alternative"
             );
+            assert!(
+                actual.iter().any(|route| route.native_supported),
+                "native conversion is a normal Cross Flash"
+            );
+            let without_native: Vec<_> = actual
+                .iter()
+                .filter(|route| !route.native_supported)
+                .collect();
+            assert!(
+                !without_native.is_empty(),
+                "other original hardware retains return alternatives"
+            );
+            assert!(
+                without_native.iter().all(|route| !route.native_supported),
+                "removing native conversion leaves only hardware-specific fallback"
+            );
+            assert!(
+                actual.iter().any(|route| route.native_supported),
+                "restoring native conversion suppresses hardware fallback"
+            );
             for (route, platform) in actual.iter().zip(["UD02", "UD03", "UD04"]) {
                 assert_eq!(route.status, crate::crossflash::RouteStatus::Conditional);
+                assert_eq!(
+                    route.native_supported,
+                    platform == ["UD02", "UD04", "UD03"][source]
+                );
                 assert_eq!(
                     route.requirements,
                     vec![crate::crossflash::RouteRequirement::OriginalHardware {
@@ -1377,6 +1401,7 @@ fn held_oem_branded_routes_retain_exact_prepared_hardware_requirements() {
         let expected: Vec<_> = ["UD03", "UD04"]
             .into_iter()
             .map(|platform| crate::crossflash::Route {
+                native_supported: false,
                 status: crate::crossflash::RouteStatus::Conditional,
                 requirements: vec![crate::crossflash::RouteRequirement::OriginalHardware {
                     platform: platform.into(),
@@ -1385,7 +1410,18 @@ fn held_oem_branded_routes_retain_exact_prepared_hardware_requirements() {
                 }],
             })
             .collect();
-        assert_eq!(decision.routes, expected, "{pair}");
+        // This fixture checks exact live prerequisites; native catalogue
+        // classification is covered by the six-direction OEM matrix above.
+        let requirements_only: Vec<_> = decision
+            .routes
+            .iter()
+            .cloned()
+            .map(|mut route| {
+                route.native_supported = false;
+                route
+            })
+            .collect();
+        assert_eq!(requirements_only, expected, "{pair}");
         for platform in ["UD03", "UD04"] {
             let scope = pioneer_optical::settings::adaptation::hardware_rules()
                 .unwrap()

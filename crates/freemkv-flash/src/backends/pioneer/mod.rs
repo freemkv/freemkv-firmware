@@ -499,7 +499,7 @@ pub(crate) fn offline_routes(
     } else {
         scopes.push(None);
     }
-    crate::crossflash::collect_routes(scopes.into_iter().map(|scope| {
+    let mut evaluation = crate::crossflash::collect_routes(scopes.into_iter().map(|scope| {
         let context = scope
             .map(
                 |scope| crate::crossflash::RouteRequirement::OriginalHardware {
@@ -539,7 +539,17 @@ pub(crate) fn offline_routes(
             Ok(requirements)
         })();
         (context, prepared)
-    }))
+    }))?;
+    // The receiver has already validated the installed envelope. Parse its OEM
+    // product descriptor with the SDK grammar, never catalogue/model heuristics.
+    let native_header = normal
+        .as_deref()
+        .and_then(pioneer_optical::envelope::header_info);
+    let native = native_header
+        .as_ref()
+        .and_then(|h| pioneer_optical::production::ProductCode::parse(&h.model));
+    crate::crossflash::bind_native_product(&mut evaluation.routes, native);
+    Ok(evaluation)
 }
 
 /// The routing facts the offline crossflash pre-filter compares: the family

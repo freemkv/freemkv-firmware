@@ -58,7 +58,7 @@ fn run() -> Result<()> {
         )
         .context(freemkv_flash::user_error::IssueCode::CommandOptions));
     };
-    let mut groups: BTreeMap<(String, RouteStatus, Vec<RouteRequirement>), Vec<String>> =
+    let mut groups: BTreeMap<(String, RouteStatus, Vec<RouteRequirement>, bool), Vec<String>> =
         BTreeMap::new();
     let mut evaluated_packages = Vec::new();
     for (dir, ext, platform) in [
@@ -76,16 +76,21 @@ fn run() -> Result<()> {
         evaluated_packages.extend(ids.iter().cloned());
         for (i, j, route) in found {
             groups
-                .entry((ids[i].clone(), route.status, route.requirements))
+                .entry((
+                    ids[i].clone(),
+                    route.status,
+                    route.requirements,
+                    route.native_supported,
+                ))
                 .or_default()
                 .push(ids[j].clone());
         }
     }
     evaluated_packages.sort();
     evaluated_packages.dedup();
-    let groups: Vec<_> = groups.into_iter().map(|((source,status,requirements),mut targets)| {
+    let groups: Vec<_> = groups.into_iter().map(|((source,status,requirements,native_supported),mut targets)| {
         targets.sort(); targets.dedup();
-        serde_json::json!({"source":source,"status":status,"requirements":requirements,"targets":targets})
+        serde_json::json!({"source":source,"status":status,"requirements":requirements,"native_supported":native_supported,"targets":targets})
     }).collect();
     let doc = serde_json::json!({
         "format": "freemkv-crossflash-routes",
