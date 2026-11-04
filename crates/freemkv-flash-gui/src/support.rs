@@ -206,31 +206,40 @@ impl Journal {
                     fs::symlink_metadata(&path)?.file_type().is_file(),
                     "invalid firmware cache file"
                 );
-                anyhow::ensure!(
-                    fs::metadata(&path)?.len() == input.bytes.len() as u64,
-                    "firmware cache length changed"
-                );
-                let mut bytes = Vec::new();
-                File::open(&path)?
-                    .take(input.bytes.len() as u64 + 1)
-                    .read_to_end(&mut bytes)?;
-                anyhow::ensure!(
-                    format!("{:x}", Sha256::digest(&bytes)) == sha256,
-                    "firmware cache checksum changed"
-                );
-            } else {
-                let mut options = OpenOptions::new();
-                options.write(true).create_new(true);
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::OpenOptionsExt;
-                    options.mode(0o600);
+                let intact = fs::metadata(&path)?.len() == input.bytes.len() as u64 && {
+                    let mut bytes = Vec::new();
+                    File::open(&path)?
+                        .take(input.bytes.len() as u64 + 1)
+                        .read_to_end(&mut bytes)?;
+                    format!("{:x}", Sha256::digest(&bytes)) == sha256
+                };
+                if intact {
+                    return Ok(());
                 }
-                let mut file = options.open(&path)?;
+                // A short or damaged snapshot is replaced from the exact bytes held here.
+                fs::remove_file(&path)?;
+            }
+            let temp = cache.join(format!("{sha256}.tmp-{}", random_id()?));
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let written = (|| -> Result<()> {
+                let mut file = options.open(&temp)?;
                 file.write_all(&input.bytes)?;
                 file.flush()?;
+                file.sync_all()?;
+                drop(file);
+                fs::rename(&temp, &path)?;
+                Ok(())
+            })();
+            if written.is_err() {
+                let _ = fs::remove_file(&temp);
             }
-            Ok(())
+            written
         })();
         let filename = input
             .filename
@@ -1253,5 +1262,39 @@ mod retained_capture_tests {
         assert_eq!(logs, 1);
         drop(journal);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn truncated_firmware_snapshot_is_repaired_from_exact_bytes() {
+        use sha2::{Digest, Sha256};
+        let dir = std::env::temp_dir().join(format!("freemkv-snapshot-{}", random_id().unwrap()));
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        let bytes = b"complete firmware input bytes";
+        let cache = dir.join("firmware-inputs");
+        fs::create_dir_all(&cache).unwrap();
+        let path = cache.join(format!("{:x}", Sha256::digest(bytes)));
+        fs::write(&path, &bytes[..8]).unwrap();
+        journal
+            .retain_firmware(
+                &freemkv_flash::workflow::FirmwareInput {
+                    role: "target",
+                    filename: "target.bin".into(),
+                    member: None,
+                    bytes: std::sync::Arc::from(bytes.as_slice()),
+                },
+                "abc123",
+            )
+            .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        let built = journal
+            .source()
+            .bundle_with_control(Scope::Session, None)
+            .unwrap();
+        assert!(built
+            .firmware_inputs
+            .iter()
+            .any(|v| v["role"] == "target" && v["available"] == true));
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
     }
 }
