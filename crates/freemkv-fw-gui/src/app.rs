@@ -165,7 +165,7 @@ impl FwApp {
     fn discover(&mut self) {
         let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let captured = events.clone();
-        self.devices = freemkv_flash::output::capture_events(
+        let devices = freemkv_flash::output::capture_events(
             move |event| captured.lock().unwrap().push(event),
             || {
                 freemkv_fw::diagnostics::run("GUI discovery", || {
@@ -174,6 +174,16 @@ impl FwApp {
                 .unwrap_or_default()
             },
         );
+        let events = std::mem::take(&mut *events.lock().unwrap());
+        self.apply_discovery(devices, events);
+    }
+
+    fn apply_discovery(
+        &mut self,
+        devices: Vec<DriveChoice>,
+        events: Vec<freemkv_flash::output::Event>,
+    ) {
+        self.devices = devices;
         if !self.devices.iter().any(|drive| drive.path == self.device) {
             self.device = self
                 .devices
@@ -181,10 +191,11 @@ impl FwApp {
                 .map(|drive| drive.path.clone())
                 .unwrap_or_default();
         }
-        for event in events.lock().unwrap().drain(..) {
+        for event in events {
             if let freemkv_flash::output::Event::Report(report) = event {
                 for (label, value) in report.gui_fields() {
-                    if label == "Diagnostic log" {
+                    // A displayed failure keeps its own evidence log.
+                    if label == "Diagnostic log" && self.failure.is_none() {
                         self.diagnostic_log = Some(value.into());
                     }
                 }

@@ -306,3 +306,18 @@ fn boot_preview_refuses_an_oversized_input_at_the_shared_cap() {
     std::fs::remove_file(&path).unwrap();
     assert!(format!("{error:#}").contains("MiB cap"), "{error:#}");
 }
+
+#[test]
+fn refresh_keeps_a_displayed_failure_log() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.failure = Some("probe failed".into());
+    app.diagnostic_log = Some("probe.log".into());
+    app.apply_discovery(
+        Vec::new(),
+        vec![freemkv_flash::output::Event::Report(
+            freemkv_flash::report::Row::gui("field", "Diagnostic log", "discovery.log".into())
+                .into(),
+        )],
+    );
+    assert_eq!(app.diagnostic_log, Some("probe.log".into()));
+}
