@@ -82,6 +82,9 @@ pub(crate) fn is_freemkv(dev: &mut dyn ScsiDevice) -> bool {
     }
 }
 
+/// Consecutive failed windows after which the drive is re-pinged.
+const DEAD_WINDOWS: usize = 64;
+
 /// Read the full 2 MiB firmware image through the injected `DumpAll` command
 /// (flash is mapped at address 0). Returns the same `(image, readable, gaps)`
 /// shape as [`crate::probe::FullImage`] so the caller validates it
@@ -93,29 +96,58 @@ pub(crate) fn capture_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> 
     let mut gaps: Vec<(usize, usize)> = Vec::new();
     let mut progress = crate::style::Progress::new("reading drive memory (freemkv)", IMAGE_SIZE);
     let mut off = 0usize;
+    let mut failed_run = 0usize;
+    let mut last_percent = usize::MAX;
     while off < IMAGE_SIZE {
         let len = MEMREAD_LEN.min(IMAGE_SIZE - off);
-        match dev.command_in(&memread_cdb(off as u32), MEMREAD_LEN) {
+        let failure = match dev.command_in(&memread_cdb(off as u32), MEMREAD_LEN) {
             Ok(data) if data.len() >= len => {
                 image.extend_from_slice(&data[..len]);
                 readable += len;
+                failed_run = 0;
+                None
             }
-            _ => {
-                image.extend(std::iter::repeat_n(0xFFu8, len));
-                match gaps.last_mut() {
-                    Some((_, end)) if *end == off => *end = off + len,
-                    _ => gaps.push((off, off + len)),
+            Ok(data) => Some(format!("short read: {} of {len} bytes", data.len())),
+            Err(error) => Some(format!("{error:#}")),
+        };
+        if let Some(reason) = failure {
+            if failed_run == 0 {
+                crate::diagnostics::record(format!("DumpAll read failed at {off:#x}: {reason}"));
+            }
+            failed_run += 1;
+            image.extend(std::iter::repeat_n(0xFFu8, len));
+            match gaps.last_mut() {
+                Some((_, end)) if *end == off => *end = off + len,
+                _ => gaps.push((off, off + len)),
+            }
+            if failed_run % DEAD_WINDOWS == 0 && !is_freemkv(dev) {
+                crate::diagnostics::record(format!(
+                    "DumpAll stopped at {:#x}: the drive no longer answers",
+                    off + len
+                ));
+                let rest = IMAGE_SIZE - (off + len);
+                image.extend(std::iter::repeat_n(0xFFu8, rest));
+                if rest > 0 {
+                    match gaps.last_mut() {
+                        Some((_, end)) if *end == off + len => *end = IMAGE_SIZE,
+                        _ => gaps.push((off + len, IMAGE_SIZE)),
+                    }
                 }
+                break;
             }
         }
         off += len;
         progress.set(off);
-        crate::output::publish(crate::output::Event::Phase {
-            phase: "reading",
-            component: "filter.firmware",
-            done: Some(off),
-            total: Some(IMAGE_SIZE),
-        });
+        let percent = off * 100 / IMAGE_SIZE;
+        if percent != last_percent {
+            last_percent = percent;
+            crate::output::publish(crate::output::Event::Phase {
+                phase: "reading",
+                component: "filter.firmware",
+                done: Some(off),
+                total: Some(IMAGE_SIZE),
+            });
+        }
     }
     Ok((image, readable, gaps))
 }
@@ -198,6 +230,61 @@ mod tests {
         assert_eq!(read, image, "DumpAll must return the flash byte-for-byte");
         assert_eq!(readable, IMAGE_SIZE);
         assert!(gaps.is_empty(), "{gaps:#x?}");
+    }
+
+    #[test]
+    fn dumpall_publishes_bounded_phase_events() {
+        let mut fw = FwMock {
+            image: vec![0; IMAGE_SIZE],
+            is_freemkv: true,
+        };
+        let phases = std::rc::Rc::new(std::cell::Cell::new(0usize));
+        let seen = phases.clone();
+        crate::output::capture_events(
+            move |event| {
+                if matches!(event, crate::output::Event::Phase { .. }) {
+                    seen.set(seen.get() + 1);
+                }
+            },
+            || capture_full_image(&mut fw).unwrap(),
+        );
+        assert!(phases.get() <= 101, "{} phase events", phases.get());
+    }
+
+    #[test]
+    fn dumpall_stops_when_the_drive_drops_off_mid_dump() {
+        struct Dropped {
+            fail_from: usize,
+            calls: usize,
+        }
+        impl ScsiDevice for Dropped {
+            fn command_in(&mut self, cdb: &[u8], _alloc: usize) -> anyhow::Result<Vec<u8>> {
+                self.calls += 1;
+                if cdb[4] == VERB_DUMPALL {
+                    let addr = u32::from_be_bytes([cdb[5], cdb[6], cdb[7], cdb[8]]) as usize;
+                    if addr < self.fail_from {
+                        return Ok(vec![0x11; MEMREAD_LEN]);
+                    }
+                }
+                bail!("device gone")
+            }
+            fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> anyhow::Result<()> {
+                bail!("no writes")
+            }
+            fn describe(&self) -> String {
+                "dropped".into()
+            }
+        }
+        let fail_from = 0x1000;
+        let mut dev = Dropped {
+            fail_from,
+            calls: 0,
+        };
+        let (image, readable, gaps) = capture_full_image(&mut dev).unwrap();
+        assert_eq!(image.len(), IMAGE_SIZE);
+        assert_eq!(readable, fail_from);
+        assert_eq!(gaps, vec![(fail_from, IMAGE_SIZE)]);
+        assert!(dev.calls < 1000, "{} commands", dev.calls);
     }
 }
 
