@@ -311,14 +311,7 @@ impl Preferences {
                 }
             }
         }
-        for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-            if let Some(value) = std::env::var_os(key).and_then(|s| s.into_string().ok()) {
-                if let Some(language) = Language::from_code(&value) {
-                    return language;
-                }
-            }
-        }
-        Language::En
+        env_language(|key| std::env::var_os(key).and_then(|s| s.into_string().ok()))
     }
 
     /// Replace a complete preference file atomically, keeping the previous choice on failure.
@@ -413,7 +406,7 @@ pub fn message(key: &str, arguments: &[(&str, String)]) -> String {
 pub fn render(language: Language, value: &str) -> String {
     if let Some(encoded) = value.strip_prefix('\u{1e}') {
         if let Ok(message) = serde_json::from_str::<Value>(encoded) {
-            if let Some(id) = message["id"].as_str() {
+            if let Some(id) = message["id"].as_str().filter(|id| is_message(id)) {
                 let mut result = text(language, id);
                 if let Some(arguments) = message["arguments"].as_array() {
                     // Replace each source placeholder once, without treating inserted data
@@ -560,5 +553,49 @@ pub fn english_json(value: Value) -> Value {
                 .collect(),
         ),
         other => other,
+    }
+}
+
+/// The first non-empty locale variable decides, even when its language is unsupported.
+fn env_language(lookup: impl Fn(&str) -> Option<String>) -> Language {
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Some(value) = lookup(key).filter(|value| !value.is_empty()) {
+            return Language::from_code(&value).unwrap_or(Language::En);
+        }
+    }
+    Language::En
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |key| {
+            pairs
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.to_string())
+        }
+    }
+
+    #[test]
+    fn unsupported_higher_priority_locale_is_not_skipped() {
+        assert_eq!(
+            env_language(env(&[("LC_ALL", "C"), ("LANG", "de_DE.UTF-8")])),
+            Language::En
+        );
+        assert_eq!(
+            env_language(env(&[("LC_ALL", ""), ("LANG", "de_DE.UTF-8")])),
+            Language::De
+        );
+    }
+
+    #[test]
+    fn unknown_message_id_renders_the_value_unchanged() {
+        let value = "\u{1e}{\"id\":\"no.such.id\"}";
+        assert_eq!(render(Language::En, value), value);
+        let known = message("ui.mtk_read_limits", &[]);
+        assert_ne!(render(Language::En, &known), known);
     }
 }
