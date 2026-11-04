@@ -353,6 +353,7 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 }
             }
             LeverId::RawRead => {
+                let mut classic_conversion_checked = false;
                 let classic = report.engine == "MT1939"
                     && original
                         .get(0x3000..0x3010)
@@ -379,6 +380,7 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                         super::mt1959_uhd::Plan::inspect(original, super::core::FLAG_TABLE_BASE)
                             .and_then(|p| p.verify(img))
                     };
+                    classic_conversion_checked = classic || classic_conversion;
                     checks.push(AuditCheck {
                         lever: name,
                         what: "UHD conversion atomic group".into(),
@@ -479,7 +481,7 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                         detail: format!("scratch 0x{scratch:08x} in [0x201000,0x300000)"),
                     });
                 }
-                if checks.len() == before {
+                if checks.len() == before && !classic_conversion_checked {
                     checks.push(missing_facts(name, "missing AKE/Gate-A/deny detour facts"));
                 }
             }

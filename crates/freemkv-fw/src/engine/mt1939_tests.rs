@@ -632,6 +632,35 @@ fn refed_classic_image_keeps_the_mt1939_engine_label() {
     assert_eq!(again.engine, "MT1939");
 }
 
+#[test]
+fn conversion_only_rawread_lever_passes_the_audit() {
+    let image = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let mut report = Mt1939Engine.modify(image).expect("classic modify");
+    let rawread = report
+        .levers
+        .iter_mut()
+        .find(|l| l.id == LeverId::RawRead)
+        .expect("RawRead lever");
+    assert!(
+        rawread
+            .facts
+            .iter()
+            .any(|(k, v)| *k == "uhd_conversion_count" && *v > 0),
+        "fixture must apply the classic conversion"
+    );
+    rawread.facts.retain(|(k, _)| *k == "uhd_conversion_count");
+    let audit = crate::engine::audit::audit_image(image, &report);
+    assert!(
+        audit.ok(),
+        "{}",
+        audit
+            .failures()
+            .map(|c| format!("[{}] {}: {}", c.lever, c.what, c.detail))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
 /// Minimal recursive `.bin` walk (std-only).
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
