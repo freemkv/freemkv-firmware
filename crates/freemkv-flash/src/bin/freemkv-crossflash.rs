@@ -37,8 +37,9 @@ fn run() -> Result<()> {
     }
     if let [flag, json, installed, target] = args.as_slice() {
         if flag == "--why" && json == "--json" {
-            let installed = std::fs::read(installed)?;
-            let target = std::fs::read(target)?;
+            let read = |p: &str| std::fs::read(p).with_context(|| format!("reading {p}"));
+            let installed = read(installed)?;
+            let target = read(target)?;
             let platform = platform(&target);
             println!(
                 "{}",
@@ -133,13 +134,7 @@ fn why(installed: &Path, target: &Path) -> Result<()> {
 }
 
 fn platform(target: &[u8]) -> Platform {
-    if freemkv_flash::mediatek_package::Package::parse(target).is_ok()
-        || target.get(257..262) != Some(b"ustar")
-    {
-        Platform::Mediatek
-    } else {
-        Platform::Pioneer
-    }
+    Platform::of_input(target)
 }
 
 /// Every `<sha256>.<ext>` in `dir`, sorted by name: (ids, bytes).
