@@ -757,28 +757,48 @@ fn salvage_span(
     let mut p = pos;
     let end = pos + n;
     let mut failed_run = 0usize;
-    // Start of the stretch of failed probe blocks, once salvage probes in blocks.
-    let mut pending: Option<usize> = None;
+    // Failure count at which to next test whether the drive still responds.
+    let mut next_check = DEEP_GIVE_UP_UNITS;
+    let mut probing = false;
+    // Start of the stretch of failed probe blocks, and of the latest one.
+    let mut pending: Option<(usize, usize)> = None;
     while p < end {
-        if failed_run >= DEEP_GIVE_UP_UNITS {
+        if !probing && failed_run >= next_check {
+            // Distinguish bad media from an unresponsive drive first.
+            let alive = match good.or(last_good) {
+                Some((off, len)) => retry_read_n(dev, off, len, 1).is_some(),
+                None => true,
+            };
+            if alive {
+                probing = true;
+            } else {
+                next_check += DEEP_GIVE_UP_UNITS;
+            }
+        }
+        if probing {
             let m = DEEP_PROBE_BLOCK.min(end - p);
             let Some(data) = retry_read_n(dev, start + p, m, 1) else {
-                if pending.is_none() {
-                    crate::diagnostics::record(format!(
-                        "salvage probing in blocks: {failed_run} consecutive unreadable units before {:#x}",
-                        start + p
-                    ));
-                    pending = Some(p);
+                match &mut pending {
+                    None => {
+                        crate::diagnostics::record(format!(
+                            "salvage probing in blocks: {failed_run} consecutive unreadable units before {:#x}",
+                            start + p
+                        ));
+                        pending = Some((p, p));
+                    }
+                    Some((_, latest)) => *latest = p,
                 }
                 p += m;
                 continue;
             };
             image[p..p + m].copy_from_slice(&data);
-            good = Some((start + p, m));
-            if let Some(first) = pending.take() {
+            good = Some((start + p, m.min(DEEP_MIN_CHUNK)));
+            if let Some((first, _)) = pending.take() {
                 rescan_units(dev, start, image, gaps, (first, p));
             }
             failed_run = 0;
+            next_check = DEEP_GIVE_UP_UNITS;
+            probing = false;
             p += m;
             continue;
         }
@@ -793,6 +813,7 @@ fn salvage_span(
                 image[p..p + m].copy_from_slice(&data);
                 good = Some((start + p, m));
                 failed_run = 0;
+                next_check = DEEP_GIVE_UP_UNITS;
             }
             None => {
                 push_gap(gaps, start + p, m);
@@ -801,8 +822,18 @@ fn salvage_span(
         }
         p += m;
     }
-    if let Some(first) = pending {
-        push_gap(gaps, start + first, end - first);
+    if let Some((first, latest)) = pending {
+        // The bad run may end inside the final probe block: test the last unit.
+        let m = DEEP_MIN_CHUNK.min(end - first);
+        match retry_read_n(dev, start + end - m, m, 1) {
+            Some(data) => {
+                image[end - m..end].copy_from_slice(&data);
+                good = Some((start + end - m, m));
+                push_gap(gaps, start + first, latest - first);
+                rescan_units(dev, start, image, gaps, (latest, end - m));
+            }
+            None => push_gap(gaps, start + first, end - first),
+        }
     }
     Ok(good)
 }

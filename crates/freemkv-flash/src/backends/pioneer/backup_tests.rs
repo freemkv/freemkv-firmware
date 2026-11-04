@@ -153,6 +153,77 @@ fn deep_read_recovers_readable_data_between_bad_regions() {
     }
 }
 
+/// Readable bytes after a bad run that ends inside the last probe block survive.
+#[test]
+fn deep_read_recovers_the_tail_when_the_bad_run_ends_in_the_last_probe_block() {
+    struct Tail;
+    impl ScsiDevice for Tail {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            if start < 0x7D00 {
+                bail!("unreadable");
+            }
+            Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "tail".into()
+        }
+    }
+    let (image, gaps) = read_region_deep_gaps(&mut Tail, 0, 0x8000).unwrap();
+    assert_eq!(gaps, vec![(0, 0x7D00)]);
+    for (i, b) in image.iter().enumerate().skip(0x7D00) {
+        assert_eq!(*b, (i & 0xff) as u8, "byte {i:#x}");
+    }
+}
+
+/// A transient burst of failing commands is not bad media.
+#[test]
+fn deep_read_does_not_treat_a_transient_burst_as_bad_media() {
+    struct Burst {
+        fired: bool,
+        burst: usize,
+        calls: usize,
+    }
+    impl ScsiDevice for Burst {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            self.calls += 1;
+            let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            if self.burst > 0 {
+                self.burst -= 1;
+                bail!("drive busy");
+            }
+            if start < 0x104 && start + len > 0x100 {
+                bail!("bad unit");
+            }
+            if len == 4 && start == 0 && !self.fired {
+                self.fired = true;
+                self.burst = 400;
+            }
+            Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "burst".into()
+        }
+    }
+    let mut dev = Burst {
+        fired: false,
+        burst: 0,
+        calls: 0,
+    };
+    let (image, gaps) = read_region_deep_gaps(&mut dev, 0, 0x10000).unwrap();
+    assert!(gaps.iter().all(|&(o, l)| o + l < 0x800), "{gaps:x?}");
+    for (i, b) in image.iter().enumerate().skip(0x800) {
+        assert_eq!(*b, (i & 0xff) as u8, "byte {i:#x}");
+    }
+    assert!(dev.calls < 10000, "too many reads: {}", dev.calls);
+}
+
 /// A wholly unreadable chunk must not cost one full retry ladder per unit.
 #[test]
 fn deep_read_bounds_attempts_on_a_wholly_unreadable_chunk() {
