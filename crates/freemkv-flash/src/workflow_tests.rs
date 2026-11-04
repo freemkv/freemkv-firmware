@@ -427,7 +427,7 @@ fn oem_receiver(vendor: &str) -> crate::platform::MockScsiDevice {
     inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
     inquiry[32..36].copy_from_slice(b"1.00");
     let mut f1 = vec![b' '; 48];
-    f1[16..24].copy_from_slice(b"SAT FFFE");
+    f1[16..24].copy_from_slice(b"SAT 8600");
     f1[24..32].copy_from_slice(b"GENERAL ");
     f1[32..40].copy_from_slice(b"GENERAL ");
     crate::platform::MockScsiDevice::new()

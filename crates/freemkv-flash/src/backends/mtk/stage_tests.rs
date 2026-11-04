@@ -13,9 +13,20 @@ fn old_modified_table_corruption_is_refused_before_flash() {
         .find(|entry| entry.enabled == u32::MAX)
         .unwrap();
     image[entry.entry_off..entry.entry_off + 4].copy_from_slice(&0x02000e41u32.to_le_bytes());
-    let image = crate::cmac::resign(&image).unwrap();
-    assert!(crate::cmac::verify(&image));
-    assert!(super::check_image(&image).is_err());
+    // mediatek-optical 1.3.0 refuses an unknown flag word in `resign` and
+    // `verify` itself, so the overwritten slot can no longer be re-signed into a
+    // MAC-valid image; the upstream refusal and our flag gate must both hold.
+    assert!(matches!(
+        crate::cmac::resign(&image),
+        Err(crate::cmac::CmacError::UnknownEnabled { index, enabled: 0x02000e41 })
+            if index == entry.index
+    ));
+    assert!(!crate::cmac::verify(&image));
+    let refusal = format!("{:#}", super::check_image(&image).unwrap_err());
+    assert!(
+        refusal.contains("unsupported flag word 0x02000e41"),
+        "{refusal}"
+    );
 }
 
 struct Drive {
