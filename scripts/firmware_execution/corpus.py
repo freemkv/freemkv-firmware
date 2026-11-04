@@ -208,7 +208,7 @@ def process(row, options):
         if any(s['status']=='failed' for s in result['stages']):result['status']='failed'
         elif any(s['status']=='unqualified' or s.get('coverage_gaps') for s in result['stages']):result['status']='partial'
         else:result['status']='bounded-pass'
-        if not installed:result['status']='static-only'
+        if not installed and result['status']!='failed':result['status']='static-only'
         if result.get('required_installed_conversion',{}).get('status')=='failed':
             result['status']='failed';result['error']='Required actual final-BIN conversion group missing or invalid'
     except Exception as error:

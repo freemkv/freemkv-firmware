@@ -118,7 +118,7 @@ def main():
             cases.append({'mode':mode, 'input':value, 'outputs':outputs})
     # Re-enter the real DI parent with a previously selected dense profile.
     # This isolates the pre-acquisition mode store; DI/hardware readiness is supplied.
-    proof = json.loads(Path('internal/docs/audits/mt1939-initialization-mode-20261030.json').read_text())['candidate']
+    proof = json.loads((Path(__file__).resolve().parents[1] / 'internal/docs/audits/mt1939-initialization-mode-20261030.json').read_text())['candidate']
     spec = importlib.util.spec_from_file_location('detection', Path(__file__).with_name('test-mt1939-detection.py'))
     detection = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(detection)

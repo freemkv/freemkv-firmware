@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate saved BN11 resident evidence. Never contacts or modifies hardware.
 
-Usage: --source MAIN.bin --capture MEMORY.bin --metadata CAPTURE.json
+Usage: --source MAIN.bin --capture MEMORY.bin --metadata CAPTURE.json --manifest MANIFEST.json
 Metadata fields and exact source bindings are in the companion audit manifest.
 This is an evidence/bounds checker, not a UHD qualification or flash tool.
 """
@@ -147,8 +147,7 @@ def main():
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--capture", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
-    parser.add_argument("--manifest", type=Path, default=Path(__file__).resolve().parents[1] /
-                        "internal/docs/audits/mt1959-old-resident-evidence-20261030.json")
+    parser.add_argument("--manifest", type=Path, required=True)
     args = parser.parse_args()
     try:
         result = check(args.source.read_bytes(), args.capture.read_bytes(),

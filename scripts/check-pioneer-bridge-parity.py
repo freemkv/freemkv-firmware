@@ -51,7 +51,7 @@ sha2 = "0.10"
             normals = [data for _, data in members if len(data) > 0x11200]
             if len(kernels) != 1 or len(normals) != 1:
                 continue
-            directory = root / "corpus" / archive.stem
+            directory = root / "corpus" / archive.relative_to(corpus).with_suffix("")
             directory.mkdir(parents=True)
             entry = {"package": str(archive.relative_to(args.hoard)), "group": archive.relative_to(corpus).parts[0]}
             for name, data in [("kernel", kernels[0]), ("normal", normals[0])]:

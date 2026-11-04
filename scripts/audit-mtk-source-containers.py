@@ -12,7 +12,7 @@ def main():
     p.add_argument('--hoard', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     a = p.parse_args()
-    corpus = json.loads(Path('internal/docs/audits/mediatek-uhd-corpus-20261030.json').read_text())['images']
+    corpus = json.loads((Path(__file__).resolve().parents[1] / 'internal/docs/audits/mediatek-uhd-corpus-20261030.json').read_text())['images']
     by_sha = {r['sha256']: r for r in corpus}
     aliases, containers = [], []
     for source in corpus:

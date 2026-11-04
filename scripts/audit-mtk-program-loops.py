@@ -29,7 +29,9 @@ def query(record):
     source = args.hoard / record['path']
     assert digest(source) == record['sha256'], str(source)
     process = subprocess.run([str(producer), str(source), args.query],
-                             check=True, capture_output=True, text=True)
+                             capture_output=True, text=True)
+    if process.returncode:
+        raise RuntimeError(f"{record['path']}: producer exited {process.returncode}: {process.stderr}")
     result = json.loads(process.stdout)
     assert digest(source) == record['sha256'], 'source changed during query'
     return {'sha256': record['sha256'], 'path': record['path'], **result}
