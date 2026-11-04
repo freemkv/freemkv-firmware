@@ -1063,8 +1063,7 @@ fn mem_read_reports_failed_windows() {
 #[test]
 fn audit_conflicts_with_the_strict_base_build() {
     let err = Cli::try_parse_from(["freemkv-fw", "create", "--base", "--audit", "in.bin"])
-        .err()
-        .expect("--base with --audit must be rejected");
+        .expect_err("--base with --audit must be rejected");
     assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
 }
 
@@ -1087,8 +1086,7 @@ fn output_naming_the_input_through_another_spelling_is_refused() {
         false,
         &settings,
     )
-    .err()
-    .expect("the input must not be overwritten without --in-place");
+    .expect_err("the input must not be overwritten without --in-place");
     assert!(format!("{err:#}").contains("refusing to overwrite the input"));
     assert_eq!(std::fs::read(&input).unwrap(), bu40n_fixture());
 }

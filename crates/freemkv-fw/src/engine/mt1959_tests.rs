@@ -1671,7 +1671,9 @@ fn modify_does_not_require_the_report_only_sense_setter_anchor() {
     let img = freemkv_flash::cmac::resign(&img).unwrap();
     assert!(Mt1959Engine::sense_setter_at(&img, entry).is_err());
 
-    let create = Mt1959Engine.build_report(&img).expect("create tolerates the miss");
+    let create = Mt1959Engine
+        .build_report(&img)
+        .expect("create tolerates the miss");
     let modify = Mt1959Engine
         .build_modify(&img, &bu40n_chip(), &cap(MediaClass::UhdBd, true, true))
         .expect("modify must tolerate the same miss");
@@ -1690,7 +1692,10 @@ fn failed_detour_verification_leaves_the_image_untouched() {
         bail!("forced verification failure")
     });
     assert!(r.is_err());
-    assert!(out == before, "failed commit must restore stub and site bytes");
+    assert!(
+        out == before,
+        "failed commit must restore stub and site bytes"
+    );
 
     commit_detour(&mut out, site, stub_va, &[0xAB; 8], "Test").unwrap();
     assert!(out != before, "successful commit writes the detour");
