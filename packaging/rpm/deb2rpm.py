@@ -29,13 +29,24 @@ from pathlib import Path
 ARCHES = {'amd64': 'x86_64', 'arm64': 'aarch64', 'armhf': 'armv7hl', 'i386': 'i686', 'all': 'noarch'}
 # Debian dependency -> (Fedora name, openSUSE name) for a versioned rich Requires.
 # Anything else on the Depends line is a shared library rpm's generator already
-# covers, or listed in NAMED.
+# covers, or listed in NAMED or SONAMES.
 VERSIONED = {
     'libgtk-4-1': ('gtk4', 'libgtk-4-1'),
     'libadwaita-1-0': ('libadwaita', 'libadwaita-1-0'),
 }
 # Debian dependency -> RPM name (same on Fedora and openSUSE), not a library.
 NAMED = {'ca-certificates': 'ca-certificates'}
+# Debian library -> soname for the libraries the GUIs dlopen (build-debs.sh $dl):
+# no DT_NEEDED entry, so rpm's generator cannot see them. Fedora and openSUSE
+# both provide these soname capabilities.
+SONAMES = {
+    'libgl1': 'libGL.so.1', 'libegl1': 'libEGL.so.1',
+    'libxkbcommon0': 'libxkbcommon.so.0', 'libxkbcommon-x11-0': 'libxkbcommon-x11.so.0',
+    'libwayland-client0': 'libwayland-client.so.0', 'libwayland-egl1': 'libwayland-egl.so.1',
+    'libx11-6': 'libX11.so.6', 'libxcursor1': 'libXcursor.so.1', 'libxi6': 'libXi.so.6',
+    'libxrandr2': 'libXrandr.so.2',
+}
+BITS64 = {'x86_64', 'aarch64', 'ppc64le', 's390x', 'riscv64'}
 # Payload paths that only mean something to dpkg.
 DEBIAN_ONLY = re.compile(r'^usr/share/lintian(/|$)|^usr/share/doc/[^/]+/(README\.Debian|changelog\.Debian\.gz)$')
 
@@ -100,7 +111,7 @@ def vkey(v):
     return [int(p) if p.isdigit() else 0 for p in re.split(r'[.~+-]', v)]
 
 
-def requires(depends, floors):
+def requires(depends, floors, arch=None):
     out = []
     for name, op, ver in parse_depends(depends):
         if name in VERSIONED:
@@ -112,9 +123,11 @@ def requires(depends, floors):
             out.append(f'({fedora} >= {need} or {suse} >= {need})' if need else f'({fedora} or {suse})')
         elif name in NAMED:
             out.append(NAMED[name])
+        elif name in SONAMES:
+            out.append(SONAMES[name] + ('()(64bit)' if arch in BITS64 else ''))
         # Libraries (libc6, libgcc-s1, libglib2.0-0t64, ...): rpm's ELF
         # dependency generator emits the matching soname Requires.
-    return out
+    return list(dict.fromkeys(out))
 
 
 def spec_text(f, version, arch, files, dirs, reqs, license_):
@@ -179,7 +192,7 @@ def convert(deb, output, license_, floors):
         version = upstream(f['Version'])
         spec = tmp / 'SPECS' / f'{package}.spec'
         spec.parent.mkdir()
-        spec.write_text(spec_text(f, version, arch, files, dirs, requires(f.get('Depends', ''), floors), license_))
+        spec.write_text(spec_text(f, version, arch, files, dirs, requires(f.get('Depends', ''), floors, arch), license_))
         subprocess.run(['rpmbuild', '-bb', '--target', arch, '--define', f'_topdir {tmp}', str(spec)],
                        check=True, stdout=subprocess.DEVNULL)
         built = list((tmp / 'RPMS').rglob('*.rpm'))
