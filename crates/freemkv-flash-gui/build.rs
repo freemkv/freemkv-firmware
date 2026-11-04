@@ -19,6 +19,10 @@ fn main() {
         res.set_icon("assets/freemkv.ico");
         res.set_manifest_file("assets/freemkv-flash-gui.manifest");
         if let Err(e) = res.compile() {
+            // Release builds need the Common Controls v6 manifest (TaskDialogIndirect).
+            if std::env::var("PROFILE").as_deref() == Ok("release") {
+                panic!("failed to embed Windows resources: {e}");
+            }
             println!("cargo:warning=failed to embed Windows resources: {e}");
         }
     }
