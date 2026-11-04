@@ -251,13 +251,18 @@ enum VerifyTarget {
 /// Classify `path` for `verify`'s dual-mode dispatch.
 ///
 /// A path is treated as a device if it looks like a device path (starts with
-/// `/dev/`, which also covers `/dev/sg*`) or — when it already exists on
+/// `/dev/`, which also covers `/dev/sg*`, or a Windows `\\.\` / `\\?\`
+/// device-namespace path) or — when it already exists on
 /// disk — its filesystem metadata says it is a character or block special
 /// file. Anything else, including a plain path that doesn't exist yet, is
 /// treated as a file, so the ordinary "no such file" error still fires for a
 /// typo'd image path instead of being swallowed by device-probe logic.
 fn classify_verify_target(path: &Path) -> VerifyTarget {
-    if path.starts_with("/dev/") {
+    if path.starts_with("/dev/")
+        || path
+            .to_str()
+            .is_some_and(|s| s.starts_with(r"\\.\") || s.starts_with(r"\\?\"))
+    {
         return VerifyTarget::Device;
     }
     #[cfg(unix)]

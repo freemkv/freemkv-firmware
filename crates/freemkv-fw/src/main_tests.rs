@@ -114,6 +114,18 @@ fn classify_plain_path_is_file() {
 }
 
 #[test]
+fn classify_windows_device_namespace_path_is_device() {
+    // String-based, so it holds on every host.
+    for p in [r"\\.\CdRom0", r"\\?\CdRom0"] {
+        assert_eq!(classify_verify_target(Path::new(p)), VerifyTarget::Device);
+    }
+    assert_eq!(
+        classify_verify_target(Path::new(r"fw\CdRom0.bin")),
+        VerifyTarget::File
+    );
+}
+
+#[test]
 fn classify_dev_prefixed_path_is_device() {
     // Purely path-based: doesn't need the node to actually exist, so this
     // runs the same on every host including CI.
