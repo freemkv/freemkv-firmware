@@ -341,9 +341,27 @@ fn refresh_does_not_replace_a_running_jobs_log() {
 #[test]
 fn a_scan_finishing_after_a_job_does_not_replace_the_jobs_log() {
     let mut app = FwApp::with_preferences(Preferences::Memory);
-    app.job_since_scan = true;
-    app.running = false;
-    app.diagnostic_log = Some("verify.log".into());
+    let (release, gate) = mpsc::channel::<()>();
+    let gate = std::sync::Mutex::new(gate);
+    app.enumerator = Some(std::sync::Arc::new(move || {
+        let _ = gate
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(30));
+        Vec::new()
+    }));
+    let ctx = egui::Context::default();
+    app.discover(&ctx);
+    app.start_job(&ctx, "job", Job::Probe("missing-drive".into()));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while app.running && std::time::Instant::now() < deadline {
+        app.pump();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert!(!app.running && app.discover_rx.is_some());
+    // As if the job had succeeded with its own log.
+    app.failure = None;
+    app.diagnostic_log = Some("job.log".into());
     app.apply_discovery(
         Vec::new(),
         vec![freemkv_flash::output::Event::Report(
@@ -351,7 +369,17 @@ fn a_scan_finishing_after_a_job_does_not_replace_the_jobs_log() {
                 .into(),
         )],
     );
-    assert_eq!(app.diagnostic_log, Some("verify.log".into()));
+    assert_eq!(app.diagnostic_log, Some("job.log".into()));
+    release.send(()).unwrap();
+}
+
+#[test]
+fn a_new_scan_after_a_job_may_update_the_log_again() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.job_since_scan = true;
+    app.enumerator = Some(std::sync::Arc::new(Vec::new));
+    app.discover(&egui::Context::default());
+    assert!(!app.job_since_scan);
 }
 
 #[test]
