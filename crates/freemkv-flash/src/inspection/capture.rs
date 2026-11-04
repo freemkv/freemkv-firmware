@@ -12,9 +12,17 @@ impl ScsiDevice for CancellableDevice<'_> {
         self.control.check()?;
         self.device.command_in(cdb, alloc_len)
     }
+    fn diagnostic_in(&mut self, cdb: &[u8], alloc_len: usize, timeout_ms: u32) -> Result<Vec<u8>> {
+        self.control.check()?;
+        self.device.diagnostic_in(cdb, alloc_len, timeout_ms)
+    }
     fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
         self.control.check()?;
         self.device.command_out(cdb, data)
+    }
+    fn command_out_directed(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        self.control.check()?;
+        self.device.command_out_directed(cdb, data)
     }
     fn command_out_strict(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
         self.control.check()?;
