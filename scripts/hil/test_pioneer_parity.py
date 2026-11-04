@@ -27,7 +27,8 @@ class ParityTests(unittest.TestCase):
             self.assertEqual(parity.transcript(self.log(temp, 'a', 1)), parity.transcript(self.log(temp, 'b', 3)))
 
     def test_backup_captured_by_only_one_build_differs(self):
-        seq = parity.transcript(self.log(tempfile.gettempdir(), 'parity-seq.log', 1))
+        with tempfile.TemporaryDirectory() as temp:
+            seq = parity.transcript(self.log(temp, 'parity-seq.log', 1))
         a = {'code': 0, 'seq': seq, 'files': {'x.tar': 'h'}}
         b = {'code': 0, 'seq': seq, 'files': {}}
         self.assertTrue(parity.compare_step('backup', a, b, 'unused'))

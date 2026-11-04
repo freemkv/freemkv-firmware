@@ -106,6 +106,11 @@ fn attach_classic_conversion(levers: &mut [LeverReport], conversion: HookReport,
         raw_read.hooks.push(conversion);
         raw_read.facts.push(("uhd_conversion_count", count));
         if count > 0 && raw_read.outcome != super::lever::LeverOutcome::Applied {
+            // Keep the gate-miss cause visible once the lever reads as Applied.
+            if let super::lever::LeverOutcome::SignatureNotFound { detail } = &raw_read.outcome {
+                let note = HookReport::unavailable("rawread-gates", detail.clone());
+                raw_read.hooks.push(note);
+            }
             raw_read.outcome = super::lever::LeverOutcome::Applied;
         }
     }

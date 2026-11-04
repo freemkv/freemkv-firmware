@@ -138,20 +138,20 @@ pub fn execute(job: &Job) -> Result<()> {
             Job::Probe(device) => {
                 let outcome = api::probe_device(device)?;
                 field("Drive", device);
-                field(
-                    "freemkv firmware",
-                    if outcome.detected {
-                        message(
-                            "modify.detected",
-                            &[("version", detected_version(&outcome))],
-                        )
-                    } else {
-                        "modify.not_detected".into()
-                    },
-                );
+                field("freemkv firmware", probe_field(&outcome)?);
             }
         }
         Ok(())
+    })
+}
+
+fn probe_field(outcome: &api::ProbeOutcome) -> Result<String> {
+    Ok(if outcome.detected {
+        message("modify.detected", &[("version", detected_version(outcome))])
+    } else if outcome.detail.starts_with("NOT DETERMINED") {
+        anyhow::bail!("{}", outcome.detail);
+    } else {
+        "modify.not_detected".into()
     })
 }
 
@@ -178,5 +178,22 @@ mod tests {
         );
         assert!(text.contains("0x01"), "{text}");
         assert!(!text.contains("DETECTED"), "{text}");
+    }
+
+    #[test]
+    fn undetermined_probe_is_an_error_not_a_stock_firmware_claim() {
+        let outcome = api::ProbeOutcome {
+            detected: false,
+            detail: "NOT DETERMINED (probe failed: timeout)".into(),
+            version: None,
+        };
+        let err = probe_field(&outcome).unwrap_err().to_string();
+        assert!(err.contains("NOT DETERMINED"), "{err}");
+        let stock = api::ProbeOutcome {
+            detected: false,
+            detail: "NOT DETECTED".into(),
+            version: None,
+        };
+        assert_eq!(probe_field(&stock).unwrap(), "modify.not_detected");
     }
 }

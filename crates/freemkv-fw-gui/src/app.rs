@@ -241,8 +241,8 @@ impl FwApp {
         for event in events {
             if let freemkv_flash::output::Event::Report(report) = event {
                 for (label, value) in report.gui_fields() {
-                    // A displayed failure keeps its own evidence log.
-                    if label == "Diagnostic log" && self.failure.is_none() {
+                    // A displayed failure or a running job keeps its own log.
+                    if label == "Diagnostic log" && self.failure.is_none() && !self.running {
                         self.diagnostic_log = Some(value.into());
                     }
                 }

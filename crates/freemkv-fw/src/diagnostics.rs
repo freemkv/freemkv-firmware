@@ -31,6 +31,15 @@ pub fn read(path: &Path) -> Result<Vec<u8>> {
         .with_context(|| format!("reading {}", path.display()))
 }
 
+/// Best effort: mounts that reject chmod must not fail the write.
+#[cfg(unix)]
+fn preserve_mode(mode: u32, set: impl FnOnce(std::fs::Permissions) -> std::io::Result<()>) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Err(e) = set(std::fs::Permissions::from_mode(mode)) {
+        record(format!("output: could not preserve mode {mode:o}: {e}"));
+    }
+}
+
 /// Publish output atomically after syncing and comparing the staged bytes.
 pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {
     use std::io::Write;
@@ -40,15 +49,25 @@ pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
+    #[cfg(unix)]
+    let existing = std::fs::metadata(path).ok();
+    #[cfg(unix)]
+    let mut staged = {
+        use std::os::unix::fs::PermissionsExt;
+        // New files: open(2) with 0666 so the umask applies, no chmod.
+        tempfile::Builder::new()
+            .permissions(std::fs::Permissions::from_mode(0o666))
+            .tempfile_in(parent)
+            .context("creating staged output")?
+    };
+    #[cfg(not(unix))]
     let mut staged = tempfile::NamedTempFile::new_in(parent).context("creating staged output")?;
     #[cfg(unix)]
-    {
+    if let Some(meta) = existing {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(path).map_or(0o644, |m| m.permissions().mode() & 0o7777);
-        staged
-            .as_file()
-            .set_permissions(std::fs::Permissions::from_mode(mode))
-            .context("setting staged output permissions")?;
+        preserve_mode(meta.permissions().mode() & 0o7777, |p| {
+            staged.as_file().set_permissions(p)
+        });
     }
     staged.write_all(bytes).context("writing staged output")?;
     staged

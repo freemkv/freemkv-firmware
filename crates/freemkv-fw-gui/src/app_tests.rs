@@ -324,6 +324,21 @@ fn refresh_keeps_a_displayed_failure_log() {
 }
 
 #[test]
+fn refresh_does_not_replace_a_running_jobs_log() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.running = true;
+    app.diagnostic_log = None;
+    app.apply_discovery(
+        Vec::new(),
+        vec![freemkv_flash::output::Event::Report(
+            freemkv_flash::report::Row::gui("field", "Diagnostic log", "discovery.log".into())
+                .into(),
+        )],
+    );
+    assert_eq!(app.diagnostic_log, None);
+}
+
+#[test]
 fn refresh_enumerates_drives_off_the_ui_thread() {
     let mut app = FwApp::with_preferences(Preferences::Memory);
     let (release, gate) = mpsc::channel::<()>();

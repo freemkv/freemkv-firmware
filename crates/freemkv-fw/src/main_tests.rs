@@ -126,12 +126,17 @@ fn classify_windows_device_namespace_path_is_device() {
 }
 
 #[test]
-fn identity_probe_error_is_named_not_reported_as_stock() {
-    let detail = not_detected_detail(&Err(anyhow::anyhow!("timeout")));
-    assert!(detail.contains("timeout"), "{detail}");
-    assert!(!detail.contains("stock/OEM"), "{detail}");
-    let stock = not_detected_detail(&Ok(vec![0u8; 4]));
+fn identity_probe_detail_uses_the_api_classification() {
+    let outcome = |detail: &str| freemkv_fw::api::ProbeOutcome {
+        detected: false,
+        detail: detail.into(),
+        version: None,
+    };
+    let stock = not_detected_detail(&outcome("NOT DETECTED (stock/OEM or other firmware)"));
     assert!(stock.contains("stock/OEM"), "{stock}");
+    let failed = not_detected_detail(&outcome("NOT DETERMINED (probe failed: timeout)"));
+    assert!(failed.contains("timeout"), "{failed}");
+    assert!(!failed.contains("stock/OEM"), "{failed}");
 }
 
 #[test]
@@ -1042,7 +1047,11 @@ fn mem_read_counts_short_replies_as_faults_for_auto_stop() {
     let mut dev = mem_mock(|| Ok(vec![0xAA; 16]));
     let r = mem_read(&mut dev, 0x1000, 0x10_0000, true);
     assert_eq!(dev.addrs.len(), 16, "auto-stop must end the read");
-    assert_eq!((r.short, r.good, r.failed), (16, 0, 0));
+    assert_eq!(
+        (r.short, r.good, r.failed),
+        (0, 0, 0),
+        "stop run is discarded"
+    );
 }
 
 #[test]
@@ -1089,4 +1098,75 @@ fn output_naming_the_input_through_another_spelling_is_refused() {
     .expect_err("the input must not be overwritten without --in-place");
     assert!(format!("{err:#}").contains("refusing to overwrite the input"));
     assert_eq!(std::fs::read(&input).unwrap(), bu40n_fixture());
+}
+
+#[test]
+fn classify_extended_length_file_paths_are_files() {
+    for p in [
+        r"\\?\C:\fw\image.bin",
+        r"\\?\d:/fw/image.bin",
+        r"\\?\UNC\srv\share\i.bin",
+    ] {
+        assert_eq!(
+            classify_verify_target(Path::new(p)),
+            VerifyTarget::File,
+            "{p}"
+        );
+    }
+    assert_eq!(
+        classify_verify_target(Path::new(r"\\?\CdRom0")),
+        VerifyTarget::Device
+    );
+}
+
+#[test]
+fn mem_read_auto_stop_does_not_count_the_discarded_stop_run() {
+    let start = 0x2000u32;
+    let good = 8usize;
+    let mut dev = WindowMem::failing_from(start + (good * abi::MEMREAD_LEN) as u32);
+    let read = mem_read(&mut dev, start, 0x1_0000, true);
+    assert_eq!(read.data.len(), good * abi::MEMREAD_LEN);
+    assert_eq!((read.failed, read.short), (0, 0));
+}
+
+#[test]
+fn mem_read_clamps_an_oversized_reply_to_one_window() {
+    struct Oversize;
+    impl platform::ScsiDevice for Oversize {
+        fn command_in(&mut self, cdb: &[u8], _alloc_len: usize) -> Result<Vec<u8>> {
+            let addr = u32::from_be_bytes([cdb[5], cdb[6], cdb[7], cdb[8]]);
+            let mut w = WindowMem::window(addr);
+            w.extend_from_slice(&[0xEE; 7]);
+            Ok(w)
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+            unreachable!("read-only")
+        }
+        fn describe(&self) -> String {
+            "mock://oversize".to_string()
+        }
+    }
+    let start = 0x4000u32;
+    let out = mem_read(&mut Oversize, start, (3 * abi::MEMREAD_LEN) as u64, false).data;
+    assert_eq!(out, WindowMem::expected(start, 3));
+}
+
+#[test]
+fn a_read_where_every_window_failed_captured_nothing() {
+    let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
+    assert!(mem_read(&mut dev, 0x1000, 0x100, false).captured_nothing());
+    let mut ok = mem_mock(|| Ok(vec![1; abi::MEMREAD_LEN]));
+    assert!(!mem_read(&mut ok, 0x1000, 0x100, false).captured_nothing());
+}
+
+#[test]
+fn dump_of_an_all_failed_read_writes_no_file_and_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("dump.bin");
+    let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
+    let read = mem_read(&mut dev, 0x1000, 0x100, false);
+    let nothing = read.captured_nothing();
+    let code = write_dump(Some(&out), 0x1000, 0x100, &read.data, nothing).unwrap();
+    assert!(!out.exists(), "an all-zero dump must not be published");
+    assert_eq!(code, ExitCode::FAILURE);
 }

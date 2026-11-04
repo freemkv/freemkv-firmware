@@ -250,7 +250,7 @@ impl Engine for Mt1939Engine {
         levers.push(LeverReport::missed(LeverId::RegionFree, degraded.clone()));
         // Raw read: the classic VID + AKE gates are reversed and proven-unique; when
         // both are located we report their offsets so the image is auditably
-        // wireable, with only the classic Identity base + detour still pending.
+        // wireable; the detail carries the real base-build failure.
         levers.push(match classic_rawread_anchors(image) {
             Some((vid_gate, ake_gate)) => LeverReport {
                 id: LeverId::RawRead,

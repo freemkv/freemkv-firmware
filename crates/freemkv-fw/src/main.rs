@@ -248,21 +248,31 @@ enum VerifyTarget {
     Device,
 }
 
+/// True for a Windows device-namespace path; `\\?\` drive and UNC paths are files.
+fn is_windows_device_path(s: &str) -> bool {
+    if s.starts_with(r"\\.\") {
+        return true;
+    }
+    let Some(rest) = s.strip_prefix(r"\\?\") else {
+        return false;
+    };
+    let b = rest.as_bytes();
+    let drive_path =
+        b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/');
+    !drive_path && !rest.to_ascii_uppercase().starts_with(r"UNC\")
+}
+
 /// Classify `path` for `verify`'s dual-mode dispatch.
 ///
 /// A path is treated as a device if it looks like a device path (starts with
 /// `/dev/`, which also covers `/dev/sg*`, or a Windows `\\.\` / `\\?\`
-/// device-namespace path) or — when it already exists on
+/// device-namespace path, but not `\\?\X:\` drive or `\\?\UNC\` file paths) or — when it already exists on
 /// disk — its filesystem metadata says it is a character or block special
 /// file. Anything else, including a plain path that doesn't exist yet, is
 /// treated as a file, so the ordinary "no such file" error still fires for a
 /// typo'd image path instead of being swallowed by device-probe logic.
 fn classify_verify_target(path: &Path) -> VerifyTarget {
-    if path.starts_with("/dev/")
-        || path
-            .to_str()
-            .is_some_and(|s| s.starts_with(r"\\.\") || s.starts_with(r"\\?\"))
-    {
+    if path.starts_with("/dev/") || path.to_str().is_some_and(is_windows_device_path) {
         return VerifyTarget::Device;
     }
     #[cfg(unix)]
@@ -328,14 +338,13 @@ fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 // verify (live drive)
 // ---------------------------------------------------------------------------
 
-/// Detail suffix for a NOT DETECTED identity probe. A well-formed non-freemkv
-/// reply means stock/OEM firmware; a command error is named, since it may be a
-/// busy or unreachable drive rather than a drive that rejected the knock.
-fn not_detected_detail(result: &Result<Vec<u8>>) -> String {
-    match result {
-        Err(e) => format!("(no identity response: {e:#})"),
-        Ok(_) => "(stock/OEM or other firmware)".to_owned(),
-    }
+/// Detail suffix for a negative identity probe, from the shared api classification.
+fn not_detected_detail(outcome: &freemkv_fw::api::ProbeOutcome) -> String {
+    outcome
+        .detail
+        .strip_prefix("NOT DETECTED ")
+        .unwrap_or(&outcome.detail)
+        .to_owned()
 }
 
 /// Probe a live drive for freemkv firmware by sending the Identity command
@@ -351,44 +360,38 @@ fn not_detected_detail(result: &Result<Vec<u8>>) -> String {
 /// writes and never crashes.
 fn cmd_verify_device(path: &Path) -> Result<ExitCode> {
     let path_str = path.to_string_lossy();
-    let mut dev =
-        platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
-
-    const ALLOC_LEN: usize = 96;
-    let cdb = abi::build_identity_cdb(ALLOC_LEN as u16);
-
-    match dev.command_in(&cdb, ALLOC_LEN) {
-        Ok(resp) if abi::verify_response(&resp) => {
-            let detail = match resp.get(abi::RESP_MAGIC.len()) {
-                Some(&v) => format!(
-                    "DETECTED on {path_str} {}",
-                    style::dim(&format!("(version 0x{v:02x})"))
+    let outcome = freemkv_fw::api::probe_device(&path_str)?;
+    if outcome.detected {
+        let detail = match outcome.version {
+            Some(v) => format!(
+                "DETECTED on {path_str} {}",
+                style::dim(&format!("(version 0x{v:02x})"))
+            ),
+            None => format!("DETECTED on {path_str}"),
+        };
+        println!(
+            "{}",
+            style::status_line("freemkv firmware", &detail, style::Status::Ok)
+        );
+        Ok(ExitCode::SUCCESS)
+    } else {
+        let verdict = if outcome.detail.starts_with("NOT DETERMINED") {
+            "NOT DETERMINED"
+        } else {
+            "NOT DETECTED"
+        };
+        println!(
+            "{}",
+            style::status_line(
+                "freemkv firmware",
+                &format!(
+                    "{verdict} on {path_str} {}",
+                    style::dim(&not_detected_detail(&outcome))
                 ),
-                None => format!("DETECTED on {path_str}"),
-            };
-            println!(
-                "{}",
-                style::status_line("freemkv firmware", &detail, style::Status::Ok)
-            );
-            Ok(ExitCode::SUCCESS)
-        }
-        // A non-freemkv reply or a command error both mean "not detected"; an
-        // error is recorded and named in the output rather than called stock.
-        other => {
-            let detail = not_detected_detail(&other);
-            if let Err(e) = &other {
-                diagnostics::record(format!("identity probe error: {e:#}"));
-            }
-            println!(
-                "{}",
-                style::status_line(
-                    "freemkv firmware",
-                    &format!("NOT DETECTED on {path_str} {}", style::dim(&detail)),
-                    style::Status::Warn
-                )
-            );
-            Ok(ExitCode::FAILURE)
-        }
+                style::Status::Warn
+            )
+        );
+        Ok(ExitCode::FAILURE)
     }
 }
 
@@ -418,6 +421,13 @@ struct MemRead {
     short: usize,
 }
 
+impl MemRead {
+    /// True when every window failed or came back short, so `data` is only fill.
+    fn captured_nothing(&self) -> bool {
+        self.good == 0 && self.short + self.failed > 0
+    }
+}
+
 /// Read `len` bytes starting at `start` via [`abi::Verb::DumpAll`], in
 /// [`abi::MEMREAD_LEN`]-byte windows. When `auto_stop`, a run of consecutive
 /// unreadable or short windows ends the read early — the natural "end of mapped
@@ -432,6 +442,7 @@ fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop:
     const RESERVE_CAP: u64 = 0x0400_0000; // 64 MiB
     let mut out = Vec::with_capacity(len.min(RESERVE_CAP) as usize);
     let (mut good, mut failed, mut short) = (0usize, 0usize, 0usize);
+    let (mut run_short, mut run_failed) = (0usize, 0usize);
     let mut faults = 0u32;
     let mut addr = start as u64;
     let end = (start as u64 + len).min(1u64 << 32);
@@ -441,22 +452,27 @@ fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop:
             Ok(d) if d.len() >= abi::MEMREAD_LEN => {
                 good += 1;
                 faults = 0;
-                out.extend_from_slice(&d);
+                (run_short, run_failed) = (0, 0);
+                out.extend_from_slice(&d[..abi::MEMREAD_LEN]);
                 addr += abi::MEMREAD_LEN as u64;
                 continue;
             }
             Ok(d) => {
                 short += 1;
+                run_short += 1;
                 d
             }
             Err(_) => {
                 failed += 1;
+                run_failed += 1;
                 Vec::new()
             }
         };
         faults += 1;
         if auto_stop && faults >= STOP_AFTER {
-            // drop the trailing all-fault fill and stop
+            // drop the trailing all-fault fill (and its counts) and stop
+            short -= run_short;
+            failed -= run_failed;
             out.truncate(
                 out.len()
                     .saturating_sub(((faults - 1) as usize) * abi::MEMREAD_LEN),
@@ -499,6 +515,55 @@ const FULL_REGIONS: &[(u32, u64)] = &[
     (0x01c0_0000, 0x0044_0000), // firmware RAM: data bank, overlay, resident lib, SRAM
 ];
 
+/// Emit a `--dump` result: write `out`, or hex-print when absent. When nothing
+/// was captured the file is not written, so a zero fill is never published.
+fn write_dump(
+    out: Option<&Path>,
+    start: u32,
+    length: u64,
+    data: &[u8],
+    nothing_captured: bool,
+) -> Result<ExitCode> {
+    match out {
+        Some(o) if nothing_captured => {
+            eprintln!(
+                "{}",
+                style::status_line(
+                    "dump",
+                    &format!("no readable data; not writing {}", o.display()),
+                    style::Status::Fail
+                )
+            );
+        }
+        Some(o) => {
+            diagnostics::write(o, data).with_context(|| format!("writing {}", o.display()))?;
+            println!(
+                "{}",
+                style::status_line(
+                    "dump",
+                    &format!(
+                        "0x{start:08x} +0x{length:x} -> {} ({} bytes)",
+                        o.display(),
+                        data.len()
+                    ),
+                    style::Status::Ok
+                )
+            );
+        }
+        None => {
+            for (i, chunk) in data.chunks(16).enumerate() {
+                let hex: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
+                println!("{:08x}  {hex}", start as usize + i * 16);
+            }
+        }
+    }
+    Ok(if nothing_captured {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
 fn cmd_info(
     device: &Path,
     dump: Option<&str>,
@@ -524,7 +589,7 @@ fn cmd_info(
                 )
             );
             let read = mem_read(dev.as_mut(), start, cap, true);
-            warn_mem_faults("region", read.short, 0);
+            warn_mem_faults("region", read.short, read.failed);
             let data = read.data;
             let file = prefix.with_file_name(format!(
                 "{}-{start:08x}.bin",
@@ -572,36 +637,9 @@ fn cmd_info(
         }
         let read = mem_read(dev.as_mut(), start, length, false);
         warn_mem_faults("dump", read.short, read.failed);
-        let nothing_captured = read.good == 0 && read.short + read.failed > 0;
+        let nothing_captured = read.captured_nothing();
         let data = read.data;
-        match out {
-            Some(o) => {
-                diagnostics::write(o, &data).with_context(|| format!("writing {}", o.display()))?;
-                println!(
-                    "{}",
-                    style::status_line(
-                        "dump",
-                        &format!(
-                            "0x{start:08x} +0x{length:x} -> {} ({} bytes)",
-                            o.display(),
-                            data.len()
-                        ),
-                        style::Status::Ok
-                    )
-                );
-            }
-            None => {
-                for (i, chunk) in data.chunks(16).enumerate() {
-                    let hex: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
-                    println!("{:08x}  {hex}", start as usize + i * 16);
-                }
-            }
-        }
-        return Ok(if nothing_captured {
-            ExitCode::FAILURE
-        } else {
-            ExitCode::SUCCESS
-        });
+        return write_dump(out, start, length, &data, nothing_captured);
     }
 
     // No dump flags: identity probe (reuse the verify-device path).
