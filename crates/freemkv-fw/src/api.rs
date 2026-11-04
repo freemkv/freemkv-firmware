@@ -187,6 +187,8 @@ pub struct ProbeOutcome {
     pub detected: bool,
     /// A human-readable one-line detail (version if known, or why not detected).
     pub detail: String,
+    /// The freemkv ABI version byte, when the drive reported one.
+    pub version: Option<u8>,
 }
 
 /// Send the freemkv identity command (`abi::build_identity_cdb`) to `device` and
@@ -204,25 +206,40 @@ fn probe_device_inner(device: &str) -> Result<ProbeOutcome> {
     const ALLOC_LEN: usize = 96;
     let cdb = abi::build_identity_cdb(ALLOC_LEN as u16);
 
-    match dev.command_in(&cdb, ALLOC_LEN) {
+    Ok(classify_probe(dev.command_in(&cdb, ALLOC_LEN)))
+}
+
+fn classify_probe(reply: Result<Vec<u8>>) -> ProbeOutcome {
+    match reply {
         Ok(resp) if abi::verify_response(&resp) => {
-            let detail = match resp.get(abi::RESP_MAGIC.len()) {
-                Some(&v) => format!("DETECTED (version 0x{v:02x})"),
+            let version = resp.get(abi::RESP_MAGIC.len()).copied();
+            let detail = match version {
+                Some(v) => format!("DETECTED (version 0x{v:02x})"),
                 None => "DETECTED".to_string(),
             };
-            Ok(ProbeOutcome {
+            ProbeOutcome {
                 detected: true,
                 detail,
-            })
+                version,
+            }
         }
-        // A well-formed non-freemkv reply, or a SCSI-level error from a drive
-        // that doesn't recognize the knock — both mean "not freemkv".
         other => {
             diagnostics::record(format!("identity probe did not match: {other:?}"));
-            Ok(ProbeOutcome {
+            // A SCSI sense rejection or a well-formed non-freemkv reply means
+            // "not freemkv"; a transport failure proves nothing either way.
+            let transport_failure = matches!(&other, Err(e)
+                if platform::sense_triplet(e).is_none());
+            let detail = match other {
+                Err(error) if transport_failure => {
+                    format!("NOT DETERMINED (probe failed: {error:#})")
+                }
+                _ => "NOT DETECTED (stock/OEM or other firmware)".to_string(),
+            };
+            ProbeOutcome {
                 detected: false,
-                detail: "NOT DETECTED (stock/OEM or other firmware)".to_string(),
-            })
+                detail,
+                version: None,
+            }
         }
     }
 }

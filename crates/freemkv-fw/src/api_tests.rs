@@ -337,3 +337,26 @@ fn create_with_defaults_logs_the_input_image_fingerprint() {
     std::fs::remove_file(&path).unwrap();
     assert!(text.contains("input image: bytes=20 sha256="), "{text}");
 }
+
+#[test]
+fn probe_reports_the_version_byte_separately() {
+    let mut resp = abi::RESP_MAGIC.to_vec();
+    resp.push(1);
+    let outcome = classify_probe(Ok(resp));
+    assert!(outcome.detected);
+    assert_eq!(outcome.version, Some(1));
+}
+
+#[test]
+fn probe_transport_failure_is_not_called_stock_firmware() {
+    let io = anyhow::Error::new(std::io::Error::other("device vanished"));
+    let outcome = classify_probe(Err(io));
+    assert!(!outcome.detected);
+    assert!(!outcome.detail.contains("stock/OEM"), "{}", outcome.detail);
+    assert!(outcome.detail.contains("device vanished"), "{}", outcome.detail);
+
+    let sense = anyhow::Error::new(platform::ScsiSenseError::new(5, 0x20, 0, "invalid opcode"));
+    let outcome = classify_probe(Err(sense));
+    assert!(!outcome.detected);
+    assert!(outcome.detail.contains("stock/OEM"), "{}", outcome.detail);
+}
