@@ -193,7 +193,7 @@ fn main() -> Result<()> {
                 && k.header.kernel_version2 == header.kernel_version2
                 && k.header.destination == header.destination
         }) {
-            status = kernel_start_status(status, matched_hash.is_some());
+            status = kernel_start_status(status);
             let Some(normal) = envelope::decode_envelope_with_kernel(&bytes, &kernel.decoded)
             else {
                 continue;
@@ -295,11 +295,10 @@ fn main() -> Result<()> {
 }
 
 /// Status when a matching kernel is tried: keep a stage an earlier kernel reached.
-fn kernel_start_status(current: &'static str, reached_stage: bool) -> &'static str {
-    if reached_stage {
-        current
-    } else {
-        "normal_decode_unsupported"
+fn kernel_start_status(current: &'static str) -> &'static str {
+    match current {
+        "no_matching_H8_kernel" | "normal_decode_unsupported" => "normal_decode_unsupported",
+        later => later,
     }
 }
 
@@ -310,11 +309,15 @@ mod tests {
     #[test]
     fn later_kernel_does_not_hide_an_earlier_stage() {
         assert_eq!(
-            kernel_start_status("normal_authentication_failed", true),
+            kernel_start_status("normal_authentication_failed"),
             "normal_authentication_failed"
         );
         assert_eq!(
-            kernel_start_status("no_matching_H8_kernel", false),
+            kernel_start_status("invalid_normal_checksum"),
+            "invalid_normal_checksum"
+        );
+        assert_eq!(
+            kernel_start_status("no_matching_H8_kernel"),
             "normal_decode_unsupported"
         );
     }
