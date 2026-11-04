@@ -4289,10 +4289,13 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                 children.push(Node::section("ui.technical_details", false, technical));
                 nodes.push(Node::section(&s.name, true, children));
             }
-            crate::localization::message(
-                "ui.hardware_family_arg0",
-                &[("arg0", format!("{:?}", report.family))],
-            )
+            let family = match report.family {
+                workflow::FamilyRelationship::Same => "compare.family_same",
+                workflow::FamilyRelationship::Different => "ui.different",
+                workflow::FamilyRelationship::Unknown => "ui.unknown",
+                workflow::FamilyRelationship::NotComparable => "compare.family_not_comparable",
+            };
+            crate::localization::message("ui.hardware_family_arg0", &[("arg0", family.into())])
         }
     };
     AnalysisView {

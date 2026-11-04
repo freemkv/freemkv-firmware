@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "A fájl eredetét: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "optikai vezérlő állapota rögzített a {arg0} (Egy fél másodperc)",
     "ui.hardware_family_arg0": "A hardver család: {arg0}",
+    "compare.family_same": "Azonos",
+    "compare.family_not_comparable": "Nem összehasonlítható",
     "ui.unexpected_differences_in_n_regions": "Váratlan különbségek a {n} A régiók.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} A cím-visszatérés vagy a metadatok változása kizárt.",
     "status.operation_result": "{operation} {result}",

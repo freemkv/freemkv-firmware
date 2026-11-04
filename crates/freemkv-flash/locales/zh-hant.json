@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "檔案起源: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "光學驅動狀態捕獲 {arg0} (一秒鐘)",
     "ui.hardware_family_arg0": "硬體家庭: {arg0}",
+    "compare.family_same": "相同",
+    "compare.family_not_comparable": "無法比較",
     "ui.unexpected_differences_in_n_regions": "意外的差異 {n} 區域。",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} 地址轉換或代資料的變化被排除。",
     "status.operation_result": "{operation} {result}",

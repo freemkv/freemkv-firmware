@@ -11,6 +11,7 @@ pub use crate::backend::{
 /// Correlation helpers keep a front-end's session events linked to operation logs.
 pub use crate::diagnostics::{new_operation_id, with_operation_id};
 pub use crate::firmware_capture::{capture_firmware_inputs, FirmwareInput};
+pub use crate::firmware_comparison::FamilyRelationship;
 /// Inspection inputs and results, so a front-end needs only this module and
 /// [`crate::report`] to run Inspect and Compare.
 pub use crate::inspection::{

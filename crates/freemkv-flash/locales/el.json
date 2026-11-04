@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Αρχείο προέλευσης: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "Η οπτική κατάσταση οδήγησης καταγράφηκε στο {arg0} (Εντεκα δευτερόλεπτα)",
     "ui.hardware_family_arg0": "Η οικογένεια Hardware: {arg0}",
+    "compare.family_same": "Ίδια",
+    "compare.family_not_comparable": "Μη συγκρίσιμη",
     "ui.unexpected_differences_in_n_regions": "Οι απροσδόκητες διαφορές στην {n} περιοχές .",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Αλλαγές στη διεύθυνση ή τα μεταδεδομένα αποκλείονται.",
     "status.operation_result": "{operation} {result}",

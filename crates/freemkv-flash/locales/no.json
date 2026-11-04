@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Arkiv opprinnelse: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "Optical drive stasjon fanget i {arg0} (Unix sekunder)",
     "ui.hardware_family_arg0": "Hardware familie: {arg0}",
+    "compare.family_same": "Samme",
+    "compare.family_not_comparable": "Kan ikke sammenlignes",
     "ui.unexpected_differences_in_n_regions": "Uventede forskjeller i {n} og regioner.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Endringer i adresseløsning eller metadata er utelukket.",
     "status.operation_result": "{operation} {result}",

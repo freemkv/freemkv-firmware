@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Oorsprong van het bestand: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "optische drive staat vastgehouden in {arg0} (Twee seconden voor een paar)",
     "ui.hardware_family_arg0": "De hardware familie: {arg0}",
+    "compare.family_same": "Gelijk",
+    "compare.family_not_comparable": "Niet vergelijkbaar",
     "ui.unexpected_differences_in_n_regions": "Onverwachte verschillen in {n} De regio.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Adresverwijzing of metadata wijzigingen uitgesloten.",
     "status.operation_result": "{operation} {result}",

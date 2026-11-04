@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Originea fișierului: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "starea optică de conducere capturată la {arg0} (în câteva secunde)",
     "ui.hardware_family_arg0": "Familia de hardware: {arg0}",
+    "compare.family_same": "Aceeași",
+    "compare.family_not_comparable": "Nu se poate compara",
     "ui.unexpected_differences_in_n_regions": "Diferenţe neaşteptate în {n} Regiuni .",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Schimbările de adresă sau metadata sunt excluse.",
     "status.operation_result": "{operation} {result}",

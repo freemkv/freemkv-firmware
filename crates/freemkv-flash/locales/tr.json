@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Dosya Kaynakları : {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "optik sürücü durumu yakalandı {arg0} ( 1 saniye içinde )",
     "ui.hardware_family_arg0": "Hardware Ailesi : {arg0}",
+    "compare.family_same": "Aynı",
+    "compare.family_not_comparable": "Karşılaştırılamaz",
     "ui.unexpected_differences_in_n_regions": "beklenmedik farklılıklar {n} Bölgeler için.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Metadata değişiklikleri veya adres değişiklikleri hariç tutulur.",
     "status.operation_result": "{operation} {result}",

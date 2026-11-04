@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Tiedoston alkuperä: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "optisia ohjauksia, jotka on otettu {arg0} (koko 10 sekuntia)",
     "ui.hardware_family_arg0": "Hardware perhe: {arg0}",
+    "compare.family_same": "Sama",
+    "compare.family_not_comparable": "Ei vertailukelpoinen",
     "ui.unexpected_differences_in_n_regions": "Odottamattomat erot {n} ja alueet .",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Rekisteröinti- tai meta-tietojen muutokset ovat poissuljettuja.",
     "status.operation_result": "{operation} {result}",

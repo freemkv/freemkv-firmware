@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "文件起源: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "光学驱动状态捕获 {arg0} (一秒钟)",
     "ui.hardware_family_arg0": "硬件家庭: {arg0}",
+    "compare.family_same": "相同",
+    "compare.family_not_comparable": "无法比较",
     "ui.unexpected_differences_in_n_regions": "意外的差异 {n} 区域。",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} 地址转换或代数据的变化被排除。",
     "status.operation_result": "{operation} {result}",

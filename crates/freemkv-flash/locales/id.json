@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Sumber dari file: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "Kondisi optik yang ditangkap di {arg0} (dalam satu detik)",
     "ui.hardware_family_arg0": "Keluarga Hardware : {arg0}",
+    "compare.family_same": "Sama",
+    "compare.family_not_comparable": "Tidak dapat dibandingkan",
     "ui.unexpected_differences_in_n_regions": "Perbedaan yang tak terduga dalam {n} dan wilayah.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Perubahan alamat atau metadata dibatasi.",
     "status.operation_result": "{operation} {result}",

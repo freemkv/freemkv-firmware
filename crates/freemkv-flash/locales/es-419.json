@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Archivo de origen: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "El estado de conducción óptica capturado en {arg0} (en un minuto)",
     "ui.hardware_family_arg0": "La familia de hardware: {arg0}",
+    "compare.family_same": "Igual",
+    "compare.family_not_comparable": "No comparable",
     "ui.unexpected_differences_in_n_regions": "Diferencias inesperadas en {n} las regiones.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Se excluyen los cambios de dirección o metadatos.",
     "status.operation_result": "{operation} {result}",

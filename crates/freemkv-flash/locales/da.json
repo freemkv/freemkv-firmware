@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Arkivets oprindelse: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "Optikken er optaget i {arg0} (Unix sekunder)",
     "ui.hardware_family_arg0": "Hardware familie: {arg0}",
+    "compare.family_same": "Samme",
+    "compare.family_not_comparable": "Kan ikke sammenlignes",
     "ui.unexpected_differences_in_n_regions": "Uventede forskelle i {n} Regionerne er.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Indsendelse af adresser eller metadata ændringer er udelukket.",
     "status.operation_result": "{operation} {result}",

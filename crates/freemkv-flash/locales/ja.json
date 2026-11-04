@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "ファイルの起源: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "オプティクス・ドライブ・ステータス 捕獲 {arg0} (ユニクス秒)",
     "ui.hardware_family_arg0": "ハードウェアファミリー: {arg0}",
+    "compare.family_same": "同じ",
+    "compare.family_not_comparable": "比較不可",
     "ui.unexpected_differences_in_n_regions": "予想外の違い {n} 地域",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} 住所転送またはメタデータの変更は排除されます。",
     "status.operation_result": "{operation} {result}",

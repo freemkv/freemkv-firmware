@@ -2281,6 +2281,26 @@ fn mtk_inspection(name: &str, edit: impl FnOnce(&mut [u8])) -> Arc<workflow::Ins
     result.unwrap()
 }
 
+#[test]
+fn comparison_family_heading_is_localized_text() {
+    use workflow::FamilyRelationship;
+    let fixture = Source::File(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../freemkv-flash/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin"),
+    );
+    for (family, text) in [
+        (FamilyRelationship::Same, "Same"),
+        (FamilyRelationship::Different, "Different"),
+        (FamilyRelationship::Unknown, "Unknown"),
+        (FamilyRelationship::NotComparable, "Not comparable"),
+    ] {
+        let mut report = workflow::compare(&fixture, &fixture, &Control::default()).unwrap();
+        report.family = family;
+        let tree = analysis_tree(&ResultView::Compare(report));
+        assert_eq!(tree.heading, format!("Hardware family: {text}"));
+    }
+}
+
 /// The "Changes by region" rows of a comparison tree, plus its text lines.
 fn compare_tree(
     report: workflow::ComparisonReport,

@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Pôvod súboru: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "Optický pohonný stav zachytený na {arg0} (v priebehu niekoľkých sekúnd)",
     "ui.hardware_family_arg0": "Rodina hardvérov: {arg0}",
+    "compare.family_same": "Rovnaká",
+    "compare.family_not_comparable": "Nedá sa porovnať",
     "ui.unexpected_differences_in_n_regions": "Neočakávané rozdiely v {n} v regiónoch .",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Zmeny adresy alebo metadata sú vylúčené.",
     "status.operation_result": "{operation} {result}",

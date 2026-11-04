@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Arxiu d’origen: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "l'estat de conducció òptica capturat en {arg0} (en un mínim de 2 segons)",
     "ui.hardware_family_arg0": "Família de Hardware: {arg0}",
+    "compare.family_same": "Igual",
+    "compare.family_not_comparable": "No comparable",
     "ui.unexpected_differences_in_n_regions": "Les diferències inesperades en {n} Regió de les regions.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Canvis de la direcció o de les metadades excloses.",
     "status.operation_result": "{operation} {result}",

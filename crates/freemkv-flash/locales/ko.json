@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "파일 출처 : {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "캡처된 오프화이트 드라이브 상태 {arg0} (유니크스 2 초)",
     "ui.hardware_family_arg0": "하드웨어 가족 : {arg0}",
+    "compare.family_same": "같음",
+    "compare.family_not_comparable": "비교할 수 없음",
     "ui.unexpected_differences_in_n_regions": "예상치 못한 차이점 {n} 지역에 대하여",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} 주소 분리 또는 메타 데이터 변경은 제외됩니다.",
     "status.operation_result": "{operation} {result}",

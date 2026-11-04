@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "Arkiv ursprung: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "Optikdrivning staten fångad i {arg0} (Unix sekunder)",
     "ui.hardware_family_arg0": "Hardware familj: {arg0}",
+    "compare.family_same": "Samma",
+    "compare.family_not_comparable": "Inte jämförbar",
     "ui.unexpected_differences_in_n_regions": "Oväntade skillnader i {n} regioner .",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} Adressförändringar eller metadata ändringar är uteslutna.",
     "status.operation_result": "{operation} {result}",

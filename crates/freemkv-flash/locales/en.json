@@ -201,6 +201,8 @@
     "ui.file_origin_arg0_arg1": "File origin: {arg0}. {arg1}",
     "ui.drive_state_captured_at_arg0_unix_seconds": "Drive state captured at {arg0} (Unix seconds)",
     "ui.hardware_family_arg0": "Hardware family: {arg0}",
+    "compare.family_same": "Same",
+    "compare.family_not_comparable": "Not comparable",
     "ui.unexpected_differences_in_n_regions": "Unexpected differences in {n} regions.",
     "ui.arg0_address_relocation_or_metadata_changes_excluded": "{arg0} address-relocation or metadata changes excluded.",
     "status.operation_result": "{operation} {result}",
