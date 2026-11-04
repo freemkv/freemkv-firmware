@@ -170,7 +170,7 @@ jobs:
       - name: Compile and test Rust examples
         run: cargo test --locked --examples
         working-directory: freemkv-firmware
-      - name: Test pinned Pioneer Rust examples and native-code KATs
+      - name: Test pinned Pioneer Rust example KATs
         run: python3 .github/scripts/test_pioneer_dependency_examples.py
         working-directory: freemkv-firmware
       - name: Mandatory Pioneer settings Rust KATs (no skips)
