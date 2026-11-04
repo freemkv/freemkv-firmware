@@ -706,6 +706,39 @@ fn refresh_enumerates_drives_off_the_ui_thread() {
 }
 
 #[test]
+fn per_window_progress_is_journaled_once_per_phase() {
+    let mut app = one_drive();
+    let dir = std::env::temp_dir().join(format!("progress-journal-{}", workflow::new_operation_id()));
+    app.journal = Some(Journal::memory_at(dir));
+    let total = 2 * 1024 * 1024;
+    for done in (64..=total).step_by(1024) {
+        app.event(Event::Phase {
+            phase: "reading",
+            component: "filter.firmware",
+            done: Some(done),
+            total: Some(total),
+        });
+    }
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let progress = contents
+        .lines()
+        .filter(|line| line.contains("operation_progress"))
+        .count();
+    assert!((1..=2).contains(&progress), "{progress} progress records");
+    assert_eq!(app.progress.as_ref().unwrap().1, 2 * 1024 * 1024 - 960);
+}
+
+#[test]
 fn info_without_a_drive_offers_only_check_file() {
     let view = dry(Vec::new()).view();
     assert!(!button(&view, "Read drive information").enabled);

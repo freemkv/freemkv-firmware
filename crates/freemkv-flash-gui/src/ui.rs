@@ -2863,12 +2863,6 @@ impl App {
                 total,
             } => {
                 self.structured_progress = true;
-                self.record_event(
-                    "operation_progress",
-                    serde_json::json!({
-                        "phase": phase, "component": component, "done": done, "total": total,
-                    }),
-                );
                 let key = match phase {
                     "reading" => "phase.reading",
                     "preparing" => "phase.preparing",
@@ -2879,11 +2873,20 @@ impl App {
                     _ => "ui.working",
                 };
                 let label = crate::localization::message(key, &[("component", component.into())]);
-                if self
+                let changed = self
                     .progress
                     .as_ref()
-                    .is_none_or(|(previous, _, _)| previous != &label)
-                {
+                    .is_none_or(|(previous, _, _)| previous != &label);
+                // Journal phase boundaries, not every window of a large read.
+                if changed || (done.is_some() && done == total) {
+                    self.record_event(
+                        "operation_progress",
+                        serde_json::json!({
+                            "phase": phase, "component": component, "done": done, "total": total,
+                        }),
+                    );
+                }
+                if changed {
                     self.log.push(crate::localization::english(&label));
                 }
                 self.progress = Some((label, done.unwrap_or(0), total.unwrap_or(0)));
