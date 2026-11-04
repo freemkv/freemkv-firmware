@@ -261,13 +261,10 @@ fn is_windows_device_path(s: &str) -> bool {
 
 /// Classify `path` for `verify`'s dual-mode dispatch.
 ///
-/// A path is treated as a device if it looks like a device path (starts with
-/// `/dev/`, which also covers `/dev/sg*`, or a Windows `\\.\` / `\\?\`
-/// device-namespace path, but not `\\?\X:\` drive or `\\?\UNC\` file paths) or — when it already exists on
-/// disk — its filesystem metadata says it is a character or block special
-/// file. Anything else, including a plain path that doesn't exist yet, is
-/// treated as a file, so the ordinary "no such file" error still fires for a
-/// typo'd image path instead of being swallowed by device-probe logic.
+/// A device is a `/dev/` path, a Windows device-namespace path (see
+/// [`is_windows_device_path`]), or an existing character or block special
+/// file. Anything else, including a plain path that doesn't exist yet, is a
+/// file, so a typo'd image path still gets the ordinary "no such file" error.
 fn classify_verify_target(path: &Path) -> VerifyTarget {
     if path.starts_with("/dev/") || path.to_str().is_some_and(is_windows_device_path) {
         return VerifyTarget::Device;
