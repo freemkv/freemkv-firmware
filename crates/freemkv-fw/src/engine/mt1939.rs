@@ -205,6 +205,7 @@ impl Engine for Mt1939Engine {
         // signature misses (e.g. a JB8-base image whose VID uses classic
         // scheduling) is reported SignatureNotFound by the never-abort driver, so
         // the image still partial-applies.
+
         // A failed base build degrades to the DE-only path below (never refuse).
         let base_err = if is_classic(image) {
             // Classic generation uses its own source-qualified feature and
