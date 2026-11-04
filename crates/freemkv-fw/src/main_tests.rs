@@ -1138,3 +1138,11 @@ fn mem_read_clamps_an_oversized_reply_to_one_window() {
     let out = mem_read(&mut Oversize, start, (3 * abi::MEMREAD_LEN) as u64, false).data;
     assert_eq!(out, WindowMem::expected(start, 3));
 }
+
+#[test]
+fn a_read_where_every_window_failed_captured_nothing() {
+    let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
+    assert!(mem_read(&mut dev, 0x1000, 0x100, false).captured_nothing());
+    let mut ok = mem_mock(|| Ok(vec![1; abi::MEMREAD_LEN]));
+    assert!(!mem_read(&mut ok, 0x1000, 0x100, false).captured_nothing());
+}

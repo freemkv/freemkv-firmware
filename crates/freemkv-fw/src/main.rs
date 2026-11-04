@@ -419,6 +419,13 @@ struct MemRead {
     short: usize,
 }
 
+impl MemRead {
+    /// True when every window failed or came back short, so `data` is only fill.
+    fn captured_nothing(&self) -> bool {
+        self.good == 0 && self.short + self.failed > 0
+    }
+}
+
 /// Read `len` bytes starting at `start` via [`abi::Verb::DumpAll`], in
 /// [`abi::MEMREAD_LEN`]-byte windows. When `auto_stop`, a run of consecutive
 /// unreadable or short windows ends the read early — the natural "end of mapped
@@ -579,9 +586,19 @@ fn cmd_info(
         }
         let read = mem_read(dev.as_mut(), start, length, false);
         warn_mem_faults("dump", read.short, read.failed);
-        let nothing_captured = read.good == 0 && read.short + read.failed > 0;
+        let nothing_captured = read.captured_nothing();
         let data = read.data;
         match out {
+            Some(o) if nothing_captured => {
+                eprintln!(
+                    "{}",
+                    style::status_line(
+                        "dump",
+                        &format!("no readable data; not writing {}", o.display()),
+                        style::Status::Fail
+                    )
+                );
+            }
             Some(o) => {
                 diagnostics::write(o, &data).with_context(|| format!("writing {}", o.display()))?;
                 println!(
