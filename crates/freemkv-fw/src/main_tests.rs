@@ -1047,7 +1047,7 @@ fn mem_read_counts_short_replies_as_faults_for_auto_stop() {
     let mut dev = mem_mock(|| Ok(vec![0xAA; 16]));
     let r = mem_read(&mut dev, 0x1000, 0x10_0000, true);
     assert_eq!(dev.addrs.len(), 16, "auto-stop must end the read");
-    assert_eq!((r.short, r.good, r.failed), (16, 0, 0));
+    assert_eq!((r.short, r.good, r.failed), (0, 0, 0), "stop run is discarded");
 }
 
 #[test]
@@ -1105,4 +1105,36 @@ fn classify_extended_length_file_paths_are_files() {
         classify_verify_target(Path::new(r"\\?\CdRom0")),
         VerifyTarget::Device
     );
+}
+
+#[test]
+fn mem_read_auto_stop_does_not_count_the_discarded_stop_run() {
+    let start = 0x2000u32;
+    let good = 8usize;
+    let mut dev = WindowMem::failing_from(start + (good * abi::MEMREAD_LEN) as u32);
+    let read = mem_read(&mut dev, start, 0x1_0000, true);
+    assert_eq!(read.data.len(), good * abi::MEMREAD_LEN);
+    assert_eq!((read.failed, read.short), (0, 0));
+}
+
+#[test]
+fn mem_read_clamps_an_oversized_reply_to_one_window() {
+    struct Oversize;
+    impl platform::ScsiDevice for Oversize {
+        fn command_in(&mut self, cdb: &[u8], _alloc_len: usize) -> Result<Vec<u8>> {
+            let addr = u32::from_be_bytes([cdb[5], cdb[6], cdb[7], cdb[8]]);
+            let mut w = WindowMem::window(addr);
+            w.extend_from_slice(&[0xEE; 7]);
+            Ok(w)
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+            unreachable!("read-only")
+        }
+        fn describe(&self) -> String {
+            "mock://oversize".to_string()
+        }
+    }
+    let start = 0x4000u32;
+    let out = mem_read(&mut Oversize, start, (3 * abi::MEMREAD_LEN) as u64, false).data;
+    assert_eq!(out, WindowMem::expected(start, 3));
 }

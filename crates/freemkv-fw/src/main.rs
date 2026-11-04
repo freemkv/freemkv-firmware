@@ -433,6 +433,7 @@ fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop:
     const RESERVE_CAP: u64 = 0x0400_0000; // 64 MiB
     let mut out = Vec::with_capacity(len.min(RESERVE_CAP) as usize);
     let (mut good, mut failed, mut short) = (0usize, 0usize, 0usize);
+    let (mut run_short, mut run_failed) = (0usize, 0usize);
     let mut faults = 0u32;
     let mut addr = start as u64;
     let end = (start as u64 + len).min(1u64 << 32);
@@ -442,22 +443,27 @@ fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop:
             Ok(d) if d.len() >= abi::MEMREAD_LEN => {
                 good += 1;
                 faults = 0;
-                out.extend_from_slice(&d);
+                (run_short, run_failed) = (0, 0);
+                out.extend_from_slice(&d[..abi::MEMREAD_LEN]);
                 addr += abi::MEMREAD_LEN as u64;
                 continue;
             }
             Ok(d) => {
                 short += 1;
+                run_short += 1;
                 d
             }
             Err(_) => {
                 failed += 1;
+                run_failed += 1;
                 Vec::new()
             }
         };
         faults += 1;
         if auto_stop && faults >= STOP_AFTER {
-            // drop the trailing all-fault fill and stop
+            // drop the trailing all-fault fill (and its counts) and stop
+            short -= run_short;
+            failed -= run_failed;
             out.truncate(
                 out.len()
                     .saturating_sub(((faults - 1) as usize) * abi::MEMREAD_LEN),
