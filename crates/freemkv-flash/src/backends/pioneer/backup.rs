@@ -571,6 +571,10 @@ const READ_CHUNK: usize = 0x8000;
 const DEEP_RETRIES: usize = 6;
 /// Smallest span a deep read drops to while isolating a bad region.
 const DEEP_MIN_CHUNK: usize = 4;
+/// Consecutive unreadable units after which salvage tries each unit once.
+const DEEP_FAST_FAIL_UNITS: usize = 16;
+/// Consecutive unreadable units after which the rest of the span is zero-filled.
+const DEEP_GIVE_UP_UNITS: usize = 256;
 
 /// One vendor firmware read at `off` of exactly `n` bytes, through
 /// `pioneer_optical::drive::read_memory` (which issues the read-unlock knock
@@ -749,14 +753,33 @@ fn salvage_span(
     }
     let mut good = None;
     let mut p = pos;
+    let mut failed_run = 0usize;
     while p < pos + n {
         let m = DEEP_MIN_CHUNK.min(pos + n - p);
-        match retry_read(dev, start + p, m) {
+        if failed_run >= DEEP_GIVE_UP_UNITS {
+            let rest = pos + n - p;
+            crate::diagnostics::record(format!(
+                "salvage giving up: {failed_run} consecutive unreadable units; zero-filling {rest} byte(s) from {:#x}",
+                start + p
+            ));
+            push_gap(gaps, start + p, rest);
+            break;
+        }
+        let attempts = if failed_run >= DEEP_FAST_FAIL_UNITS {
+            1
+        } else {
+            DEEP_RETRIES
+        };
+        match retry_read_n(dev, start + p, m, attempts) {
             Some(data) => {
                 image[p..p + m].copy_from_slice(&data);
                 good = Some((start + p, m));
+                failed_run = 0;
             }
-            None => push_gap(gaps, start + p, m),
+            None => {
+                push_gap(gaps, start + p, m);
+                failed_run += 1;
+            }
         }
         p += m;
     }
@@ -767,10 +790,19 @@ fn salvage_span(
 /// crate's `read_memory` unlocks before each read), covering a drive that
 /// dropped out of read mode. `None` if every attempt failed.
 fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Option<Vec<u8>> {
-    for attempt in 1..=DEEP_RETRIES {
+    retry_read_n(dev, off, n, DEEP_RETRIES)
+}
+
+fn retry_read_n(
+    dev: &mut dyn ScsiDevice,
+    off: usize,
+    n: usize,
+    attempts: usize,
+) -> Option<Vec<u8>> {
+    for attempt in 1..=attempts {
         match read_chunk(dev, off, n) {
             Ok(data) => return Some(data),
-            Err(error) => crate::diagnostics::record(format!("salvage read failed: address={off:#x} length={n} attempt={attempt}/{DEEP_RETRIES} error={error:#}")),
+            Err(error) => crate::diagnostics::record(format!("salvage read failed: address={off:#x} length={n} attempt={attempt}/{attempts} error={error:#}")),
         }
     }
     None

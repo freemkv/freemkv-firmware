@@ -103,6 +103,38 @@ fn read_access_probe_retries_only_short_reads_and_reknocks() {
     }
 }
 
+/// A wholly unreadable chunk must not cost one full retry ladder per unit.
+#[test]
+fn deep_read_bounds_attempts_on_a_wholly_unreadable_chunk() {
+    struct Dead {
+        calls: usize,
+    }
+    impl ScsiDevice for Dead {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            self.calls += 1;
+            let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            if start < 0x8000 {
+                bail!("unreadable region");
+            }
+            Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "dead".into()
+        }
+    }
+    let mut dev = Dead { calls: 0 };
+    let (image, gaps) = read_region_deep_gaps(&mut dev, 0, 0x10000).unwrap();
+    assert_eq!(gaps, vec![(0, 0x8000)]);
+    assert!(image[..0x8000].iter().all(|b| *b == 0));
+    for (i, b) in image.iter().enumerate().skip(0x8000) {
+        assert_eq!(*b, (i & 0xff) as u8);
+    }
+    assert!(dev.calls < 2000, "too many reads: {}", dev.calls);
+}
+
 #[test]
 fn deep_read_salvages_around_an_unreadable_span_and_reports_the_gap() {
     // A device that serves byte `off & 0xff` everywhere except a bad window
@@ -130,7 +162,8 @@ fn deep_read_salvages_around_an_unreadable_span_and_reports_the_gap() {
     let bad = 0x100usize;
     let badlen = 0x10usize;
     let mut dev = Spotty { bad, badlen };
-    let image = read_region_deep(&mut dev, 0, len).unwrap();
+    let (image, gaps) = read_region_deep_gaps(&mut dev, 0, len).unwrap();
+    assert_eq!(gaps, vec![(bad, badlen)]);
     assert_eq!(image.len(), len);
     // Readable bytes are their offset mod 256; the bad window is zero-filled.
     for (i, b) in image.iter().enumerate() {
@@ -145,7 +178,8 @@ fn deep_read_salvages_around_an_unreadable_span_and_reports_the_gap() {
         bad: len,
         badlen: 0,
     };
-    let whole = read_region_deep(&mut clean, 0, len).unwrap();
+    let (whole, clean_gaps) = read_region_deep_gaps(&mut clean, 0, len).unwrap();
+    assert!(clean_gaps.is_empty());
     assert!(whole
         .iter()
         .enumerate()
