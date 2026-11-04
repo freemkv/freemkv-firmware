@@ -639,6 +639,25 @@ fn every_rawread_stub_is_allocated_with_exact_capacity() {
         let window = (va - base) as usize + blob - 1;
         let mut cramped = img.clone();
         assert_eq!(only_free_space(&mut cramped, window), base);
+        let optional = match name {
+            "UHD" => Some("uhd-native"),
+            "HRL-skip" => Some("hrl"),
+            "BD-refuse" => Some("bd-native"),
+            _ => None,
+        };
+        if let Some(id) = optional {
+            // Optional hooks degrade to "unavailable" and keep the mandatory detours.
+            let facts = e
+                .emit_rawread(&img, &mut cramped, FLAG_TABLE_BASE)
+                .unwrap_or_else(|err| panic!("{name} shortfall must degrade: {err:#}"));
+            let hook = facts.hooks.iter().find(|h| h.id == id).expect("hook");
+            let reason = hook.reason.as_deref().unwrap_or_default();
+            assert!(
+                hook.variant.is_none() && reason.contains(&out_of_space(blob)),
+                "the {name} stub ({blob} bytes) must report its finalized size; got: {reason}"
+            );
+            continue;
+        }
         let msg = refusal(
             e.emit_rawread(&img, &mut cramped, FLAG_TABLE_BASE),
             "a free run one byte short of the finalized blob must not be used",
@@ -1675,4 +1694,36 @@ fn failed_detour_verification_leaves_the_image_untouched() {
 
     commit_detour(&mut out, site, stub_va, &[0xAB; 8], "Test").unwrap();
     assert!(out != before, "successful commit writes the detour");
+}
+
+/// UHD / HRL / BD / auth-cell are optional hooks: when free space runs out after
+/// the mandatory AKE, Gate-A and deny detours, they report unavailable instead of
+/// discarding the validated detours.
+#[test]
+fn exhausted_free_space_degrades_optional_rawread_hooks() {
+    let e = Mt1959Engine;
+    let img = fixture();
+    let base = only_free_space(&mut img.clone(), 16);
+    let facts = e
+        .emit_rawread(&img, &mut img.clone(), FLAG_TABLE_BASE)
+        .expect("raw-read emits on the undamaged base");
+    let deny_len = e
+        .build_deny_reset_stub(e.find_aacs_session_reset(&img).expect("reset"))
+        .expect("deny stub")
+        .len();
+    let window = (facts.deny_stub_va - base) as usize + deny_len;
+    let mut cramped = img.clone();
+    only_free_space(&mut cramped, window);
+    let mut out = cramped.clone();
+    let facts = e
+        .emit_rawread(&cramped, &mut out, FLAG_TABLE_BASE)
+        .expect("optional hooks must degrade, not fail the lever");
+    assert!(facts.ake_stub_va != 0 && facts.gatea_stub_va != 0 && facts.deny_stub_va != 0);
+    for name in ["uhd-native", "hrl", "bd-native", "auth-cell"] {
+        let hook = facts.hooks.iter().find(|h| h.id == name);
+        assert!(
+            hook.is_some_and(|h| h.variant.is_none() && h.reason.is_some()),
+            "{name} must be reported unavailable"
+        );
+    }
 }
