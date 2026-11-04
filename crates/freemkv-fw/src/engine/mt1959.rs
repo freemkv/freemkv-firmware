@@ -671,17 +671,7 @@ impl Mt1959Engine {
             aacs_reset,
         )?;
         let deny_site = gatea_deny as usize + 0x10;
-        if deny_site + 4 > image.len() {
-            bail!("deny sense-setup site 0x{deny_site:x} is past the end of the image");
-        }
-        let d0 = u16::from_le_bytes([image[deny_site], image[deny_site + 1]]);
-        let d1 = u16::from_le_bytes([image[deny_site + 2], image[deny_site + 3]]);
-        if d0 != 0x2202 || d1 != 0x216f {
-            bail!(
-                "deny sense-setup (movs r2,#2; movs r1,#0x6f) not at 0x{deny_site:x} \
-                 (got 0x{d0:04x} 0x{d1:04x})"
-            );
-        }
+        check_deny_sense_setup(image, deny_site)?;
         let deny_bytes = self.build_deny_reset_stub(aacs_reset)?;
 
         // VID producer facts (required for the feature; reported).
@@ -1002,6 +992,23 @@ fn commit_detour_checked(
         out[stub_at..stub_at + saved_stub.len()].copy_from_slice(&saved_stub);
         out[site..site + saved_site.len()].copy_from_slice(&saved_site);
         return Err(e);
+    }
+    Ok(())
+}
+
+/// The deny-reset detour overwrites the OEM pair `movs r2,#2; movs r1,#0x6f`
+/// at `site`; both halfwords must be in the image and match.
+fn check_deny_sense_setup(image: &[u8], site: usize) -> Result<()> {
+    let Some(pair) = site.checked_add(4).and_then(|end| image.get(site..end)) else {
+        bail!("deny sense-setup site 0x{site:x} is past the end of the image");
+    };
+    let d0 = u16::from_le_bytes([pair[0], pair[1]]);
+    let d1 = u16::from_le_bytes([pair[2], pair[3]]);
+    if d0 != 0x2202 || d1 != 0x216f {
+        bail!(
+            "deny sense-setup (movs r2,#2; movs r1,#0x6f) not at 0x{site:x} \
+             (got 0x{d0:04x} 0x{d1:04x})"
+        );
     }
     Ok(())
 }

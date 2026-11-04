@@ -950,17 +950,20 @@ fn deny_sense_setup_refuses_when_either_halfword_is_not_the_known_pair() {
 }
 
 /// The deny site is derived by arithmetic from a branch displacement, so on a
-/// short image it can point past the end. The bounds check must refuse *before*
-/// the halfword read, and it must bound the real end of that read (`site + 4`):
-/// a `site - 4` bound leaves the last 4 bytes of the read unchecked and the
-/// build panics on a slice index instead of refusing cleanly.
+/// short image it can point past the end. The bound must cover the whole 4-byte
+/// read (`site + 4`) and refuse cleanly instead of panicking on a slice index.
 #[test]
 fn deny_site_running_past_the_image_end_is_refused_before_it_is_read() {
-    let site = deny_site_of(&fixture()) + 0x20;
-    let doctored = rawread_image_with_deny_at_the_tail(site);
-    assert!(Mt1959Engine
-        .emit_rawread(&doctored[..site + 2], &mut fixture(), FLAG_TABLE_BASE)
-        .is_err());
+    let mut img = vec![0u8; 0x40];
+    let site = 0x3c;
+    img[site..site + 2].copy_from_slice(&0x2202u16.to_le_bytes());
+    img[site + 2..site + 4].copy_from_slice(&0x216fu16.to_le_bytes());
+    assert!(check_deny_sense_setup(&img, site).is_ok());
+    for end in [site, site + 1, site + 2, site + 3] {
+        let err = check_deny_sense_setup(&img[..end], site).unwrap_err();
+        assert!(format!("{err}").contains("past the end"), "{end:#x}: {err}");
+    }
+    assert!(check_deny_sense_setup(&img, usize::MAX - 1).is_err());
 }
 
 /// A complete deny pair does not make a truncated producer valid: its native
@@ -1020,9 +1023,9 @@ fn speed_ramp_exit_sign_extends_a_backward_bhi() {
     );
 }
 
-/// Build a copy of the fixture whose Raw-read prerequisites all resolve *below*
-/// the deny site, so the image can be truncated right at the deny pair and the
-/// deny bounds check is actually reached.
+/// Build a copy of the fixture with the deny pair moved toward a truncation
+/// point. The AGID operand binding still refuses it, so it only shows that a
+/// truncated producer is refused; the deny bound is tested directly above.
 ///
 /// Two surgical edits: the VID gate's deny arm is re-pointed forward to
 /// `deny_at` (so the deny pair sits at a chosen address) and the producer's

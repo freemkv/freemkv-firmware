@@ -126,7 +126,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           python3 -m venv "$RUNNER_TEMP/hook-cpu"
-          "$RUNNER_TEMP/hook-cpu/bin/python" -m pip install --only-binary=:all: unicorn==2.1.4
+          "$RUNNER_TEMP/hook-cpu/bin/python" -m pip install --only-binary=:all: -r scripts/firmware_execution/requirements.txt
+          (cd scripts/firmware_execution && "$RUNNER_TEMP/hook-cpu/bin/python" -m unittest test_cpu test_disc test_read_inputs test_scope test_source_snapshot)
+          (cd scripts/hil && "$RUNNER_TEMP/hook-cpu/bin/python" -m unittest test_pioneer_parity)
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hook-execution.py --fw target/release/freemkv-fw
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-runtime-execution.py --fw target/release/freemkv-fw
           "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-integrity-routing.py

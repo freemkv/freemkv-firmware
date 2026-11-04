@@ -103,115 +103,88 @@ fn read_access_probe_retries_only_short_reads_and_reknocks() {
     }
 }
 
+/// Serves byte `off & 0xff` everywhere except `[bad, bad+badlen)`, where every
+/// read intersecting it errors; counts reads.
+struct Spotty {
+    bad: usize,
+    badlen: usize,
+    reads: usize,
+}
+
+impl ScsiDevice for Spotty {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        self.reads += 1;
+        let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+        if start < self.bad + self.badlen && start + len > self.bad {
+            bail!("unreadable span");
+        }
+        Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
+    }
+    fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+    fn describe(&self) -> String {
+        "spotty".into()
+    }
+}
+
 #[test]
-fn deep_read_salvages_around_an_unreadable_span_and_reports_the_gap() {
-    // A device that serves byte `off & 0xff` everywhere except a bad window
-    // `[bad, bad+badlen)`, where every read intersecting it errors.
-    struct Spotty {
-        bad: usize,
-        badlen: usize,
-    }
-    impl ScsiDevice for Spotty {
-        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-            let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-            if start < self.bad + self.badlen && start + len > self.bad {
-                bail!("unreadable span");
-            }
-            Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
-        }
-        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
-            Ok(())
-        }
-        fn describe(&self) -> String {
-            "spotty".into()
-        }
-    }
-    let len = 0x200usize;
-    let bad = 0x100usize;
-    let badlen = 0x10usize;
-    let mut dev = Spotty { bad, badlen };
-    let (image, gaps) = read_region_deep_gaps(&mut dev, 0, len).unwrap();
-    assert_eq!(gaps, vec![(bad, badlen)]);
-    assert_eq!(image.len(), len);
-    // Readable bytes are their offset mod 256; the bad window is zero-filled.
-    for (i, b) in image.iter().enumerate() {
-        if (bad..bad + badlen).contains(&i) {
-            assert_eq!(*b, 0, "byte {i:#x} should be a zero-filled gap");
-        } else {
-            assert_eq!(*b, (i & 0xff) as u8, "byte {i:#x} should be recovered");
-        }
-    }
-    // A fully readable region salvages byte-for-byte with no gaps.
-    let mut clean = Spotty {
+fn recover_read_of_a_hard_failing_chunk_aborts_without_a_backup() {
+    let mut dev = Spotty {
+        bad: READ_CHUNK + 0x100,
+        badlen: 0x10,
+        reads: 0,
+    };
+    let err = read_region_deep(&mut dev, 0, READ_CHUNK * 24).unwrap_err();
+    assert!(
+        format!("{err:#}").contains("backup not possible"),
+        "{err:#}"
+    );
+    // Chunk 0, then the failing chunk plus its retries; no subdivision.
+    assert_eq!(dev.reads, 2 + DEEP_RETRIES, "reads: {}", dev.reads);
+}
+
+#[test]
+fn recover_read_of_a_clean_region_is_byte_exact() {
+    let len = READ_CHUNK * 2 + 0x200;
+    let mut dev = Spotty {
         bad: len,
         badlen: 0,
+        reads: 0,
     };
-    let (whole, clean_gaps) = read_region_deep_gaps(&mut clean, 0, len).unwrap();
-    assert!(clean_gaps.is_empty());
-    assert!(whole
+    let image = read_region_deep(&mut dev, 0, len).unwrap();
+    assert_eq!(image.len(), len);
+    assert!(image
         .iter()
         .enumerate()
         .all(|(i, b)| *b == (i & 0xff) as u8));
 }
 
 #[test]
-fn deep_read_aborts_when_the_drive_drops_out_mid_region() {
-    // Serves the first read, then every read (including the liveness probe)
-    // fails: a dropped drive must not cost millions of retries.
-    struct Dying {
-        reads: usize,
+fn recover_read_survives_a_transient_failure() {
+    struct Flaky {
+        fails_left: usize,
     }
-    impl ScsiDevice for Dying {
-        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-            self.reads += 1;
-            let _ = cdb;
-            if self.reads > 1 {
-                bail!("drive gone");
+    impl ScsiDevice for Flaky {
+        fn command_in(&mut self, _cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            if self.fails_left > 0 {
+                self.fails_left -= 1;
+                bail!("transient");
             }
-            Ok(vec![0u8; len])
+            Ok(vec![7; len])
         }
         fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
             Ok(())
         }
         fn describe(&self) -> String {
-            "dying".into()
+            "flaky".into()
         }
     }
-    let mut dev = Dying { reads: 0 };
-    let err = read_region_deep(&mut dev, 0, READ_CHUNK * 24).unwrap_err();
-    assert!(format!("{err:#}").contains("stopped responding"), "{err:#}");
-    assert!(
-        dev.reads <= DEEP_RETRIES + 3,
-        "too many retries: {}",
-        dev.reads
+    let mut dev = Flaky { fails_left: 3 };
+    assert_eq!(
+        read_region_deep(&mut dev, 0, 0x200).unwrap(),
+        vec![7; 0x200]
     );
-}
-
-#[test]
-fn push_gap_merges_contiguous_runs_and_separates_disjoint_ones() {
-    let mut g = Vec::new();
-    push_gap(&mut g, 0x100, 4);
-    push_gap(&mut g, 0x104, 4); // contiguous with the previous → merged
-    push_gap(&mut g, 0x200, 8); // disjoint → new entry
-    assert_eq!(g, vec![(0x100, 8), (0x200, 8)]);
-}
-
-#[test]
-fn deep_read_bails_when_the_whole_region_is_unreadable() {
-    struct Dead;
-    impl ScsiDevice for Dead {
-        fn command_in(&mut self, _c: &[u8], _a: usize) -> Result<Vec<u8>> {
-            bail!("dead drive")
-        }
-        fn command_out(&mut self, _c: &[u8], _d: &[u8]) -> Result<()> {
-            bail!("dead drive")
-        }
-        fn describe(&self) -> String {
-            "dead".into()
-        }
-    }
-    let err = read_region_deep(&mut Dead, 0, 0x200).unwrap_err();
-    assert!(format!("{err:#}").contains("entirely unreadable"));
 }
 
 /// Refuses any command after the two identity reads and records writes so the
