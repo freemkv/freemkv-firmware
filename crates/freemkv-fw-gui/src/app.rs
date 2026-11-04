@@ -408,13 +408,15 @@ impl FwApp {
                 let ctx = ctx.clone();
                 std::thread::spawn(move || {
                     let result = std::panic::catch_unwind(|| boot_options_at(&path))
-                    .map_err(|_| {
-                        (
-                            read_only_problem("errors.analysis"),
-                            "Firmware analysis worker stopped unexpectedly".to_string(),
-                        )
-                    })
-                    .and_then(|result| result.map_err(|e| (user_guidance(&e), format!("{e:#}"))));
+                        .map_err(|_| {
+                            (
+                                read_only_problem("errors.analysis"),
+                                "Firmware analysis worker stopped unexpectedly".to_string(),
+                            )
+                        })
+                        .and_then(|result| {
+                            result.map_err(|e| (user_guidance(&e), format!("{e:#}")))
+                        });
                     let _ = tx.send(result);
                     ctx.request_repaint();
                 });

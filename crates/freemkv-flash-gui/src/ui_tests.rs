@@ -708,7 +708,8 @@ fn refresh_enumerates_drives_off_the_ui_thread() {
 #[test]
 fn per_window_progress_is_journaled_once_per_phase() {
     let mut app = one_drive();
-    let dir = std::env::temp_dir().join(format!("progress-journal-{}", workflow::new_operation_id()));
+    let dir =
+        std::env::temp_dir().join(format!("progress-journal-{}", workflow::new_operation_id()));
     app.journal = Some(Journal::memory_at(dir));
     let total = 2 * 1024 * 1024;
     for done in (64..=total).step_by(1024) {
