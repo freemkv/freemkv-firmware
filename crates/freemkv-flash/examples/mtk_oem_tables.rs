@@ -350,6 +350,7 @@ fn main() -> Result<()> {
     let mut builds = Vec::new();
     let mut ambiguous = 0;
     let mut catalog = Catalog::new();
+    let mut cataloged = std::collections::BTreeSet::new();
     let mut per_chip: HashMap<Chip, Vec<&Candidate>> = HashMap::new();
     for (key, candidates) in &by_key {
         for c in candidates {
@@ -367,6 +368,7 @@ fn main() -> Result<()> {
         for (i, byte) in digest.iter_mut().enumerate() {
             *byte = u8::from_str_radix(&key[2 * i..2 * i + 2], 16)?;
         }
+        cataloged.insert(key.clone());
         catalog.insert(
             digest,
             Build {
@@ -434,14 +436,14 @@ fn main() -> Result<()> {
     // Admission check: every cataloged build rebuilds exactly from a drive
     // read, and its family survives the read.
     let mut checked = 0;
-    for candidates in by_key.values() {
+    for (key, candidates) in &by_key {
         let c = &candidates[0];
         let image = std::fs::read(&c.path)?;
         let read = simulated_read(&image);
         let rebuilt = oem::rebuild(&read, &catalog)
             .with_context(|| format!("rebuilding {}", c.path.display()))?;
         let exact = rebuilt.provenance.is_exact();
-        if exact && rebuilt.image != image {
+        if !rebuild_admitted(exact, rebuilt.image == image, cataloged.contains(key)) {
             bail!("{} does not rebuild byte-exact", c.path.display());
         }
         if family(&read).map(|f| f.to_string()).as_deref() != Some(c.family.as_str()) {
@@ -475,9 +477,26 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// A cataloged build must rebuild exactly; others fail only on an exact mismatch.
+fn rebuild_admitted(exact: bool, same_bytes: bool, cataloged: bool) -> bool {
+    if cataloged {
+        exact && same_bytes
+    } else {
+        !exact || same_bytes
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cataloged_build_must_rebuild_exactly() {
+        assert!(rebuild_admitted(true, true, true));
+        assert!(!rebuild_admitted(true, false, true));
+        assert!(!rebuild_admitted(false, false, true));
+        assert!(rebuild_admitted(false, false, false));
+    }
 
     fn test_dir() -> PathBuf {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

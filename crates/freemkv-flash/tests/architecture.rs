@@ -577,6 +577,17 @@ fn module_links(code: &str, strings: &[String]) -> Vec<Link> {
     out
 }
 
+fn scanned_target(dir: &Path, target: &str) -> bool {
+    let file = dir.join(target);
+    let name = file.file_name().map(|n| n.to_string_lossy().into_owned());
+    let inside_src = file
+        .canonicalize()
+        .ok()
+        .zip(root().join("src").canonicalize().ok())
+        .is_some_and(|(file, src)| file.starts_with(src));
+    file.is_file() && inside_src && name.is_some_and(|n| scanned_name(&n))
+}
+
 /// Production code loads only files the scan reads: every `#[path]` and
 /// `include!` outside `#[cfg(test)]` names an existing, scanned `.rs` file, and
 /// no `mod x;` loads a `tests.rs` or `*_tests.rs` file.
@@ -587,13 +598,7 @@ fn production_code_loads_only_scanned_files() {
     for s in production_sources() {
         let dir = root().join(&s.path);
         let dir = dir.parent().unwrap();
-        let scanned = |target: &str| {
-            let file = dir.join(target);
-            let name = file.file_name().map(|n| n.to_string_lossy().into_owned());
-            file.is_file()
-                && file.starts_with(root().join("src"))
-                && name.is_some_and(|n| scanned_name(&n))
-        };
+        let scanned = |target: &str| scanned_target(dir, target);
         for link in module_links(&s.code, &s.strings) {
             let ok = match &link {
                 Link::Path(target) | Link::Include(Some(target)) => scanned(target),
@@ -610,6 +615,13 @@ fn production_code_loads_only_scanned_files() {
     }
     assert!(problems.is_empty(), "{problems:#?}");
     assert!(mods >= 10, "the scan found only {mods} module declarations");
+}
+
+#[test]
+fn linked_files_outside_src_are_not_scanned() {
+    let dir = root().join("src/backends");
+    assert!(scanned_target(&root().join("src"), "lib.rs"));
+    assert!(!scanned_target(&dir, "../../tests/architecture.rs"));
 }
 
 #[test]

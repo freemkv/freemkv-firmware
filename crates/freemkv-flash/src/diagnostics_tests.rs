@@ -4,16 +4,20 @@ use std::sync::{Arc, Mutex};
 #[test]
 fn log_name_has_readable_utc_datetime_and_unique_suffix() {
     let directory = std::env::temp_dir().join(format!("freemkv-log-name-{}", new_operation_id()));
+    let before = time::OffsetDateTime::now_utc();
     let (first, first_log) = create_log(&directory, "freemkv-flash").unwrap();
     let (second, second_log) = create_log(&directory, "freemkv-flash").unwrap();
+    let after = time::OffsetDateTime::now_utc();
     let name = first.file_name().unwrap().to_str().unwrap();
-    let now = time::OffsetDateTime::now_utc();
-    assert!(name.starts_with(&format!(
-        "freemkv-flash-{:04}-{:02}-{:02}_",
-        now.year(),
-        u8::from(now.month()),
-        now.day()
-    )));
+    let prefix = |t: time::OffsetDateTime| {
+        format!(
+            "freemkv-flash-{:04}-{:02}-{:02}_",
+            t.year(),
+            u8::from(t.month()),
+            t.day()
+        )
+    };
+    assert!(name.starts_with(&prefix(before)) || name.starts_with(&prefix(after)));
     assert!(name.contains('Z'));
     assert!(name.ends_with(".log"));
     assert_ne!(first, second);
@@ -401,4 +405,37 @@ fn recovery_current_reference_refusal_publishes_a_persistent_log() {
     assert!(text.contains("Loader revision 0000"));
     assert!(text.contains("impact=Blocked"));
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn prefix_closes_at_the_first_line_that_does_not_fit() {
+    let directory = std::env::temp_dir().join(format!("freemkv-prefix-{}", new_operation_id()));
+    let (path, mut log) = create_log(&directory, "freemkv-flash").unwrap();
+    let big = "x".repeat(MAX_EVENT);
+    log.write(&big).unwrap();
+    log.write(&big).unwrap();
+    log.write(&big).unwrap();
+    log.write("MARK").unwrap();
+    assert!(!String::from_utf8_lossy(&log.prefix).contains("MARK"));
+    drop(log);
+    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
+#[test]
+fn empty_or_relative_xdg_directories_fall_through() {
+    use std::ffi::OsString;
+    let some = |s: &str| Some(OsString::from(s));
+    assert_eq!(
+        linux_log_directory(some(""), some("/cache"), some("/home/u")),
+        Some(PathBuf::from("/cache/freemkv/logs"))
+    );
+    assert_eq!(
+        linux_log_directory(some("rel"), some("rel2"), some("/home/u")),
+        Some(PathBuf::from("/home/u/.cache/freemkv/logs"))
+    );
+    assert_eq!(
+        linux_log_directory(some("/state"), None, None),
+        Some(PathBuf::from("/state/freemkv/logs"))
+    );
 }

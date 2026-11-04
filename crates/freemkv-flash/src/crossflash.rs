@@ -208,6 +208,22 @@ pub enum Platform {
     Mediatek,
 }
 
+impl Platform {
+    /// Platform of a flash input: a MediaTek package or image, a Pioneer tar, or a
+    /// bare Pioneer Normal `.enc`.
+    pub fn of_input(target: &[u8]) -> Self {
+        let is_tar = target.get(257..262) == Some(b"ustar");
+        if crate::mediatek_package::Package::parse(target).is_ok() {
+            return Platform::Mediatek;
+        }
+        if is_tar || pioneer_optical::ident::parse_banner(target).is_some() {
+            Platform::Pioneer
+        } else {
+            Platform::Mediatek
+        }
+    }
+}
+
 /// Whether `flash` admits `target` on a drive whose installed firmware is
 /// `installed` (refusal reason on `Err`).
 fn evaluate(platform: Platform, installed: &[u8], target: &[u8]) -> Result<Evaluation> {
@@ -636,5 +652,22 @@ mod route_tests {
                 requirements: vec![hardware("UD02", None)]
             }]
         );
+    }
+}
+
+#[cfg(test)]
+mod platform_tests {
+    use super::*;
+    #[test]
+    fn bare_pioneer_normal_is_pioneer_and_other_inputs_keep_their_platform() {
+        let mut enc = vec![0u8; 512];
+        let header = b"********  Copyright(c) 2000 Pioneer Corporation\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11.\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";
+        enc[..header.len()].copy_from_slice(header);
+        assert_eq!(Platform::of_input(&enc), Platform::Pioneer);
+        let bin = include_bytes!("../tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+        assert_eq!(Platform::of_input(bin), Platform::Mediatek);
+        let mut tar = vec![0u8; 512];
+        tar[257..262].copy_from_slice(b"ustar");
+        assert_eq!(Platform::of_input(&tar), Platform::Pioneer);
     }
 }

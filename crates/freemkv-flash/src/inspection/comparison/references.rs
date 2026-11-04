@@ -29,10 +29,11 @@ fn mapped(ranges: &[(Range<usize>, usize)], offset: usize) -> Option<usize> {
 const TARGET_CONTEXT_BYTES: usize = 8;
 fn mapped_target(ranges: &[(Range<usize>, usize)], offset: usize) -> Option<usize> {
     let end = offset.checked_add(TARGET_CONTEXT_BYTES)?;
-    let (range, destination) = ranges
-        .iter()
-        .find(|(range, _)| range.start <= offset && end <= range.end)?;
-    Some(destination + offset - range.start)
+    let i = ranges
+        .partition_point(|(r, _)| r.start <= offset)
+        .checked_sub(1)?;
+    let (range, destination) = &ranges[i];
+    (end <= range.end).then(|| destination + offset - range.start)
 }
 
 pub(super) fn normalize(
@@ -102,6 +103,44 @@ pub(super) fn normalize(
             if agrees {
                 change.kind = ChangeKind::RelocatedReference;
                 change.targets = Some((ar.target, br.target));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn linear(ranges: &[(Range<usize>, usize)], offset: usize) -> Option<usize> {
+        let end = offset.checked_add(TARGET_CONTEXT_BYTES)?;
+        let (range, destination) = ranges
+            .iter()
+            .find(|(range, _)| range.start <= offset && end <= range.end)?;
+        Some(destination + offset - range.start)
+    }
+    #[test]
+    fn mapped_target_matches_linear_scan_on_sorted_disjoint_ranges() {
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move |m: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % m as u64) as usize
+        };
+        for _ in 0..200 {
+            let (mut at, mut ranges) = (0usize, Vec::new());
+            for _ in 0..next(12) {
+                at += next(20);
+                let len = 1 + next(40);
+                ranges.push((at..at + len, next(1000)));
+                at += len + 1;
+            }
+            for offset in 0..at + 20 {
+                assert_eq!(
+                    mapped_target(&ranges, offset),
+                    linear(&ranges, offset),
+                    "{ranges:?} @ {offset}"
+                );
             }
         }
     }

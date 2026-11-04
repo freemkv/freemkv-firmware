@@ -264,13 +264,13 @@ fn coherent_backup() -> BackupArtifact {
 
 fn fresh_backup_path() -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
-        "freemkv-backup-{}-{}.tar",
+        "freemkv-backup-{}-{}-{}.tar",
         std::process::id(),
-        BACKUP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ^ std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64
+        BACKUP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64
     ))
 }
 
@@ -442,7 +442,9 @@ fn flash_dry_run_rejects_a_different_family_without_writes() {
 fn flash_rejects_wrong_size_bin() {
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let req = bin_req(vec![0u8; 1024], false);
-    assert!(flash(&mut dev, &Mtk, &req).is_err());
+    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
+    assert!(format!("{err:#}").contains("must be exactly"), "{err:#}");
+    assert!(dev.writes.is_empty());
 }
 
 #[test]
@@ -997,6 +999,18 @@ fn dump_refuses_unreadable_firmware_without_creating_archive() {
 }
 
 #[test]
+fn mtk_dump_labels_its_digest_as_a_dump_not_a_backup() {
+    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    let out = fresh_backup_path();
+    let text = captured_output(|| {
+        backup_with_replace(&mut dev, &Mtk, &out, true, false).unwrap();
+    });
+    let _ = std::fs::remove_file(&out);
+    assert!(text.contains("dump sha256"), "{text}");
+    assert!(!text.contains("backup sha256"), "{text}");
+}
+
+#[test]
 fn execute_refuses_unsaved_or_existing_backup_before_write() {
     let mut req = bin_req(backup_firmware(), true);
     req.predump_out = None;
@@ -1465,6 +1479,9 @@ fn describe_never_prints_escape_sequences_from_the_image() {
     let mut hostile = img.clone();
     let d = ROM_1EC000_OFFSET as usize;
     hostile[d + 0x08..d + 0x08 + 4].copy_from_slice(b"\x1b[2J");
+    let banner = freemkv_chipset::BANNER_OFFSET;
+    let end = hostile[banner..].iter().position(|&b| b == 0).unwrap() + banner;
+    hostile[end..end + 4].copy_from_slice(b"\x1b[2J");
     let hostile = crate::cmac::resign(&hostile).unwrap();
     let out = captured_output(|| {
         FileFacet::describe(

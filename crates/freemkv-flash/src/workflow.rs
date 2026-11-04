@@ -1322,11 +1322,25 @@ fn package_image_inner(input: &Path, output: &Path) -> Result<()> {
     use std::io::Write;
     let bytes = crate::package::wrap_image(read_capped(input)?)
         .map_err(|e| e.context(crate::user_error::IssueCode::FirmwareInvalid))?;
+    write_new_file(output, |file| {
+        file.write_all(&bytes)?;
+        file.sync_all()
+    })
+}
+
+/// Create `output` exclusively; a failed write removes the partial file this call made.
+fn write_new_file(
+    output: &Path,
+    write: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+) -> Result<()> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(output)?;
-    file.write_all(&bytes)?;
-    file.sync_all()?;
-    Ok(())
+    let result = write(&mut file);
+    drop(file);
+    if result.is_err() {
+        let _ = std::fs::remove_file(output);
+    }
+    Ok(result?)
 }

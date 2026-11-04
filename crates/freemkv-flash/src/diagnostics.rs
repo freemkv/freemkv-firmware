@@ -18,6 +18,7 @@ struct Log {
     start: Instant,
     bytes: usize,
     prefix: Vec<u8>,
+    prefix_closed: bool,
     rolled: bool,
 }
 
@@ -54,8 +55,12 @@ impl Log {
         }
         self.file.write_all(line.as_bytes())?;
         self.bytes += line.len();
-        if !self.rolled && self.prefix.len() + line.len() <= KEEP_START {
-            self.prefix.extend_from_slice(line.as_bytes());
+        if !self.rolled && !self.prefix_closed {
+            if self.prefix.len() + line.len() <= KEEP_START {
+                self.prefix.extend_from_slice(line.as_bytes());
+            } else {
+                self.prefix_closed = true;
+            }
         }
         Ok(())
     }
@@ -142,18 +147,30 @@ pub fn log_directory() -> PathBuf {
         return PathBuf::from(base).join("Library/Logs/freemkv");
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        if let Some(base) = std::env::var_os("XDG_STATE_HOME") {
-            return PathBuf::from(base).join("freemkv/logs");
-        }
-        if let Some(base) = std::env::var_os("XDG_CACHE_HOME") {
-            return PathBuf::from(base).join("freemkv/logs");
-        }
-        if let Some(base) = std::env::var_os("HOME") {
-            return PathBuf::from(base).join(".cache/freemkv/logs");
-        }
+    if let Some(path) = linux_log_directory(
+        std::env::var_os("XDG_STATE_HOME"),
+        std::env::var_os("XDG_CACHE_HOME"),
+        std::env::var_os("HOME"),
+    ) {
+        return path;
     }
     std::env::temp_dir().join("freemkv-logs")
+}
+
+/// XDG base directories must be absolute; empty or relative values are ignored.
+#[cfg(any(not(any(target_os = "windows", target_os = "macos")), test))]
+fn linux_log_directory(
+    state: Option<std::ffi::OsString>,
+    cache: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    let absolute = |value: Option<std::ffi::OsString>| {
+        value.map(PathBuf::from).filter(|path| path.is_absolute())
+    };
+    if let Some(base) = absolute(state).or_else(|| absolute(cache)) {
+        return Some(base.join("freemkv/logs"));
+    }
+    home.map(|base| PathBuf::from(base).join(".cache/freemkv/logs"))
 }
 
 fn system_details() -> String {
@@ -220,6 +237,7 @@ fn create_log(directory: &Path, application: &str) -> io::Result<(PathBuf, Log)>
             start: Instant::now(),
             bytes: 0,
             prefix: Vec::new(),
+            prefix_closed: false,
             rolled: false,
         },
     ))
