@@ -368,3 +368,17 @@ fn family_override_popup_displays_the_risk_and_code_before_enabling() {
     assert!(shows(&text, &confirmation.danger));
     assert!(shows(&text, confirmation.prompt.as_ref().unwrap()));
 }
+
+#[test]
+fn update_notice_is_drawn_without_a_task_result() {
+    let mut s = shell(vec![drive("test", "Optical drive")]);
+    s.app.available_update = Some("99.0.0".into());
+    s.app.dispatch(crate::ui::Input::SelectTask(Task::Backup));
+    assert!(s.app.view().status.is_none(), "fixture must have no result");
+    let text = rendered_text(&mut s);
+    assert!(
+        text.iter()
+            .any(|(t, visible)| t.contains("Update 99.0.0 is available") && *visible),
+        "{text:?}"
+    );
+}

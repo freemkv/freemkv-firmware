@@ -330,12 +330,17 @@ fn main_panel(ui: &mut egui::Ui, view: &View, out: &mut Vec<Input>) {
                     }
                 });
         });
-        let (Some(status), Some(results)) = (&view.status, &view.results) else {
+        if view.status.is_none() && view.results.is_none() {
             return;
-        };
+        }
         ui.add_space(8.0);
         ui.separator();
-        status_ui(ui, status, out);
+        if let Some(status) = &view.status {
+            status_ui(ui, status, out);
+        }
+        let Some(results) = &view.results else {
+            return;
+        };
         egui::ScrollArea::vertical()
             .id_salt("result_panel")
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)

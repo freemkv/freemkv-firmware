@@ -822,7 +822,7 @@ pub struct App {
     report_rx: Option<Receiver<ReportMsg>>,
     update_rx: Option<Receiver<Result<Option<String>, String>>>,
     update_checked: bool,
-    available_update: Option<String>,
+    pub(crate) available_update: Option<String>,
     successful_flash: bool,
     report_prompt: Option<crate::support::BundleSource>,
     report_description: String,
