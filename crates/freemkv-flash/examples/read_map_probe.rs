@@ -1,7 +1,8 @@
-//! Read-only live probe: map which drive offsets are readable BEFORE vs AFTER
-//! the `unlock_all_reads` command (`3C 02 F1`), to prove the broad-read unlock.
+//! Live probe without firmware writes: map which drive offsets are readable BEFORE vs AFTER
+//! the `unlock_all_reads` command (`3B 02 41 A5 AA AA`), to prove the broad-read unlock.
 //! Usage: cargo run --example read_map_probe -- <selector>
-//! Issues ONLY reads (READ BUFFER 0x3C). No writes, no kernel mode.
+//! Sends that one zero-length WRITE BUFFER mode-entry command plus READ BUFFER
+//! (0x3C) reads. No firmware writes, no kernel mode.
 
 use anyhow::Result;
 use freemkv_flash::platform::{open, ScsiDevice};

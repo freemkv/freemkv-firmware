@@ -83,10 +83,10 @@ fn main() -> Result<()> {
     }
 
     // Independence: after kernel mode (no knock), are protected reads open?
+    let after = protected_read_ok(dev.as_mut());
     println!(
-        "protected read AFTER kernel mode (no knock): {}  => kernel mode {} a read unlock",
-        protected_read_ok(dev.as_mut()),
-        if protected_read_ok(dev.as_mut()) {
+        "protected read AFTER kernel mode (no knock): {after}  => kernel mode {} a read unlock",
+        if after {
             "IS ALSO"
         } else {
             "is NOT"
