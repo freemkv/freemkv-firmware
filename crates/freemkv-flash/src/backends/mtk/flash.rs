@@ -28,7 +28,7 @@ use mediatek_optical::Identity;
 use super::crossflash::{Build, Verdict};
 use super::{
     backup, cdb, crossflash, describe_sequence, detect_receiver, ensure_flashable_boot_page,
-    live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE, ROM_003000_LEN, ROM_003000_OFFSET,
+    live_identity_checked, Mtk, DESCRIPTOR, IMAGE_SIZE, ROM_003000_LEN, ROM_003000_OFFSET,
 };
 use crate::backend::{
     AuthorizedPlan, FlashFacet, FlashPlan, FlashRequest, FormatRole, PlanLine, ReadDevice,
@@ -412,6 +412,13 @@ pub(super) fn failure_phase(
     }
 }
 
+/// Publish the post-flash INQUIRY vendor/product/revision and return it.
+fn publish_running_identity(inquiry: &[u8]) -> String {
+    let identity = crate::style::printable(String::from_utf8_lossy(&inquiry[8..36]).trim());
+    crate::output::field("Firmware running", crate::report::Value::text(&identity));
+    identity
+}
+
 pub(super) fn completion_evidence(
     completion: mediatek_optical::update::Completion,
 ) -> UpdateEvidence {
@@ -440,13 +447,10 @@ pub(super) fn completion_evidence(
             vec![format!("{unverified} protected chunks unreadable")],
         ),
     };
-    let identity = String::from_utf8_lossy(&completion.startup.inquiry()[8..36])
-        .trim()
-        .to_owned();
     for region in &unverified_regions {
         crate::output::field("Verification warning", region);
     }
-    crate::output::field("Firmware running", &identity);
+    let identity = publish_running_identity(completion.startup.inquiry());
     UpdateEvidence {
         target_started: true,
         target_identity: identity,
@@ -814,8 +818,17 @@ impl Mtk {
         drive_product: &str,
     ) -> Result<(Identity, Verdict)> {
         check_image(image)?;
-        let live = live_identity(dev);
-        PreparedUpdate::check(image, &live).map_err(refusal)?;
+        let (live, identity_read) = live_identity_checked(dev);
+        PreparedUpdate::check(image, &live).map_err(|error| {
+            let error = refusal(error);
+            if identity_read {
+                error
+            } else {
+                error
+                    .context("the drive identity regions could not be read")
+                    .context(crate::user_error::IssueCode::Connection)
+            }
+        })?;
         let target = Build::of_image(image)?;
         let mut drive = Build::of_drive(&live);
         // A crossflash gates on the boot banner too (its loader tells apart the
@@ -860,6 +873,10 @@ pub(super) fn test_plan(dev: &mut dyn ScsiDevice, image: &[u8]) -> Result<FlashP
         verdict: Verdict::SameModel,
     }))
 }
+
+#[cfg(test)]
+#[path = "identity_tests.rs"]
+mod identity_tests;
 
 #[cfg(test)]
 #[path = "stage_tests.rs"]

@@ -85,19 +85,64 @@ pub(super) fn persist_at(path: &Path, backup: &BankBackup) -> Result<BackupRecei
         .context("published persistent-bank backup failed final verification")
 }
 
-fn sync_ancestors(_path: &Path) -> Result<()> {
-    // New directory entries above the publisher's immediate parent must also
-    // be durable before the dependency receives an acknowledgement.
+fn sync_ancestors(path: &Path) -> Result<()> {
+    sync_ancestors_with(path, |directory| std::fs::File::open(directory)?.sync_all())
+}
+
+/// New directory entries above the publisher's immediate parent should also be
+/// durable before the dependency receives an acknowledgement. The immediate
+/// parent must sync; higher ancestors only warn, since some filesystems reject
+/// directory fsync.
+fn sync_ancestors_with(_path: &Path, _sync: impl Fn(&Path) -> std::io::Result<()>) -> Result<()> {
     #[cfg(unix)]
-    for directory in _path.parent().into_iter().flat_map(Path::ancestors) {
-        if !directory.as_os_str().is_empty() {
-            std::fs::File::open(directory)
-                .with_context(|| format!("opening backup directory {}", directory.display()))?
-                .sync_all()
-                .with_context(|| format!("syncing backup directory {}", directory.display()))?;
+    for (index, directory) in _path
+        .parent()
+        .into_iter()
+        .flat_map(Path::ancestors)
+        .enumerate()
+    {
+        if directory.as_os_str().is_empty() {
+            continue;
+        }
+        match _sync(directory) {
+            Ok(()) => {}
+            Err(error) if index == 0 => {
+                return Err(error)
+                    .with_context(|| format!("syncing backup directory {}", directory.display()));
+            }
+            Err(error) => crate::diagnostics::record(format!(
+                "could not sync backup ancestor directory {}: {error}",
+                directory.display()
+            )),
         }
     }
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ancestor_sync_failures_warn_but_the_immediate_parent_is_strict() {
+        let path = Path::new("/a/b/c/file.bin");
+        let ancestors_fail = |directory: &Path| {
+            if directory == Path::new("/a/b/c") {
+                Ok(())
+            } else {
+                Err(std::io::Error::other("fsync unsupported"))
+            }
+        };
+        assert!(sync_ancestors_with(path, ancestors_fail).is_ok());
+        let parent_fails = |directory: &Path| {
+            if directory == Path::new("/a/b/c") {
+                Err(std::io::Error::other("fsync unsupported"))
+            } else {
+                Ok(())
+            }
+        };
+        assert!(sync_ancestors_with(path, parent_fails).is_err());
+    }
 }
 
 fn backup_directory() -> Result<PathBuf> {

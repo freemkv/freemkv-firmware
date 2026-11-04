@@ -72,6 +72,20 @@ fn unknown_mt1939_build_backs_up_as_a_labelled_reconstruction() {
     validate(&backup, "BD-RE BE14NU40", IMAGE_SIZE).unwrap();
 }
 
+/// A failed INQUIRY after a complete read is a connection fault, not a bad image.
+#[test]
+fn inquiry_failure_after_a_full_read_is_a_connection_error() {
+    let installed = stored_image(b"MTEKMT1939", "BD-RE BE14NU40", 7);
+    let mut dev = MockScsiDevice::new()
+        .with_firmware_image(drive_read(&installed))
+        .with_product("BD-RE BE14NU40")
+        .on_fail(|cdb| cdb.first() == Some(&0x12), "inquiry lost");
+    let error = capture(&mut crate::backend::ReadDevice::without_unlocks(&mut dev)).unwrap_err();
+    let cause = crate::user_error::UserError::of(&error);
+    assert_ne!(cause.id, "errors.backup_mismatch", "{error:#}");
+    assert!(format!("{error:#}").contains("INQUIRY failed"), "{error:#}");
+}
+
 #[test]
 fn unknown_boot_page_is_refused() {
     let installed = stored_image(b"MTEKMT1959", "BD-RE BU40N", 3);

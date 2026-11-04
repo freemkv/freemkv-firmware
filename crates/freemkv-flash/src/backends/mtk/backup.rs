@@ -200,7 +200,7 @@ pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
         "MTK backup rebuild: {}",
         describe(&rebuilt.provenance)
     ));
-    let product = super::Mtk.identity(dev).product;
+    let product = super::Mtk.try_identity(dev)?.product;
     validate_image(&rebuilt.image, Some(&product))?;
     Ok(rebuilt.image)
 }

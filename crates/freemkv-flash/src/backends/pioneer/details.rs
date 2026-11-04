@@ -43,8 +43,7 @@ fn identity_rows(dev: &mut ReadDevice<'_>, read: &InfoSoFar<'_>) -> Vec<Row> {
         }
     };
     let mut b = [0; production::PARAMETERS_LEN];
-    let made =
-        with_device(dev, |d| d.parameters(&mut b).ok()).and_then(|n| production::parse(&b[..n]));
+    let made = read_parameters(dev, &mut b).and_then(|n| production::parse(&b[..n]));
     rows.push(row(
         "product_code",
         "Factory product code",
@@ -66,6 +65,21 @@ fn identity_rows(dev: &mut ReadDevice<'_>, read: &InfoSoFar<'_>) -> Vec<Row> {
     rows.into_iter()
         .map(|r| r.in_group(Group::Additional))
         .collect()
+}
+
+fn read_parameters(
+    dev: &mut ReadDevice<'_>,
+    b: &mut [u8; production::PARAMETERS_LEN],
+) -> Option<usize> {
+    match with_device(dev, |d| d.parameters(b)) {
+        Ok(n) => Some(n),
+        Err(error) => {
+            crate::diagnostics::record(format!(
+                "Pioneer production parameters read failed: {error:#}"
+            ));
+            None
+        }
+    }
 }
 
 fn settings_rows(settings: &Result<Settings>) -> Vec<Row> {

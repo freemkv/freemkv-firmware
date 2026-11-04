@@ -300,7 +300,15 @@ pub(crate) fn find_receiver_with_current(
         if identity.vendor() != current.kernel.info().vendor
             || (identity.revision() != "0000" && !current.normal.targets(&identity))
         {
-            return Ok(None);
+            let info = current.kernel.info();
+            return Err(anyhow::anyhow!(
+                "Current firmware {} {} does not match this drive ({} {}); no firmware written",
+                crate::style::printable(&info.vendor),
+                crate::style::printable(&info.revision),
+                crate::style::printable(identity.product()),
+                crate::style::printable(identity.revision())
+            )
+            .context(crate::user_error::IssueCode::FirmwareInvalid));
         }
     }
     Ok(Some(identity))

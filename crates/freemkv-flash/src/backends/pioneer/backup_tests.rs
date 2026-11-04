@@ -130,7 +130,8 @@ fn deep_read_salvages_around_an_unreadable_span_and_reports_the_gap() {
     let bad = 0x100usize;
     let badlen = 0x10usize;
     let mut dev = Spotty { bad, badlen };
-    let image = read_region_deep(&mut dev, 0, len).unwrap();
+    let (image, gaps) = read_region_deep_gaps(&mut dev, 0, len).unwrap();
+    assert_eq!(gaps, vec![(bad, badlen)]);
     assert_eq!(image.len(), len);
     // Readable bytes are their offset mod 256; the bad window is zero-filled.
     for (i, b) in image.iter().enumerate() {
@@ -145,7 +146,8 @@ fn deep_read_salvages_around_an_unreadable_span_and_reports_the_gap() {
         bad: len,
         badlen: 0,
     };
-    let whole = read_region_deep(&mut clean, 0, len).unwrap();
+    let (whole, clean_gaps) = read_region_deep_gaps(&mut clean, 0, len).unwrap();
+    assert!(clean_gaps.is_empty());
     assert!(whole
         .iter()
         .enumerate()

@@ -567,6 +567,17 @@ fn receiver_gate_refuses_nonzero_installed_checksum() {
     assert_eq!(err, RECEIVER_INCOMPATIBLE);
 }
 
+/// Nonzero checksum with matching bodies (the production input) is refused.
+#[test]
+fn receiver_gate_refuses_nonzero_checksum_even_when_bodies_match() {
+    let err = receiver_gate(&ReceiverEvidence {
+        installed_checksum_zero: Some(false),
+        bodies_match: true,
+    })
+    .unwrap_err();
+    assert_eq!(err, RECEIVER_INCOMPATIBLE);
+}
+
 /// A zero checksum but a differing body (a rotation-only divergence) is refused.
 #[test]
 fn receiver_gate_refuses_zero_checksum_but_mismatched_body() {
