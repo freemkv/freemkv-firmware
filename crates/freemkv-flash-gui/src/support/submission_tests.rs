@@ -429,7 +429,7 @@ fn empty_server_receipt_is_not_submission_success() {
 
 #[test]
 fn approval_url_outside_the_report_origin_is_never_opened() {
-    for url in ["file:///etc/passwd", "https://example.invalid/approve"] {
+    for url in ["file:///etc/passwd", "https://example.com/approve"] {
         let (base, server) = server(vec![reply(
             200,
             json!({"id":"test-id","poll_token":"poll-secret","approval_url":url}),

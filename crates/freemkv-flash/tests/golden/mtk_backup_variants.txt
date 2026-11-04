@@ -843,7 +843,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
+dump sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 wrote <TMP>/mtk-backup/dump_mt1959.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (109) ---
@@ -951,7 +951,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
+MSG      dump sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 FIELD    Saved to = <TMP>/mtk-backup/dump_mt1959.bak
 MSG      wrote <TMP>/mtk-backup/dump_mt1959.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -2318,7 +2318,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
+dump sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 wrote <TMP>/mtk-backup/dump_mt1939.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (109) ---
@@ -2426,7 +2426,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
+MSG      dump sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 FIELD    Saved to = <TMP>/mtk-backup/dump_mt1939.bak
 MSG      wrote <TMP>/mtk-backup/dump_mt1939.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -3783,7 +3783,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
+dump sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 wrote <TMP>/mtk-backup/dump_unknown_boot.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (109) ---
@@ -3891,7 +3891,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
+MSG      dump sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 FIELD    Saved to = <TMP>/mtk-backup/dump_unknown_boot.bak
 MSG      wrote <TMP>/mtk-backup/dump_unknown_boot.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -5262,7 +5262,7 @@ reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
 errors.backup_partial
-backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
+dump sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (111) ---
@@ -5377,7 +5377,7 @@ FIELD    Dump gaps = Unreadable ranges filled with FF: [
     ),
 ]
 MSG      errors.backup_partial
-MSG      backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
+MSG      dump sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 FIELD    Saved to = <TMP>/mtk-backup/dump_read_fail.bak
 MSG      wrote <TMP>/mtk-backup/dump_read_fail.bak (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup

@@ -1726,7 +1726,7 @@ fn golden_backup_capture() {
     let (outcome, transcript) = drive_run(BackupReplay::new(), |d| {
         crate::engine::backup(d, &Pioneer::new(), &out, true)
     });
-    let outcome = outcome.mask_digest("candidate sha256: ");
+    let outcome = outcome.mask_digest("dump sha256: ");
     g.case(
         "Pioneer dump (recover): bounded replay",
         &outcome,
@@ -2822,6 +2822,7 @@ fn golden_pioneer_flash_bundle_failures() {
 /// `INTENDED_CHANGES.md` lists it.
 const ALLOWED_REASONS: &[&str] = &[
     "MTK_READ_GUIDANCE",
+    "DUMP_LABEL",
     "M-TABLE-FIXTURE",
     "FILE_VALIDATION",
     "F-OVERRIDE",
@@ -2855,6 +2856,7 @@ const ALLOWED_REASONS: &[&str] = &[
 /// fixture-derived digests differ (commands and messages unchanged).
 const PIONEER_REASONS: &[&str] = &[
     "FILE_VALIDATION",
+    "DUMP_LABEL",
     "F-OVERRIDE",
     "OPERATION_015",
     "PROTO",

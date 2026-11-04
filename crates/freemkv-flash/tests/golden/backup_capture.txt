@@ -843,7 +843,7 @@ reading drive memory: 97%
 reading drive memory: 98%
 reading drive memory: 99%
 reading drive memory: 100%
-backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
+dump sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 wrote <TMP>/backup/mtk_dump.bin (2 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (109) ---
@@ -951,7 +951,7 @@ PROGRESS reading drive memory 2056192/2097152
 PROGRESS reading drive memory 2076672/2097152
 PROGRESS reading drive memory 2097152/2097152
 FIELD    Memory captured = 2097152 of 2097152 bytes
-MSG      backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
+MSG      dump sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 FIELD    Saved to = <TMP>/backup/mtk_dump.bin
 MSG      wrote <TMP>/backup/mtk_dump.bin (2 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup
@@ -1533,7 +1533,7 @@ saved file: 146432 bytes sha256=59c84c6548af436262d26211ed341629f87fa3f621fccaf0
 result: OK
 --- text (4) ---
 Backing up BD-RW   BDR-UD04 → <TMP>/backup/pioneer_dump.bin
-candidate sha256: <MASKED-TIME-DEPENDENT-SHA256>
+dump sha256: <MASKED-TIME-DEPENDENT-SHA256>
 wrote <TMP>/backup/pioneer_dump.bin (16.10 MiB).
 RAW DUMP: device memory and diagnostic sections; NOT a flashable backup.
 --- events (10) ---
@@ -1542,7 +1542,7 @@ FIELD    Dump = capturing high registers and CPU memory
 FIELD    Dump = capturing controller memory and diagnostic responses
 FIELD    Drive logging = skipped: not attempted
 FIELD    Dump = partial capture; failures recorded in directory
-MSG      candidate sha256: <MASKED-TIME-DEPENDENT-SHA256>
+MSG      dump sha256: <MASKED-TIME-DEPENDENT-SHA256>
 FIELD    Saved to = <TMP>/backup/pioneer_dump.bin
 MSG      wrote <TMP>/backup/pioneer_dump.bin (16.10 MiB).
 FIELD    Artifact = Raw memory dump — not a flashable backup

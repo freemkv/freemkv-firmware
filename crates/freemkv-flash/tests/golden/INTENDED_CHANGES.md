@@ -18,6 +18,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 | M-TABLE-FIXTURE | 0.15.2: synthetic MediaTek fixtures now initialize every inactive integrity-table record to the erased sentinel instead of retaining patterned payload bytes. Only the resulting fixture hashes and the affected transfer chunk hashes change; v0.11.2 baseline files remain immutable. The new real preflight rejects instruction-valued metadata before any write. |
 | FILE_VALIDATION | Check file rejects unrecognized bytes rather than reporting successful validation. Informational inspection remains available. No drive commands change. |
 | OPERATION_015 | 0.15.0: confirmation prompts and accepted answers use the selected language; Pioneer requires a usable installed backup and never offers a bypass it cannot execute. Typed localized user issues retain pre-write and read-only evidence; internal error chains gain stable cause markers. Recovery states whether its family gate is retained or explicitly bypassed. Expected restart command failures remain in diagnostics rather than user warnings. Write ordering, payloads and verification comparisons are unchanged. |
+| DUMP_LABEL | 0.17.x: a raw dump prints its digest as `dump sha256`, not the backup format's label (`backup`/`candidate`); a dump is not a flashable backup. No device command or saved byte changes. |
 | CLI_INFO | 0.14.4: CLI drive information groups and aligns the shared GUI identity, interface, capabilities, region and settings fields. GUI field values and device-command transcript remain unchanged. Native transport traces stay in diagnostics. |
 | HUMAN_ERRORS | 0.14.1: optional DVD region, Pioneer identity and settings read failures show Unavailable. Full causes remain in English diagnostics. No device commands or values from successful reads change. |
 | PRECHECK | 0.14.0: proven pre-write failures retain phase and no-write evidence; hardware mismatches have actionable model guidance with original family identifiers in diagnostics. Pioneer preview explicitly leaves installed compatibility pending. No SCSI commands, payloads, programming order or compatibility gates change. |
@@ -188,12 +189,12 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE, M-TABLE-FIXTURE, MTK_READ_GUIDANCE
 +--- text (106) ---
 +ui.mtk_read_limits
 -backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
++dump sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 ---- events (108) ---
 +--- events (109) ---
 +MSG      ui.mtk_read_limits
 -MSG      backup sha256: aaf5fc27815cf3fe2eb47f22de8c9bc5028963b57bd583300bee14b8e4fecec7
-+MSG      backup sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
++MSG      dump sha256: 585c5abe8e168b20824730cedac7531eab76deb903f5bd430e8f940005ba964b
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -219,8 +220,12 @@ reason: P4, P12
 ```
 
 ### Pioneer dump (recover): bounded replay
-reason: PROTO
+reason: PROTO, DUMP_LABEL
 ```diff
+-candidate sha256: <MASKED-TIME-DEPENDENT-SHA256>
++dump sha256: <MASKED-TIME-DEPENDENT-SHA256>
+-MSG      candidate sha256: <MASKED-TIME-DEPENDENT-SHA256>
++MSG      dump sha256: <MASKED-TIME-DEPENDENT-SHA256>
 -saved file: 16883069 bytes; body sha256=ad014a01fb01cc08256975884a0a0719617b641fd141025b6bea37e358e6aa5b directory(time masked) sha256=0a005af45c41a0ba8a4a49026e673bdb3d3ba49f362f071fa20a1b4dce5737e9
 +saved file: 16883069 bytes; body sha256=d96dd36548221d3662922fea0da0ff285a1bd2f448babfbd3cb98e2699411cff directory(time masked) sha256=c0e8de22c670c9cfdbc96fec4a7aff6db3881e242c3adf358023e49fa5912e90
 ```
@@ -10692,12 +10697,12 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 +--- text (106) ---
 +ui.mtk_read_limits
 -backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
-+backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
++dump sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 ---- events (108) ---
 +--- events (109) ---
 +MSG      ui.mtk_read_limits
 -MSG      backup sha256: 933b76a9b212ec6cf76415c55570a05a31a9c5b4e0c20b94077632b6ae67d50f
-+MSG      backup sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
++MSG      dump sha256: 61d678cd80bbe3736185ba8882e27ba95743ecbe89bb609093f1d34c12567173
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -10712,12 +10717,12 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 +--- text (106) ---
 +ui.mtk_read_limits
 -backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
-+backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
++dump sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 ---- events (108) ---
 +--- events (109) ---
 +MSG      ui.mtk_read_limits
 -MSG      backup sha256: 1df7973e77ff7b7e57d17920fad0180b2484328c2bab6acd67b9842bab81b327
-+MSG      backup sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
++MSG      dump sha256: 47f278c9da1d6231c6da131898276ed2165ff5d6de63cec7412ae6803d4c510c
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -10739,7 +10744,7 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 -]
 -backup sha256: 39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
 +errors.backup_partial
-+backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
++dump sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 ---- events (115) ---
 +--- events (111) ---
 +MSG      ui.mtk_read_limits
@@ -10751,7 +10756,7 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 -MSG      ]
 -MSG      backup sha256: 39538150772685a07837f2b6c3ea385623abeb25ff98ff647d9641589a6b3dd4
 +MSG      errors.backup_partial
-+MSG      backup sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
++MSG      dump sha256: 1aace22e473e903625c6f2aa60f2c37bbeb341ff61c8b7cae0ef9e2de96131d7
 ---- scsi transcript (522) ---
 +--- scsi transcript (523) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
@@ -10766,12 +10771,12 @@ reason: R8, M-BAK, M-ENC, M-LIFECYCLE, MTK_READ_GUIDANCE
 +--- text (106) ---
 +ui.mtk_read_limits
 -backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
-+backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
++dump sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 ---- events (108) ---
 +--- events (109) ---
 +MSG      ui.mtk_read_limits
 -MSG      backup sha256: e7d5f581ed99ed90e4831d488ec302a185987464c439d455a5cc74540e480194
-+MSG      backup sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
++MSG      dump sha256: e14682a7e542c28ff90872bcfabb5f08b7d4bb0c98265c70f83e563a40c0f0f1
 ---- scsi transcript (514) ---
 +--- scsi transcript (515) ---
 +IN   cdb=3c0ec0de010000006000 alloc=96 -> ok 96
