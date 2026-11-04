@@ -799,11 +799,12 @@ pub(crate) struct Pending {
 /// Called from the worker after each event so an event-driven shell repaints.
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
-/// Report progress is distinct from its authoritative terminal result.
 /// A finished drive scan: its drives and events, or `None` if the scan panicked.
 type Discovered = Option<(Vec<DriveChoice>, Vec<Event>)>;
+/// Lists the attached drives; injectable so tests need no hardware.
 type Enumerator = Arc<dyn Fn() -> Vec<DriveChoice> + Send + Sync>;
 
+/// Report progress is distinct from its authoritative terminal result.
 enum ReportMsg {
     Progress(String),
     Diagnostic(String),

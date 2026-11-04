@@ -712,7 +712,7 @@ fn per_window_progress_is_journaled_once_per_phase() {
         std::env::temp_dir().join(format!("progress-journal-{}", workflow::new_operation_id()));
     app.journal = Some(Journal::memory_at(dir));
     let total = 2 * 1024 * 1024;
-    for done in (64..=total).step_by(1024) {
+    for done in (64..total).step_by(1024).chain([total]) {
         app.event(Event::Phase {
             phase: "reading",
             component: "filter.firmware",
@@ -735,8 +735,8 @@ fn per_window_progress_is_journaled_once_per_phase() {
         .lines()
         .filter(|line| line.contains("operation_progress"))
         .count();
-    assert!((1..=2).contains(&progress), "{progress} progress records");
-    assert_eq!(app.progress.as_ref().unwrap().1, 2 * 1024 * 1024 - 960);
+    assert_eq!(progress, 2, "start + completion records");
+    assert_eq!(app.progress.as_ref().unwrap().1, total);
 }
 
 #[test]
