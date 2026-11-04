@@ -26,10 +26,10 @@ EXPECTED_GROUPS={'newer-native':82,'older-conversion-required':12,
 # This binds test membership only; production recognition never consults it.
 MEMBERSHIP_SHA256='8f7c7c842698452c44938953c67788c8ac646fc6a59997770e2e98beff38668d'
 FEATURE_FACTS={'speed':{'speed':'speed_stub_va'},'region':{'region':'region_stub_va'},
- 'encryption':{'ake':'ake_stub_va','deny-reset':'deny_stub_va'},'hrl':{'hrl':'hrl_stub_va'},
- 'unrestricted':{'vid':'gatea_stub_va','auth_cell':'auth_cell_stub_va',
+ 'encryption':{'ake':'ake_stub_va','deny-reset':'deny_stub_va','vid':'gatea_stub_va'},'hrl':{'hrl':'hrl_stub_va'},
+ 'unrestricted':{'auth_cell':'auth_cell_stub_va',
                  'bd_site':'bd_stub_va','uhd_site':'uhd_stub_va'}}
-MINIMUM_FEATURE_ROLE={'speed':'speed','region':'region','encryption':'ake','hrl':'hrl','unrestricted':'vid'}
+MINIMUM_FEATURE_ROLE={'speed':'speed','region':'region','encryption':'ake','hrl':'hrl','unrestricted':'auth_cell'}
 
 
 # Exact reviewed boundary statements only. Missing source contracts, absent
@@ -167,19 +167,7 @@ def capability_matrix(row, result):
             'advertised_settings_dispatch':result.get('advertised_settings_dispatch')}
 
 
-def main():
-    p=argparse.ArgumentParser(description=__doc__)
-    for name in ('inventory','hoard','builder','fw','output'):p.add_argument('--'+name,type=Path,required=True)
-    p.add_argument('--dependency-commit',required=True)
-    p.add_argument('--workers',type=int,default=4)
-    p.add_argument('--baseline-receipt',type=Path,help='Require identical canonical/output bytes against this prior receipt')
-    p.add_argument('--build',action='store_true')
-    p.add_argument('--handler-rust-test-log',type=Path,help='Parent-reviewed final-source Rust handler/KAT test log; hashed as complementary evidence')
-    args=p.parse_args();repo=Path(__file__).resolve().parents[2]
-    inventory=json.loads(args.inventory.read_text());rows=inventory['images']
-    validate_inventory(rows)
-    args.output.mkdir(parents=True,exist_ok=True)
-    assert not (args.output/'receipt.json').exists(),'fresh output required; never overwrite a frozen run'
+def build_corpus_argv(args):
     argv=[sys.executable,str(Path(__file__).with_name('corpus.py')),
           '--inventory',str(args.inventory.resolve()),'--hoard',str(args.hoard.resolve()),
           '--builder',str(args.builder.resolve()),'--fw',str(args.fw.resolve()),
@@ -187,6 +175,29 @@ def main():
           '--dependency-commit',args.dependency_commit,'--require-installed-conversion']
     if args.build:argv.append('--build')
     if args.baseline_receipt:argv.extend(['--baseline-receipt',str(args.baseline_receipt.resolve())])
+    if args.disc_fixtures:argv.extend(['--disc-fixtures',str(args.disc_fixtures.resolve()),
+                                       '--disc-worker-receipt',str(args.disc_worker_receipt.resolve())])
+    return argv
+
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__)
+    for name in ('inventory','hoard','builder','fw','output'):p.add_argument('--'+name,type=Path,required=True)
+    p.add_argument('--dependency-commit',required=True)
+    p.add_argument('--workers',type=int,default=4)
+    p.add_argument('--baseline-receipt',type=Path,help='Require identical canonical/output bytes against this prior receipt')
+    p.add_argument('--build',action='store_true')
+    p.add_argument('--disc-fixtures',type=Path,help='Captured-DI/ISO fixture directory forwarded to corpus.py')
+    p.add_argument('--disc-worker-receipt',type=Path,help='Source-bound DI worker receipt; required with --disc-fixtures')
+    p.add_argument('--handler-rust-test-log',type=Path,help='Parent-reviewed final-source Rust handler/KAT test log; hashed as complementary evidence')
+    args=p.parse_args()
+    assert bool(args.disc_fixtures)==bool(args.disc_worker_receipt),'supply both disc fixture and worker receipt paths'
+    repo=Path(__file__).resolve().parents[2]
+    inventory=json.loads(args.inventory.read_text());rows=inventory['images']
+    validate_inventory(rows)
+    args.output.mkdir(parents=True,exist_ok=True)
+    assert not (args.output/'receipt.json').exists(),'fresh output required; never overwrite a frozen run'
+    argv=build_corpus_argv(args)
     completed=subprocess.run(argv,cwd=repo)
     receipt_path=args.output/'receipt.json'
     assert receipt_path.exists(),'corpus failed before writing frozen receipt'
@@ -245,7 +256,9 @@ def main():
         result=by_sha[row['sha256']]
         if result.get('output_sha256'):
             folder=args.output/row['sha256'];doc=json.loads((folder/'modify.json').read_text())
-            result['advertised_settings_dispatch']=settings_dispatch_proof(folder,doc,result['trace_sha256'],complementary)
+            if result.get('trace_sha256'):
+                result['advertised_settings_dispatch']=settings_dispatch_proof(folder,doc,result['trace_sha256'],complementary)
+            else:result['advertised_settings_dispatch']={'qualified':False,'reason':'no CPU trace hash recorded'}
         result['_folder']=str(args.output/row['sha256'])
         matrix.append(capability_matrix(row,result));del result['_folder']
     if any(set(m['capabilities'])!=set(FEATURE_FACTS) or not all(c['supported'] for c in m['capabilities'].values()) for m in matrix if m['final_bin_available']):reasons.append('authorable output does not advertise exactly five supported features')
