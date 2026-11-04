@@ -250,7 +250,8 @@ enum VerifyTarget {
 
 /// True for a Windows device-namespace path (`\\.\CdRom0`, `\\?\scsi#...`).
 /// A `\\.\` or `\\?\` path with components below its root (`\\?\C:\fw.bin`,
-/// `\\?\UNC\srv\share\fw.bin`, `\\?\Volume{..}\fw.bin`) names a file.
+/// `\\?\UNC\srv\share\fw.bin`, `\\?\Volume{..}\fw.bin`) names a file, except
+/// below `\\?\GLOBALROOT\`, the NT object namespace, which is always a device.
 fn is_windows_device_path(s: &str) -> bool {
     let Some(rest) = s.strip_prefix(r"\\.\").or_else(|| s.strip_prefix(r"\\?\")) else {
         return false;
@@ -566,8 +567,13 @@ fn write_region(file: &Path, start: u32, read: &MemRead) -> Result<bool> {
             style::status_line(
                 "region",
                 &format!(
-                    "0x{start:08x}: no readable data; not writing {}",
-                    file.display()
+                    "0x{start:08x}: no readable data; not writing {}{}",
+                    file.display(),
+                    if file.exists() {
+                        " (the existing file is from an earlier run)"
+                    } else {
+                        ""
+                    }
                 ),
                 style::Status::Fail
             )
@@ -592,6 +598,37 @@ fn write_region(file: &Path, start: u32, read: &MemRead) -> Result<bool> {
     Ok(true)
 }
 
+/// Capture each [`FULL_REGIONS`] region to `<prefix>-<start>.bin`.
+/// Fails when any region read nothing.
+fn capture_full(dev: &mut dyn platform::ScsiDevice, prefix: &Path) -> Result<ExitCode> {
+    let mut all_captured = true;
+    for &(start, cap) in FULL_REGIONS {
+        eprintln!(
+            "{}",
+            style::status_line(
+                "capture",
+                &format!("region 0x{start:08x} (cap 0x{cap:x}) …"),
+                style::Status::Ok
+            )
+        );
+        let read = mem_read(dev, start, cap, true);
+        warn_mem_faults("region", read.short, read.failed);
+        let file = prefix.with_file_name(format!(
+            "{}-{start:08x}.bin",
+            prefix
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("dump")
+        ));
+        all_captured &= write_region(&file, start, &read)?;
+    }
+    Ok(if all_captured {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
 fn cmd_info(
     device: &Path,
     dump: Option<&str>,
@@ -607,32 +644,7 @@ fn cmd_info(
             .context(freemkv_flash::user_error::IssueCode::CommandOptions)?;
         let mut dev =
             platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
-        let mut all_captured = true;
-        for &(start, cap) in FULL_REGIONS {
-            eprintln!(
-                "{}",
-                style::status_line(
-                    "capture",
-                    &format!("region 0x{start:08x} (cap 0x{cap:x}) …"),
-                    style::Status::Ok
-                )
-            );
-            let read = mem_read(dev.as_mut(), start, cap, true);
-            warn_mem_faults("region", read.short, read.failed);
-            let file = prefix.with_file_name(format!(
-                "{}-{start:08x}.bin",
-                prefix
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("dump")
-            ));
-            all_captured &= write_region(&file, start, &read)?;
-        }
-        return Ok(if all_captured {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::FAILURE
-        });
+        return capture_full(dev.as_mut(), prefix);
     }
 
     if let Some(d) = dump {

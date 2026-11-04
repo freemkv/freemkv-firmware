@@ -1198,3 +1198,12 @@ fn full_region_with_no_readable_window_writes_no_file_and_fails() {
     assert!(write_region(&file, 0x01c0_0000, &read).unwrap());
     assert_eq!(std::fs::read(&file).unwrap(), vec![1; 0x100]);
 }
+
+#[test]
+fn full_capture_with_an_unreadable_region_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let prefix = dir.path().join("p");
+    let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
+    assert_eq!(capture_full(&mut dev, &prefix).unwrap(), ExitCode::FAILURE);
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
