@@ -143,7 +143,7 @@ fn submit_at(
         if Instant::now() >= approval_deadline {
             bail!("Report approval timed out");
         }
-        let mut reply = agent
+        let reply = agent
             .get(&format!("{base}/requests/{id}/poll"))
             .header("Authorization", &format!("Bearer {poll_token}"))
             .config()
@@ -153,9 +153,18 @@ fn submit_at(
                     .min(approval_deadline.saturating_duration_since(Instant::now())),
             ))
             .build()
-            .call()
-            .context("Report approval failed")?;
+            .call();
         control.check()?;
+        // One poll of many: a transient failure waits for the next interval.
+        let mut reply = match reply {
+            Err(
+                ureq::Error::StatusCode(500..=599)
+                | ureq::Error::Io(_)
+                | ureq::Error::Timeout(_)
+                | ureq::Error::ConnectionFailed,
+            ) => continue,
+            reply => reply.context("Report approval failed")?,
+        };
         match reply.status().as_u16() {
             200 => break reply.body_mut().read_json::<Value>()?,
             202 => {}

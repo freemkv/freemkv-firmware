@@ -482,3 +482,19 @@ fn missing_browser_shows_the_approval_url_and_keeps_waiting() {
     assert_eq!(server.join().unwrap().len(), 4);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn transient_approval_poll_failure_keeps_waiting() {
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(502, json!({})),
+        reply(200, approved()),
+        reply(200, json!({"saved":true})),
+        reply(200, json!({"report_id":"after-502"})),
+    ]);
+    let (source, dir) = source();
+    let receipt = submit_at(source, &control(), &base, |_| Ok(()), |_| {}).unwrap();
+    assert!(receipt.contains("after-502"));
+    assert_eq!(server.join().unwrap().len(), 5);
+    std::fs::remove_dir_all(dir).unwrap();
+}
