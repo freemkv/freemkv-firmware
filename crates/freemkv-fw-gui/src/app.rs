@@ -78,6 +78,8 @@ pub struct FwApp {
     running: bool,
     rx: Option<Receiver<Msg>>,
     discover_rx: Option<Receiver<Discovered>>,
+    /// A job started after the in-flight drive scan began; its log outranks the scan's.
+    job_since_scan: bool,
     /// Test seam: enumerate drives with this instead of the host's real drives.
     #[cfg(test)]
     enumerator: Option<std::sync::Arc<dyn Fn() -> Vec<DriveChoice> + Send + Sync>>,
@@ -167,6 +169,7 @@ impl FwApp {
             running: false,
             rx: None,
             discover_rx: None,
+            job_since_scan: false,
             #[cfg(test)]
             enumerator: None,
         }
@@ -181,6 +184,7 @@ impl FwApp {
         let enumerate = self.enumerator.clone();
         let (tx, rx) = mpsc::channel();
         self.discover_rx = Some(rx);
+        self.job_since_scan = false;
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -241,8 +245,12 @@ impl FwApp {
         for event in events {
             if let freemkv_flash::output::Event::Report(report) = event {
                 for (label, value) in report.gui_fields() {
-                    // A displayed failure or a running job keeps its own log.
-                    if label == "Diagnostic log" && self.failure.is_none() && !self.running {
+                    // A displayed failure or a job run during the scan keeps its own log.
+                    if label == "Diagnostic log"
+                        && self.failure.is_none()
+                        && !self.running
+                        && !self.job_since_scan
+                    {
                         self.diagnostic_log = Some(value.into());
                     }
                 }
@@ -281,6 +289,7 @@ impl FwApp {
         }
         self.result_task = self.task;
         self.running = true;
+        self.job_since_scan = true;
         self.action = label.to_string();
         self.status =
             localization::message("status.operation_running", &[("operation", label.into())]);
