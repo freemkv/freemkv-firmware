@@ -531,7 +531,7 @@ fn cmd_info(
                 )
             );
             let read = mem_read(dev.as_mut(), start, cap, true);
-            warn_mem_faults("region", read.short, 0);
+            warn_mem_faults("region", read.short, read.failed);
             let data = read.data;
             let file = prefix.with_file_name(format!(
                 "{}-{start:08x}.bin",
