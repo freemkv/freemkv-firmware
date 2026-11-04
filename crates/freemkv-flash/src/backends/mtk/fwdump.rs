@@ -120,7 +120,7 @@ pub(crate) fn capture_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> 
                 Some((_, end)) if *end == off => *end = off + len,
                 _ => gaps.push((off, off + len)),
             }
-            if failed_run % DEAD_WINDOWS == 0 && !is_freemkv(dev) {
+            if failed_run.is_multiple_of(DEAD_WINDOWS) && !is_freemkv(dev) {
                 crate::diagnostics::record(format!(
                     "DumpAll stopped at {:#x}: the drive no longer answers",
                     off + len
