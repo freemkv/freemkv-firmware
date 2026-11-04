@@ -1059,3 +1059,36 @@ fn mem_read_reports_failed_windows() {
     assert_eq!((r.good, r.failed), (0, 4));
     assert_eq!(r.data, vec![0u8; 0x100]);
 }
+
+#[test]
+fn audit_conflicts_with_the_strict_base_build() {
+    let err = Cli::try_parse_from(["freemkv-fw", "create", "--base", "--audit", "in.bin"])
+        .err()
+        .expect("--base with --audit must be rejected");
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn output_naming_the_input_through_another_spelling_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("fw.bin");
+    std::fs::write(&input, bu40n_fixture()).unwrap();
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+    let settings = CreateSettings {
+        defaults: BootSettings::standard(),
+        dry_run: false,
+    };
+    let err = cmd_create_configured(
+        &input,
+        Some(dir.path().join("sub").join("..").join("fw.bin")),
+        false,
+        false,
+        false,
+        false,
+        &settings,
+    )
+    .err()
+    .expect("the input must not be overwritten without --in-place");
+    assert!(format!("{err:#}").contains("refusing to overwrite the input"));
+    assert_eq!(std::fs::read(&input).unwrap(), bu40n_fixture());
+}

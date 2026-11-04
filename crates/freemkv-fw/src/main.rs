@@ -86,8 +86,8 @@ enum Command {
         /// After building, run the structural detour audit (prove each Applied
         /// lever's `bl` and stub actually landed, the record was repointed, the
         /// DE byte is set, and CMAC verifies) and print PASS/FAIL per check.
-        /// Exits non-zero if any check fails.
-        #[arg(long)]
+        /// Exits non-zero if any check fails. Not available with `--base`.
+        #[arg(long, conflicts_with = "base")]
         audit: bool,
     },
     /// Verify a firmware image (file) or probe a live drive (device) for
@@ -737,7 +737,11 @@ fn cmd_create_configured(
         path.to_path_buf()
     } else {
         let dest = out.unwrap_or_else(|| default_created_path(path));
-        if dest == path {
+        let same_file = match (std::fs::canonicalize(&dest), std::fs::canonicalize(path)) {
+            (Ok(d), Ok(p)) => d == p,
+            _ => dest == path,
+        };
+        if same_file {
             return Err(anyhow::anyhow!(
                 "refusing to overwrite the input ({}); pass --in-place or a different output path",
                 path.display()
