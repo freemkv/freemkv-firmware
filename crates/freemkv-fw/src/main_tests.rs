@@ -1095,3 +1095,14 @@ fn output_naming_the_input_through_another_spelling_is_refused() {
     assert!(format!("{err:#}").contains("refusing to overwrite the input"));
     assert_eq!(std::fs::read(&input).unwrap(), bu40n_fixture());
 }
+
+#[test]
+fn classify_extended_length_file_paths_are_files() {
+    for p in [r"\\?\C:\fw\image.bin", r"\\?\d:/fw/image.bin", r"\\?\UNC\srv\share\i.bin"] {
+        assert_eq!(classify_verify_target(Path::new(p)), VerifyTarget::File, "{p}");
+    }
+    assert_eq!(
+        classify_verify_target(Path::new(r"\\?\CdRom0")),
+        VerifyTarget::Device
+    );
+}

@@ -257,12 +257,20 @@ enum VerifyTarget {
 /// file. Anything else, including a plain path that doesn't exist yet, is
 /// treated as a file, so the ordinary "no such file" error still fires for a
 /// typo'd image path instead of being swallowed by device-probe logic.
+fn is_windows_device_path(s: &str) -> bool {
+    if s.starts_with(r"\\.\") {
+        return true;
+    }
+    let Some(rest) = s.strip_prefix(r"\\?\") else {
+        return false;
+    };
+    let b = rest.as_bytes();
+    let drive_path = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/');
+    !drive_path && !rest.to_ascii_uppercase().starts_with(r"UNC\")
+}
+
 fn classify_verify_target(path: &Path) -> VerifyTarget {
-    if path.starts_with("/dev/")
-        || path
-            .to_str()
-            .is_some_and(|s| s.starts_with(r"\\.\") || s.starts_with(r"\\?\"))
-    {
+    if path.starts_with("/dev/") || path.to_str().is_some_and(is_windows_device_path) {
         return VerifyTarget::Device;
     }
     #[cfg(unix)]
