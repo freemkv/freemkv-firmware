@@ -265,7 +265,8 @@ fn is_windows_device_path(s: &str) -> bool {
         return false;
     };
     let b = rest.as_bytes();
-    let drive_path = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/');
+    let drive_path =
+        b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/');
     !drive_path && !rest.to_ascii_uppercase().starts_with(r"UNC\")
 }
 

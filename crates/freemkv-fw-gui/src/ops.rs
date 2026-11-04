@@ -147,10 +147,7 @@ pub fn execute(job: &Job) -> Result<()> {
 
 fn probe_field(outcome: &api::ProbeOutcome) -> Result<String> {
     Ok(if outcome.detected {
-        message(
-            "modify.detected",
-            &[("version", detected_version(outcome))],
-        )
+        message("modify.detected", &[("version", detected_version(outcome))])
     } else if outcome.detail.starts_with("NOT DETERMINED") {
         anyhow::bail!("{}", outcome.detail);
     } else {

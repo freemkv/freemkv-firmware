@@ -1331,10 +1331,10 @@ fn applied_conversion_promotes_a_missed_rawread_lever() {
     attach_classic_conversion(&mut levers, conversion, 2);
     assert_eq!(levers[0].outcome, LeverOutcome::Applied);
     assert!(
-        levers[0]
-            .hooks
-            .iter()
-            .any(|h| h.reason.as_deref().is_some_and(|r| r.contains("gates missed"))),
+        levers[0].hooks.iter().any(|h| h
+            .reason
+            .as_deref()
+            .is_some_and(|r| r.contains("gates missed"))),
         "the promoted lever must keep the miss detail: {:?}",
         levers[0].hooks
     );

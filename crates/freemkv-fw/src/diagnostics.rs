@@ -33,10 +33,7 @@ pub fn read(path: &Path) -> Result<Vec<u8>> {
 
 /// Best effort: mounts that reject chmod must not fail the write.
 #[cfg(unix)]
-fn preserve_mode(
-    mode: u32,
-    set: impl FnOnce(std::fs::Permissions) -> std::io::Result<()>,
-) {
+fn preserve_mode(mode: u32, set: impl FnOnce(std::fs::Permissions) -> std::io::Result<()>) {
     use std::os::unix::fs::PermissionsExt;
     if let Err(e) = set(std::fs::Permissions::from_mode(mode)) {
         record(format!("output: could not preserve mode {mode:o}: {e}"));

@@ -1047,7 +1047,11 @@ fn mem_read_counts_short_replies_as_faults_for_auto_stop() {
     let mut dev = mem_mock(|| Ok(vec![0xAA; 16]));
     let r = mem_read(&mut dev, 0x1000, 0x10_0000, true);
     assert_eq!(dev.addrs.len(), 16, "auto-stop must end the read");
-    assert_eq!((r.short, r.good, r.failed), (0, 0, 0), "stop run is discarded");
+    assert_eq!(
+        (r.short, r.good, r.failed),
+        (0, 0, 0),
+        "stop run is discarded"
+    );
 }
 
 #[test]
@@ -1098,8 +1102,16 @@ fn output_naming_the_input_through_another_spelling_is_refused() {
 
 #[test]
 fn classify_extended_length_file_paths_are_files() {
-    for p in [r"\\?\C:\fw\image.bin", r"\\?\d:/fw/image.bin", r"\\?\UNC\srv\share\i.bin"] {
-        assert_eq!(classify_verify_target(Path::new(p)), VerifyTarget::File, "{p}");
+    for p in [
+        r"\\?\C:\fw\image.bin",
+        r"\\?\d:/fw/image.bin",
+        r"\\?\UNC\srv\share\i.bin",
+    ] {
+        assert_eq!(
+            classify_verify_target(Path::new(p)),
+            VerifyTarget::File,
+            "{p}"
+        );
     }
     assert_eq!(
         classify_verify_target(Path::new(r"\\?\CdRom0")),
