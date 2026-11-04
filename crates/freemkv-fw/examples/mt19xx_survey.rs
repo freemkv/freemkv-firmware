@@ -8,9 +8,9 @@
 //!   `find_boot_init` (Modern / ClassicUnconfirmed / None / ambiguous);
 //! * the strict `create` build outcome, categorised as
 //!     - `built`       — build succeeded AND every AES-CMAC region re-verifies;
-//!     - `fail-closed` — build refused BECAUSE the boot-init site is the
-//!       hardware-unconfirmed MT1939-classic leaf helper (expected, safe DE-only
-//!       degrade — not a defect);
+//!     - `fail-closed` — build refused by the classic boot-init resolver (the
+//!       unconfirmed MT1939-classic helper lacks exactly one `bl` caller;
+//!       expected, safe DE-only degrade — not a defect);
 //!     - `errored`     — any other build/verify failure (a real gap to look at).
 //!
 //! and prints a per-family matrix plus the aggregate finder tallies.
@@ -45,9 +45,30 @@ struct FamilyRow {
     boot_ambiguous: usize,
 }
 
+enum Outcome {
+    FailClosed,
+    Errored,
+}
+
+/// The EXPECTED classic fail-closed is the boot-init resolver's refusal; any
+/// other build failure on a classic image is a real gap.
+fn classify(boot: &anyhow::Result<Option<BootInitSite>>, error: &anyhow::Error) -> Outcome {
+    if matches!(boot, Ok(Some(BootInitSite::ClassicUnconfirmed(_))))
+        && format!("{error:#}").contains("classic boot-init")
+    {
+        Outcome::FailClosed
+    } else {
+        Outcome::Errored
+    }
+}
+
 fn collect_bins(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            eprintln!("warning: cannot read {}: {error}", dir.display());
+            return;
+        }
     };
     for e in entries.flatten() {
         let p = e.path();
@@ -142,15 +163,10 @@ fn main() {
                 Ok(v) if !v.is_empty() && v.iter().all(|r| r.ok) => row.built += 1,
                 _ => row.errored += 1,
             },
-            Err(_) => {
-                // Distinguish the EXPECTED classic fail-closed (unconfirmed boot-init
-                // leaf helper) from a genuine hard error.
-                if matches!(boot, Ok(Some(BootInitSite::ClassicUnconfirmed(_)))) {
-                    row.fail_closed += 1;
-                } else {
-                    row.errored += 1;
-                }
-            }
+            Err(error) => match classify(&boot, &error) {
+                Outcome::FailClosed => row.fail_closed += 1,
+                Outcome::Errored => row.errored += 1,
+            },
         }
     }
 
@@ -217,4 +233,18 @@ fn main() {
         "\nfinders: flash_program n==1 on {}/{} | boot-init: modern {} / classic {} / none {} / ambiguous {}",
         tot.flash_n1, tot.total, tot.boot_modern, tot.boot_classic, tot.boot_none, tot.boot_ambiguous
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unrelated_build_errors_on_classic_images_are_errored() {
+        let boot = Ok(Some(BootInitSite::ClassicUnconfirmed(0x100)));
+        let unrelated = anyhow::Error::new(engine::NoCodeSpace { need: 64 });
+        assert!(matches!(classify(&boot, &unrelated), Outcome::Errored));
+        let refusal = anyhow::anyhow!("classic boot-init: the helper has no unique caller");
+        assert!(matches!(classify(&boot, &refusal), Outcome::FailClosed));
+    }
 }
