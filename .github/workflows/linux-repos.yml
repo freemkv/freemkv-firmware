@@ -6,8 +6,8 @@ name: RPM and pacman packages
 # packaging/arch/deb2pkg.py (the same converters freemkv uses). Nothing is
 # compiled. freemkv.org/rpm and freemkv.org/arch index them; payloads stay here.
 #
-#   tag push        wait for the release's .debs, convert, install-test, sign,
-#                   attach, refresh freemkv.org/rpm and /arch
+#   tag release     not run: promote_qa.py attaches the QA run's signed
+#                   rpm-package/arch-package, then release.yml refreshes the repos
 #   dispatch + tag  the same for an existing release (backfill):
 #                     gh workflow run linux-repos.yml --ref dev -f tag=v0.11.0
 #   dev/PR          convert the LATEST release's .debs and install-test (skipped
@@ -21,8 +21,8 @@ on:
         description: existing release tag to add .rpm/.pkg.tar.zst to; empty = test only
         type: string
         default: ''
-  # A release tag runs this through release.yml (a tag push has no changed
-  # paths, so a paths-filtered tag trigger never fires).
+  # release.yml calls this on QA builds (use-build-artifacts); a tag release
+  # promotes those artifacts instead of running it.
   workflow_call:
     inputs:
       use-build-artifacts:
@@ -193,6 +193,8 @@ jobs:
             test -x "/usr/bin/freemkv-$t-gui"
             if ldd "/usr/bin/freemkv-$t-gui" | grep -F 'not found'; then exit 1; fi
           done
+          # Release promotion verifies every payload against its sidecar.
+          (cd out && for f in freemkv-*.rpm; do sha256sum "$f" > "$f.sha256"; done)
       - uses: actions/upload-artifact@v7
         with: { name: rpm-package, path: out, if-no-files-found: error, retention-days: 90 }
 
@@ -251,6 +253,8 @@ jobs:
             test -x "/usr/bin/freemkv-$t-gui"
             if ldd "/usr/bin/freemkv-$t-gui" | grep -F 'not found'; then exit 1; fi
           done
+          # Release promotion verifies every payload against its sidecar.
+          (cd out && for f in freemkv-*.pkg.tar.zst; do sha256sum "$f" > "$f.sha256"; done)
       - uses: actions/upload-artifact@v7
         with: { name: arch-package, path: out, if-no-files-found: error, retention-days: 90 }
 

@@ -36,7 +36,7 @@ def eligible(run, artifacts):
 
 def stage_assets(source, destination, tag):
     files = [p for p in source.rglob('*') if p.is_file()]
-    checked = 0
+    checked, verified = 0, set()
     for path in files:
         if path.name.endswith('.sha256'):
             for line in path.read_text().splitlines():
@@ -47,8 +47,22 @@ def stage_assets(source, destination, tag):
                 if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
                     raise ValueError('QA checksum mismatch: ' + str(target))
                 checked += 1
+                verified.add(target)
     if not checked:
         raise ValueError('QA artifacts contain no checksum evidence')
+    unverified = [p for p in files if p not in verified and not p.name.endswith(('.sha256', '.sig', '.asc'))]
+    if unverified:
+        raise ValueError('QA artifact lacks checksum evidence: ' + ', '.join(map(str, unverified)))
+    # QA dry runs without APT_SIGNING_KEY upload unsigned packages; never release them.
+    unsigned = [p for p in files if (p.name.endswith('.rpm') and not (p.parent / 'freemkv.asc').is_file())
+                or (p.name.endswith('.pkg.tar.zst') and not p.with_name(p.name + '.sig').is_file())]
+    if unsigned:
+        raise ValueError('QA Linux packages are unsigned: ' + ', '.join(map(str, unsigned)))
+    # Inno Setup writes AppVersion into the setup.exe version resource (UTF-16).
+    stamp = tag.lstrip('v').encode('utf-16-le')
+    unstamped = [p for p in files if p.name.endswith('-setup.exe') and stamp not in p.read_bytes()]
+    if unstamped:
+        raise ValueError(f'Windows installer is not stamped {tag}: ' + ', '.join(map(str, unstamped)))
     destination.mkdir()
     for path in files:
         name = re.sub(r'-dev-[0-9a-f]{7,40}-', '-' + tag + '-', path.name)

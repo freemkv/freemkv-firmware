@@ -61,6 +61,39 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'collide'):
                 promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
 
+    def test_unverified_payload_cannot_be_promoted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.artifact(root / 'download/a')
+            rpm = root / 'download/rpm-package'
+            rpm.mkdir(parents=True)
+            (rpm / 'freemkv-flash-x86_64.rpm').write_bytes(b'rpm')
+            (rpm / 'freemkv.asc').write_text('key')
+            with self.assertRaisesRegex(ValueError, 'lacks checksum evidence'):
+                promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
+
+    def test_unsigned_linux_packages_cannot_be_promoted(self):
+        for name in ('freemkv-flash-x86_64.rpm', 'freemkv-flash-x86_64.pkg.tar.zst'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.artifact(root / 'download/pkg', name=name, data=b'package')
+                with self.assertRaisesRegex(ValueError, 'unsigned'):
+                    promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
+                signed = root / 'download/pkg'
+                (signed / 'freemkv.asc').write_text('key')
+                (signed / (name + '.sig')).write_bytes(b'sig')
+                self.assertEqual(promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0'), 1)
+
+    def test_installer_without_release_version_cannot_be_promoted(self):
+        name = 'freemkv-flash-x86_64-windows-setup.exe'
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.artifact(root / 'download/old', name=name, data=b'MZ' + '0.0.0.0'.encode('utf-16-le'))
+            with self.assertRaisesRegex(ValueError, 'not stamped'):
+                promote.stage_assets(root / 'download/old', root / 'old-assets', 'v0.15.0')
+            self.artifact(root / 'download/new', name=name, data=b'MZ' + '0.15.0.0'.encode('utf-16-le'))
+            self.assertEqual(promote.stage_assets(root / 'download/new', root / 'assets', 'v0.15.0'), 1)
+
     def test_unfetchable_run_is_skipped(self):
         runs = {'workflow_runs': [{'id': 1, 'head_sha': 'a' * 40, 'conclusion': 'success'}, {'id': 2, 'head_sha': 'b' * 40, 'conclusion': 'success'}]}
         def run(args, **kwargs):
@@ -81,6 +114,13 @@ class PromotionTests(unittest.TestCase):
         self.assertIn('needs: resolve-msrv', text)
         self.assertIn('needs.promote-qa.result', text)
 
+
+    def test_release_refreshes_rpm_and_arch_repositories(self):
+        text = Path('.github/workflows/release.yml').read_text()
+        job = text.split('\n  apt:\n', 1)[1]
+        self.assertIn('needs: [promote-qa]', job)
+        for event in ('apt-refresh', 'rpm-refresh', 'arch-refresh'):
+            self.assertIn('event_type=' + event, job)
 
 if __name__ == '__main__':
     unittest.main()

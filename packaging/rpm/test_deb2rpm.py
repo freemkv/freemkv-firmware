@@ -23,6 +23,18 @@ class Requires(unittest.TestCase):
     def test_static_cli_has_none(self):
         self.assertEqual(deb2rpm.requires('', {}), [])
 
+    def test_dlopen_libraries_become_soname_requires(self):
+        depends = 'libgl1, libxkbcommon-x11-0, libc6 (>= 2.39)'
+        self.assertEqual(deb2rpm.requires(depends, {}, 'x86_64'),
+                         ['libGL.so.1()(64bit)', 'libxkbcommon-x11.so.0()(64bit)'])
+        self.assertEqual(deb2rpm.requires(depends, {}, 'armv7hl'),
+                         ['libGL.so.1', 'libxkbcommon-x11.so.0'])
+
+    def test_every_build_debs_dlopen_library_is_mapped(self):
+        script = (Path(__file__).parents[1] / 'linux/build-debs.sh').read_text()
+        dl = script.split("\ndl='", 1)[1].split("'", 1)[0]
+        self.assertEqual(len(deb2rpm.requires(dl, {}, 'aarch64')), len(dl.split(',')))
+
     def test_alternatives_are_refused(self):
         with self.assertRaises(ValueError):
             deb2rpm.requires('a | b', {})

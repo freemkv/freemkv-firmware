@@ -11,9 +11,17 @@ from unicorn import arm_const as reg
 REGISTERS = [getattr(reg, f'UC_ARM_REG_R{i}') for i in range(13)]
 
 
+def arm_cpu(engine):
+    """MT1939 is an ARM926 (ARMv5TE, Thumb-1); Unicorn's default accepts Thumb-2."""
+    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    if engine.startswith('MT1939'):
+        cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
+    return cpu
+
+
 class MediaCpu:
-    def __init__(self, data):
-        self.cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    def __init__(self, data, engine):
+        self.cpu = arm_cpu(engine)
         self.cpu.mem_map(0, 0x200000)
         self.cpu.mem_write(0, data)
         self.cpu.mem_map(0x01ff0000, 0x20000)
@@ -79,7 +87,7 @@ def main():
                 str(args.builder.resolve()), str(original), 'installed-hrl',
                 str(report_path), str(modified)]))
             slot = evidence['flag_slot'] - 2
-            native, changed = MediaCpu(data), MediaCpu(patched)
+            native, changed = MediaCpu(data, report['engine']), MediaCpu(patched, report['engine'])
             count = 0
             for site in sites:
                 for setting in (0, 1, 255, 2):

@@ -15,9 +15,17 @@ REGISTERS = [getattr(reg, f'UC_ARM_REG_R{i}') for i in range(13)]
 FIFO, STACK, RETURN = 0x04209000, 0x03008000, 0x1fe000
 
 
+def arm_cpu(engine):
+    """MT1939 is an ARM926 (ARMv5TE, Thumb-1); Unicorn's default accepts Thumb-2."""
+    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    if engine.startswith('MT1939'):
+        cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
+    return cpu
+
+
 class RegionCpu:
-    def __init__(self, data):
-        self.cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    def __init__(self, data, engine):
+        self.cpu = arm_cpu(engine)
         for start, size in ((0, 0x200000), (0x01ff0000, 0x20000),
                             (0x03000000, 0x10000), (0x04200000, 0x10000)):
             self.cpu.mem_map(start, size)
@@ -64,7 +72,8 @@ def review(builder, original, modified, report_path):
     data, patched = original.read_bytes(), modified.read_bytes()
     evidence = json.loads(subprocess.check_output([str(builder.resolve()), str(original),
         'installed-region', str(report_path), str(modified)]))
-    native, changed = RegionCpu(data), RegionCpu(patched)
+    engine = json.loads(Path(report_path).read_text())['engine']
+    native, changed = RegionCpu(data, engine), RegionCpu(patched, engine)
     cases = 0
     for type_code in (0, 0x40, 0x80, 0xc0):
         for counter in (0, 1, 7):
