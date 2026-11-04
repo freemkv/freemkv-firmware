@@ -56,17 +56,6 @@ fn output_replacement_is_exact_and_failed_publication_preserves_destination() {
 
 #[cfg(unix)]
 #[test]
-fn created_output_is_not_owner_only() {
-    use std::os::unix::fs::PermissionsExt;
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("firmware.bin");
-    write(&path, b"image").unwrap();
-    let mode = std::fs::metadata(&path).unwrap().permissions().mode();
-    assert_ne!(mode & 0o044, 0, "mode {mode:o}");
-}
-
-#[cfg(unix)]
-#[test]
 fn overwritten_output_keeps_its_previous_mode() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -76,4 +65,42 @@ fn overwritten_output_keeps_its_previous_mode() {
     write(&path, b"new").unwrap();
     let mode = std::fs::metadata(&path).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o664);
+}
+
+#[cfg(unix)]
+#[test]
+fn created_output_honours_the_umask() {
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(target_os = "macos")]
+    type ModeT = u16;
+    #[cfg(not(target_os = "macos"))]
+    type ModeT = u32;
+    extern "C" {
+        fn umask(mask: ModeT) -> ModeT;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    // One test owns the process-wide umask; it is restored at the end.
+    let mut modes = Vec::new();
+    for (mask, name) in [(0o022, "a.bin"), (0o077, "b.bin")] {
+        let path = dir.path().join(name);
+        // SAFETY: umask has no memory-safety preconditions.
+        let old = unsafe { umask(mask) };
+        let result = write(&path, b"image");
+        unsafe { umask(old) };
+        result.unwrap();
+        modes.push(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777);
+    }
+    assert_eq!(modes, [0o644, 0o600]);
+}
+
+#[cfg(unix)]
+#[test]
+fn failed_mode_preservation_does_not_abort_the_write() {
+    let mut seen = None;
+    preserve_mode(0o640, |p| {
+        use std::os::unix::fs::PermissionsExt;
+        seen = Some(p.mode() & 0o7777);
+        Err(std::io::Error::from_raw_os_error(1))
+    });
+    assert_eq!(seen, Some(0o640));
 }
