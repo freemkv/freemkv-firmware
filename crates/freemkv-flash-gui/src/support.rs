@@ -480,6 +480,9 @@ impl BundleSource {
             }
         }
         events.sort_by_key(|e| e["ts_ms"].as_u64().unwrap_or(0));
+        // Accepted logs share one canonical directory, so another spelling is a duplicate.
+        let mut names = std::collections::BTreeSet::new();
+        logs.retain(|log| names.insert(log.file_name().map(ToOwned::to_owned)));
         logs.sort();
         if logs.len() > MAX_LOGS {
             return Err(anyhow::Error::new(ReportProblem::TooLarge)
@@ -1224,5 +1227,31 @@ mod retained_capture_tests {
         drop(zip);
         drop(journal);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn aliased_log_spelling_is_bundled_once() {
+        let root = std::env::temp_dir().join(format!("freemkv-alias-{}", random_id().unwrap()));
+        let dir = root.join("logs");
+        fs::create_dir_all(&dir).unwrap();
+        let alias = root.join("alias");
+        std::os::unix::fs::symlink(&dir, &alias).unwrap();
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        fs::write(dir.join("freemkv-flash-x.log"), b"evidence").unwrap();
+        journal
+            .record(
+                "operation_finished",
+                json!({"log_file": alias.join("freemkv-flash-x.log")}),
+            )
+            .unwrap();
+        let path = journal.source().bundle(Scope::AllHistory).unwrap();
+        let mut zip = zip::ZipArchive::new(File::open(&path).unwrap()).unwrap();
+        let logs = (0..zip.len())
+            .filter(|&i| zip.by_index(i).unwrap().name().unwrap() == "logs/freemkv-flash-x.log")
+            .count();
+        assert_eq!(logs, 1);
+        drop(journal);
+        fs::remove_dir_all(root).unwrap();
     }
 }
