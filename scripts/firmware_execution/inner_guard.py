@@ -27,12 +27,13 @@ def main():
         assert state==0x01ff9def and flag==0x02000c8c
         assert data[0x11ab52:0x11ab58]==bytes.fromhex('b44200d27ce7')
     else:assert data[0x153054:0x15306a]==bytes.fromhex('107800090f2801d1012000e00020ad49097808426dd0')
-    active=0;instructions=set();edges=set();trace_path=a.output.with_suffix('.traces.jsonl.gz')
+    active=0;profiles=set();instructions=set();edges=set();trace_path=a.output.with_suffix('.traces.jsonl.gz')
     with gzip.open(trace_path,'wt') as log:
         for value in range(256):
             for context in range(256):
                 r=run(data,'MT1959' if early else 'MT1939',entry,{body,bypass},0x0200fe00,
                     registers={0:0x12345678,4:0,6:1},memory=[(state,bytes([value])),(flag,bytes([context]))],allow_stack_delta=32,strict_reads=True)
+                profiles.add(r['cpu_profile'])
                 expected=body if value>>4==15 and context&1 else bypass
                 assert r['target']==expected,(value,context,r['target'])
                 active+=int(r['target']==body);instructions.update(r['instructions']);edges.update(r['edges'])
@@ -44,10 +45,11 @@ def main():
                         registers={4:start,6:end},memory=[(state,bytes([value])),(flag,b'\x01')],strict_reads=True)
                     expected=bypass if value==0xc7 else body if start<end else 0x11ab58
                     assert r['target']==expected
-                    instructions.update(r['instructions']);edges.update(r['edges'])
+                    profiles.add(r['cpu_profile']);instructions.update(r['instructions']);edges.update(r['edges'])
                     log.write(json.dumps({'state':value,'flag':1,'r4':start,'r6':end,'target':r['target'],'trace':r['trace'],'cpsr':r['cpsr'],'writes':r['writes']})+'\n')
+    assert len(profiles)==1,profiles
     receipt={'schema':'native-inner-w-recovery-guard-v2','status':'passed','source_sha256':digest,
-        'cpu':'ARM926','unicorn':unicorn.__version__,'entry':entry,'state_cell':state,'flag_cell':flag,
+        'cpu':profiles.pop(),'unicorn':unicorn.__version__,'entry':entry,'state_cell':state,'flag_cell':flag,
         'cases':65536,'enter_recovery_loop':active,'bypass_recovery_loop':65536-active,
         'c7_c8_enter_loop':False,'source_same_cell_reload_at':reload,
         'explicit_iteration_bounds':{'r4':0,'r6':1} if early else None,'additional_bounds_cases':8 if early else 0,

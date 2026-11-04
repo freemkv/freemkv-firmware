@@ -150,7 +150,7 @@ def classify(source, scan, di, keys, references, alias=None, consumers=None, wor
         'destination': identity['destination'], 'category': source['category'],
         'bytes': source['bytes'], 'payload': 'archive duplicate' if alias else 'full source' if full else 'fragment',
         'canonical_payload_sha256': alias['payload_sha256'] if alias else sha if full else '',
-        'classification': 'OEM UHD' if media_complete else '1959 non UHD' if full else 'unresolved',
+        'classification': 'OEM UHD' if media_complete else '1959 non UHD' if full and (media_gaps or differences) else 'unresolved',
         'classification_basis': '100% of G01-G06 media contracts' if media_complete else
             'G01-G06 media gaps or incomplete evidence; G07/G08 excluded',
         'manufacturer_backed_reference': bool(reference),
@@ -159,7 +159,10 @@ def classify(source, scan, di, keys, references, alias=None, consumers=None, wor
         'reference_url': reference['url'] if reference else '',
         'manufacturer_reference_provenance_gap': '' if reference else qualification_gap(source, alias),
         'comparison_baseline': 'WH16NS60 1.01 / BU40N 1.02; semantic roles, not hardware constants',
-        **{name: ('unknown' if not full and alias is None else 'gap' if gap in gaps else 'reviewed match')
+        **{name: ('unknown' if not full and alias is None
+                  or gap == 'G01' and di_result.startswith('unresolved')
+                  or gap in ('G02', 'G03', 'G04', 'G05', 'G06') and not consumers
+                  else 'gap' if gap in gaps else 'reviewed match')
            for gap, name in (
                ('G01', 'disc_information_admission'), ('G02', 'C7_control_bit'),
                ('G03', 'C7_control_field'), ('G04', 'C7_forward_calculation_admission'),

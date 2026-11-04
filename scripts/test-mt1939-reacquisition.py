@@ -30,8 +30,8 @@ def main():
         assert receipt['source_sha256'] == detection.OEM_HASH
         machine = detection.machine(data, receipt)
         # Bound source fixture's mode cell; exact addresses are test landmarks.
-        machine[0].hook_add(UC_HOOK_CODE, lambda c, at, _size, _user:
-            c.mem_write(0x01ffa20d, b'\x1c') if at == receipt['entry'] else None)
+        machine[0].hook_add(UC_HOOK_CODE, lambda c, at, _size, _user, entry=receipt['entry']:
+            c.mem_write(0x01ffa20d, b'\x1c') if at == entry else None)
         machines.append((machine, receipt))
     assert not machines[0][1]['reacquisition_mode']
     assert machines[1][1]['reacquisition_mode']

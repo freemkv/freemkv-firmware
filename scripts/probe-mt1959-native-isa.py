@@ -39,6 +39,7 @@ for prefix in ('1bbe','5c01'):
    state.clear();state.update(known=set(range(base['cdb'],base['cdb']+len(cdb))),trace=[],isa_events=[],stop='instruction-budget')
    try:cpu.emu_start(base['original_handler']|1,0x0300f000,count=10000)
    except Exception as error:state.update(stop='CPU-error',error=str(error))
+   if state['stop']=='instruction-budget' and cpu.reg_read(reg.UC_ARM_REG_PC)&~1==0x0300f000:state['stop']='returned-to-caller'
    allrows.append({'source_sha256':source,'source_modify_report_sha256':hashlib.sha256((p/'modify.json').read_bytes()).hexdigest(),'registered_record':record,'registered_flags':data[record+1],'entry':base['original_handler'],'cdb':cdb.hex(),'model':'ARM926','arguments':'r0-r12 zero, supplied transport preconditions only','stop':state['stop'],'unmodeled_address':state.get('address'),'isa_events':state['isa_events'],'trace':state['trace']})
 receipt={'schema':'source-native-mt1959-ordinary-isa-v1',
  'scope':'Unmodified registered READ BUFFER handler; stop before opaque resident service/unseeded RAM reads/global writes; no service-success replacement; supplied transport arguments only',
