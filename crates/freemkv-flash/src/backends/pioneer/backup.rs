@@ -571,12 +571,6 @@ const READ_CHUNK: usize = 0x8000;
 const DEEP_RETRIES: usize = 6;
 /// Smallest span a deep read drops to while isolating a bad region.
 const DEEP_MIN_CHUNK: usize = 4;
-/// Consecutive unreadable units after which salvage tries each unit once.
-const DEEP_FAST_FAIL_UNITS: usize = 16;
-/// Consecutive unreadable units after which salvage probes in blocks.
-const DEEP_GIVE_UP_UNITS: usize = 256;
-/// Probe block size once salvage has given up on per-unit reads.
-const DEEP_PROBE_BLOCK: usize = 1024;
 
 /// One vendor firmware read at `off` of exactly `n` bytes, through
 /// `pioneer_optical::drive::read_memory` (which issues the read-unlock knock
@@ -755,126 +749,28 @@ fn salvage_span(
     }
     let mut good = None;
     let mut p = pos;
-    let end = pos + n;
-    let mut failed_run = 0usize;
-    // Failure count at which to next test whether the drive still responds.
-    let mut next_check = DEEP_GIVE_UP_UNITS;
-    let mut probing = false;
-    // Start of the stretch of failed probe blocks, and of the latest one.
-    let mut pending: Option<(usize, usize)> = None;
-    while p < end {
-        if !probing && failed_run >= next_check {
-            // Distinguish bad media from an unresponsive drive first.
-            let alive = match good.or(last_good) {
-                Some((off, len)) => retry_read_n(dev, off, len, 1).is_some(),
-                None => true,
-            };
-            if alive {
-                probing = true;
-            } else {
-                next_check += DEEP_GIVE_UP_UNITS;
-            }
-        }
-        if probing {
-            let m = DEEP_PROBE_BLOCK.min(end - p);
-            let Some(data) = retry_read_n(dev, start + p, m, 1) else {
-                match &mut pending {
-                    None => {
-                        crate::diagnostics::record(format!(
-                            "salvage probing in blocks: {failed_run} consecutive unreadable units before {:#x}",
-                            start + p
-                        ));
-                        pending = Some((p, p));
-                    }
-                    Some((_, latest)) => *latest = p,
-                }
-                p += m;
-                continue;
-            };
-            image[p..p + m].copy_from_slice(&data);
-            good = Some((start + p, m.min(DEEP_MIN_CHUNK)));
-            if let Some((first, _)) = pending.take() {
-                rescan_units(dev, start, image, gaps, (first, p));
-            }
-            failed_run = 0;
-            next_check = DEEP_GIVE_UP_UNITS;
-            probing = false;
-            p += m;
-            continue;
-        }
-        let m = DEEP_MIN_CHUNK.min(end - p);
-        let attempts = if failed_run >= DEEP_FAST_FAIL_UNITS {
-            1
-        } else {
-            DEEP_RETRIES
-        };
-        match retry_read_n(dev, start + p, m, attempts) {
+    while p < pos + n {
+        let m = DEEP_MIN_CHUNK.min(pos + n - p);
+        match retry_read(dev, start + p, m) {
             Some(data) => {
                 image[p..p + m].copy_from_slice(&data);
                 good = Some((start + p, m));
-                failed_run = 0;
-                next_check = DEEP_GIVE_UP_UNITS;
             }
-            None => {
-                push_gap(gaps, start + p, m);
-                failed_run += 1;
-            }
+            None => push_gap(gaps, start + p, m),
         }
         p += m;
     }
-    if let Some((first, latest)) = pending {
-        // The bad run may end inside the final probe block: test the last unit.
-        let m = DEEP_MIN_CHUNK.min(end - first);
-        match retry_read_n(dev, start + end - m, m, 1) {
-            Some(data) => {
-                image[end - m..end].copy_from_slice(&data);
-                good = Some((start + end - m, m));
-                push_gap(gaps, start + first, latest - first);
-                rescan_units(dev, start, image, gaps, (latest, end - m));
-            }
-            None => push_gap(gaps, start + first, end - first),
-        }
-    }
     Ok(good)
-}
-
-/// Re-read a failed stretch `[from, to)` unit by unit, one attempt each: keep
-/// the units that read and gap only those that fail.
-fn rescan_units(
-    dev: &mut dyn ScsiDevice,
-    start: usize,
-    image: &mut [u8],
-    gaps: &mut Vec<(usize, usize)>,
-    (from, to): (usize, usize),
-) {
-    let mut q = from;
-    while q < to {
-        let m = DEEP_MIN_CHUNK.min(to - q);
-        match retry_read_n(dev, start + q, m, 1) {
-            Some(data) => image[q..q + m].copy_from_slice(&data),
-            None => push_gap(gaps, start + q, m),
-        }
-        q += m;
-    }
 }
 
 /// Read `off..off+n` up to `DEEP_RETRIES` times. Every attempt re-knocks (the
 /// crate's `read_memory` unlocks before each read), covering a drive that
 /// dropped out of read mode. `None` if every attempt failed.
 fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Option<Vec<u8>> {
-    retry_read_n(dev, off, n, DEEP_RETRIES)
-}
-
-fn retry_read_n(
-    dev: &mut dyn ScsiDevice,
-    off: usize,
-    n: usize,
-    attempts: usize,
-) -> Option<Vec<u8>> {
-    for attempt in 1..=attempts {
+    for attempt in 1..=DEEP_RETRIES {
         match read_chunk(dev, off, n) {
             Ok(data) => return Some(data),
-            Err(error) => crate::diagnostics::record(format!("salvage read failed: address={off:#x} length={n} attempt={attempt}/{attempts} error={error:#}")),
+            Err(error) => crate::diagnostics::record(format!("salvage read failed: address={off:#x} length={n} attempt={attempt}/{DEEP_RETRIES} error={error:#}")),
         }
     }
     None
