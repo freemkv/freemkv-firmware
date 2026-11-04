@@ -216,7 +216,7 @@ impl Platform {
         if crate::mediatek_package::Package::parse(target).is_ok() {
             return Platform::Mediatek;
         }
-        if is_tar || crate::backends::pioneer::parse_banner(target).is_some() {
+        if is_tar || pioneer_optical::ident::parse_banner(target).is_some() {
             Platform::Pioneer
         } else {
             Platform::Mediatek

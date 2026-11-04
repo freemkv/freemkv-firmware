@@ -585,9 +585,7 @@ fn scanned_target(dir: &Path, target: &str) -> bool {
         .ok()
         .zip(root().join("src").canonicalize().ok())
         .is_some_and(|(file, src)| file.starts_with(src));
-    file.is_file()
-        && inside_src
-        && name.is_some_and(|n| scanned_name(&n))
+    file.is_file() && inside_src && name.is_some_and(|n| scanned_name(&n))
 }
 
 /// Production code loads only files the scan reads: every `#[path]` and

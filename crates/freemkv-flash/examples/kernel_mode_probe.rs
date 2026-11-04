@@ -86,11 +86,7 @@ fn main() -> Result<()> {
     let after = protected_read_ok(dev.as_mut());
     println!(
         "protected read AFTER kernel mode (no knock): {after}  => kernel mode {} a read unlock",
-        if after {
-            "IS ALSO"
-        } else {
-            "is NOT"
-        }
+        if after { "IS ALSO" } else { "is NOT" }
     );
     Ok(())
 }
