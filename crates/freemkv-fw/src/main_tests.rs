@@ -126,12 +126,17 @@ fn classify_windows_device_namespace_path_is_device() {
 }
 
 #[test]
-fn identity_probe_error_is_named_not_reported_as_stock() {
-    let detail = not_detected_detail(&Err(anyhow::anyhow!("timeout")));
-    assert!(detail.contains("timeout"), "{detail}");
-    assert!(!detail.contains("stock/OEM"), "{detail}");
-    let stock = not_detected_detail(&Ok(vec![0u8; 4]));
+fn identity_probe_detail_uses_the_api_classification() {
+    let outcome = |detail: &str| freemkv_fw::api::ProbeOutcome {
+        detected: false,
+        detail: detail.into(),
+        version: None,
+    };
+    let stock = not_detected_detail(&outcome("NOT DETECTED (stock/OEM or other firmware)"));
     assert!(stock.contains("stock/OEM"), "{stock}");
+    let failed = not_detected_detail(&outcome("NOT DETERMINED (probe failed: timeout)"));
+    assert!(failed.contains("timeout"), "{failed}");
+    assert!(!failed.contains("stock/OEM"), "{failed}");
 }
 
 #[test]

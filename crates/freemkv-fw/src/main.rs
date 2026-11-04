@@ -328,14 +328,13 @@ fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 // verify (live drive)
 // ---------------------------------------------------------------------------
 
-/// Detail suffix for a NOT DETECTED identity probe. A well-formed non-freemkv
-/// reply means stock/OEM firmware; a command error is named, since it may be a
-/// busy or unreachable drive rather than a drive that rejected the knock.
-fn not_detected_detail(result: &Result<Vec<u8>>) -> String {
-    match result {
-        Err(e) => format!("(no identity response: {e:#})"),
-        Ok(_) => "(stock/OEM or other firmware)".to_owned(),
-    }
+/// Detail suffix for a negative identity probe, from the shared api classification.
+fn not_detected_detail(outcome: &freemkv_fw::api::ProbeOutcome) -> String {
+    outcome
+        .detail
+        .strip_prefix("NOT DETECTED ")
+        .unwrap_or(&outcome.detail)
+        .to_owned()
 }
 
 /// Probe a live drive for freemkv firmware by sending the Identity command
@@ -351,44 +350,38 @@ fn not_detected_detail(result: &Result<Vec<u8>>) -> String {
 /// writes and never crashes.
 fn cmd_verify_device(path: &Path) -> Result<ExitCode> {
     let path_str = path.to_string_lossy();
-    let mut dev =
-        platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
-
-    const ALLOC_LEN: usize = 96;
-    let cdb = abi::build_identity_cdb(ALLOC_LEN as u16);
-
-    match dev.command_in(&cdb, ALLOC_LEN) {
-        Ok(resp) if abi::verify_response(&resp) => {
-            let detail = match resp.get(abi::RESP_MAGIC.len()) {
-                Some(&v) => format!(
-                    "DETECTED on {path_str} {}",
-                    style::dim(&format!("(version 0x{v:02x})"))
+    let outcome = freemkv_fw::api::probe_device(&path_str)?;
+    if outcome.detected {
+        let detail = match outcome.version {
+            Some(v) => format!(
+                "DETECTED on {path_str} {}",
+                style::dim(&format!("(version 0x{v:02x})"))
+            ),
+            None => format!("DETECTED on {path_str}"),
+        };
+        println!(
+            "{}",
+            style::status_line("freemkv firmware", &detail, style::Status::Ok)
+        );
+        Ok(ExitCode::SUCCESS)
+    } else {
+        let verdict = if outcome.detail.starts_with("NOT DETERMINED") {
+            "NOT DETERMINED"
+        } else {
+            "NOT DETECTED"
+        };
+        println!(
+            "{}",
+            style::status_line(
+                "freemkv firmware",
+                &format!(
+                    "{verdict} on {path_str} {}",
+                    style::dim(&not_detected_detail(&outcome))
                 ),
-                None => format!("DETECTED on {path_str}"),
-            };
-            println!(
-                "{}",
-                style::status_line("freemkv firmware", &detail, style::Status::Ok)
-            );
-            Ok(ExitCode::SUCCESS)
-        }
-        // A non-freemkv reply or a command error both mean "not detected"; an
-        // error is recorded and named in the output rather than called stock.
-        other => {
-            let detail = not_detected_detail(&other);
-            if let Err(e) = &other {
-                diagnostics::record(format!("identity probe error: {e:#}"));
-            }
-            println!(
-                "{}",
-                style::status_line(
-                    "freemkv firmware",
-                    &format!("NOT DETECTED on {path_str} {}", style::dim(&detail)),
-                    style::Status::Warn
-                )
-            );
-            Ok(ExitCode::FAILURE)
-        }
+                style::Status::Warn
+            )
+        );
+        Ok(ExitCode::FAILURE)
     }
 }
 
