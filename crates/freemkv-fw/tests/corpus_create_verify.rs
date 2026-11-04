@@ -368,6 +368,14 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
         failed.len(),
         forgeable
     );
+    let attempted = forgeable + no_safe_space.len() + unchanged.len();
+    assert!(
+        attempted == 0 || !passed.is_empty(),
+        "{attempted} forgeable image(s) but none passed create+verify \
+         ({} refused for no safe space, {} unchanged)",
+        no_safe_space.len(),
+        unchanged.len()
+    );
 }
 
 /// Fleet-wide `create == modify` invariant: the strict all-or-nothing `create`
@@ -475,6 +483,7 @@ fn corpus_create_and_modify_agree_byte_for_byte() {
         }
     }
 
+    assert!(checked > 0, "create==modify invariant compared zero images");
     assert!(
         disagree.is_empty(),
         "{} image(s) failed the create==modify invariant (out of {checked} checked):\n{}",
