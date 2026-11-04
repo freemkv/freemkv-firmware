@@ -324,7 +324,6 @@ pub fn backup_with_replace(
         return Err(anyhow::anyhow!("no firmware backup capability for {id}")
             .context(IssueCode::UnsupportedDrive));
     }
-    let infix = facet.map_or("dump", |f| f.format().infix);
     // Fail fast before the multi-minute capture if the output already exists.
     if !replace && out.symlink_metadata().is_ok() {
         return Err(std::io::Error::new(
@@ -364,6 +363,7 @@ pub fn backup_with_replace(
         ),
         _ => unreachable!("capabilities checked above"),
     };
+    let infix = facet.map_or("dump", |f| f.format().infix);
     let saved_len = match facet {
         Some(facet) => backup::save_validated_with_replace(out, &bytes, replace, |candidate| {
             facet.validate(candidate, &target_model).map(|_| ())
