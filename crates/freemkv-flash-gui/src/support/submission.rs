@@ -124,12 +124,13 @@ fn submit_at(
     let poll_token = request["poll_token"]
         .as_str()
         .context("Missing polling token")?;
-    open(
-        request["approval_url"]
-            .as_str()
-            .context("Missing approval URL")?,
-    )
-    .context("Could not open report approval")?;
+    let approval_url = request["approval_url"]
+        .as_str()
+        .context("Missing approval URL")?;
+    if !same_origin(base, approval_url) {
+        bail!("Invalid report approval URL");
+    }
+    open(approval_url).context("Could not open report approval")?;
     let approval_deadline = (Instant::now() + control.approval_limit).min(control.deadline);
     let approved = loop {
         control.pause()?;
@@ -231,6 +232,16 @@ fn submit_at(
         }
     }
     unreachable!("last upload either returns a receipt or an error")
+}
+
+/// The approval page must be served by the report endpoint's own origin.
+fn same_origin(base: &str, candidate: &str) -> bool {
+    match (url::Url::parse(base), url::Url::parse(candidate)) {
+        (Ok(base), Ok(candidate)) => {
+            matches!(candidate.scheme(), "http" | "https") && base.origin() == candidate.origin()
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]

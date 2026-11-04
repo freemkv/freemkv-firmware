@@ -3637,7 +3637,8 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
-    app.report_endpoint = Some(format!("http://{}", listener.local_addr().unwrap()));
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    app.report_endpoint = Some(endpoint.clone());
     let requests = Arc::new(AtomicUsize::new(0));
     let observed = requests.clone();
     let description = "Backup failed.\n日本語 — description 🐈";
@@ -3702,12 +3703,12 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
                 )));
             }
             let body = match index {
-                0 => {
-                    r#"{"id":"joined","poll_token":"poll","approval_url":"http://localhost/approval"}"#
-                }
-                1 => r#"{"scope":"session","upload_token":"upload"}"#,
-                2 => r#"{"saved":true}"#,
-                _ => r#"{"report_id":"joined-receipt"}"#,
+                0 => format!(
+                    r#"{{"id":"joined","poll_token":"poll","approval_url":"{endpoint}/approval"}}"#
+                ),
+                1 => r#"{"scope":"session","upload_token":"upload"}"#.into(),
+                2 => r#"{"saved":true}"#.into(),
+                _ => r#"{"report_id":"joined-receipt"}"#.into(),
             };
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
         }
