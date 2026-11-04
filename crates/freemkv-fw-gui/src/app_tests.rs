@@ -339,6 +339,22 @@ fn refresh_does_not_replace_a_running_jobs_log() {
 }
 
 #[test]
+fn a_scan_finishing_after_a_job_does_not_replace_the_jobs_log() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.job_since_scan = true;
+    app.running = false;
+    app.diagnostic_log = Some("verify.log".into());
+    app.apply_discovery(
+        Vec::new(),
+        vec![freemkv_flash::output::Event::Report(
+            freemkv_flash::report::Row::gui("field", "Diagnostic log", "discovery.log".into())
+                .into(),
+        )],
+    );
+    assert_eq!(app.diagnostic_log, Some("verify.log".into()));
+}
+
+#[test]
 fn refresh_enumerates_drives_off_the_ui_thread() {
     let mut app = FwApp::with_preferences(Preferences::Memory);
     let (release, gate) = mpsc::channel::<()>();

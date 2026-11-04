@@ -116,7 +116,14 @@ fn classify_plain_path_is_file() {
 #[test]
 fn classify_windows_device_namespace_path_is_device() {
     // String-based, so it holds on every host.
-    for p in [r"\\.\CdRom0", r"\\?\CdRom0"] {
+    for p in [
+        r"\\.\CdRom0",
+        r"\\?\CdRom0",
+        r"\\.\E:",
+        r"\\.\PhysicalDrive1\",
+        r"\\?\GLOBALROOT\Device\CdRom0",
+        r"\\?\scsi#cdrom&ven_hl-dt-st#5&1#{53f56308-b6bf-11d0-94f2-00a0c91efb8b}",
+    ] {
         assert_eq!(classify_verify_target(Path::new(p)), VerifyTarget::Device);
     }
     assert_eq!(
@@ -137,6 +144,10 @@ fn identity_probe_detail_uses_the_api_classification() {
     let failed = not_detected_detail(&outcome("NOT DETERMINED (probe failed: timeout)"));
     assert!(failed.contains("timeout"), "{failed}");
     assert!(!failed.contains("stock/OEM"), "{failed}");
+    assert!(
+        !failed.contains("NOT DETERMINED"),
+        "verdict printed twice: {failed}"
+    );
 }
 
 #[test]
@@ -1106,6 +1117,9 @@ fn classify_extended_length_file_paths_are_files() {
         r"\\?\C:\fw\image.bin",
         r"\\?\d:/fw/image.bin",
         r"\\?\UNC\srv\share\i.bin",
+        r"\\?\unc\srv\share\i.bin",
+        r"\\?\Volume{1b3b0000-0000-0000-0000-000000000000}\fw\image.bin",
+        r"\\.\C:\fw\image.bin",
     ] {
         assert_eq!(
             classify_verify_target(Path::new(p)),
@@ -1169,4 +1183,18 @@ fn dump_of_an_all_failed_read_writes_no_file_and_fails() {
     let code = write_dump(Some(&out), 0x1000, 0x100, &read.data, nothing).unwrap();
     assert!(!out.exists(), "an all-zero dump must not be published");
     assert_eq!(code, ExitCode::FAILURE);
+}
+
+#[test]
+fn full_region_with_no_readable_window_writes_no_file_and_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("p-01c00000.bin");
+    let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
+    let read = mem_read(&mut dev, 0x01c0_0000, 0x10_0000, true);
+    assert!(!write_region(&file, 0x01c0_0000, &read).unwrap());
+    assert!(!file.exists(), "an unreadable region must not be published");
+    let mut ok = mem_mock(|| Ok(vec![1; abi::MEMREAD_LEN]));
+    let read = mem_read(&mut ok, 0x01c0_0000, 0x100, true);
+    assert!(write_region(&file, 0x01c0_0000, &read).unwrap());
+    assert_eq!(std::fs::read(&file).unwrap(), vec![1; 0x100]);
 }

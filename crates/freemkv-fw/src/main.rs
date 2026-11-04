@@ -248,29 +248,23 @@ enum VerifyTarget {
     Device,
 }
 
-/// True for a Windows device-namespace path; `\\?\` drive and UNC paths are files.
+/// True for a Windows device-namespace path (`\\.\CdRom0`, `\\?\scsi#...`).
+/// A `\\.\` or `\\?\` path with components below its root (`\\?\C:\fw.bin`,
+/// `\\?\UNC\srv\share\fw.bin`, `\\?\Volume{..}\fw.bin`) names a file.
 fn is_windows_device_path(s: &str) -> bool {
-    if s.starts_with(r"\\.\") {
-        return true;
-    }
-    let Some(rest) = s.strip_prefix(r"\\?\") else {
+    let Some(rest) = s.strip_prefix(r"\\.\").or_else(|| s.strip_prefix(r"\\?\")) else {
         return false;
     };
-    let b = rest.as_bytes();
-    let drive_path =
-        b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/');
-    !drive_path && !rest.to_ascii_uppercase().starts_with(r"UNC\")
+    let rest = rest.trim_end_matches(['\\', '/']);
+    rest.to_ascii_uppercase().starts_with(r"GLOBALROOT\") || !rest.contains(['\\', '/'])
 }
 
 /// Classify `path` for `verify`'s dual-mode dispatch.
 ///
-/// A path is treated as a device if it looks like a device path (starts with
-/// `/dev/`, which also covers `/dev/sg*`, or a Windows `\\.\` / `\\?\`
-/// device-namespace path, but not `\\?\X:\` drive or `\\?\UNC\` file paths) or — when it already exists on
-/// disk — its filesystem metadata says it is a character or block special
-/// file. Anything else, including a plain path that doesn't exist yet, is
-/// treated as a file, so the ordinary "no such file" error still fires for a
-/// typo'd image path instead of being swallowed by device-probe logic.
+/// A device is a `/dev/` path, a Windows device-namespace path (see
+/// [`is_windows_device_path`]), or an existing character or block special
+/// file. Anything else, including a plain path that doesn't exist yet, is a
+/// file, so a typo'd image path still gets the ordinary "no such file" error.
 fn classify_verify_target(path: &Path) -> VerifyTarget {
     if path.starts_with("/dev/") || path.to_str().is_some_and(is_windows_device_path) {
         return VerifyTarget::Device;
@@ -340,10 +334,10 @@ fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 
 /// Detail suffix for a negative identity probe, from the shared api classification.
 fn not_detected_detail(outcome: &freemkv_fw::api::ProbeOutcome) -> String {
-    outcome
-        .detail
-        .strip_prefix("NOT DETECTED ")
-        .unwrap_or(&outcome.detail)
+    let d = &outcome.detail;
+    d.strip_prefix("NOT DETECTED ")
+        .or_else(|| d.strip_prefix("NOT DETERMINED "))
+        .unwrap_or(d)
         .to_owned()
 }
 
@@ -564,6 +558,40 @@ fn write_dump(
     })
 }
 
+/// Publish one `--full` region; a region with no readable window is not written.
+fn write_region(file: &Path, start: u32, read: &MemRead) -> Result<bool> {
+    if read.good == 0 {
+        eprintln!(
+            "{}",
+            style::status_line(
+                "region",
+                &format!(
+                    "0x{start:08x}: no readable data; not writing {}",
+                    file.display()
+                ),
+                style::Status::Fail
+            )
+        );
+        return Ok(false);
+    }
+    let data = &read.data;
+    diagnostics::write(file, data).with_context(|| format!("writing {}", file.display()))?;
+    println!(
+        "{}",
+        style::status_line(
+            "captured",
+            &format!(
+                "0x{start:08x}..0x{:08x} ({} bytes) -> {}",
+                start as u64 + data.len() as u64,
+                data.len(),
+                file.display()
+            ),
+            style::Status::Ok
+        )
+    );
+    Ok(true)
+}
+
 fn cmd_info(
     device: &Path,
     dump: Option<&str>,
@@ -579,6 +607,7 @@ fn cmd_info(
             .context(freemkv_flash::user_error::IssueCode::CommandOptions)?;
         let mut dev =
             platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
+        let mut all_captured = true;
         for &(start, cap) in FULL_REGIONS {
             eprintln!(
                 "{}",
@@ -590,7 +619,6 @@ fn cmd_info(
             );
             let read = mem_read(dev.as_mut(), start, cap, true);
             warn_mem_faults("region", read.short, read.failed);
-            let data = read.data;
             let file = prefix.with_file_name(format!(
                 "{}-{start:08x}.bin",
                 prefix
@@ -598,23 +626,13 @@ fn cmd_info(
                     .and_then(|s| s.to_str())
                     .unwrap_or("dump")
             ));
-            diagnostics::write(&file, &data)
-                .with_context(|| format!("writing {}", file.display()))?;
-            println!(
-                "{}",
-                style::status_line(
-                    "captured",
-                    &format!(
-                        "0x{start:08x}..0x{:08x} ({} bytes) -> {}",
-                        start as u64 + data.len() as u64,
-                        data.len(),
-                        file.display()
-                    ),
-                    style::Status::Ok
-                )
-            );
+            all_captured &= write_region(&file, start, &read)?;
         }
-        return Ok(ExitCode::SUCCESS);
+        return Ok(if all_captured {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        });
     }
 
     if let Some(d) = dump {
