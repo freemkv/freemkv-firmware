@@ -61,6 +61,17 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'collide'):
                 promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
 
+    def test_unverified_payload_cannot_be_promoted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.artifact(root / 'download/a')
+            rpm = root / 'download/rpm-package'
+            rpm.mkdir(parents=True)
+            (rpm / 'freemkv-flash-x86_64.rpm').write_bytes(b'rpm')
+            (rpm / 'freemkv.asc').write_text('key')
+            with self.assertRaisesRegex(ValueError, 'lacks checksum evidence'):
+                promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
+
     def test_unfetchable_run_is_skipped(self):
         runs = {'workflow_runs': [{'id': 1, 'head_sha': 'a' * 40, 'conclusion': 'success'}, {'id': 2, 'head_sha': 'b' * 40, 'conclusion': 'success'}]}
         def run(args, **kwargs):

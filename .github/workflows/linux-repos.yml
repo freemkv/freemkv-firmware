@@ -193,6 +193,8 @@ jobs:
             test -x "/usr/bin/freemkv-$t-gui"
             if ldd "/usr/bin/freemkv-$t-gui" | grep -F 'not found'; then exit 1; fi
           done
+          # Release promotion verifies every payload against its sidecar.
+          (cd out && for f in freemkv-*.rpm; do sha256sum "$f" > "$f.sha256"; done)
       - uses: actions/upload-artifact@v7
         with: { name: rpm-package, path: out, if-no-files-found: error, retention-days: 90 }
 
@@ -251,6 +253,8 @@ jobs:
             test -x "/usr/bin/freemkv-$t-gui"
             if ldd "/usr/bin/freemkv-$t-gui" | grep -F 'not found'; then exit 1; fi
           done
+          # Release promotion verifies every payload against its sidecar.
+          (cd out && for f in freemkv-*.pkg.tar.zst; do sha256sum "$f" > "$f.sha256"; done)
       - uses: actions/upload-artifact@v7
         with: { name: arch-package, path: out, if-no-files-found: error, retention-days: 90 }
 
