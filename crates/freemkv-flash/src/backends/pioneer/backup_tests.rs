@@ -103,18 +103,19 @@ fn read_access_probe_retries_only_short_reads_and_reknocks() {
     }
 }
 
-/// Only the head of a span is bad: the readable remainder must still be recovered.
+/// Readable data around and between bad regions must be recovered unit-exact.
 #[test]
-fn deep_read_recovers_the_readable_tail_after_a_long_bad_head() {
-    struct Head {
+fn deep_read_recovers_readable_data_between_bad_regions() {
+    struct Bad {
+        bad: Vec<(usize, usize)>,
         calls: usize,
     }
-    impl ScsiDevice for Head {
+    impl ScsiDevice for Bad {
         fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
             self.calls += 1;
             let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
-            if start < 0x800 {
-                bail!("unreadable head");
+            if self.bad.iter().any(|&(a, b)| start < b && start + len > a) {
+                bail!("unreadable");
             }
             Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
         }
@@ -122,18 +123,34 @@ fn deep_read_recovers_the_readable_tail_after_a_long_bad_head() {
             Ok(())
         }
         fn describe(&self) -> String {
-            "head".into()
+            "bad".into()
         }
     }
-    let mut dev = Head { calls: 0 };
-    let (image, gaps) = read_region_deep_gaps(&mut dev, 0, 0x10000).unwrap();
-    assert_eq!(gaps, vec![(0, 0x800)]);
-    assert!(image[..0x800].iter().all(|b| *b == 0));
-    for (i, b) in image.iter().enumerate().skip(0x800) {
-        assert_eq!(*b, (i & 0xff) as u8, "byte {i:#x}");
+    let cases: [(Vec<(usize, usize)>, Gaps); 3] = [
+        (vec![(0, 0x800)], vec![(0, 0x800)]),
+        (
+            vec![(0, 0x400), (0x600, 0x700)],
+            vec![(0, 0x400), (0x600, 0x100)],
+        ),
+        (
+            vec![(0x400, 0x1000), (0x1200, 0x1208)],
+            vec![(0x400, 0xc00), (0x1200, 0x8)],
+        ),
+    ];
+    for (bad, want) in cases {
+        let mut dev = Bad {
+            bad: bad.clone(),
+            calls: 0,
+        };
+        let (image, gaps) = read_region_deep_gaps(&mut dev, 0, 0x10000).unwrap();
+        assert_eq!(gaps, want, "bad {bad:x?}");
+        for (i, b) in image.iter().enumerate() {
+            let is_bad = bad.iter().any(|&(a, e)| (a..e).contains(&i));
+            let expected = if is_bad { 0 } else { (i & 0xff) as u8 };
+            assert_eq!(*b, expected, "byte {i:#x} for bad {bad:x?}");
+        }
+        assert!(dev.calls < 10000, "too many reads: {}", dev.calls);
     }
-    // Each readable unit is read once; the bad head costs a few hundred reads.
-    assert!(dev.calls < 8192, "too many reads: {}", dev.calls);
 }
 
 /// A wholly unreadable chunk must not cost one full retry ladder per unit.

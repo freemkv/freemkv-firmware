@@ -757,29 +757,26 @@ fn salvage_span(
     let mut p = pos;
     let end = pos + n;
     let mut failed_run = 0usize;
-    // Start of the unresolved bad region while probing in blocks, and the
-    // start of the last failed probe block.
-    let mut pending: Option<(usize, usize)> = None;
+    // Start of the stretch of failed probe blocks, once salvage probes in blocks.
+    let mut pending: Option<usize> = None;
     while p < end {
         if failed_run >= DEEP_GIVE_UP_UNITS {
             let m = DEEP_PROBE_BLOCK.min(end - p);
             let Some(data) = retry_read_n(dev, start + p, m, 1) else {
-                let (first, _) = *pending.get_or_insert_with(|| {
+                if pending.is_none() {
                     crate::diagnostics::record(format!(
                         "salvage probing in blocks: {failed_run} consecutive unreadable units before {:#x}",
                         start + p
                     ));
-                    (p, p)
-                });
-                pending = Some((first, p));
+                    pending = Some(p);
+                }
                 p += m;
                 continue;
             };
             image[p..p + m].copy_from_slice(&data);
             good = Some((start + p, m));
-            if let Some((first, last)) = pending.take() {
-                let resume = bisect_bad_end(dev, start, image, (last, p));
-                push_gap(gaps, start + first, resume - first);
+            if let Some(first) = pending.take() {
+                rescan_units(dev, start, image, gaps, (first, p));
             }
             failed_run = 0;
             p += m;
@@ -804,43 +801,30 @@ fn salvage_span(
         }
         p += m;
     }
-    if let Some((first, _)) = pending {
+    if let Some(first) = pending {
         push_gap(gaps, start + first, end - first);
     }
     Ok(good)
 }
 
-/// The failed block `[last, ok)` precedes a readable block. Find the earliest
-/// unit-aligned `s` whose tail `[s, ok)` reads, store those bytes, and return `s`.
-fn bisect_bad_end(
+/// Re-read a failed stretch `[from, to)` unit by unit, one attempt each: keep
+/// the units that read and gap only those that fail.
+fn rescan_units(
     dev: &mut dyn ScsiDevice,
     start: usize,
     image: &mut [u8],
-    (last, ok): (usize, usize),
-) -> usize {
-    let units = (ok - last).div_ceil(DEEP_MIN_CHUNK);
-    let (mut lo, mut hi) = (0usize, units);
-    let mut tail: Option<Vec<u8>> = None;
-    while hi - lo > 1 {
-        let mid = lo + (hi - lo) / 2;
-        match retry_read_n(
-            dev,
-            start + last + mid * DEEP_MIN_CHUNK,
-            ok - last - mid * DEEP_MIN_CHUNK,
-            1,
-        ) {
-            Some(data) => {
-                hi = mid;
-                tail = Some(data);
-            }
-            None => lo = mid,
+    gaps: &mut Vec<(usize, usize)>,
+    (from, to): (usize, usize),
+) {
+    let mut q = from;
+    while q < to {
+        let m = DEEP_MIN_CHUNK.min(to - q);
+        match retry_read_n(dev, start + q, m, 1) {
+            Some(data) => image[q..q + m].copy_from_slice(&data),
+            None => push_gap(gaps, start + q, m),
         }
+        q += m;
     }
-    let s = last + hi * DEEP_MIN_CHUNK;
-    if let Some(data) = tail {
-        image[s..ok].copy_from_slice(&data);
-    }
-    s
 }
 
 /// Read `off..off+n` up to `DEEP_RETRIES` times. Every attempt re-knocks (the
