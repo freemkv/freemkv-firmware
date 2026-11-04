@@ -209,6 +209,8 @@ def main():
     parser.add_argument('--profiles', type=Path, default=Path(__file__).with_name('profiles.json'))
     parser.add_argument('--stages', nargs='+', choices=('auth_cell', 'media_gates'),
                         default=['auth_cell', 'media_gates'])
+    parser.add_argument('--dependency-commit', default='21031df434cff7fb2a4efbaa54a824b245933a95',
+                        help='Expected mediatek-optical commit; verified against its Cargo.lock package source')
     args = parser.parse_args()
     args.builder = args.builder.resolve(); args.fw = args.fw.resolve()
     profiles = load_profiles(args.profiles)
@@ -221,7 +223,7 @@ def main():
     suite = [Path(__file__), Path(__file__).with_name('cpu.py'), args.profiles,
              repo/'crates/freemkv-fw/examples/firmware_execution_evidence.rs']
     lock = (repo/'Cargo.lock').read_text()
-    expected_pin = '45e5a98b6085e938986456b098434720dd8ae368'
+    expected_pin = args.dependency_commit
     require(f'#{expected_pin}' in lock, 'unexpected mediatek-optical source pin')
     receipt = {'schema': 'firmware-bounded-execution-v1', 'status': 'failed',
         'scope': 'explicit supplied-input decision stages only; not full conversion or READ/optical success',
