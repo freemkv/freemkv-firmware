@@ -10,12 +10,20 @@ from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE
 from unicorn import arm_const as reg
 
 ROOT = Path(__file__).resolve().parents[1]
+def arm_cpu(engine):
+    """MT1939 is an ARM926 (ARMv5TE, Thumb-1); Unicorn's default accepts Thumb-2."""
+    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    if engine.startswith('MT1939'):
+        cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
+    return cpu
+
+
 REGISTERS = [getattr(reg, f'UC_ARM_REG_R{i}') for i in range(13)]
 
 
 class EncryptionCpu:
-    def __init__(self, data, evidence):
-        self.cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    def __init__(self, data, evidence, engine):
+        self.cpu = arm_cpu(engine)
         for start, size in ((0, 0x200000), (0x01ff0000, 0x20000), (0x03000000, 0x10000)):
             self.cpu.mem_map(start, size)
         self.cpu.mem_write(0, data)
@@ -67,7 +75,8 @@ def review(builder, original, modified, report_path):
     data, patched = original.read_bytes(), modified.read_bytes()
     evidence = json.loads(subprocess.check_output([str(builder.resolve()), str(original),
         'installed-encryption', str(report_path), str(modified)]))
-    native, changed = EncryptionCpu(data, evidence), EncryptionCpu(patched, evidence)
+    engine = json.loads(Path(report_path).read_text())['engine']
+    native, changed = EncryptionCpu(data, evidence, engine), EncryptionCpu(patched, evidence, engine)
     ake_cases = vid_cases = deny_cases = 0
     for setting in (0, 1, 255, 2):
         for value in (0, 1, 3, 63, 64, 127, 128, 191, 192, 255):

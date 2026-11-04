@@ -13,8 +13,16 @@ REGISTERS = [getattr(reg, f'UC_ARM_REG_R{i}') for i in range(13)]
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def execute(data, site, revoke, slot, flag, value, clean_end=None):
+def arm_cpu(engine):
+    """MT1939 is an ARM926 (ARMv5TE, Thumb-1); Unicorn's default accepts Thumb-2."""
     cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    if engine.startswith('MT1939'):
+        cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
+    return cpu
+
+
+def execute(data, engine, site, revoke, slot, flag, value, clean_end=None):
+    cpu = arm_cpu(engine)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0, data)
     cpu.mem_map(0x01ff0000, 0x20000)
@@ -45,13 +53,14 @@ def review(builder, original, modified, report_path):
     evidence = json.loads(subprocess.check_output([
         str(builder.resolve()), str(original), 'installed-hrl', str(report_path), str(modified)]))
     assert evidence['sites'], 'no emitted HRL sites'
+    engine = json.loads(Path(report_path).read_text())['engine']
     cases = 0
     for item in evidence['sites']:
         site, revoke = item['site'], item['revoke']
         for flag in (0, 1, 255, 2):
             for value in (0, 1, 2, 255, 0x80000000):
-                native = execute(original_data, site, revoke, evidence['flag_slot'], flag, value)
-                patched = execute(modified_data, site, revoke, evidence['flag_slot'], flag, value)
+                native = execute(original_data, engine, site, revoke, evidence['flag_slot'], flag, value)
+                patched = execute(modified_data, engine, site, revoke, evidence['flag_slot'], flag, value)
                 assert patched[0] == (site + 4 if flag == 0 else native[0])
                 assert patched[1] == native[1], (site, flag, value, 'register preservation')
                 assert patched[2] == native[2], (site, 'stack preservation')
@@ -60,9 +69,9 @@ def review(builder, original, modified, report_path):
                 if flag == 0:
                     # A skipped HRL result must flow into the same clean native
                     # behavior as a genuine clean result, beyond the hook return.
-                    clean = execute(original_data, site, revoke, evidence['flag_slot'], flag, 0,
+                    clean = execute(original_data, engine, site, revoke, evidence['flag_slot'], flag, 0,
                                     item['clean_end'])
-                    bypassed = execute(modified_data, site, revoke, evidence['flag_slot'], flag, value,
+                    bypassed = execute(modified_data, engine, site, revoke, evidence['flag_slot'], flag, value,
                                        item['clean_end'])
                     assert bypassed == clean, (site, value, 'native clean workflow')
                 cases += 1

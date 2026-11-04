@@ -11,11 +11,18 @@ from unicorn import arm_const as reg
 ROOT = Path(__file__).resolve().parents[1] / 'crates/freemkv-fw/tests/fixtures/mt1939-research'
 
 
+
+def arm926():
+    """Every input here is MT1939: an ARM926 (ARMv5TE, Thumb-1) core."""
+    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    cpu.ctl_set_cpu_model(reg.UC_CPU_ARM_926)
+    return cpu
+
 def machine(name):
     record = next(r for r in json.loads((ROOT / 'sources.json').read_text()) if r['file'] == name + '.bin')
     data = (ROOT / record['file']).read_bytes()
     assert hashlib.sha256(data).hexdigest() == record['excerpt_sha256']
-    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    cpu = arm926()
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(record['source_offset'] - record['padding'], data)
     cpu.mem_map(0x01FF0000, 0x10000)
@@ -331,7 +338,7 @@ def candidate_cases(builder, source=None, records=None):
 
     def execute(raw, setting, modified):
         value = raw >> 4
-        cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+        cpu = arm926()
         cpu.mem_map(0, max(0x4000, (len(source_bytes) + 4095) & ~4095))
         cpu.mem_write(0, source_bytes)
         cpu.mem_write(0x1000, blob)

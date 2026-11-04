@@ -14,8 +14,16 @@ from unicorn.arm_const import UC_ARM_REG_CPSR, UC_ARM_REG_PC, UC_ARM_REG_SP, UC_
 from unicorn import arm_const
 
 
-def execute(image, site, deny, value, setting, value_register, flag_base=0x02000e40, refusal=None):
+def arm_cpu(engine):
+    """MT1939 is an ARM926 (ARMv5TE, Thumb-1); Unicorn's default accepts Thumb-2."""
     cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    if engine.startswith('MT1939'):
+        cpu.ctl_set_cpu_model(arm_const.UC_CPU_ARM_926)
+    return cpu
+
+
+def execute(image, engine, site, deny, value, setting, value_register, flag_base=0x02000e40, refusal=None):
+    cpu = arm_cpu(engine)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0, image)
     cpu.mem_map(0x02000000, 0x2000)
@@ -46,8 +54,8 @@ def execute(image, site, deny, value, setting, value_register, flag_base=0x02000
 
 
 
-def execute_bd(image, site, unrestricted, retired, media_class):
-    cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+def execute_bd(image, engine, site, unrestricted, retired, media_class):
+    cpu = arm_cpu(engine)
     cpu.mem_map(0, 0x200000)
     cpu.mem_write(0, image)
     cpu.mem_map(0x02000000, 0x2000)
@@ -77,10 +85,10 @@ def execute_bd(image, site, unrestricted, retired, media_class):
     return cpu.reg_read(UC_ARM_REG_CPSR) & 0xF0000000
 
 
-def execute_boot_arguments(image):
+def execute_boot_arguments(image, engine):
     """Run the actual BU40N boot detour up to/through its native init call."""
     for return_flags in (0, 0xA0000000, 0xF0000000):
-        cpu = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+        cpu = arm_cpu(engine)
         cpu.mem_map(0, 0x200000)
         cpu.mem_write(0, image)
         cpu.mem_map(0x02000000, 0x2000)
@@ -134,6 +142,7 @@ def main():
             output = Path(temp) / 'modified.bin'
             result = subprocess.run([str(args.fw.resolve()), 'modify', str(original_path), str(output), '--json'], capture_output=True, text=True, check=True)
             report = json.loads(result.stdout)
+            engine = report['engine']
             facts = next(lever['facts'] for lever in report['levers'] if lever['id'] == 'RawRead')
             site = facts['auth_cell_site']
             assert site == expected_site, 'selected the wrong semantic check'
@@ -146,13 +155,13 @@ def main():
             deny = site + 6 + displacement * 2
             modified = output.read_bytes()
             if name == 'BU40N_OEM_1.00.bin':
-                execute_boot_arguments(modified)
+                execute_boot_arguments(modified, engine)
                 for media_site in (facts['bd_site'], facts['uhd_site']):
                     for setting in (0, 1, 255):
                         for retired in (0, 1, 255):
                             for media_class in range(256):
-                                old_flags = execute_bd(original, media_site, setting, retired, media_class)
-                                flags = execute_bd(modified, media_site, setting, retired, media_class)
+                                old_flags = execute_bd(original, engine, media_site, setting, retired, media_class)
+                                flags = execute_bd(modified, engine, media_site, setting, retired, media_class)
                                 if setting == 0:
                                     assert flags & 0x40000000 == 0, (media_site, setting, retired, media_class, 'Off must refuse')
                                 else:
@@ -160,8 +169,8 @@ def main():
                                 cases += 1
             for setting in (0, 1, 255, 2):
                 for value in range(16):
-                    old_target, old_flags = execute(original, site, deny, value, setting, value_register)
-                    target, flags = execute(modified, site, deny, value, setting, value_register)
+                    old_target, old_flags = execute(original, engine, site, deny, value, setting, value_register)
+                    target, flags = execute(modified, engine, site, deny, value, setting, value_register)
                     expected = deny if setting == 0 else site + 4 if setting == 1 else old_target
                     assert target == expected, (name, value, setting, hex(target), hex(expected))
                     assert flags == old_flags, (name, value, setting, 'CMP flags were not preserved')
