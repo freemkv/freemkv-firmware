@@ -378,7 +378,6 @@ impl Mt1959Engine {
         let commands = analysis
             .commands()
             .context("nothing modifiable: native command ownership")?;
-        Self::sense_setter_at(image, commands.scanner().entry())?;
         let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)?;
         let ram = super::sram::SramPlacement::inspect(image);
         let flag_base = FLAG_TABLE_BASE;
@@ -605,17 +604,7 @@ impl Mt1959Engine {
         let speed_bytes =
             self.build_speed_stub(flag_base, fallthrough, ramp_exit, speed_idx_reg)?;
         let speed_stub_va = self.free_space(out, speed_bytes.len())?;
-        let bl = thumb::encode_bl(cmp_at, speed_stub_va)
-            .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
-        thumb::write(out, speed_stub_va as usize, &speed_bytes);
-        thumb::write(out, cmp_at, &bl);
-        crate::install_guard::verify_branch(
-            out,
-            cmp_at,
-            thumb::BranchKind::Bl,
-            speed_stub_va,
-            "Speed",
-        )?;
+        commit_detour(out, cmp_at, speed_stub_va, &speed_bytes, "Speed")?;
         Ok((speed_gate, speed_stub_va))
     }
 
@@ -626,17 +615,7 @@ impl Mt1959Engine {
         let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
         let region_stub_va = self.free_space(out, region_bytes.len())?;
-        let bl = thumb::encode_bl(region_site, region_stub_va)
-            .ok_or_else(|| anyhow!("Region detour `bl` out of range"))?;
-        thumb::write(out, region_stub_va as usize, &region_bytes);
-        thumb::write(out, region_site, &bl);
-        crate::install_guard::verify_branch(
-            out,
-            region_site,
-            thumb::BranchKind::Bl,
-            region_stub_va,
-            "Region",
-        )?;
+        commit_detour(out, region_site, region_stub_va, &region_bytes, "Region")?;
         Ok((region_emitter, region_stub_va))
     }
 
@@ -767,10 +746,9 @@ impl Mt1959Engine {
             ),
             HookReport::applied(
                 "vid",
-                format!(
-                    "{:?}",
-                    mediatek_optical::image::analysis::VidGate::inspect(image)?.variant()
-                ),
+                mediatek_optical::image::analysis::VidGate::inspect(image)
+                    .map(|g| format!("{:?}", g.variant()))
+                    .unwrap_or_else(|e| format!("unknown: {e}")),
             ),
             HookReport::applied("deny-reset", "light-reset"),
         ];
@@ -782,20 +760,17 @@ impl Mt1959Engine {
         // This control does not add media recognition or missing AACS2 workers.
         // Images on the descriptor-classifier gate shape (no class-3 arm) leave it
         // unwired (0). Committed so the free_space order matches build_report (…→ deny → uhd).
-        let (uhd_site, uhd_stub_va) = match self.uhd_gate_detour(image, flag_base) {
-            Ok((site, bytes)) => {
-                let stub_va = self.free_space(&w, bytes.len())?;
-                let bl = thumb::encode_bl(site, stub_va)
-                    .ok_or_else(|| anyhow!("UHD media-gate detour `bl` out of range"))?;
-                thumb::write(&mut w, stub_va as usize, &bytes);
-                thumb::write(&mut w, site, &bl);
-                crate::install_guard::verify_branch(
-                    &w,
-                    site,
-                    thumb::BranchKind::Bl,
-                    stub_va,
-                    "UHD",
-                )?;
+        let uhd = self
+            .uhd_gate_detour(image, flag_base)
+            .and_then(|(site, bytes)| {
+                let mut h = w.clone();
+                let stub_va = self.free_space(&h, bytes.len())?;
+                commit_detour(&mut h, site, stub_va, &bytes, "UHD media-gate")?;
+                Ok((h, site, stub_va))
+            });
+        let (uhd_site, uhd_stub_va) = match uhd {
+            Ok((h, site, stub_va)) => {
+                w = h;
                 hooks.push(HookReport::applied(
                     "uhd-native",
                     "explicit-class".to_string(),
@@ -812,22 +787,29 @@ impl Mt1959Engine {
         // each of the three cert-path `cmp r0,#0; bne <6F/00>` sites. Graceful:
         // images whose HRL cert path is not the known shape leave it unwired.
         // Committed last so the free_space order matches build_report (…→ uhd → hrl).
-        let (hrl_sites, hrl_stub_va) = match self.hrl_skip_detour(image, flag_base) {
-            Ok((sites, _revoke, bytes)) => {
-                let stub_va = self.free_space(&w, bytes.len())?;
-                thumb::write(&mut w, stub_va as usize, &bytes);
+        let hrl = self
+            .hrl_skip_detour(image, flag_base)
+            .and_then(|(sites, _revoke, bytes)| {
+                let mut h = w.clone();
+                let stub_va = self.free_space(&h, bytes.len())?;
+                thumb::write(&mut h, stub_va as usize, &bytes);
                 for &site in &sites {
                     let bl = thumb::encode_bl(site, stub_va)
                         .ok_or_else(|| anyhow!("HRL-skip detour `bl` out of range"))?;
-                    thumb::write(&mut w, site, &bl);
+                    thumb::write(&mut h, site, &bl);
                     crate::install_guard::verify_branch(
-                        &w,
+                        &h,
                         site,
                         thumb::BranchKind::Bl,
                         stub_va,
                         "HRL-skip",
                     )?;
                 }
+                Ok((h, sites, stub_va))
+            });
+        let (hrl_sites, hrl_stub_va) = match hrl {
+            Ok((h, sites, stub_va)) => {
+                w = h;
                 hooks.push(HookReport::applied("hrl", "shared-revoke".to_string()));
                 (sites.iter().map(|&s| s as u32).collect(), stub_va)
             }
@@ -843,26 +825,20 @@ impl Mt1959Engine {
         // replays OEM (stealth). Graceful: images whose REPORT KEY gate is not the
         // known MT1959 shape leave it unwired (0). Committed last so the free_space
         // order matches build_report (…→ hrl → bd).
-        let (bd_site, bd_stub_va) = match self.bd_detour(image, flag_base) {
-            Ok((site, bytes)) => {
-                let stub_va = self.free_space(&w, bytes.len())?;
-                let bl = thumb::encode_bl(site, stub_va)
-                    .ok_or_else(|| anyhow!("BD-refuse detour `bl` out of range"))?;
-                thumb::write(&mut w, stub_va as usize, &bytes);
-                thumb::write(&mut w, site, &bl);
-                crate::install_guard::verify_branch(
-                    &w,
-                    site,
-                    thumb::BranchKind::Bl,
-                    stub_va,
-                    "BD-refuse",
-                )?;
+        let bd = self.bd_detour(image, flag_base).and_then(|(site, bytes)| {
+            let mut h = w.clone();
+            let stub_va = self.free_space(&h, bytes.len())?;
+            commit_detour(&mut h, site, stub_va, &bytes, "BD-refuse")?;
+            Ok((h, site, stub_va))
+        });
+        let (bd_site, bd_stub_va) = match bd {
+            Ok((h, site, stub_va)) => {
+                w = h;
                 hooks.push(HookReport::applied(
                     "bd-native",
-                    format!(
-                        "{:?}",
-                        mediatek_optical::image::analysis::MediaGate::inspect(image)?.variant()
-                    ),
+                    mediatek_optical::image::analysis::MediaGate::inspect(image)
+                        .map(|g| format!("{:?}", g.variant()))
+                        .unwrap_or_else(|e| format!("unknown: {e}")),
                 ));
                 (site as u32, stub_va)
             }
@@ -881,39 +857,35 @@ impl Mt1959Engine {
         // Graceful: images that don't carry the `ldr r4,[pc,...] = 0x01FF9E04`
         // prefix leave it unwired (0). Committed last so the free_space order
         // matches build_report (…→ bd → auth-cell).
-        let (auth_cell_site, auth_cell_stub_va) =
-            match self.auth_cell_widen_detour(image, flag_base) {
-                Ok((site, bytes)) => {
-                    let stub_va = self.free_space(&w, bytes.len())?;
-                    let bl = thumb::encode_bl(site, stub_va)
-                        .ok_or_else(|| anyhow!("auth-cell widen detour `bl` out of range"))?;
-                    thumb::write(&mut w, stub_va as usize, &bytes);
-                    thumb::write(&mut w, site, &bl);
-                    crate::install_guard::verify_branch(
-                        &w,
-                        site,
-                        thumb::BranchKind::Bl,
-                        stub_va,
-                        "auth-cell widen",
-                    )?;
-                    hooks.push(HookReport::applied(
-                        "auth-cell",
-                        format!(
-                            "{:?}",
-                            mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()
-                        ),
-                    ));
-                    (site as u32, stub_va)
-                }
-                Err(e) => {
-                    hooks.push(HookReport::unavailable("auth-cell", format!("{e:#}")));
-                    (0, 0)
-                }
-            };
+        let auth_cell = self
+            .auth_cell_widen_detour(image, flag_base)
+            .and_then(|(site, bytes)| {
+                let mut h = w.clone();
+                let stub_va = self.free_space(&h, bytes.len())?;
+                commit_detour(&mut h, site, stub_va, &bytes, "auth-cell widen")?;
+                Ok((h, site, stub_va))
+            });
+        let detected = mediatek_optical::image::analysis::AuthCell::detect(image)
+            .map(|c| c.variant())
+            .ok();
+        let (auth_cell_site, auth_cell_stub_va) = match auth_cell {
+            Ok((h, site, stub_va)) => {
+                w = h;
+                hooks.push(HookReport::applied(
+                    "auth-cell",
+                    detected.map_or_else(|| "unknown".to_owned(), |v| format!("{v:?}")),
+                ));
+                (site as u32, stub_va)
+            }
+            Err(e) => {
+                hooks.push(HookReport::unavailable("auth-cell", format!("{e:#}")));
+                (0, 0)
+            }
+        };
 
         let auth_cell_refusal = auth_cell_stub_va != 0
-            && mediatek_optical::image::analysis::AuthCell::detect(image)?.variant()
-                != mediatek_optical::image::analysis::AuthCellVariant::R0StateR1Alternate;
+            && detected
+                != Some(mediatek_optical::image::analysis::AuthCellVariant::R0StateR1Alternate);
         // UHD conversion is separate from the raw-read controls above. Each
         // required media gap must be closed before conversion edits reach output.
         // G01-G06 matches establish the agreed media definition, not a hardware test.
@@ -993,6 +965,45 @@ impl Mt1959Engine {
             hooks,
         })
     }
+}
+
+/// Write `stub` at `stub_va` and a `bl` to it at `site`, then verify the branch.
+/// Atomic: on any failure `out` is restored to its bytes before the call.
+fn commit_detour(
+    out: &mut [u8],
+    site: usize,
+    stub_va: u32,
+    stub: &[u8],
+    label: &str,
+) -> Result<()> {
+    commit_detour_checked(out, site, stub_va, stub, label, |o| {
+        crate::install_guard::verify_branch(o, site, thumb::BranchKind::Bl, stub_va, label)
+    })
+}
+
+fn commit_detour_checked(
+    out: &mut [u8],
+    site: usize,
+    stub_va: u32,
+    stub: &[u8],
+    label: &str,
+    verify: impl FnOnce(&[u8]) -> Result<()>,
+) -> Result<()> {
+    let bl = thumb::encode_bl(site, stub_va)
+        .ok_or_else(|| anyhow!("{label} detour `bl` out of range"))?;
+    let stub_at = stub_va as usize;
+    let saved_stub = out[stub_at..stub_at + stub.len()].to_vec();
+    let saved_site = out[site..site + bl.len()].to_vec();
+    thumb::write(out, stub_at, stub);
+    thumb::write(out, site, &bl);
+    if let Err(e) = verify(out) {
+        // The stub range is restored first so an overlap with the site keeps the
+        // original site bytes.
+        out[stub_at..stub_at + saved_stub.len()].copy_from_slice(&saved_stub);
+        out[site..site + saved_site.len()].copy_from_slice(&saved_site);
+        return Err(e);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -639,6 +639,25 @@ fn every_rawread_stub_is_allocated_with_exact_capacity() {
         let window = (va - base) as usize + blob - 1;
         let mut cramped = img.clone();
         assert_eq!(only_free_space(&mut cramped, window), base);
+        let optional = match name {
+            "UHD" => Some("uhd-native"),
+            "HRL-skip" => Some("hrl"),
+            "BD-refuse" => Some("bd-native"),
+            _ => None,
+        };
+        if let Some(id) = optional {
+            // Optional hooks degrade to "unavailable" and keep the mandatory detours.
+            let facts = e
+                .emit_rawread(&img, &mut cramped, FLAG_TABLE_BASE)
+                .unwrap_or_else(|err| panic!("{name} shortfall must degrade: {err:#}"));
+            let hook = facts.hooks.iter().find(|h| h.id == id).expect("hook");
+            let reason = hook.reason.as_deref().unwrap_or_default();
+            assert!(
+                hook.variant.is_none() && reason.contains(&out_of_space(blob)),
+                "the {name} stub ({blob} bytes) must report its finalized size; got: {reason}"
+            );
+            continue;
+        }
         let msg = refusal(
             e.emit_rawread(&img, &mut cramped, FLAG_TABLE_BASE),
             "a free run one byte short of the finalized blob must not be used",
@@ -1625,4 +1644,91 @@ fn response_writer_supports_immediate_shift_buffer_offsets() {
         Mt1959Engine.find_response_writer(image).unwrap(),
         (0xa192c, 0xda00)
     );
+}
+
+/// The scanner's sense-setter is a report-only anchor on both paths: an image
+/// whose scanner lacks the `movs r2/r1/r0 + bl` triple must still modify, and to
+/// the same bytes `create` produces.
+#[test]
+fn modify_does_not_require_the_report_only_sense_setter_anchor() {
+    let mut img = fixture();
+    let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(&img);
+    let entry = analysis.commands().unwrap().scanner().entry();
+    let hw = |image: &[u8], at: usize| u16::from_le_bytes([image[at], image[at + 1]]);
+    let is_movs = |image: &[u8], at: usize, rt: u16| {
+        (hw(image, at) & 0xF800) == 0x2000 && ((hw(image, at) >> 8) & 7) == rt
+    };
+    let triple = (entry..entry + 0x118)
+        .step_by(2)
+        .find(|&at| {
+            is_movs(&img, at, 2)
+                && is_movs(&img, at + 2, 1)
+                && is_movs(&img, at + 4, 0)
+                && super::thumb::decode_bl(&img, at + 6).is_some()
+        })
+        .expect("fixture scanner carries the sense-setter triple");
+    img[triple + 4..triple + 6].copy_from_slice(&0x46c0u16.to_le_bytes()); // nop
+    let img = freemkv_flash::cmac::resign(&img).unwrap();
+    assert!(Mt1959Engine::sense_setter_at(&img, entry).is_err());
+
+    let create = Mt1959Engine
+        .build_report(&img)
+        .expect("create tolerates the miss");
+    let modify = Mt1959Engine
+        .build_modify(&img, &bu40n_chip(), &cap(MediaClass::UhdBd, true, true))
+        .expect("modify must tolerate the same miss");
+    assert_eq!(modify.image, create.image);
+}
+
+/// `emit_speed`/`emit_region` are documented atomic: a failed branch verification
+/// must leave the image byte-identical, stub and `bl` site both.
+#[test]
+fn failed_detour_verification_leaves_the_image_untouched() {
+    let mut out = fixture();
+    let before = out.clone();
+    let stub_va = Mt1959Engine.free_space(&out, 8).unwrap();
+    let site = 0x20000;
+    let r = commit_detour_checked(&mut out, site, stub_va, &[0xAB; 8], "Test", |_| {
+        bail!("forced verification failure")
+    });
+    assert!(r.is_err());
+    assert!(
+        out == before,
+        "failed commit must restore stub and site bytes"
+    );
+
+    commit_detour(&mut out, site, stub_va, &[0xAB; 8], "Test").unwrap();
+    assert!(out != before, "successful commit writes the detour");
+}
+
+/// UHD / HRL / BD / auth-cell are optional hooks: when free space runs out after
+/// the mandatory AKE, Gate-A and deny detours, they report unavailable instead of
+/// discarding the validated detours.
+#[test]
+fn exhausted_free_space_degrades_optional_rawread_hooks() {
+    let e = Mt1959Engine;
+    let img = fixture();
+    let base = only_free_space(&mut img.clone(), 16);
+    let facts = e
+        .emit_rawread(&img, &mut img.clone(), FLAG_TABLE_BASE)
+        .expect("raw-read emits on the undamaged base");
+    let deny_len = e
+        .build_deny_reset_stub(e.find_aacs_session_reset(&img).expect("reset"))
+        .expect("deny stub")
+        .len();
+    let window = (facts.deny_stub_va - base) as usize + deny_len;
+    let mut cramped = img.clone();
+    only_free_space(&mut cramped, window);
+    let mut out = cramped.clone();
+    let facts = e
+        .emit_rawread(&cramped, &mut out, FLAG_TABLE_BASE)
+        .expect("optional hooks must degrade, not fail the lever");
+    assert!(facts.ake_stub_va != 0 && facts.gatea_stub_va != 0 && facts.deny_stub_va != 0);
+    for name in ["uhd-native", "hrl", "bd-native", "auth-cell"] {
+        let hook = facts.hooks.iter().find(|h| h.id == name);
+        assert!(
+            hook.is_some_and(|h| h.variant.is_none() && h.reason.is_some()),
+            "{name} must be reported unavailable"
+        );
+    }
 }

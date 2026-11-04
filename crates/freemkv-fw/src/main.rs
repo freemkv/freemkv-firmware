@@ -86,8 +86,8 @@ enum Command {
         /// After building, run the structural detour audit (prove each Applied
         /// lever's `bl` and stub actually landed, the record was repointed, the
         /// DE byte is set, and CMAC verifies) and print PASS/FAIL per check.
-        /// Exits non-zero if any check fails.
-        #[arg(long)]
+        /// Exits non-zero if any check fails. Not available with `--base`.
+        #[arg(long, conflicts_with = "base")]
         audit: bool,
     },
     /// Verify a firmware image (file) or probe a live drive (device) for
@@ -251,13 +251,18 @@ enum VerifyTarget {
 /// Classify `path` for `verify`'s dual-mode dispatch.
 ///
 /// A path is treated as a device if it looks like a device path (starts with
-/// `/dev/`, which also covers `/dev/sg*`) or — when it already exists on
+/// `/dev/`, which also covers `/dev/sg*`, or a Windows `\\.\` / `\\?\`
+/// device-namespace path) or — when it already exists on
 /// disk — its filesystem metadata says it is a character or block special
 /// file. Anything else, including a plain path that doesn't exist yet, is
 /// treated as a file, so the ordinary "no such file" error still fires for a
 /// typo'd image path instead of being swallowed by device-probe logic.
 fn classify_verify_target(path: &Path) -> VerifyTarget {
-    if path.starts_with("/dev/") {
+    if path.starts_with("/dev/")
+        || path
+            .to_str()
+            .is_some_and(|s| s.starts_with(r"\\.\") || s.starts_with(r"\\?\"))
+    {
         return VerifyTarget::Device;
     }
     #[cfg(unix)]
@@ -323,6 +328,16 @@ fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 // verify (live drive)
 // ---------------------------------------------------------------------------
 
+/// Detail suffix for a NOT DETECTED identity probe. A well-formed non-freemkv
+/// reply means stock/OEM firmware; a command error is named, since it may be a
+/// busy or unreachable drive rather than a drive that rejected the knock.
+fn not_detected_detail(result: &Result<Vec<u8>>) -> String {
+    match result {
+        Err(e) => format!("(no identity response: {e:#})"),
+        Ok(_) => "(stock/OEM or other firmware)".to_owned(),
+    }
+}
+
 /// Probe a live drive for freemkv firmware by sending the Identity command
 /// built by [`abi::build_identity_cdb`].
 ///
@@ -357,18 +372,18 @@ fn cmd_verify_device(path: &Path) -> Result<ExitCode> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        // Either a well-formed non-freemkv response (e.g. a plain INQUIRY
-        // reply on stock firmware) or a SCSI-level error from a drive that
-        // doesn't recognize the knock at all — both mean "not freemkv".
-        Ok(_) | Err(_) => {
+        // A non-freemkv reply or a command error both mean "not detected"; an
+        // error is recorded and named in the output rather than called stock.
+        other => {
+            let detail = not_detected_detail(&other);
+            if let Err(e) = &other {
+                diagnostics::record(format!("identity probe error: {e:#}"));
+            }
             println!(
                 "{}",
                 style::status_line(
                     "freemkv firmware",
-                    &format!(
-                        "NOT DETECTED on {path_str} {}",
-                        style::dim("(stock/OEM or other firmware)")
-                    ),
+                    &format!("NOT DETECTED on {path_str} {}", style::dim(&detail)),
                     style::Status::Warn
                 )
             );
@@ -394,45 +409,86 @@ fn parse_u32(s: &str) -> Result<u32> {
     Ok(v)
 }
 
+/// Result of [`mem_read`]: the bytes plus how many windows read cleanly, failed,
+/// or came back short (zero-padded in `data`).
+struct MemRead {
+    data: Vec<u8>,
+    good: usize,
+    failed: usize,
+    short: usize,
+}
+
 /// Read `len` bytes starting at `start` via [`abi::Verb::DumpAll`], in
 /// [`abi::MEMREAD_LEN`]-byte windows. When `auto_stop`, a run of consecutive
-/// unreadable windows (transport/sense error) ends the read early — the natural
-/// "end of mapped memory" signal. Unreadable windows before the run are
-/// zero-filled to keep byte offsets aligned to `start`. Returns the bytes read.
-fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop: bool) -> Vec<u8> {
+/// unreadable or short windows ends the read early — the natural "end of mapped
+/// memory" signal. Bad windows before the run are zero-filled to keep byte
+/// offsets aligned to `start`. The range is clamped to the 32-bit address space
+/// and the data is trimmed to the requested length.
+fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop: bool) -> MemRead {
     const STOP_AFTER: u32 = 16; // consecutive faults = end of region
                                 // Cap the up-front reservation: `--dump --len` is user-supplied and can be up
                                 // to 4 GiB, which would abort the process on `with_capacity` before a single
                                 // SCSI command issues. The Vec still grows to the full length as it reads.
     const RESERVE_CAP: u64 = 0x0400_0000; // 64 MiB
     let mut out = Vec::with_capacity(len.min(RESERVE_CAP) as usize);
+    let (mut good, mut failed, mut short) = (0usize, 0usize, 0usize);
     let mut faults = 0u32;
     let mut addr = start as u64;
-    let end = start as u64 + len;
+    let end = (start as u64 + len).min(1u64 << 32);
     while addr < end {
         let cdb = abi::build_memread_cdb(addr as u32);
-        match dev.command_in(&cdb, abi::MEMREAD_LEN) {
-            Ok(mut d) => {
+        let mut window = match dev.command_in(&cdb, abi::MEMREAD_LEN) {
+            Ok(d) if d.len() >= abi::MEMREAD_LEN => {
+                good += 1;
                 faults = 0;
-                d.resize(abi::MEMREAD_LEN, 0);
                 out.extend_from_slice(&d);
+                addr += abi::MEMREAD_LEN as u64;
+                continue;
+            }
+            Ok(d) => {
+                short += 1;
+                d
             }
             Err(_) => {
-                faults += 1;
-                if auto_stop && faults >= STOP_AFTER {
-                    // drop the trailing all-fault fill and stop
-                    out.truncate(
-                        out.len()
-                            .saturating_sub(((faults - 1) as usize) * abi::MEMREAD_LEN),
-                    );
-                    break;
-                }
-                out.extend_from_slice(&[0u8; abi::MEMREAD_LEN]);
+                failed += 1;
+                Vec::new()
             }
+        };
+        faults += 1;
+        if auto_stop && faults >= STOP_AFTER {
+            // drop the trailing all-fault fill and stop
+            out.truncate(
+                out.len()
+                    .saturating_sub(((faults - 1) as usize) * abi::MEMREAD_LEN),
+            );
+            break;
         }
+        window.resize(abi::MEMREAD_LEN, 0);
+        out.extend_from_slice(&window);
         addr += abi::MEMREAD_LEN as u64;
     }
-    out
+    out.truncate((end - start as u64).min(out.len() as u64) as usize);
+    MemRead {
+        data: out,
+        good,
+        failed,
+        short,
+    }
+}
+
+/// Warn when a capture contains zero-filled windows (short or unreadable replies).
+fn warn_mem_faults(label: &str, short: usize, failed: usize) {
+    if short + failed == 0 {
+        return;
+    }
+    eprintln!(
+        "{}",
+        style::status_line(
+            label,
+            &format!("{short} short and {failed} unreadable window(s), zero-filled"),
+            style::Status::Warn
+        )
+    );
 }
 
 /// The decrypted-image regions captured by `--full`: flash + the RAM banks the
@@ -467,7 +523,9 @@ fn cmd_info(
                     style::Status::Ok
                 )
             );
-            let data = mem_read(dev.as_mut(), start, cap, true);
+            let read = mem_read(dev.as_mut(), start, cap, true);
+            warn_mem_faults("region", read.short, 0);
+            let data = read.data;
             let file = prefix.with_file_name(format!(
                 "{}-{start:08x}.bin",
                 prefix
@@ -502,7 +560,20 @@ fn cmd_info(
         )? as u64;
         let mut dev =
             platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
-        let data = mem_read(dev.as_mut(), start, length, false);
+        if start as u64 + length > 1u64 << 32 {
+            eprintln!(
+                "{}",
+                style::status_line(
+                    "dump",
+                    "range exceeds the 32-bit address space; clamped",
+                    style::Status::Warn
+                )
+            );
+        }
+        let read = mem_read(dev.as_mut(), start, length, false);
+        warn_mem_faults("dump", read.short, read.failed);
+        let nothing_captured = read.good == 0 && read.short + read.failed > 0;
+        let data = read.data;
         match out {
             Some(o) => {
                 diagnostics::write(o, &data).with_context(|| format!("writing {}", o.display()))?;
@@ -526,7 +597,11 @@ fn cmd_info(
                 }
             }
         }
-        return Ok(ExitCode::SUCCESS);
+        return Ok(if nothing_captured {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        });
     }
 
     // No dump flags: identity probe (reuse the verify-device path).
@@ -662,7 +737,11 @@ fn cmd_create_configured(
         path.to_path_buf()
     } else {
         let dest = out.unwrap_or_else(|| default_created_path(path));
-        if dest == path {
+        let same_file = match (std::fs::canonicalize(&dest), std::fs::canonicalize(path)) {
+            (Ok(d), Ok(p)) => d == p,
+            _ => dest == path,
+        };
+        if same_file {
             return Err(anyhow::anyhow!(
                 "refusing to overwrite the input ({}); pass --in-place or a different output path",
                 path.display()

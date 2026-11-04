@@ -114,6 +114,27 @@ fn classify_plain_path_is_file() {
 }
 
 #[test]
+fn classify_windows_device_namespace_path_is_device() {
+    // String-based, so it holds on every host.
+    for p in [r"\\.\CdRom0", r"\\?\CdRom0"] {
+        assert_eq!(classify_verify_target(Path::new(p)), VerifyTarget::Device);
+    }
+    assert_eq!(
+        classify_verify_target(Path::new(r"fw\CdRom0.bin")),
+        VerifyTarget::File
+    );
+}
+
+#[test]
+fn identity_probe_error_is_named_not_reported_as_stock() {
+    let detail = not_detected_detail(&Err(anyhow::anyhow!("timeout")));
+    assert!(detail.contains("timeout"), "{detail}");
+    assert!(!detail.contains("stock/OEM"), "{detail}");
+    let stock = not_detected_detail(&Ok(vec![0u8; 4]));
+    assert!(stock.contains("stock/OEM"), "{stock}");
+}
+
+#[test]
 fn classify_dev_prefixed_path_is_device() {
     // Purely path-based: doesn't need the node to actually exist, so this
     // runs the same on every host including CI.
@@ -242,7 +263,7 @@ fn mem_read_walks_fixed_windows_and_returns_exactly_the_requested_length() {
     let len = (windows * abi::MEMREAD_LEN) as u64;
     let mut dev = WindowMem::all_readable();
 
-    let out = mem_read(&mut dev, start, len, false);
+    let out = mem_read(&mut dev, start, len, false).data;
 
     assert_eq!(
         out.len(),
@@ -268,7 +289,7 @@ fn mem_read_of_a_zero_length_range_issues_no_commands_at_all() {
     // The loop bound is `addr < end`, not `<=`: a zero-length dump must not
     // poke the drive even once.
     let mut dev = WindowMem::all_readable();
-    let out = mem_read(&mut dev, 0x1000, 0, false);
+    let out = mem_read(&mut dev, 0x1000, 0, false).data;
     assert!(out.is_empty(), "a zero-length dump must return no bytes");
     assert!(
         dev.reads.is_empty(),
@@ -288,7 +309,7 @@ fn mem_read_auto_stop_drops_the_trailing_fault_fill_after_the_threshold() {
     let fail_from = start + (good * abi::MEMREAD_LEN) as u32;
     let mut dev = WindowMem::failing_from(fail_from);
 
-    let out = mem_read(&mut dev, start, 0x1_0000, true);
+    let out = mem_read(&mut dev, start, 0x1_0000, true).data;
 
     assert_eq!(
         out.len(),
@@ -352,7 +373,7 @@ fn mem_read_auto_stop_counts_only_consecutive_faults() {
         .collect();
     let mut dev = Intermittent { readable, reads: 0 };
 
-    let out = mem_read(&mut dev, start, (windows * abi::MEMREAD_LEN) as u64, true);
+    let out = mem_read(&mut dev, start, (windows * abi::MEMREAD_LEN) as u64, true).data;
 
     assert_eq!(
         out.len(),
@@ -388,7 +409,7 @@ fn mem_read_without_auto_stop_zero_fills_every_fault_and_reads_the_whole_range()
     let windows = 40usize; // far more than STOP_AFTER consecutive faults
     let mut dev = WindowMem::failing_from(start + abi::MEMREAD_LEN as u32);
 
-    let out = mem_read(&mut dev, start, (windows * abi::MEMREAD_LEN) as u64, false);
+    let out = mem_read(&mut dev, start, (windows * abi::MEMREAD_LEN) as u64, false).data;
 
     assert_eq!(
         out.len(),
@@ -978,4 +999,94 @@ fn cli_custom_defaults_match_base_and_can_edit_a_generated_image() {
         .unwrap()
         .unwrap();
     assert_eq!(read.flags(), reset.defaults.flags());
+}
+
+// -- mem_read -------------------------------------------------------------
+
+struct MemMock {
+    reply: Box<dyn FnMut() -> Result<Vec<u8>>>,
+    addrs: Vec<u32>,
+}
+
+impl freemkv_flash::platform::ScsiDevice for MemMock {
+    fn command_in(&mut self, cdb: &[u8], _alloc_len: usize) -> Result<Vec<u8>> {
+        self.addrs
+            .push(u32::from_be_bytes([cdb[5], cdb[6], cdb[7], cdb[8]]));
+        (self.reply)()
+    }
+    fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+        unreachable!()
+    }
+    fn describe(&self) -> String {
+        "mock".into()
+    }
+}
+
+fn mem_mock(reply: impl FnMut() -> Result<Vec<u8>> + 'static) -> MemMock {
+    MemMock {
+        reply: Box::new(reply),
+        addrs: Vec::new(),
+    }
+}
+
+#[test]
+fn mem_read_clamps_to_the_32_bit_address_space() {
+    let mut dev = mem_mock(|| Ok(vec![0x11; abi::MEMREAD_LEN]));
+    let r = mem_read(&mut dev, 0xFFFF_FFC0, 0x100, false);
+    assert_eq!(r.data.len(), 64);
+    assert_eq!(dev.addrs, vec![0xFFFF_FFC0]);
+}
+
+#[test]
+fn mem_read_counts_short_replies_as_faults_for_auto_stop() {
+    let mut dev = mem_mock(|| Ok(vec![0xAA; 16]));
+    let r = mem_read(&mut dev, 0x1000, 0x10_0000, true);
+    assert_eq!(dev.addrs.len(), 16, "auto-stop must end the read");
+    assert_eq!((r.short, r.good, r.failed), (16, 0, 0));
+}
+
+#[test]
+fn mem_read_returns_exactly_the_requested_length() {
+    let mut dev = mem_mock(|| Ok(vec![0x22; abi::MEMREAD_LEN]));
+    assert_eq!(mem_read(&mut dev, 0x1000, 0x10, false).data.len(), 0x10);
+    assert_eq!(mem_read(&mut dev, 0x1000, 0x41, false).data.len(), 0x41);
+}
+
+#[test]
+fn mem_read_reports_failed_windows() {
+    let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
+    let r = mem_read(&mut dev, 0x1000, 0x100, false);
+    assert_eq!((r.good, r.failed), (0, 4));
+    assert_eq!(r.data, vec![0u8; 0x100]);
+}
+
+#[test]
+fn audit_conflicts_with_the_strict_base_build() {
+    let err = Cli::try_parse_from(["freemkv-fw", "create", "--base", "--audit", "in.bin"])
+        .expect_err("--base with --audit must be rejected");
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn output_naming_the_input_through_another_spelling_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("fw.bin");
+    std::fs::write(&input, bu40n_fixture()).unwrap();
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+    let settings = CreateSettings {
+        defaults: BootSettings::standard(),
+        dry_run: false,
+    };
+    let err = cmd_create_configured(
+        &input,
+        Some(dir.path().join("sub").join("..").join("fw.bin")),
+        false,
+        false,
+        false,
+        false,
+        &settings,
+    )
+    .expect_err("the input must not be overwritten without --in-place");
+    assert!(format!("{err:#}").contains("refusing to overwrite the input"));
+    assert_eq!(std::fs::read(&input).unwrap(), bu40n_fixture());
 }
