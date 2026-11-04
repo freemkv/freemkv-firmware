@@ -427,12 +427,12 @@ fn empty_or_relative_xdg_directories_fall_through() {
     use std::ffi::OsString;
     let some = |s: &str| Some(OsString::from(s));
     assert_eq!(
-        linux_log_directory(some(""), some("/cache"), some("/home/u")),
+        linux_log_directory(some(""), some("/cache"), some("/fake-home")),
         Some(PathBuf::from("/cache/freemkv/logs"))
     );
     assert_eq!(
-        linux_log_directory(some("rel"), some("rel2"), some("/home/u")),
-        Some(PathBuf::from("/home/u/.cache/freemkv/logs"))
+        linux_log_directory(some("rel"), some("rel2"), some("/fake-home")),
+        Some(PathBuf::from("/fake-home/.cache/freemkv/logs"))
     );
     assert_eq!(
         linux_log_directory(some("/state"), None, None),
