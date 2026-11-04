@@ -1179,6 +1179,10 @@ fn modify_is_idempotent_over_corpus() {
         checked,
         fails.join("\n")
     );
+    assert!(
+        files.is_empty() || checked > 0,
+        "no corpus image was modifiable/checked"
+    );
     eprintln!("idempotency OK over {checked} modifiable corpus images");
 }
 
@@ -1213,6 +1217,10 @@ fn structural_audit_passes_over_corpus() {
         fails.len(),
         checked,
         fails.join("\n")
+    );
+    assert!(
+        files.is_empty() || checked > 0,
+        "no corpus image was modifiable/checked"
     );
     eprintln!("structural audit OK over {checked} modifiable corpus images");
 }
