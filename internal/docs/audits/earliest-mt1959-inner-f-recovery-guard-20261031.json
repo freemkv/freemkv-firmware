@@ -2,7 +2,7 @@
   "schema": "native-inner-w-recovery-guard-v2",
   "status": "passed",
   "source_sha256": "c88a69013d557b9c4cf1a4d603c314585f51a258b9747c345184e866eef36306",
-  "cpu": "ARM926",
+  "cpu": "Cortex-A8",
   "unicorn": "2.1.4",
   "entry": 1157688,
   "state_cell": 33529327,
@@ -121,8 +121,8 @@
       1157714
     ]
   ],
-  "trace_sha256": "68f4761c2e7368549a14bb0de4e8e1ba47ebc4d04bcefb22b9353ff7b5e4c745",
-  "suite_sha256": "a57f5f81afad537e8fdeeeed3f51bd9441461ee8204bc32d4bd16529afbf8d70",
+  "trace_sha256": "ab394a3dc82e9f0c338d427709c50b6fc2ce0ffbbb4871d2de40636c0dd2e820",
+  "suite_sha256": "e7513f195778d758a3ba235179bd4f24211ac1d4a9dee3c9ff4c0118e5405627",
   "limits": [
     "Only native inner guard is executed",
     "No calls are replaced or returned as success",
