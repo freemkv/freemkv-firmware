@@ -248,15 +248,7 @@ enum VerifyTarget {
     Device,
 }
 
-/// Classify `path` for `verify`'s dual-mode dispatch.
-///
-/// A path is treated as a device if it looks like a device path (starts with
-/// `/dev/`, which also covers `/dev/sg*`, or a Windows `\\.\` / `\\?\`
-/// device-namespace path) or — when it already exists on
-/// disk — its filesystem metadata says it is a character or block special
-/// file. Anything else, including a plain path that doesn't exist yet, is
-/// treated as a file, so the ordinary "no such file" error still fires for a
-/// typo'd image path instead of being swallowed by device-probe logic.
+/// True for a Windows device-namespace path; `\\?\` drive and UNC paths are files.
 fn is_windows_device_path(s: &str) -> bool {
     if s.starts_with(r"\\.\") {
         return true;
@@ -270,6 +262,15 @@ fn is_windows_device_path(s: &str) -> bool {
     !drive_path && !rest.to_ascii_uppercase().starts_with(r"UNC\")
 }
 
+/// Classify `path` for `verify`'s dual-mode dispatch.
+///
+/// A path is treated as a device if it looks like a device path (starts with
+/// `/dev/`, which also covers `/dev/sg*`, or a Windows `\\.\` / `\\?\`
+/// device-namespace path, but not `\\?\X:\` drive or `\\?\UNC\` file paths) or — when it already exists on
+/// disk — its filesystem metadata says it is a character or block special
+/// file. Anything else, including a plain path that doesn't exist yet, is
+/// treated as a file, so the ordinary "no such file" error still fires for a
+/// typo'd image path instead of being swallowed by device-probe logic.
 fn classify_verify_target(path: &Path) -> VerifyTarget {
     if path.starts_with("/dev/") || path.to_str().is_some_and(is_windows_device_path) {
         return VerifyTarget::Device;
@@ -514,6 +515,55 @@ const FULL_REGIONS: &[(u32, u64)] = &[
     (0x01c0_0000, 0x0044_0000), // firmware RAM: data bank, overlay, resident lib, SRAM
 ];
 
+/// Emit a `--dump` result: write `out`, or hex-print when absent. When nothing
+/// was captured the file is not written, so a zero fill is never published.
+fn write_dump(
+    out: Option<&Path>,
+    start: u32,
+    length: u64,
+    data: &[u8],
+    nothing_captured: bool,
+) -> Result<ExitCode> {
+    match out {
+        Some(o) if nothing_captured => {
+            eprintln!(
+                "{}",
+                style::status_line(
+                    "dump",
+                    &format!("no readable data; not writing {}", o.display()),
+                    style::Status::Fail
+                )
+            );
+        }
+        Some(o) => {
+            diagnostics::write(o, data).with_context(|| format!("writing {}", o.display()))?;
+            println!(
+                "{}",
+                style::status_line(
+                    "dump",
+                    &format!(
+                        "0x{start:08x} +0x{length:x} -> {} ({} bytes)",
+                        o.display(),
+                        data.len()
+                    ),
+                    style::Status::Ok
+                )
+            );
+        }
+        None => {
+            for (i, chunk) in data.chunks(16).enumerate() {
+                let hex: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
+                println!("{:08x}  {hex}", start as usize + i * 16);
+            }
+        }
+    }
+    Ok(if nothing_captured {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
 fn cmd_info(
     device: &Path,
     dump: Option<&str>,
@@ -589,44 +639,7 @@ fn cmd_info(
         warn_mem_faults("dump", read.short, read.failed);
         let nothing_captured = read.captured_nothing();
         let data = read.data;
-        match out {
-            Some(o) if nothing_captured => {
-                eprintln!(
-                    "{}",
-                    style::status_line(
-                        "dump",
-                        &format!("no readable data; not writing {}", o.display()),
-                        style::Status::Fail
-                    )
-                );
-            }
-            Some(o) => {
-                diagnostics::write(o, &data).with_context(|| format!("writing {}", o.display()))?;
-                println!(
-                    "{}",
-                    style::status_line(
-                        "dump",
-                        &format!(
-                            "0x{start:08x} +0x{length:x} -> {} ({} bytes)",
-                            o.display(),
-                            data.len()
-                        ),
-                        style::Status::Ok
-                    )
-                );
-            }
-            None => {
-                for (i, chunk) in data.chunks(16).enumerate() {
-                    let hex: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
-                    println!("{:08x}  {hex}", start as usize + i * 16);
-                }
-            }
-        }
-        return Ok(if nothing_captured {
-            ExitCode::FAILURE
-        } else {
-            ExitCode::SUCCESS
-        });
+        return write_dump(out, start, length, &data, nothing_captured);
     }
 
     // No dump flags: identity probe (reuse the verify-device path).

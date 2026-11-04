@@ -1158,3 +1158,15 @@ fn a_read_where_every_window_failed_captured_nothing() {
     let mut ok = mem_mock(|| Ok(vec![1; abi::MEMREAD_LEN]));
     assert!(!mem_read(&mut ok, 0x1000, 0x100, false).captured_nothing());
 }
+
+#[test]
+fn dump_of_an_all_failed_read_writes_no_file_and_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("dump.bin");
+    let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
+    let read = mem_read(&mut dev, 0x1000, 0x100, false);
+    let nothing = read.captured_nothing();
+    let code = write_dump(Some(&out), 0x1000, 0x100, &read.data, nothing).unwrap();
+    assert!(!out.exists(), "an all-zero dump must not be published");
+    assert_eq!(code, ExitCode::FAILURE);
+}
