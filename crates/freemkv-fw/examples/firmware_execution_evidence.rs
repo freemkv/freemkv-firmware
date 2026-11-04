@@ -50,10 +50,10 @@ fn main() -> Result<()> {
     let source_hash = digest(&input);
     let artifact = match Artifact::parse(input) {
         Ok(a) => a,
-        Err(_) => {
+        Err(error) => {
             println!(
                 "{}",
-                json!({"input_sha256":source_hash,"status":"invalid-input"})
+                json!({"input_sha256":source_hash,"status":"invalid-input","reason":format!("{error:#}")})
             );
             return Ok(());
         }
