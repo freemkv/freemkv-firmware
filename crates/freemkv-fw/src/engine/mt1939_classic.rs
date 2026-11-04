@@ -99,6 +99,18 @@ const AKE_GATE_SIG_CLASSIC_SPLIT: &[(u16, u16)] = &[
     (0xf800, 0xf800),
 ];
 
+/// Attach the conversion hook to RawRead; an applied conversion makes the
+/// lever Applied so the auditor checks its atomic group.
+fn attach_classic_conversion(levers: &mut [LeverReport], conversion: HookReport, count: u32) {
+    if let Some(raw_read) = levers.iter_mut().find(|l| l.id == LeverId::RawRead) {
+        raw_read.hooks.push(conversion);
+        raw_read.facts.push(("uhd_conversion_count", count));
+        if count > 0 && raw_read.outcome != super::lever::LeverOutcome::Applied {
+            raw_read.outcome = super::lever::LeverOutcome::Applied;
+        }
+    }
+}
+
 impl Mt1959Engine {
     pub(super) fn emit_media_conversion_classic(
         &self,
@@ -704,10 +716,7 @@ impl Mt1959Engine {
         });
 
         let (conversion, count) = self.emit_media_conversion_classic(image, &mut out, flag_base);
-        if let Some(raw_read) = levers.iter_mut().find(|l| l.id == LeverId::RawRead) {
-            raw_read.hooks.push(conversion);
-            raw_read.facts.push(("uhd_conversion_count", count));
-        }
+        attach_classic_conversion(&mut levers, conversion, count);
 
         // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));

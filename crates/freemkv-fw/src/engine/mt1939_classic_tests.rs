@@ -1301,3 +1301,20 @@ fn commit_classic_detour_leaves_the_image_untouched_on_decode_back_mismatch() {
     assert_eq!(result, None);
     assert!(out == before, "a refused detour must not modify the image");
 }
+
+#[test]
+fn applied_conversion_promotes_a_missed_rawread_lever() {
+    let mut levers = vec![LeverReport::missed(LeverId::RawRead, "gates missed")];
+    let conversion = HookReport::applied("uhd-conversion", "complete media group: classic 2");
+    attach_classic_conversion(&mut levers, conversion, 2);
+    assert_eq!(levers[0].outcome, LeverOutcome::Applied);
+    assert!(levers[0].facts.contains(&("uhd_conversion_count", 2)));
+
+    let mut levers = vec![LeverReport::missed(LeverId::RawRead, "gates missed")];
+    let conversion = HookReport::unavailable("uhd-conversion", "0 conversion edits");
+    attach_classic_conversion(&mut levers, conversion, 0);
+    assert!(matches!(
+        levers[0].outcome,
+        LeverOutcome::SignatureNotFound { .. }
+    ));
+}
