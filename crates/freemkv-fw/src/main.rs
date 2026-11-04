@@ -409,45 +409,86 @@ fn parse_u32(s: &str) -> Result<u32> {
     Ok(v)
 }
 
+/// Result of [`mem_read`]: the bytes plus how many windows read cleanly, failed,
+/// or came back short (zero-padded in `data`).
+struct MemRead {
+    data: Vec<u8>,
+    good: usize,
+    failed: usize,
+    short: usize,
+}
+
 /// Read `len` bytes starting at `start` via [`abi::Verb::DumpAll`], in
 /// [`abi::MEMREAD_LEN`]-byte windows. When `auto_stop`, a run of consecutive
-/// unreadable windows (transport/sense error) ends the read early — the natural
-/// "end of mapped memory" signal. Unreadable windows before the run are
-/// zero-filled to keep byte offsets aligned to `start`. Returns the bytes read.
-fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop: bool) -> Vec<u8> {
+/// unreadable or short windows ends the read early — the natural "end of mapped
+/// memory" signal. Bad windows before the run are zero-filled to keep byte
+/// offsets aligned to `start`. The range is clamped to the 32-bit address space
+/// and the data is trimmed to the requested length.
+fn mem_read(dev: &mut dyn platform::ScsiDevice, start: u32, len: u64, auto_stop: bool) -> MemRead {
     const STOP_AFTER: u32 = 16; // consecutive faults = end of region
                                 // Cap the up-front reservation: `--dump --len` is user-supplied and can be up
                                 // to 4 GiB, which would abort the process on `with_capacity` before a single
                                 // SCSI command issues. The Vec still grows to the full length as it reads.
     const RESERVE_CAP: u64 = 0x0400_0000; // 64 MiB
     let mut out = Vec::with_capacity(len.min(RESERVE_CAP) as usize);
+    let (mut good, mut failed, mut short) = (0usize, 0usize, 0usize);
     let mut faults = 0u32;
     let mut addr = start as u64;
-    let end = start as u64 + len;
+    let end = (start as u64 + len).min(1u64 << 32);
     while addr < end {
         let cdb = abi::build_memread_cdb(addr as u32);
-        match dev.command_in(&cdb, abi::MEMREAD_LEN) {
-            Ok(mut d) => {
+        let mut window = match dev.command_in(&cdb, abi::MEMREAD_LEN) {
+            Ok(d) if d.len() >= abi::MEMREAD_LEN => {
+                good += 1;
                 faults = 0;
-                d.resize(abi::MEMREAD_LEN, 0);
                 out.extend_from_slice(&d);
+                addr += abi::MEMREAD_LEN as u64;
+                continue;
+            }
+            Ok(d) => {
+                short += 1;
+                d
             }
             Err(_) => {
-                faults += 1;
-                if auto_stop && faults >= STOP_AFTER {
-                    // drop the trailing all-fault fill and stop
-                    out.truncate(
-                        out.len()
-                            .saturating_sub(((faults - 1) as usize) * abi::MEMREAD_LEN),
-                    );
-                    break;
-                }
-                out.extend_from_slice(&[0u8; abi::MEMREAD_LEN]);
+                failed += 1;
+                Vec::new()
             }
+        };
+        faults += 1;
+        if auto_stop && faults >= STOP_AFTER {
+            // drop the trailing all-fault fill and stop
+            out.truncate(
+                out.len()
+                    .saturating_sub(((faults - 1) as usize) * abi::MEMREAD_LEN),
+            );
+            break;
         }
+        window.resize(abi::MEMREAD_LEN, 0);
+        out.extend_from_slice(&window);
         addr += abi::MEMREAD_LEN as u64;
     }
-    out
+    out.truncate((end - start as u64).min(out.len() as u64) as usize);
+    MemRead {
+        data: out,
+        good,
+        failed,
+        short,
+    }
+}
+
+/// Warn when a capture contains zero-filled windows (short or unreadable replies).
+fn warn_mem_faults(label: &str, short: usize, failed: usize) {
+    if short + failed == 0 {
+        return;
+    }
+    eprintln!(
+        "{}",
+        style::status_line(
+            label,
+            &format!("{short} short and {failed} unreadable window(s), zero-filled"),
+            style::Status::Warn
+        )
+    );
 }
 
 /// The decrypted-image regions captured by `--full`: flash + the RAM banks the
@@ -482,7 +523,9 @@ fn cmd_info(
                     style::Status::Ok
                 )
             );
-            let data = mem_read(dev.as_mut(), start, cap, true);
+            let read = mem_read(dev.as_mut(), start, cap, true);
+            warn_mem_faults("region", read.short, 0);
+            let data = read.data;
             let file = prefix.with_file_name(format!(
                 "{}-{start:08x}.bin",
                 prefix
@@ -517,7 +560,20 @@ fn cmd_info(
         )? as u64;
         let mut dev =
             platform::open(&path_str, false).with_context(|| format!("opening {path_str}"))?;
-        let data = mem_read(dev.as_mut(), start, length, false);
+        if start as u64 + length > 1u64 << 32 {
+            eprintln!(
+                "{}",
+                style::status_line(
+                    "dump",
+                    "range exceeds the 32-bit address space; clamped",
+                    style::Status::Warn
+                )
+            );
+        }
+        let read = mem_read(dev.as_mut(), start, length, false);
+        warn_mem_faults("dump", read.short, read.failed);
+        let nothing_captured = read.good == 0 && read.short + read.failed > 0;
+        let data = read.data;
         match out {
             Some(o) => {
                 diagnostics::write(o, &data).with_context(|| format!("writing {}", o.display()))?;
@@ -541,7 +597,11 @@ fn cmd_info(
                 }
             }
         }
-        return Ok(ExitCode::SUCCESS);
+        return Ok(if nothing_captured {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        });
     }
 
     // No dump flags: identity probe (reuse the verify-device path).
