@@ -431,8 +431,10 @@ pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     capture(dev, false)
 }
 
-/// Recover: same capture, but a failing chunk is retried before giving up;
-/// a chunk that never reads means no backup. Issues no flash commands.
+/// Retrying capture: a failing chunk is retried before giving up, and a chunk
+/// that never reads fails its region (same Kernel-only partial rule as
+/// [`capture`]). No command uses it yet; `recover` uses the strict capture.
+/// Issues no flash commands.
 pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     capture(dev, true)
 }
@@ -440,7 +442,7 @@ pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
 /// Capture and verify Kernel, derive Normal geometry from it, then capture Normal.
 /// A valid Kernel and supported capture layout are required. A failed Normal
 /// capture preserves Kernel in a partial archive; it cannot authorize a flash
-/// that would overwrite Normal. `deep` selects salvage reads for failed regions.
+/// that would overwrite Normal. `deep` retries a failing chunk before failing.
 fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
     let (inquiry, hardware, kernel_len) = read_identity(dev)?;
     prepare_firmware_read(dev)?;
@@ -684,15 +686,19 @@ fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Resul
 
 /// Read `off..off+n` up to `DEEP_RETRIES` times. Every attempt re-knocks (the
 /// crate's `read_memory` unlocks before each read), covering a drive that
-/// dropped out of read mode. `None` if every attempt failed.
-fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Option<Vec<u8>> {
+/// dropped out of read mode. Returns the last error if every attempt failed.
+fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Result<Vec<u8>> {
+    let mut last = anyhow::anyhow!("no read attempted");
     for attempt in 1..=DEEP_RETRIES {
         match read_chunk(dev, off, n) {
-            Ok(data) => return Some(data),
-            Err(error) => crate::diagnostics::record(format!("recover read failed: address={off:#x} length={n} attempt={attempt}/{DEEP_RETRIES} error={error:#}")),
+            Ok(data) => return Ok(data),
+            Err(error) => {
+                crate::diagnostics::record(format!("recover read failed: address={off:#x} length={n} attempt={attempt}/{DEEP_RETRIES} error={error:#}"));
+                last = error;
+            }
         }
     }
-    None
+    Err(last)
 }
 
 /// Shared H8/SAT image map observed in decoded Kernels from 28 hardware
