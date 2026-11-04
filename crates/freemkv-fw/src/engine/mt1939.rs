@@ -205,26 +205,24 @@ impl Engine for Mt1939Engine {
         // signature misses (e.g. a JB8-base image whose VID uses classic
         // scheduling) is reported SignatureNotFound by the never-abort driver, so
         // the image still partial-applies.
-        if !is_classic(image) {
-            if let Ok(mut report) =
-                Mt1959Engine.build_modify_with_defaults(image, &chip, &cap, defaults)
-            {
-                report.engine = "MT1939";
-                return Ok(report);
+        // A failed base build degrades to the DE-only path below (never refuse).
+        let base_err = if is_classic(image) {
+            // Classic generation uses its own source-qualified feature and
+            // conversion builders.
+            match Mt1959Engine.build_modify_classic_with_defaults(image, &chip, &cap, defaults) {
+                Ok(report) => return Ok(report),
+                Err(error) => error,
             }
-            // Fall through to the DE-only path if the shared build unexpectedly
-            // fails on a non-classic image (degrade, never refuse).
-        }
-
-        // Classic generation uses its own source-qualified feature and conversion
-        // builders. A missing base falls back to downgrade-enable below.
-        if is_classic(image) {
-            if let Ok(report) =
-                Mt1959Engine.build_modify_classic_with_defaults(image, &chip, &cap, defaults)
-            {
-                return Ok(report);
+        } else {
+            match Mt1959Engine.build_modify_with_defaults(image, &chip, &cap, defaults) {
+                Ok(mut report) => {
+                    report.engine = "MT1939";
+                    return Ok(report);
+                }
+                Err(error) => error,
             }
-        }
+        };
+        let degraded = format!("base build failed: {base_err:#}; downgrade-enable only");
 
         // Family-agnostic downgrade-enable remains available when the base fails.
         // No absent feature hook becomes an advertised setting.
@@ -246,13 +244,9 @@ impl Engine for Mt1939Engine {
         };
         levers.push(de);
 
-        // In scope for these BD-writer parts, but the classic-generation emit is
-        // pending its Identity base — report precisely (never-abort partial).
-        levers.push(LeverReport::missed(
-            LeverId::RegionFree,
-            "MT1939 classic generation — RPC emitter transfers but the flag-gated \
-             detour needs the classic Identity base (sense-setter + injected handler)",
-        ));
+        // In scope for these BD-writer parts, but the base build failed — report
+        // the real cause (never-abort partial).
+        levers.push(LeverReport::missed(LeverId::RegionFree, degraded.clone()));
         // Raw read: the classic VID + AKE gates are reversed and proven-unique; when
         // both are located we report their offsets so the image is auditably
         // wireable, with only the classic Identity base + detour still pending.
@@ -260,9 +254,9 @@ impl Engine for Mt1939Engine {
             Some((vid_gate, ake_gate)) => LeverReport {
                 id: LeverId::RawRead,
                 outcome: super::lever::LeverOutcome::SignatureNotFound {
-                    detail: "classic VID + AKE gates located (reversed, proven-unique); full \
-                             raw-read detour pending the classic Identity base"
-                        .to_string(),
+                    detail: format!(
+                        "classic VID + AKE gates located (reversed, proven-unique); {degraded}"
+                    ),
                 },
                 hooks: vec![],
                 facts: vec![
@@ -272,13 +266,10 @@ impl Engine for Mt1939Engine {
             },
             None => LeverReport::missed(
                 LeverId::RawRead,
-                "MT1939 classic generation — VID/AKE gate anchors not located in this image",
+                format!("VID/AKE gate anchors not located in this image; {degraded}"),
             ),
         });
-        levers.push(LeverReport::missed(
-            LeverId::Speed,
-            "Read-speed control requires the classic CDB base and boot hook; this image did not establish that complete contract",
-        ));
+        levers.push(LeverReport::missed(LeverId::Speed, degraded));
 
         if !levers.iter().any(|l| l.outcome.is_effective()) {
             bail!(
