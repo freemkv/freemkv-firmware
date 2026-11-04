@@ -77,7 +77,14 @@ pub struct FwApp {
     fields: Vec<(String, String)>,
     running: bool,
     rx: Option<Receiver<Msg>>,
+    discover_rx: Option<Receiver<Discovered>>,
+    /// Test seam: enumerate drives with this instead of the host's real drives.
+    #[cfg(test)]
+    enumerator: Option<std::sync::Arc<dyn Fn() -> Vec<DriveChoice> + Send + Sync>>,
 }
+
+/// A finished drive scan: its drives and events, or `None` if the scan panicked.
+type Discovered = Option<(Vec<DriveChoice>, Vec<freemkv_flash::output::Event>)>;
 
 impl FwApp {
     fn diagnostic_text(&self) -> std::io::Result<String> {
@@ -159,23 +166,63 @@ impl FwApp {
             fields: Vec::new(),
             running: false,
             rx: None,
+            discover_rx: None,
+            #[cfg(test)]
+            enumerator: None,
         }
     }
 
-    fn discover(&mut self) {
-        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let captured = events.clone();
-        let devices = freemkv_flash::output::capture_events(
-            move |event| captured.lock().unwrap().push(event),
-            || {
-                freemkv_fw::diagnostics::run("GUI discovery", || {
-                    Ok(freemkv_flash::workflow::drives())
-                })
-                .unwrap_or_default()
-            },
-        );
-        let events = std::mem::take(&mut *events.lock().unwrap());
-        self.apply_discovery(devices, events);
+    /// Scan on a worker: a slow or wedged drive must not freeze the window.
+    fn discover(&mut self, ctx: &egui::Context) {
+        if self.discover_rx.is_some() {
+            return;
+        }
+        #[cfg(test)]
+        let enumerate = self.enumerator.clone();
+        let (tx, rx) = mpsc::channel();
+        self.discover_rx = Some(rx);
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+                let captured = events.clone();
+                let devices = freemkv_flash::output::capture_events(
+                    move |event| captured.lock().unwrap().push(event),
+                    || {
+                        freemkv_fw::diagnostics::run("GUI discovery", || {
+                            #[cfg(test)]
+                            if let Some(enumerate) = &enumerate {
+                                return Ok(enumerate());
+                            }
+                            Ok(freemkv_flash::workflow::drives())
+                        })
+                        .unwrap_or_default()
+                    },
+                );
+                let events = std::mem::take(&mut *events.lock().unwrap());
+                (devices, events)
+            }));
+            let _ = tx.send(found.ok());
+            ctx.request_repaint();
+        });
+    }
+
+    fn poll_discovery(&mut self) {
+        let Some(rx) = &self.discover_rx else {
+            return;
+        };
+        let found = match rx.try_recv() {
+            Ok(found) => found,
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => None,
+        };
+        self.discover_rx = None;
+        match found {
+            Some((devices, events)) => self.apply_discovery(devices, events),
+            None => self
+                .log
+                .push("Drive scan stopped unexpectedly; the drive list was not changed.".into()),
+        }
     }
 
     fn apply_discovery(
@@ -285,6 +332,7 @@ impl FwApp {
     }
 
     fn pump(&mut self) {
+        self.poll_discovery();
         let mut finished = false;
         if let Some(rx) = &self.rx {
             loop {
@@ -515,7 +563,7 @@ impl FwApp {
                 if primary(
                     ui,
                     localization::get(self.language, "action.read_info"),
-                    !self.device.is_empty(),
+                    !self.device.is_empty() && self.discover_rx.is_none(),
                 )
                 .clicked()
                 {
@@ -693,10 +741,16 @@ impl FwApp {
                                         }
                                     });
                                 if ui
-                                    .button(localization::get(self.language, "action.refresh"))
+                                    .add_enabled(
+                                        self.discover_rx.is_none(),
+                                        egui::Button::new(localization::get(
+                                            self.language,
+                                            "action.refresh",
+                                        )),
+                                    )
                                     .clicked()
                                 {
-                                    self.discover();
+                                    self.discover(&ctx);
                                 }
                             });
                         } else {

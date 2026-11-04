@@ -321,3 +321,32 @@ fn refresh_keeps_a_displayed_failure_log() {
     );
     assert_eq!(app.diagnostic_log, Some("probe.log".into()));
 }
+
+#[test]
+fn refresh_enumerates_drives_off_the_ui_thread() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    let (release, gate) = mpsc::channel::<()>();
+    let gate = std::sync::Mutex::new(gate);
+    app.enumerator = Some(std::sync::Arc::new(move || {
+        let _ = gate
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2));
+        vec![DriveChoice {
+            path: "drive-a".into(),
+            name: "drive-a".into(),
+            label: "Drive A".into(),
+        }]
+    }));
+    let started = std::time::Instant::now();
+    app.discover(&egui::Context::default());
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    assert!(app.discover_rx.is_some());
+    release.send(()).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while app.discover_rx.is_some() && std::time::Instant::now() < deadline {
+        app.pump();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert_eq!(app.device, "drive-a");
+}
