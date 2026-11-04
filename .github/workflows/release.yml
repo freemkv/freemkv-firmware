@@ -834,7 +834,13 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - name: Refresh the freemkv.org APT repository
+      # The rpm/arch packages come from the promoted QA artifacts; refresh their repos too.
+      - name: Refresh the freemkv.org APT, rpm and arch repositories
         env:
           GH_TOKEN: ${{ secrets.ORG_DISPATCH_TOKEN }}
-        run: gh api repos/freemkv/marketing/dispatches -f event_type=apt-refresh
+        run: |
+          rc=0
+          gh api repos/freemkv/marketing/dispatches -f event_type=apt-refresh || rc=1
+          gh api repos/freemkv/marketing/dispatches -f event_type=rpm-refresh || rc=1
+          gh api repos/freemkv/marketing/dispatches -f event_type=arch-refresh || rc=1
+          exit $rc

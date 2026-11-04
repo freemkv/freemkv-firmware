@@ -115,5 +115,12 @@ class PromotionTests(unittest.TestCase):
         self.assertIn('needs.promote-qa.result', text)
 
 
+    def test_release_refreshes_rpm_and_arch_repositories(self):
+        text = Path('.github/workflows/release.yml').read_text()
+        job = text.split('\n  apt:\n', 1)[1]
+        self.assertIn('needs: [promote-qa]', job)
+        for event in ('apt-refresh', 'rpm-refresh', 'arch-refresh'):
+            self.assertIn('event_type=' + event, job)
+
 if __name__ == '__main__':
     unittest.main()
