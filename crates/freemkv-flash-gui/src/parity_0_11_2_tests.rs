@@ -765,24 +765,27 @@ fn analysed(app: &mut App, result: ResultView) {
 
 #[test]
 fn inspect_a_or_b_from_a_comparison_matches_0_11_2() {
-    let mut app = pioneer_app();
-    app.dispatch(Input::SelectTask(Task::Compare));
-    let copy = temp("side-b.bin");
-    std::fs::copy(mtk_fixture(), &copy).unwrap();
-    let (a, b) = (Source::File(mtk_fixture()), Source::File(copy.clone()));
-    let report = workflow::compare(&a, &b, &Control::default()).unwrap();
-    std::fs::remove_file(&copy).unwrap();
-    let right = report.right.source.clone();
-    assert_ne!(right, report.left.source);
-    analysed(&mut app, ResultView::Compare(report));
-    // 0.11.2 `analysis_ui.rs:300-304`: the side becomes the Inspect source and result.
-    app.dispatch(Input::InspectSide(Side::B));
-    assert_eq!(app.task, Task::Inspect);
-    assert_eq!(
-        app.sources[0].as_ref().map(src),
-        Some(Src::Analyzed(right.clone()))
-    );
-    assert!(matches!(&app.analysis, Some(ResultView::Inspect(r)) if r.source == right));
+    for side in [Side::A, Side::B] {
+        let mut app = pioneer_app();
+        app.dispatch(Input::SelectTask(Task::Compare));
+        let copy = temp("side-b.bin");
+        std::fs::copy(mtk_fixture(), &copy).unwrap();
+        let (a, b) = (Source::File(mtk_fixture()), Source::File(copy.clone()));
+        let report = workflow::compare(&a, &b, &Control::default()).unwrap();
+        std::fs::remove_file(&copy).unwrap();
+        let (left, right) = (report.left.source.clone(), report.right.source.clone());
+        assert_ne!(right, left);
+        let chosen = if side == Side::A { left } else { right };
+        analysed(&mut app, ResultView::Compare(report));
+        // 0.11.2 `analysis_ui.rs:300-304`: the side becomes the Inspect source and result.
+        app.dispatch(Input::InspectSide(side));
+        assert_eq!(app.task, Task::Inspect);
+        assert_eq!(
+            app.sources[0].as_ref().map(src),
+            Some(Src::Analyzed(chosen.clone()))
+        );
+        assert!(matches!(&app.analysis, Some(ResultView::Inspect(r)) if r.source == chosen));
+    }
 }
 
 #[test]
