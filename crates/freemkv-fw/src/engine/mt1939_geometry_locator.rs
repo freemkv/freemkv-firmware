@@ -124,15 +124,21 @@ impl Copy {
             "DI copy controller register"
         );
         let leaf = target(data, block + 16, "bl")?;
+        let join = block
+            .checked_sub(10)
+            .context("DI second-copy join out of range")?;
+        let metadata_call = block
+            .checked_sub(6)
+            .context("DI metadata call out of range")?;
         ensure!(
-            target(data, block + 28, "b")? == block - 10,
+            target(data, block + 28, "b")? == join,
             "DI second-copy join"
         );
         ensure!(
-            target(data, block - 10, "bl")? == leaf,
+            target(data, join, "bl")? == leaf,
             "DI copy calls disagree"
         );
-        let _metadata = target(data, block - 6, "bl")?;
+        let _metadata = target(data, metadata_call, "bl")?;
         let entry = unique(
             find(
                 data,
@@ -571,5 +577,20 @@ mod tests {
         assert!(detect(&broken).is_err());
         let duplicated = [source.as_slice(), source.as_slice()].concat();
         assert!(detect(&duplicated).is_err());
+    }
+
+    #[test]
+    fn copy_signature_at_the_image_start_is_refused_not_underflowed() {
+        let code: [u16; 15] = [
+            0x490a, 0x6908, 0x2202, 0x4310, 0x6108, 0x6828, 0x2240, 0x0021, 0xf000, 0xf800,
+            0x6828, 0x2240, 0x18a1, 0x3070, 0xe000,
+        ];
+        let mut data = vec![0u8; 64];
+        for (i, op) in code.iter().enumerate() {
+            data[i * 2..i * 2 + 2].copy_from_slice(&op.to_le_bytes());
+        }
+        data[44..48].copy_from_slice(&0x0405_0000u32.to_le_bytes());
+        assert!(Copy::at(&data, 0).is_err());
+        assert!(Copy::detect(&data).is_err());
     }
 }
