@@ -41,6 +41,15 @@ pub fn write(path: &Path, bytes: &[u8]) -> Result<()> {
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     let mut staged = tempfile::NamedTempFile::new_in(parent).context("creating staged output")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(path).map_or(0o644, |m| m.permissions().mode() & 0o7777);
+        staged
+            .as_file()
+            .set_permissions(std::fs::Permissions::from_mode(mode))
+            .context("setting staged output permissions")?;
+    }
     staged.write_all(bytes).context("writing staged output")?;
     staged
         .as_file()
