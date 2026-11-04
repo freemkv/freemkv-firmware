@@ -1330,6 +1330,14 @@ fn applied_conversion_promotes_a_missed_rawread_lever() {
     let conversion = HookReport::applied("uhd-conversion", "complete media group: classic 2");
     attach_classic_conversion(&mut levers, conversion, 2);
     assert_eq!(levers[0].outcome, LeverOutcome::Applied);
+    assert!(
+        levers[0]
+            .hooks
+            .iter()
+            .any(|h| h.reason.as_deref().is_some_and(|r| r.contains("gates missed"))),
+        "the promoted lever must keep the miss detail: {:?}",
+        levers[0].hooks
+    );
     assert!(levers[0].facts.contains(&("uhd_conversion_count", 2)));
 
     let mut levers = vec![LeverReport::missed(LeverId::RawRead, "gates missed")];
