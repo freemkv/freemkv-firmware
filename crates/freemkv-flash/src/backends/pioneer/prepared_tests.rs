@@ -968,8 +968,14 @@ fn first_pass_readback_failure_prevents_any_restore_write() {
     drive.corrupt_after_finish = Some(1);
     let error = execute(&mut drive, &plan).unwrap_err();
     assert!(format!("{error:#}").contains("Initial Kernel readback differs"));
-    assert!(format!("{error:#}").contains("Initial Kernel readback differs"));
     assert_eq!(drive.finishes, 1);
+    let enter = pioneer_optical::cdb::enter_update();
+    assert_eq!(drive.writes.iter().filter(|w| w.0 == enter).count(), 1);
+    assert_eq!(
+        drive.writes.last().map(|w| w.0.clone()),
+        Some(pioneer_optical::cdb::finish().to_vec()),
+        "no write may follow the first pass"
+    );
 }
 #[test]
 fn prepared_flash_requires_matching_live_receiver_before_entry() {
