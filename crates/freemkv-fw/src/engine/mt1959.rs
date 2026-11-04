@@ -378,7 +378,6 @@ impl Mt1959Engine {
         let commands = analysis
             .commands()
             .context("nothing modifiable: native command ownership")?;
-        Self::sense_setter_at(image, commands.scanner().entry())?;
         let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)?;
         let ram = super::sram::SramPlacement::inspect(image);
         let flag_base = FLAG_TABLE_BASE;

@@ -1626,3 +1626,35 @@ fn response_writer_supports_immediate_shift_buffer_offsets() {
         (0xa192c, 0xda00)
     );
 }
+
+/// The scanner's sense-setter is a report-only anchor on both paths: an image
+/// whose scanner lacks the `movs r2/r1/r0 + bl` triple must still modify, and to
+/// the same bytes `create` produces.
+#[test]
+fn modify_does_not_require_the_report_only_sense_setter_anchor() {
+    let mut img = fixture();
+    let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(&img);
+    let entry = analysis.commands().unwrap().scanner().entry();
+    let hw = |image: &[u8], at: usize| u16::from_le_bytes([image[at], image[at + 1]]);
+    let is_movs = |image: &[u8], at: usize, rt: u16| {
+        (hw(image, at) & 0xF800) == 0x2000 && ((hw(image, at) >> 8) & 7) == rt
+    };
+    let triple = (entry..entry + 0x118)
+        .step_by(2)
+        .find(|&at| {
+            is_movs(&img, at, 2)
+                && is_movs(&img, at + 2, 1)
+                && is_movs(&img, at + 4, 0)
+                && super::thumb::decode_bl(&img, at + 6).is_some()
+        })
+        .expect("fixture scanner carries the sense-setter triple");
+    img[triple + 4..triple + 6].copy_from_slice(&0x46c0u16.to_le_bytes()); // nop
+    let img = freemkv_flash::cmac::resign(&img).unwrap();
+    assert!(Mt1959Engine::sense_setter_at(&img, entry).is_err());
+
+    let create = Mt1959Engine.build_report(&img).expect("create tolerates the miss");
+    let modify = Mt1959Engine
+        .build_modify(&img, &bu40n_chip(), &cap(MediaClass::UhdBd, true, true))
+        .expect("modify must tolerate the same miss");
+    assert_eq!(modify.image, create.image);
+}
