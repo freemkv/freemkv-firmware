@@ -49,10 +49,8 @@ def transcript(log_path):
     out = []
     for req, res in pairs:
         step = (req, res)
-        if out and out[-1][0] == step:
-            out[-1] = (step, "repeated")
-        else:
-            out.append((step, "once"))
+        if not out or out[-1] != step:
+            out.append(step)
     return out
 
 
@@ -73,9 +71,52 @@ def run(binary, args, cwd):
     return p.returncode, text, logs[-1] if logs else None
 
 
+def capture_state(cwd):
+    """Stat signature of every capture already in a step directory."""
+    state = {}
+    for n in os.listdir(cwd):
+        if n.endswith((".tar", ".bin")):
+            st = os.stat(os.path.join(cwd, n))
+            state[n] = (st.st_mtime_ns, st.st_size)
+    return state
+
+
+def new_captures(cwd, before):
+    """Captures written by this run; files left by an earlier run are ignored."""
+    return sorted(n for n, sig in capture_state(cwd).items() if before.get(n) != sig)
+
+
 def sha(path):
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
+
+
+def compare_step(step, a, b, package):
+    """Differences between the old and new run of one step."""
+    problems = []
+    if a["code"] != b["code"]:
+        problems.append(f"exit {a['code']} vs {b['code']}")
+    if not a["seq"] or not b["seq"]:
+        problems.append("no SCSI transcript")
+    elif a["seq"] != b["seq"]:
+        first = next(
+            (i for i, (x, y) in enumerate(zip(a["seq"], b["seq"])) if x != y),
+            min(len(a["seq"]), len(b["seq"])),
+        )
+        ctx = lambda s: s[first] if first < len(s) else "<end>"
+        problems.append(
+            f"commands differ at #{first}: old {ctx(a['seq'])} / new {ctx(b['seq'])}"
+        )
+    # Firmware captures must match byte for byte; a dump holds live RAM.
+    if step in ("backup", "post-flash-backup") and (a["files"] or b["files"]):
+        if sorted(a["files"].values()) != sorted(b["files"].values()):
+            problems.append(f"backup bytes differ: {a['files']} vs {b['files']}")
+    if step == "post-flash-backup":
+        want = sha(package)
+        for label, r in (("old", a), ("new", b)):
+            if want not in r["files"].values():
+                problems.append(f"{label} post-flash backup is not the package ({want[:16]})")
+    return problems
 
 
 def main():
@@ -84,6 +125,10 @@ def main():
     if len(argv) != 5:
         sys.exit(__doc__)
     old, new, device, package, out = argv
+    # Steps run in their own working directories, so relative paths must be
+    # fixed first; a bare binary name is left for PATH lookup.
+    old, new = (os.path.abspath(b) if os.path.dirname(b) else b for b in (old, new))
+    package = os.path.abspath(package)
     steps = [
         ("info", ["info", device]),
         ("backup", ["backup", device]),
@@ -106,10 +151,12 @@ def main():
     for label, binary in (("old", old), ("new", new)):
         for step, args in steps:
             cwd = os.path.join(out, label, step)
+            os.makedirs(cwd, exist_ok=True)
+            before = capture_state(cwd)
             code, text, log = run(binary, args, cwd)
             with open(os.path.join(cwd, "output.txt"), "w") as f:
                 f.write(text)
-            files = sorted(n for n in os.listdir(cwd) if n.endswith((".tar", ".bin")))
+            files = new_captures(cwd, before)
             results[(label, step)] = {
                 "code": code,
                 "log": log,
@@ -122,29 +169,7 @@ def main():
         if step == "dump-warmup":
             continue
         a, b = results[("old", step)], results[("new", step)]
-        problems = []
-        if a["code"] != b["code"]:
-            problems.append(f"exit {a['code']} vs {b['code']}")
-        if not a["seq"] or not b["seq"]:
-            problems.append("no SCSI transcript")
-        elif a["seq"] != b["seq"]:
-            first = next(
-                (i for i, (x, y) in enumerate(zip(a["seq"], b["seq"])) if x != y),
-                min(len(a["seq"]), len(b["seq"])),
-            )
-            ctx = lambda s: s[first] if first < len(s) else "<end>"
-            problems.append(
-                f"commands differ at #{first}: old {ctx(a['seq'])} / new {ctx(b['seq'])}"
-            )
-        # Firmware captures must match byte for byte; a dump holds live RAM.
-        if step in ("backup", "post-flash-backup") and a["files"] and b["files"]:
-            if sorted(a["files"].values()) != sorted(b["files"].values()):
-                problems.append(f"backup bytes differ: {a['files']} vs {b['files']}")
-        if step == "post-flash-backup":
-            want = sha(package)
-            for label, r in (("old", a), ("new", b)):
-                if want not in r["files"].values():
-                    problems.append(f"{label} post-flash backup is not the package ({want[:16]})")
+        problems = compare_step(step, a, b, package)
         verdict = "MATCH" if not problems else "DIFFER"
         failed |= bool(problems)
         print(f"{step:18} {verdict}" + "".join(f"\n    {p}" for p in problems))
