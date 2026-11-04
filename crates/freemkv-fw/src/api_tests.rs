@@ -313,3 +313,27 @@ fn failed_coverage_retry_reports_the_original_no_code_space_cause() {
     assert!(error.contains("no CMAC-covered free space"), "{error}");
     assert!(!error.contains("retry exploded"), "{error}");
 }
+
+#[test]
+fn create_with_defaults_logs_the_input_image_fingerprint() {
+    use std::sync::{Arc, Mutex};
+    let path = Arc::new(Mutex::new(None));
+    let captured = path.clone();
+    let result = diagnostics::capture_events(
+        move |event| {
+            if let diagnostics::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(std::path::PathBuf::from(value));
+                    }
+                }
+            }
+        },
+        || create_with_defaults(b"not a firmware image", &crate::boot::BootSettings::standard()),
+    );
+    assert!(result.is_err());
+    let path = path.lock().unwrap().clone().expect("diagnostic log path");
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(text.contains("input image: bytes=20 sha256="), "{text}");
+}

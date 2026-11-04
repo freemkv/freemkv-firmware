@@ -130,7 +130,10 @@ pub fn create_with_defaults(
     image: &[u8],
     defaults: &crate::boot::BootSettings,
 ) -> Result<CreateOutcome> {
-    diagnostics::run("create", || create_inner(image, defaults))
+    diagnostics::run("create", || {
+        diagnostics::image("input image", image);
+        create_inner(image, defaults)
+    })
 }
 
 fn create_inner(image: &[u8], defaults: &crate::boot::BootSettings) -> Result<CreateOutcome> {
