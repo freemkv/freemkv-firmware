@@ -556,17 +556,22 @@ impl Shell {
     fn render(self: &Rc<Self>) {
         let v = self.view();
         self.painting.set(true);
-        {
+        let language_changed = {
             let mut memo = self.memo.borrow_mut();
-            if memo.language.replace(v.language) != Some(v.language) {
+            let changed = memo.language.replace(v.language) != Some(v.language);
+            if changed {
                 memo.drives = None;
                 memo.results = None;
             }
-        }
+            changed
+        };
         self.window.set_title(Some(&v.title));
         self.title.set_title(&v.title);
-        self.language_menu_button
-            .set_menu_model(Some(&main_menu(v.language)));
+        // Replacing the model rebuilds the popover, closing an open menu mid-tick.
+        if language_changed {
+            self.language_menu_button
+                .set_menu_model(Some(&main_menu(v.language)));
+        }
         self.render_drives(&v);
         for (tab, b) in v.tabs.iter().zip(&self.tabs) {
             b.set_label(&tab.title);
