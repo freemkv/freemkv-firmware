@@ -2718,6 +2718,38 @@ fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
     assert_eq!(app.recovery_current, Some("other.tar".into()));
 }
 
+#[test]
+fn current_file_reprobe_waits_for_a_running_job() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
+    app.start();
+    app.answer_profile(Ok(Profile {
+        recovery_without_live_protocol: true,
+        ..Profile::every_task()
+    }));
+    app.dispatch(Input::SelectTask(Task::Backup));
+    app.dispatch(Input::Chosen(Pick::Backup, "backup.tar".into()));
+    assert!(app.running());
+    app.recovery_current = Some("installed.tar".into());
+    let (tx, rx) = mpsc::channel();
+    app.origin_rx = vec![(0, Pick::RecoveryCurrent, "installed.tar".into(), rx)];
+    tx.send((
+        Pick::RecoveryCurrent,
+        "installed.tar".into(),
+        Ok(workflow::SelectedFileInfo {
+            origin: workflow::FileOrigin::Unknown,
+            members: Vec::new(),
+        }),
+    ))
+    .unwrap();
+    app.poll();
+    assert!(app.profile_rx.is_none(), "no probe beside a running job");
+    assert!(matches!(app.profile, ProfileState::Ready(_)));
+    finish(&mut app, Ok(()));
+    assert!(!app.running());
+    assert!(matches!(app.profile, ProfileState::Probing));
+    assert!(app.profile_rx.is_some());
+}
+
 fn recovery_plan_passes(app: &mut App) -> workflow::PreparedRecovery {
     let (_, _, job) = last_job(app);
     assert!(matches!(job, Job::Recovery(o) if !o.execute && !o.acknowledged_risk));

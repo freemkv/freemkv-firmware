@@ -838,6 +838,8 @@ pub struct App {
     origin_rx: Vec<(u64, Pick, PathBuf, Receiver<OriginReply>)>,
     origin_pending: Vec<(u64, Pick, PathBuf)>,
     origin_versions: [u64; 4],
+    /// A Current-file reprobe that waits for the drive to be free.
+    profile_refresh_due: bool,
     origin_next: u64,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -1000,6 +1002,7 @@ impl App {
             origin_rx: Vec::new(),
             origin_pending: Vec::new(),
             origin_versions: [0; 4],
+            profile_refresh_due: false,
             origin_next: 0,
             flash_origin: None,
             recovery_origin: None,
@@ -2575,6 +2578,10 @@ impl App {
                 .collect();
             self.ask(target, Sheet::Recovery { options, plan });
         }
+        if self.profile_refresh_due && !self.busy() {
+            self.profile_refresh_due = false;
+            self.refresh_current_profile();
+        }
         let due = self.diagnostic_checked.is_none_or(|checked| {
             finished || (self.running() && checked.elapsed() >= DIAGNOSTIC_REFRESH)
         });
@@ -2582,6 +2589,7 @@ impl App {
             self.refresh_diagnostic_view();
         }
         if (finished || profiled || origin_done || report_done || update_done)
+            && !self.profile_refresh_due
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
@@ -2703,7 +2711,12 @@ impl App {
                 Pick::FlashCurrent => self.flash_current_members = members,
                 Pick::RecoveryCurrent => {
                     self.recovery_current_members = members;
-                    self.refresh_current_profile();
+                    // Never probe the drive beside a running job or probe.
+                    if self.busy() {
+                        self.profile_refresh_due = true;
+                    } else {
+                        self.refresh_current_profile();
+                    }
                 }
                 _ => {}
             }
