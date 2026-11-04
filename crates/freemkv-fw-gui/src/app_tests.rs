@@ -294,3 +294,15 @@ fn unicode_ui_languages_have_renderable_cjk_glyphs() {
         })
     });
 }
+
+#[test]
+fn boot_preview_refuses_an_oversized_input_at_the_shared_cap() {
+    let path = std::env::temp_dir().join(format!("freemkv-fw-oversized-{}.bin", std::process::id()));
+    std::fs::File::create(&path)
+        .unwrap()
+        .set_len(65 * 1024 * 1024)
+        .unwrap();
+    let error = boot_options_at(&path).unwrap_err();
+    std::fs::remove_file(&path).unwrap();
+    assert!(format!("{error:#}").contains("MiB cap"), "{error:#}");
+}

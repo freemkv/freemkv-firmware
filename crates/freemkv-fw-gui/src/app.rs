@@ -45,6 +45,11 @@ fn read_only_problem(id: &'static str) -> String {
     .encoded()
 }
 
+fn boot_options_at(path: &std::path::Path) -> anyhow::Result<(BootSettings, BootSupport)> {
+    let artifact = freemkv_fw::artifact::Artifact::parse(freemkv_fw::diagnostics::read(path)?)?;
+    freemkv_fw::api::boot_options(artifact.image())
+}
+
 pub struct FwApp {
     language: Language,
     preferences: Preferences,
@@ -343,10 +348,7 @@ impl FwApp {
                 self.boot_rx = Some(rx);
                 let ctx = ctx.clone();
                 std::thread::spawn(move || {
-                    let result = std::panic::catch_unwind(|| -> anyhow::Result<_> {
-                        let artifact = freemkv_fw::artifact::Artifact::parse(std::fs::read(path)?)?;
-                        freemkv_fw::api::boot_options(artifact.image())
-                    })
+                    let result = std::panic::catch_unwind(|| boot_options_at(&path))
                     .map_err(|_| {
                         (
                             read_only_problem("errors.analysis"),
