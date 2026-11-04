@@ -554,6 +554,7 @@
     "report.sent_backup": "Raport de diagnostic și copie de siguranță trimise. Confirmare de primire: {receipt}. Copie locală: {path}",
     "report.cancelled": "Raportul de depunere a fost anulat.",
     "report.opening": "A se deschide raportul de aprobare în browser-ul dvs. ...",
+    "report.open_approval_manually": "Browserul nu a putut fi deschis. Pentru a aproba raportul, deschideți {url}",
     "report.uploading": "Raportul de încărcare...",
     "report.retrying": "Raportul a fost salvat; notificarea de retragere ...",
     "report.received": "Raport {receipt} Copie locală: {path}",

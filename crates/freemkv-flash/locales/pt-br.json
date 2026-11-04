@@ -554,6 +554,7 @@
     "report.sent_backup": "Relatório de diagnóstico e cópia de segurança enviados. Comprovante de recebimento: {receipt}. Cópia local: {path}",
     "report.cancelled": "A apresentação do relatório foi cancelada.",
     "report.opening": "Abertura de relatório de aprovação em seu navegador...",
+    "report.open_approval_manually": "Não foi possível abrir o navegador. Para aprovar o relatório, abra {url}",
     "report.uploading": "Apresentação de relatório...",
     "report.retrying": "Relatório salvo; notificação de retiro...",
     "report.received": "Relatório {receipt} Composição: Copia local {path}",

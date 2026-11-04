@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnosztikai jelentés és biztonsági másolat elküldve. Átvételi igazolás: {receipt}. Helyi másolat: {path}",
     "report.cancelled": "A jelentés benyújtása törlésre került.",
     "report.opening": "Nyissa meg a jelentés jóváhagyását a böngészőben...",
+    "report.open_approval_manually": "A böngészőt nem sikerült megnyitni. A jelentés jóváhagyásához nyissa meg: {url}",
     "report.uploading": "Felvételi jelentés...",
     "report.retrying": "Jelentés mentett; visszavonási értesítés...",
     "report.received": "jelentés {receipt} Helyi másolat: {path}",

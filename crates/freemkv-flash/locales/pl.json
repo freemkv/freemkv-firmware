@@ -554,6 +554,7 @@
     "report.sent_backup": "Raport diagnostyczny i kopia zapasowa zostały wysłane. Potwierdzenie odbioru: {receipt}. Kopia lokalna: {path}",
     "report.cancelled": "Zgłoszenie zgłoszenia zostało anulowane.",
     "report.opening": "Otwarcie zgody zgody w przeglądarce...",
+    "report.open_approval_manually": "Nie udało się otworzyć przeglądarki. Aby zatwierdzić raport, otwórz {url}",
     "report.uploading": "Raport przesyłający...",
     "report.retrying": "Informacja została zarejestrowana; powiadomienie o zwrocie...",
     "report.received": "Raport {receipt} Kopia lokalna - kopia lokalna: {path}",

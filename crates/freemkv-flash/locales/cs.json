@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnostická zpráva a záloha byly odeslány. Potvrzení o přijetí: {receipt}. Místní kopie: {path}",
     "report.cancelled": "Zpráva byla zrušena.",
     "report.opening": "Otevření zprávy schválení ve vašem prohlížeči ...",
+    "report.open_approval_manually": "Prohlížeč se nepodařilo otevřít. Pro schválení zprávy otevřete {url}",
     "report.uploading": "Přihlašovací zpráva...",
     "report.retrying": "Zpráva byla zachráněna; oznámení o odchodu...",
     "report.received": "Zpráva {receipt} Zobrazit místní kopii: {path}",

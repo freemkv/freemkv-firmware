@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnostická správa a záloha boli odoslané. Potvrdenie o prijatí: {receipt}. Miestna kópia: {path}",
     "report.cancelled": "Zrušenie podania správy.",
     "report.opening": "Otvorenie správy schválenia vo vašom prehliadači ...",
+    "report.open_approval_manually": "Prehliadač sa nepodarilo otvoriť. Na schválenie správy otvorte {url}",
     "report.uploading": "Zverejnenie nahrávania...",
     "report.retrying": "Správa zachránená; odvolanie oznámenia ...",
     "report.received": "Správa {receipt} Zoznam miestnych kópií: {path}",

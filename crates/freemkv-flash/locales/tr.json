@@ -554,6 +554,7 @@
     "report.sent_backup": "Tanı raporu ve yedek gönderildi. Alındı onayı: {receipt}. Yerel kopya: {path}",
     "report.cancelled": "Rapor gönderimi iptal edildi.",
     "report.opening": "Web sitenizde rapor onayını açmak...",
+    "report.open_approval_manually": "Tarayıcınız açılamadı. Raporu onaylamak için {url} adresini açın",
     "report.uploading": "Rapor Yükleme...",
     "report.retrying": "Rapor kurtarıldı; geri bildirim bildirimi...",
     "report.received": "raporu {receipt} yerel kopyası: {path}",

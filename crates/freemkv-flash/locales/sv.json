@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnostikrapport och säkerhetskopia skickade. Kvitto: {receipt}. Lokal kopia: {path}",
     "report.cancelled": "Rapportering upphävs.",
     "report.opening": "Öppna rapport godkännande i din webbläsare ...",
+    "report.open_approval_manually": "Webbläsaren kunde inte öppnas. Öppna {url} för att godkänna rapporten",
     "report.uploading": "Ladda upp rapporten...",
     "report.retrying": "Rapporten sparas; återkallande meddelande...",
     "report.received": "Rapporten {receipt} Lokala kopior och lokala: {path}",

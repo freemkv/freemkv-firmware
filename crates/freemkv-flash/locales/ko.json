@@ -554,6 +554,7 @@
     "report.sent_backup": "진단 보고서와 백업을 보냈습니다. 접수 번호: {receipt}. 로컬 사본: {path}",
     "report.cancelled": "보고서 제출 취소",
     "report.opening": "귀하의 브라우저에서 승인 보고서를 열기 ...",
+    "report.open_approval_manually": "브라우저를 열 수 없습니다. 보고서를 승인하려면 {url}을(를) 여세요",
     "report.uploading": "업로드 보고서...",
     "report.retrying": "보고서 저장; 퇴원 통보 ...",
     "report.received": "보고서 {receipt} 현지 복사본 : {path}",

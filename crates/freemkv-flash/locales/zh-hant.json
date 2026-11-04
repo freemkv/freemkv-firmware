@@ -554,6 +554,7 @@
     "report.sent_backup": "診斷報告和備份檔案已傳送。收件確認：{receipt}。本機副本：{path}",
     "report.cancelled": "報告提交已取消。",
     "report.opening": "在您的瀏覽器中開啟報告批准...",
+    "report.open_approval_manually": "無法開啟瀏覽器。若要核准報告，請開啟 {url}",
     "report.uploading": "上傳報告...",
     "report.retrying": "報告儲存;退出通知...",
     "report.received": "報告 {receipt} 收到的本地副本: {path}",

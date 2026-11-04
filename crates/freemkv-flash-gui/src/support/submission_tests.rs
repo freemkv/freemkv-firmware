@@ -452,3 +452,33 @@ fn approval_url_outside_the_report_origin_is_never_opened() {
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
+
+#[test]
+fn missing_browser_shows_the_approval_url_and_keeps_waiting() {
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(200, approved()),
+        reply(200, json!({"saved":true})),
+        reply(200, json!({"report_id":"manual-approval"})),
+    ]);
+    let (source, dir) = source();
+    let mut progress = Vec::new();
+    let receipt = submit_at(
+        source,
+        &control(),
+        &base,
+        |_| anyhow::bail!("no browser handler"),
+        |message| progress.push(message),
+    )
+    .unwrap();
+    assert!(receipt.contains("manual-approval"));
+    let url = format!("{base}/approve");
+    assert!(
+        progress
+            .iter()
+            .any(|message| crate::localization::english(message).contains(&url)),
+        "approval URL must be shown: {progress:?}"
+    );
+    assert_eq!(server.join().unwrap().len(), 4);
+    std::fs::remove_dir_all(dir).unwrap();
+}

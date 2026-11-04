@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnostiikkaraportti ja varmuuskopio lähetetty. Vastaanottokuittaus: {receipt}. Paikallinen kopio: {path}",
     "report.cancelled": "Raportti on peruutettu.",
     "report.opening": "Avaa raportin hyväksyntä selaimessasi...",
+    "report.open_approval_manually": "Selainta ei voitu avata. Hyväksy raportti avaamalla {url}",
     "report.uploading": "Lataa raportti...",
     "report.retrying": "Raportti tallennettu; peruutus ilmoitus ...",
     "report.received": "Raportti {receipt} Paikallinen kopio ja paikallinen kopio: {path}",

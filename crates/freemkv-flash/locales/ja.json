@@ -554,6 +554,7 @@
     "report.sent_backup": "診断レポートとバックアップを送信しました。受領番号：{receipt}。ローカルコピー：{path}",
     "report.cancelled": "報告書の提出はキャンセル。",
     "report.opening": "あなたのブラウザで承認レポートを開く...",
+    "report.open_approval_manually": "ブラウザーを開けませんでした。レポートを承認するには {url} を開いてください",
     "report.uploading": "アップロードレポート...",
     "report.retrying": "報告書が保存され、リリース通知...",
     "report.received": "レポート {receipt} 地元コピー: {path}",

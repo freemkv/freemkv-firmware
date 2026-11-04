@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnoserapport og sikkerhedskopi sendt. Kvittering: {receipt}. Lokal kopi: {path}",
     "report.cancelled": "Rapporten er annulleret.",
     "report.opening": "Åbning af rapport godkendelse i din browser ...",
+    "report.open_approval_manually": "Din browser kunne ikke åbnes. Åbn {url} for at godkende rapporten",
     "report.uploading": "Opladning af rapporten...",
     "report.retrying": "Rapporten blev redegjort; tilbagekaldelse meddelelse ...",
     "report.received": "Rapporten {receipt} Lokalt udgivet kopi: {path}",

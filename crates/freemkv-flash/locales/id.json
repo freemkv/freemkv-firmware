@@ -554,6 +554,7 @@
     "report.sent_backup": "Laporan diagnostik dan cadangan terkirim. Tanda terima: {receipt}. Salinan lokal: {path}",
     "report.cancelled": "Laporan pengiriman dibatalkan.",
     "report.opening": "Membuka laporan persetujuan di browser Anda ...",
+    "report.open_approval_manually": "Browser Anda tidak dapat dibuka. Untuk menyetujui laporan, buka {url}",
     "report.uploading": "Laporan yang diunggah...",
     "report.retrying": "Laporan diselamatkan; pemberitahuan penarikan ...",
     "report.received": "Laporan {receipt} Keterangan : Kopi lokal : {path}",

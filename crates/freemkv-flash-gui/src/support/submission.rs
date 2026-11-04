@@ -130,7 +130,13 @@ fn submit_at(
     if !same_origin(base, approval_url) {
         bail!("Invalid report approval URL");
     }
-    open(approval_url).context("Could not open report approval")?;
+    // Without a browser handler the request can still be approved by hand.
+    if open(approval_url).is_err() {
+        progress(crate::localization::message(
+            "report.open_approval_manually",
+            &[("url", approval_url.into())],
+        ));
+    }
     let approval_deadline = (Instant::now() + control.approval_limit).min(control.deadline);
     let approved = loop {
         control.pause()?;

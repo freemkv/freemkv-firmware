@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnoserapport en back-up verstuurd. Ontvangstbewijs: {receipt}. Lokale kopie: {path}",
     "report.cancelled": "De rapportage is geannuleerd.",
     "report.opening": "Het openen van een rapport goedkeuring in uw browser...",
+    "report.open_approval_manually": "Uw browser kon niet worden geopend. Open {url} om het rapport goed te keuren",
     "report.uploading": "Het opladen van het rapport...",
     "report.retrying": "Het rapport is gered; de terugtrekking van de kennisgeving ...",
     "report.received": "verslag {receipt} Lokale kopie van: {path}",

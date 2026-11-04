@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnoserapport og sikkerhetskopi sendt. Kvittering: {receipt}. Lokal kopi: {path}",
     "report.cancelled": "Rapporten er avlyst.",
     "report.opening": "Åpning av rapport godkjennelse i nettleseren din ...",
+    "report.open_approval_manually": "Nettleseren kunne ikke åpnes. Åpne {url} for å godkjenne rapporten",
     "report.uploading": "Oppdatering av rapporten...",
     "report.retrying": "Rapporten er redde; tilbakekalling av melding ...",
     "report.received": "Rapporten {receipt} Lokalt kopi: {path}",

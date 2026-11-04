@@ -554,6 +554,7 @@
     "report.sent_backup": "Informe de diagnóstico y copia de seguridad enviados. Acuse de recibo: {receipt}. Copia local: {path}",
     "report.cancelled": "La presentación del informe fue cancelada.",
     "report.opening": "Abre el informe de aprobación en su navegador...",
+    "report.open_approval_manually": "No se pudo abrir el navegador. Para aprobar el informe, abra {url}",
     "report.uploading": "El informe de descarga...",
     "report.retrying": "El informe se salvó; la notificación de retiro...",
     "report.received": "El informe {receipt} Recogida. copia local {path}",

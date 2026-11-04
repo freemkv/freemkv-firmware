@@ -554,6 +554,7 @@
     "report.sent_backup": "Informe de diagnòstic i còpia de seguretat enviats. Justificant de recepció: {receipt}. Còpia local: {path}",
     "report.cancelled": "La presentació del informe ha estat cancel·lada.",
     "report.opening": "Obertura de l'aprovació de l'informe en el seu navegador ...",
+    "report.open_approval_manually": "No s'ha pogut obrir el navegador. Per aprovar l'informe, obriu {url}",
     "report.uploading": "El reportatge de càrrega...",
     "report.retrying": "Notícia rescatada; notificació de retracció...",
     "report.received": "Reportatge {receipt} Reconeix una còpia local: {path}",

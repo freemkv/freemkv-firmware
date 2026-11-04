@@ -554,6 +554,7 @@
     "report.sent_backup": "Diagnosebericht und Sicherung gesendet. Empfangsbestätigung: {receipt}. Lokale Kopie: {path}",
     "report.cancelled": "Die Berichterstattung wurde abgesagt.",
     "report.opening": "Öffnen von Bericht Genehmigung in Ihrem Browser ...",
+    "report.open_approval_manually": "Ihr Browser konnte nicht geöffnet werden. Öffnen Sie {url}, um den Bericht zu genehmigen",
     "report.uploading": "Einladungspapier...",
     "report.retrying": "Berichterstattung gespeichert; Retrieb Notifizierung ...",
     "report.received": "Bericht {receipt} Lokale Kopie erhalten: {path}",

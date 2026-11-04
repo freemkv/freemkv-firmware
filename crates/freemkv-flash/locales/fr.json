@@ -554,6 +554,7 @@
     "report.sent_backup": "Rapport de diagnostic et sauvegarde envoyés. Accusé de réception : {receipt}. Copie locale : {path}",
     "report.cancelled": "La présentation du rapport est annulée.",
     "report.opening": "Ouverture du rapport d’approbation dans votre navigateur...",
+    "report.open_approval_manually": "Impossible d’ouvrir votre navigateur. Pour approuver le rapport, ouvrez {url}",
     "report.uploading": "Le rapport de téléchargement...",
     "report.retrying": "Rapport sauvé; notification de retrait...",
     "report.received": "Rapport {receipt} Copie locale : {path}",

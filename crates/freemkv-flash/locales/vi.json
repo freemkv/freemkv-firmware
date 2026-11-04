@@ -554,6 +554,7 @@
     "report.sent_backup": "Đã gửi báo cáo chẩn đoán và bản sao lưu. Mã xác nhận đã nhận: {receipt}. Bản sao cục bộ: {path}",
     "report.cancelled": "Báo cáo đã bị hủy bỏ.",
     "report.opening": "Mở báo cáo phê duyệt trong trình duyệt của bạn ...",
+    "report.open_approval_manually": "Không thể mở trình duyệt. Để phê duyệt báo cáo, hãy mở {url}",
     "report.uploading": "Báo cáo tải...",
     "report.retrying": "Báo cáo được tiết kiệm; thông báo rút lại...",
     "report.received": "Báo cáo {receipt} Bản sao địa phương: {path}",
