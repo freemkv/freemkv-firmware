@@ -1479,6 +1479,9 @@ fn describe_never_prints_escape_sequences_from_the_image() {
     let mut hostile = img.clone();
     let d = ROM_1EC000_OFFSET as usize;
     hostile[d + 0x08..d + 0x08 + 4].copy_from_slice(b"\x1b[2J");
+    let banner = freemkv_chipset::BANNER_OFFSET;
+    let end = hostile[banner..].iter().position(|&b| b == 0).unwrap() + banner;
+    hostile[end..end + 4].copy_from_slice(b"\x1b[2J");
     let hostile = crate::cmac::resign(&hostile).unwrap();
     let out = captured_output(|| {
         FileFacet::describe(
