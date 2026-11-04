@@ -328,6 +328,16 @@ fn cmd_verify_file(path: &Path, family: Option<Family>) -> Result<ExitCode> {
 // verify (live drive)
 // ---------------------------------------------------------------------------
 
+/// Detail suffix for a NOT DETECTED identity probe. A well-formed non-freemkv
+/// reply means stock/OEM firmware; a command error is named, since it may be a
+/// busy or unreachable drive rather than a drive that rejected the knock.
+fn not_detected_detail(result: &Result<Vec<u8>>) -> String {
+    match result {
+        Err(e) => format!("(no identity response: {e:#})"),
+        Ok(_) => "(stock/OEM or other firmware)".to_owned(),
+    }
+}
+
 /// Probe a live drive for freemkv firmware by sending the Identity command
 /// built by [`abi::build_identity_cdb`].
 ///
@@ -362,18 +372,18 @@ fn cmd_verify_device(path: &Path) -> Result<ExitCode> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        // Either a well-formed non-freemkv response (e.g. a plain INQUIRY
-        // reply on stock firmware) or a SCSI-level error from a drive that
-        // doesn't recognize the knock at all — both mean "not freemkv".
-        Ok(_) | Err(_) => {
+        // A non-freemkv reply or a command error both mean "not detected"; an
+        // error is recorded and named in the output rather than called stock.
+        other => {
+            let detail = not_detected_detail(&other);
+            if let Err(e) = &other {
+                diagnostics::record(format!("identity probe error: {e:#}"));
+            }
             println!(
                 "{}",
                 style::status_line(
                     "freemkv firmware",
-                    &format!(
-                        "NOT DETECTED on {path_str} {}",
-                        style::dim("(stock/OEM or other firmware)")
-                    ),
+                    &format!("NOT DETECTED on {path_str} {}", style::dim(&detail)),
                     style::Status::Warn
                 )
             );

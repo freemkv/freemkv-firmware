@@ -126,6 +126,15 @@ fn classify_windows_device_namespace_path_is_device() {
 }
 
 #[test]
+fn identity_probe_error_is_named_not_reported_as_stock() {
+    let detail = not_detected_detail(&Err(anyhow::anyhow!("timeout")));
+    assert!(detail.contains("timeout"), "{detail}");
+    assert!(!detail.contains("stock/OEM"), "{detail}");
+    let stock = not_detected_detail(&Ok(vec![0u8; 4]));
+    assert!(stock.contains("stock/OEM"), "{stock}");
+}
+
+#[test]
 fn classify_dev_prefixed_path_is_device() {
     // Purely path-based: doesn't need the node to actually exist, so this
     // runs the same on every host including CI.
