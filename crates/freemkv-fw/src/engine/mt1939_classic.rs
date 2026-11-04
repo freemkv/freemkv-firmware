@@ -99,6 +99,18 @@ const AKE_GATE_SIG_CLASSIC_SPLIT: &[(u16, u16)] = &[
     (0xf800, 0xf800),
 ];
 
+/// Attach the conversion hook to RawRead; an applied conversion makes the
+/// lever Applied so the auditor checks its atomic group.
+fn attach_classic_conversion(levers: &mut [LeverReport], conversion: HookReport, count: u32) {
+    if let Some(raw_read) = levers.iter_mut().find(|l| l.id == LeverId::RawRead) {
+        raw_read.hooks.push(conversion);
+        raw_read.facts.push(("uhd_conversion_count", count));
+        if count > 0 && raw_read.outcome != super::lever::LeverOutcome::Applied {
+            raw_read.outcome = super::lever::LeverOutcome::Applied;
+        }
+    }
+}
+
 impl Mt1959Engine {
     pub(super) fn emit_media_conversion_classic(
         &self,
@@ -502,16 +514,28 @@ impl Mt1959Engine {
     /// the feature is left unwired, the base still ships). Mirrors the per-feature
     /// commit block modern `emit_rawread` uses, but for the classic report path.
     fn commit_classic_detour(&self, out: &mut [u8], site: usize, bytes: &[u8]) -> Option<u32> {
+        self.commit_classic_detour_checked(out, site, bytes, thumb::decode_bl)
+    }
+
+    /// Writes into a copy and publishes it only after the decode-back check
+    /// passes, so a refused detour leaves `out` byte-identical.
+    fn commit_classic_detour_checked(
+        &self,
+        out: &mut [u8],
+        site: usize,
+        bytes: &[u8],
+        decode: impl Fn(&[u8], usize) -> Option<u32>,
+    ) -> Option<u32> {
         let stub_va = self.free_space(out, bytes.len() + 16).ok()?;
         let bl = thumb::encode_bl(site, stub_va)?;
-        thumb::write(out, stub_va as usize, bytes);
-        thumb::write(out, site, &bl);
-        // Emit-time decode-back guard — miss-is-graceful per this fn's
-        // `Option` contract, so an install-shape failure returns None
-        // (feature left unwired, base still ships) rather than panicking.
-        if thumb::decode_bl(out, site) != Some(stub_va) {
+        let mut staged = out.to_vec();
+        thumb::write(&mut staged, stub_va as usize, bytes);
+        thumb::write(&mut staged, site, &bl);
+        // Emit-time decode-back guard: a failure is a graceful miss.
+        if decode(&staged, site) != Some(stub_va) {
             return None;
         }
+        out.copy_from_slice(&staged);
         Some(stub_va)
     }
 
@@ -553,7 +577,7 @@ impl Mt1959Engine {
         // Idempotency: a re-fed freemkv-modified classic image reports every lever
         // AlreadyPresent and returns byte-identical (see `build_modify`).
         if is_freemkv_patched(image) {
-            return Ok(self.already_present_report(image, chip, cap, "MT1959"));
+            return Ok(self.already_present_report(image, chip, cap, "MT1939"));
         }
 
         // Base prerequisites (classic): scanner + CDB base (r5) + the chip-agnostic
@@ -692,10 +716,7 @@ impl Mt1959Engine {
         });
 
         let (conversion, count) = self.emit_media_conversion_classic(image, &mut out, flag_base);
-        if let Some(raw_read) = levers.iter_mut().find(|l| l.id == LeverId::RawRead) {
-            raw_read.hooks.push(conversion);
-            raw_read.facts.push(("uhd_conversion_count", count));
-        }
+        attach_classic_conversion(&mut levers, conversion, count);
 
         // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));
@@ -1002,7 +1023,13 @@ impl Mt1959Engine {
                     if !hopped && (h & 0xF800) == 0xE000 {
                         let d = (h & 0x7FF) as i32;
                         let d = if d >= 0x400 { d - 0x800 } else { d };
-                        p = (p as i32 + 4 + d * 2) as usize;
+                        let Some(next) = usize::try_from(p as i64 + 4 + i64::from(d) * 2)
+                            .ok()
+                            .filter(|&n| n + 4 <= image.len())
+                        else {
+                            break;
+                        };
+                        p = next;
                         hopped = true;
                         steps += 1;
                         continue;

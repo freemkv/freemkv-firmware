@@ -20,23 +20,7 @@ fn main() -> Result<()> {
         .iter()
         .map(|r| json!({"opcode":r.opcode,"flags":r.flags,"handler":r.handler,"record":r.off}))
         .collect();
-    let mut calls: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for site in (0..image.len().saturating_sub(4)).step_by(2) {
-        let first = u16::from_le_bytes(image[site..site + 2].try_into()?);
-        let second = u16::from_le_bytes(image[site + 2..site + 4].try_into()?);
-        if first & 0xf800 != 0xf000 || !matches!(second & 0xf800, 0xe800 | 0xf800) {
-            continue;
-        }
-        let Some(instruction) = thumb_asm::isa::decode_at(&image, site) else {
-            continue;
-        };
-        if !matches!(instruction.mnemonic, "bl" | "blx") {
-            continue;
-        }
-        if let Some(target) = instruction.branch_target() {
-            calls.entry(target as usize).or_default().push(site);
-        }
-    }
+    let calls = call_index(&image)?;
     let mut rows = Vec::new();
     for target in targets {
         let first = image
@@ -95,4 +79,37 @@ fn main() -> Result<()> {
         "commands":records,"targets":rows}))?,
     )?;
     Ok(())
+}
+
+fn call_index(image: &[u8]) -> Result<BTreeMap<usize, Vec<usize>>> {
+    let mut calls: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for site in (0..image.len().saturating_sub(3)).step_by(2) {
+        let first = u16::from_le_bytes(image[site..site + 2].try_into()?);
+        let second = u16::from_le_bytes(image[site + 2..site + 4].try_into()?);
+        if first & 0xf800 != 0xf000 || !matches!(second & 0xf800, 0xe800 | 0xf800) {
+            continue;
+        }
+        let Some(instruction) = thumb_asm::isa::decode_at(image, site) else {
+            continue;
+        };
+        if !matches!(instruction.mnemonic, "bl" | "blx") {
+            continue;
+        }
+        if let Some(target) = instruction.branch_target() {
+            calls.entry(target as usize).or_default().push(site);
+        }
+    }
+    Ok(calls)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn call_index_includes_a_bl_in_the_final_four_bytes() {
+        let image = [0, 0, 0x00, 0xf0, 0x00, 0xf8];
+        let calls = call_index(&image).unwrap();
+        assert_eq!(calls.get(&6), Some(&vec![2]));
+    }
 }

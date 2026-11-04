@@ -130,7 +130,10 @@ pub fn create_with_defaults(
     image: &[u8],
     defaults: &crate::boot::BootSettings,
 ) -> Result<CreateOutcome> {
-    diagnostics::run("create", || create_inner(image, defaults))
+    diagnostics::run("create", || {
+        diagnostics::image("input image", image);
+        create_inner(image, defaults)
+    })
 }
 
 fn create_inner(image: &[u8], defaults: &crate::boot::BootSettings) -> Result<CreateOutcome> {
@@ -184,6 +187,8 @@ pub struct ProbeOutcome {
     pub detected: bool,
     /// A human-readable one-line detail (version if known, or why not detected).
     pub detail: String,
+    /// The freemkv ABI version byte, when the drive reported one.
+    pub version: Option<u8>,
 }
 
 /// Send the freemkv identity command (`abi::build_identity_cdb`) to `device` and
@@ -201,25 +206,40 @@ fn probe_device_inner(device: &str) -> Result<ProbeOutcome> {
     const ALLOC_LEN: usize = 96;
     let cdb = abi::build_identity_cdb(ALLOC_LEN as u16);
 
-    match dev.command_in(&cdb, ALLOC_LEN) {
+    Ok(classify_probe(dev.command_in(&cdb, ALLOC_LEN)))
+}
+
+fn classify_probe(reply: Result<Vec<u8>>) -> ProbeOutcome {
+    match reply {
         Ok(resp) if abi::verify_response(&resp) => {
-            let detail = match resp.get(abi::RESP_MAGIC.len()) {
-                Some(&v) => format!("DETECTED (version 0x{v:02x})"),
+            let version = resp.get(abi::RESP_MAGIC.len()).copied();
+            let detail = match version {
+                Some(v) => format!("DETECTED (version 0x{v:02x})"),
                 None => "DETECTED".to_string(),
             };
-            Ok(ProbeOutcome {
+            ProbeOutcome {
                 detected: true,
                 detail,
-            })
+                version,
+            }
         }
-        // A well-formed non-freemkv reply, or a SCSI-level error from a drive
-        // that doesn't recognize the knock — both mean "not freemkv".
         other => {
             diagnostics::record(format!("identity probe did not match: {other:?}"));
-            Ok(ProbeOutcome {
+            // A SCSI sense rejection or a well-formed non-freemkv reply means
+            // "not freemkv"; a transport failure proves nothing either way.
+            let transport_failure = matches!(&other, Err(e)
+                if platform::sense_triplet(e).is_none());
+            let detail = match other {
+                Err(error) if transport_failure => {
+                    format!("NOT DETERMINED (probe failed: {error:#})")
+                }
+                _ => "NOT DETECTED (stock/OEM or other firmware)".to_string(),
+            };
+            ProbeOutcome {
                 detected: false,
-                detail: "NOT DETECTED (stock/OEM or other firmware)".to_string(),
-            })
+                detail,
+                version: None,
+            }
         }
     }
 }
@@ -254,7 +274,18 @@ pub fn modify_with_defaults(
     image: &[u8],
     defaults: &crate::boot::BootSettings,
 ) -> Result<(engine::ModifyReport, crate::boot::BootSupport)> {
-    let first = modify_once(image, defaults);
+    modify_with_retry(image, defaults, modify_once, engine::coverage_retry)
+}
+
+type ModifyResult = Result<(engine::ModifyReport, crate::boot::BootSupport)>;
+
+fn modify_with_retry(
+    image: &[u8],
+    defaults: &crate::boot::BootSettings,
+    modify: impl Fn(&[u8], &crate::boot::BootSettings) -> ModifyResult,
+    plan_retry: impl FnOnce(&[u8]) -> Option<engine::CoverageRetry>,
+) -> ModifyResult {
+    let first = modify(image, defaults);
     let needs_space = match &first {
         Err(error) => error.chain().any(|e| {
             e.downcast_ref::<engine::NoCodeSpace>().is_some()
@@ -263,21 +294,29 @@ pub fn modify_with_defaults(
         Ok((report, _)) => allocation_limited(report),
     };
     if needs_space {
-        if let Some(plan) = engine::coverage_retry(image) {
-            let (mut report, support) = modify_once(&plan.image, defaults)?;
-            engine::validate_metadata(image, &report.image)?;
-            if let Some(identity) = report
-                .levers
-                .iter_mut()
-                .find(|p| p.id == engine::lever::LeverId::Identity)
-            {
-                identity.facts.extend([
-                    ("coverage_entry", plan.entry),
-                    ("coverage_original_end", plan.old_end),
-                    ("coverage_new_end", plan.new_end),
-                ]);
+        if let Some(plan) = plan_retry(image) {
+            let retried = (|| -> ModifyResult {
+                let (mut report, support) = modify(&plan.image, defaults)?;
+                engine::validate_metadata(image, &report.image)?;
+                if let Some(identity) = report
+                    .levers
+                    .iter_mut()
+                    .find(|p| p.id == engine::lever::LeverId::Identity)
+                {
+                    identity.facts.extend([
+                        ("coverage_entry", plan.entry),
+                        ("coverage_original_end", plan.old_end),
+                        ("coverage_new_end", plan.new_end),
+                    ]);
+                }
+                Ok((report, support))
+            })();
+            match retried {
+                Ok(result) => return Ok(result),
+                Err(error) => diagnostics::record(format!(
+                    "coverage retry failed; keeping the first result: {error:#}"
+                )),
             }
-            return Ok((report, support));
         }
     }
     first

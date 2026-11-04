@@ -874,6 +874,22 @@ fn classic_hrl_follows_one_backward_unconditional_b_to_reach_the_check() {
     );
 }
 
+/// A backward `b` whose target falls before the start of the image must end
+/// that site's walk, not wrap to a huge index and panic.
+#[test]
+fn classic_hrl_walk_survives_a_backward_b_that_leaves_the_image() {
+    let mut img = fixture();
+    plant_hrl_routine(&mut img, HRL);
+    plant_revoke_head(&mut img, REVOKE);
+    let bl = thumb::encode_bl(0, HRL as u32).expect("bl in range");
+    thumb::write(&mut img, 0, &bl);
+    // `b` with imm11 = -5: the target from offset 4 is -2.
+    put_hw(&mut img, 4, &[0xE7FB]);
+    let mut out = img.clone();
+    let result = Mt1959Engine.emit_hrl_classic(&img, &mut out, FLAG_BASE);
+    assert!(result.is_err(), "no cert-path check site resolves");
+}
+
 /// The walk must start AFTER the `bl <hrl>`: the check that matters is the one
 /// testing the lookup's result. A `cmp r0,#0; bne` sitting just BEFORE the call
 /// tests something else entirely, and anchoring on it sends the HRL stub to a
@@ -1011,14 +1027,23 @@ fn classic_hrl_refuses_when_any_single_halfword_of_the_oem_6f_deny_head_is_wrong
 /// past the tail.
 #[test]
 fn classic_hrl_refuses_a_revoke_target_without_room_for_the_head() {
-    let (mut img, _) = classic_hrl_image();
-    put_hw(&mut img, REVOKE, &[0xFFFF]);
+    let mut img = fixture();
+    plant_hrl_routine(&mut img, HRL);
+    // The revoke target sits 4 bytes before the end: the 8-byte head cannot fit.
+    let revoke = img.len() - 4;
+    // The first two head halfwords match, so only the bound stops the read.
+    put_hw(&mut img, revoke, &[0x78a8, 0x2800]);
+    let bl_at = img.len() - 0x40;
+    let bl = thumb::encode_bl(bl_at, HRL as u32).expect("bl in range");
+    thumb::write(&mut img, bl_at, &bl);
+    put_hw(&mut img, bl_at + 4, &[0x2800, bne_to(bl_at + 6, revoke)]);
     let mut out = img.clone();
+    let error = Mt1959Engine
+        .emit_hrl_classic(&img, &mut out, FLAG_BASE)
+        .expect_err("a revoke target past the tail must refuse, not index out of bounds");
     assert!(
-        Mt1959Engine
-            .emit_hrl_classic(&img, &mut out, FLAG_BASE)
-            .is_err(),
-        "a revoke target without the OEM head must refuse"
+        format!("{error:#}").contains("lacks the OEM 6F-deny head"),
+        "{error:#}"
     );
 }
 
@@ -1284,4 +1309,34 @@ fn the_modern_fixture_carries_none_of_the_classic_signatures() {
             "{name} must not match the modern BU40N fixture"
         );
     }
+}
+
+/// A decode-back mismatch must leave the image untouched, matching the
+/// "feature left unwired" contract; otherwise the overwritten `bl` ships.
+#[test]
+fn commit_classic_detour_leaves_the_image_untouched_on_decode_back_mismatch() {
+    let mut out = fixture();
+    let before = out.clone();
+    let result =
+        Mt1959Engine
+            .commit_classic_detour_checked(&mut out, 0x001c_4800, &[0u8; 32], |_, _| Some(0));
+    assert_eq!(result, None);
+    assert!(out == before, "a refused detour must not modify the image");
+}
+
+#[test]
+fn applied_conversion_promotes_a_missed_rawread_lever() {
+    let mut levers = vec![LeverReport::missed(LeverId::RawRead, "gates missed")];
+    let conversion = HookReport::applied("uhd-conversion", "complete media group: classic 2");
+    attach_classic_conversion(&mut levers, conversion, 2);
+    assert_eq!(levers[0].outcome, LeverOutcome::Applied);
+    assert!(levers[0].facts.contains(&("uhd_conversion_count", 2)));
+
+    let mut levers = vec![LeverReport::missed(LeverId::RawRead, "gates missed")];
+    let conversion = HookReport::unavailable("uhd-conversion", "0 conversion edits");
+    attach_classic_conversion(&mut levers, conversion, 0);
+    assert!(matches!(
+        levers[0].outcome,
+        LeverOutcome::SignatureNotFound { .. }
+    ));
 }

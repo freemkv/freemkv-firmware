@@ -622,6 +622,45 @@ fn be14nu40_101_classic_create_and_modify_emit_identical_audited_images() {
     );
 }
 
+#[test]
+fn refed_classic_image_keeps_the_mt1939_engine_label() {
+    let image = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let first = Mt1939Engine.modify(image).expect("classic modify");
+    let again = Mt1939Engine
+        .modify(&first.image)
+        .expect("re-fed classic modify");
+    assert_eq!(again.engine, "MT1939");
+}
+
+#[test]
+fn conversion_only_rawread_lever_passes_the_audit() {
+    let image = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let mut report = Mt1939Engine.modify(image).expect("classic modify");
+    let rawread = report
+        .levers
+        .iter_mut()
+        .find(|l| l.id == LeverId::RawRead)
+        .expect("RawRead lever");
+    assert!(
+        rawread
+            .facts
+            .iter()
+            .any(|(k, v)| *k == "uhd_conversion_count" && *v > 0),
+        "fixture must apply the classic conversion"
+    );
+    rawread.facts.retain(|(k, _)| *k == "uhd_conversion_count");
+    let audit = crate::engine::audit::audit_image(image, &report);
+    assert!(
+        audit.ok(),
+        "{}",
+        audit
+            .failures()
+            .map(|c| format!("[{}] {}: {}", c.lever, c.what, c.detail))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
 /// Minimal recursive `.bin` walk (std-only).
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
@@ -637,4 +676,32 @@ fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
         }
     }
     out
+}
+
+fn de_only_details(img: &[u8]) -> Vec<(LeverId, String)> {
+    let r = Mt1939Engine.modify(img).expect("DE-only degrade");
+    r.levers
+        .iter()
+        .filter_map(|l| match &l.outcome {
+            LeverOutcome::SignatureNotFound { detail } => Some((l.id, detail.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn de_only_fallback_reports_the_base_build_error_not_a_canned_classic_note() {
+    let mut non_classic = synthetic_classic_de_only_image(0x00);
+    non_classic[freemkv_chipset::BANNER_OFFSET..freemkv_chipset::BANNER_OFFSET + 16]
+        .copy_from_slice(b"MT1959 Boot JB8 ");
+    assert!(!is_classic(&non_classic));
+    for img in [non_classic, synthetic_classic_de_only_image(0x00)] {
+        let missed = de_only_details(&img);
+        assert!(missed.len() >= 3, "{missed:?}");
+        for (id, detail) in missed {
+            assert!(detail.contains("base build failed"), "{id:?}: {detail}");
+            assert!(!detail.contains("classic generation"), "{id:?}: {detail}");
+            assert!(!detail.contains("pending the classic"), "{id:?}: {detail}");
+        }
+    }
 }

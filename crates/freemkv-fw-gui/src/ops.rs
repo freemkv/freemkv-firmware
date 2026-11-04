@@ -141,7 +141,10 @@ pub fn execute(job: &Job) -> Result<()> {
                 field(
                     "freemkv firmware",
                     if outcome.detected {
-                        message("modify.detected", &[("version", outcome.detail)])
+                        message(
+                            "modify.detected",
+                            &[("version", detected_version(&outcome))],
+                        )
                     } else {
                         "modify.not_detected".into()
                     },
@@ -150,4 +153,30 @@ pub fn execute(job: &Job) -> Result<()> {
         }
         Ok(())
     })
+}
+
+fn detected_version(outcome: &api::ProbeOutcome) -> String {
+    outcome
+        .version
+        .map_or_else(|| message("ui.unknown", &[]), |v| format!("0x{v:02x}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detected_version_is_the_bare_version_not_the_cli_sentence() {
+        let outcome = api::ProbeOutcome {
+            detected: true,
+            detail: "DETECTED (version 0x01)".into(),
+            version: Some(1),
+        };
+        let text = message(
+            "modify.detected",
+            &[("version", detected_version(&outcome))],
+        );
+        assert!(text.contains("0x01"), "{text}");
+        assert!(!text.contains("DETECTED"), "{text}");
+    }
 }

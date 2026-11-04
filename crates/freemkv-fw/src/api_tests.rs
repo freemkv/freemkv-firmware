@@ -239,3 +239,133 @@ fn old_modified_table_corruption_is_refused_before_modification() {
     );
     assert!(super::modify_with_defaults(&image, &crate::boot::BootSettings::standard()).is_err());
 }
+
+fn stub_report(levers: Vec<engine::lever::LeverReport>) -> engine::ModifyReport {
+    engine::ModifyReport {
+        engine: "TEST",
+        family: String::new(),
+        vendor: String::new(),
+        model: String::new(),
+        rev: String::new(),
+        vendor_specific: String::new(),
+        media: String::new(),
+        levers,
+        image: vec![1, 2, 3],
+        validation: engine::lever::Validation::StaticOnly,
+    }
+}
+
+fn stub_plan(_: &[u8]) -> Option<engine::CoverageRetry> {
+    Some(engine::CoverageRetry {
+        image: vec![9],
+        entry: 0,
+        old_end: 0,
+        new_end: 0,
+    })
+}
+
+#[test]
+fn failed_coverage_retry_keeps_the_degraded_first_result() {
+    use std::cell::Cell;
+    let calls = Cell::new(0);
+    let limited = engine::lever::LeverReport::missed(
+        engine::lever::LeverId::Identity,
+        "no CMAC-covered free space of 64 bytes",
+    );
+    let result = modify_with_retry(
+        &[0],
+        &crate::boot::BootSettings::standard(),
+        |_, _| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                let report = stub_report(vec![limited.clone()]);
+                let support = crate::boot::BootSupport::from_modify(&report);
+                Ok((report, support))
+            } else {
+                Err(anyhow::anyhow!("retry exploded"))
+            }
+        },
+        stub_plan,
+    );
+    let (report, _) = result.expect("a usable degraded first build must survive a failed retry");
+    assert_eq!(report.image, vec![1, 2, 3]);
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn failed_coverage_retry_reports_the_original_no_code_space_cause() {
+    use std::cell::Cell;
+    let calls = Cell::new(0);
+    let result = modify_with_retry(
+        &[0],
+        &crate::boot::BootSettings::standard(),
+        |_, _| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                Err(engine::NoCodeSpace { need: 64 }.into())
+            } else {
+                Err(anyhow::anyhow!("retry exploded"))
+            }
+        },
+        stub_plan,
+    );
+    let error = format!("{:#}", result.expect_err("no usable build exists"));
+    assert!(error.contains("no CMAC-covered free space"), "{error}");
+    assert!(!error.contains("retry exploded"), "{error}");
+}
+
+#[test]
+fn create_with_defaults_logs_the_input_image_fingerprint() {
+    use std::sync::{Arc, Mutex};
+    let path = Arc::new(Mutex::new(None));
+    let captured = path.clone();
+    let result = diagnostics::capture_events(
+        move |event| {
+            if let diagnostics::Event::Report(report) = event {
+                for (label, value) in report.gui_fields() {
+                    if label == "Diagnostic log" {
+                        *captured.lock().unwrap() = Some(std::path::PathBuf::from(value));
+                    }
+                }
+            }
+        },
+        || {
+            create_with_defaults(
+                b"not a firmware image",
+                &crate::boot::BootSettings::standard(),
+            )
+        },
+    );
+    assert!(result.is_err());
+    let path = path.lock().unwrap().clone().expect("diagnostic log path");
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(text.contains("input image: bytes=20 sha256="), "{text}");
+}
+
+#[test]
+fn probe_reports_the_version_byte_separately() {
+    let mut resp = abi::RESP_MAGIC.to_vec();
+    resp.push(1);
+    let outcome = classify_probe(Ok(resp));
+    assert!(outcome.detected);
+    assert_eq!(outcome.version, Some(1));
+}
+
+#[test]
+fn probe_transport_failure_is_not_called_stock_firmware() {
+    let io = anyhow::Error::new(std::io::Error::other("device vanished"));
+    let outcome = classify_probe(Err(io));
+    assert!(!outcome.detected);
+    assert!(!outcome.detail.contains("stock/OEM"), "{}", outcome.detail);
+    assert!(
+        outcome.detail.contains("device vanished"),
+        "{}",
+        outcome.detail
+    );
+
+    let sense = anyhow::Error::new(platform::ScsiSenseError::new(5, 0x20, 0, "invalid opcode"));
+    let outcome = classify_probe(Err(sense));
+    assert!(!outcome.detected);
+    assert!(outcome.detail.contains("stock/OEM"), "{}", outcome.detail);
+}
