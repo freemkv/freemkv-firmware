@@ -6,16 +6,15 @@ const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 #[path = "bypass_transaction_tests.rs"]
 mod bypass_transaction_tests;
 
-#[path = "native_startup_tests.rs"]
-mod native_startup_tests;
-
 // Release regression: run explicitly with PIONEER_SETTINGS_HOARD pointing at
 // the retained corpus. Unlike an environment-gated early return, a missing
-// corpus is an error when this test is requested. The source is checked against
-// every memory-read hash in the customer's 0.17.2 failure log before preparation.
+// corpus is an error when this test is requested. The persistent-bank
+// conversion no longer exists, so the customer's 0.17.2 pair is refused in
+// both directions by Flash and by Recovery, with or without the family
+// override.
 #[test]
 #[ignore = "requires retained Pioneer OEM corpus; mandatory for settings release sign-off"]
-fn customer_212u_101_to_213u_102_recovery_prepares_without_bank_conversion_refusal() {
+fn customer_212u_101_and_213u_102_are_refused_in_both_directions() {
     use sha2::{Digest, Sha256};
     let root = std::path::PathBuf::from(
         std::env::var("PIONEER_SETTINGS_HOARD").expect("PIONEER_SETTINGS_HOARD is required"),
@@ -25,604 +24,36 @@ fn customer_212u_101_to_213u_102_recovery_prepares_without_bank_conversion_refus
         assert_eq!(format!("{:x}", Sha256::digest(&bytes)), expected);
         bytes
     };
-    let installed = read(
+    let bdr_212u = read(
         "packages/pioneer/8F01/ID83/1.01/276c667ac1383c3aac110cbb433bd8627e49d626ac7c2136b1fa9dd29ecd11a7.installer.tar",
         "276c667ac1383c3aac110cbb433bd8627e49d626ac7c2136b1fa9dd29ecd11a7",
     );
-    let target = read(
+    let bdr_213u = read(
         "packages/pioneer/9201/ID58/1.02/967c3e42c65ae54802d9b6e1480e3fdf5f70b5de0d875da65731ab8567065415.installer.tar",
         "967c3e42c65ae54802d9b6e1480e3fdf5f70b5de0d875da65731ab8567065415",
     );
-    let (kernel, normal) = classify_flash_input(&installed).unwrap();
-    let kernel = Envelope::load(&kernel.unwrap()).unwrap();
-    let normal = Envelope::load_with_kernel(&normal.unwrap(), &kernel).unwrap();
-    let chunks: std::collections::BTreeMap<String, String> = serde_json::from_str(include_str!(
-        "../../test-fixtures/pioneer-212u-101-customer-readback.json"
-    ))
-    .unwrap();
-    assert_eq!(chunks.len(), 62);
-    for (location, expected) in chunks {
-        let (address, len) = location.split_once(':').unwrap();
-        let address = usize::from_str_radix(address, 16).unwrap();
-        let len: usize = len.parse().unwrap();
-        let (image, base) = if address < 0x410000 {
-            (kernel.image.as_slice(), 0x400000)
-        } else {
-            (normal.image.as_slice(), 0x410000)
-        };
-        let offset = address - base;
-        assert_eq!(
-            format!("{:x}", Sha256::digest(&image[offset..offset + len])),
-            expected,
-            "retained OEM code differs from customer readback at {location}"
+    for (installed, target) in [(&bdr_212u, &bdr_213u), (&bdr_213u, &bdr_212u)] {
+        assert_ne!(
+            crate::crossflash::decide(crate::crossflash::Platform::Pioneer, installed, target)
+                .status,
+            crate::crossflash::CompatibilityStatus::Yes
         );
-    }
-    let (target_kernel, target_normal) = classify_flash_input(&target).unwrap();
-    let target_kernel = Envelope::load(&target_kernel.unwrap()).unwrap();
-    let target_normal =
-        Envelope::load_with_kernel(&target_normal.unwrap(), &target_kernel).unwrap();
-    assert_eq!(
-        include_bytes!("../../test-fixtures/pioneer-213u-bank-guard.bin").as_slice(),
-        &target_normal.image[0x1409e8..0x140a7a]
-    );
-    let fixtures: serde_json::Value = serde_json::from_str(include_str!(
-        "../../test-fixtures/pioneer-212u-213u-bank-contracts.json"
-    ))
-    .unwrap();
-    for (name, image) in [
-        ("212u-1.01", &normal.image),
-        ("213u-1.02", &target_normal.image),
-    ] {
-        assert_eq!(
-            format!("{:x}", Sha256::digest(image)),
-            fixtures[name]["decoded_sha256"]
-        );
-        for fragment in fixtures[name]["fragments"].as_array().unwrap() {
-            let at = fragment["offset"].as_u64().unwrap() as usize;
-            let hex = fragment["bytes"].as_str().unwrap();
-            let actual: String = image[at..at + hex.len() / 2]
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect();
-            assert_eq!(
-                actual, hex,
-                "native CI fixture differs from {name} at {at:#x}"
-            );
-        }
-    }
-    let programmer = pioneer_optical::startup::bank::programmer::discover(&normal.image)
-        .expect("exact source OEM must bind native programmer evidence");
-    assert_eq!(
-        (
-            programmer.erase_entry(),
-            programmer.program_entry(),
-            programmer.sector_size()
-        ),
-        (0x4f0, 0x53c, 0x10000)
-    );
-    assert_eq!(programmer.runtime_interval(), (0x4be, 0x28c));
-    assert!(programmer.matches_runtime(&normal.image[0x16e8fc..0x16eb88]));
-    let layout = pioneer_optical::startup::bank::conversion::LayoutPair::discover(
-        &normal.image,
-        &target_normal.image,
-    )
-    .expect("exact OEM images must bind the offline converter");
-    let make_bank = |sequence: u16| {
-        let mut bank: Vec<u8> = (0..0x10000)
-            .map(|i| ((i * 13 + i / 257) % 251) as u8)
-            .collect();
-        bank[0xfff8..0xfffa].copy_from_slice(&0x8765u16.to_be_bytes());
-        bank[0xfffa..0xfffe].copy_from_slice(&0xfedc4321u32.to_be_bytes());
-        bank[0xfffe..].copy_from_slice(&sequence.to_be_bytes());
-        bank
-    };
-    let banks = [make_bank(7), make_bank(8)];
-    let converted = layout.convert([&banks[0], &banks[1]]).unwrap();
-    assert_eq!(converted.receipt().authoritative_bank(), 1);
-    assert_eq!(
-        *converted.footer_to_commit_last(),
-        [0x87, 0x65, 0xfe, 0xdc, 0x43, 0x22, 0, 8]
-    );
-    native_startup_tests::converted_record_reaches_native_acceptance(
-        converted.body_before_commit(),
-        converted.footer_to_commit_last(),
-    );
-    // The host may acknowledge a bank capture only after durable, exact
-    // published readback. Failure to save must not yield a receipt.
-    let captured = pioneer_optical::startup::bank::backup::BankBackup::capture(
-        &normal.image,
-        &target_normal.image,
-        [&banks[0], &banks[1]],
-        0x5e0000,
-        0x5f0000,
-    )
-    .unwrap();
-    let dir = std::env::temp_dir().join(crate::diagnostics::new_operation_id());
-    std::fs::create_dir(&dir).unwrap();
-    let path = dir.join("banks.bin");
-    let saved = super::bank_backup::persist_at(&path, &captured).unwrap();
-    assert!(captured.accepts(&saved));
-    assert_eq!(std::fs::read(&path).unwrap(), captured.bytes());
-    assert!(super::bank_backup::persist_at(&path, &captured).is_err());
-    assert_eq!(std::fs::read(&path).unwrap(), captured.bytes());
-    assert!(super::bank_backup::persist_at(&dir.join("missing/banks.bin"), &captured).is_err());
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-    }
-    std::fs::remove_dir_all(&dir).unwrap();
-    let current = recovery::Current::load(&installed).unwrap();
-    let result = recovery::Target::load(&target)
-        .unwrap()
-        .bind(&current, true);
-    assert!(
-        result.is_ok(),
-        "customer recovery preparation failed: {:#}",
-        result.err().unwrap()
-    );
-    let plan = result.unwrap();
-    let prepared = plan.prepared_for_tests();
-    assert_eq!(
-        prepared.pending_bridge(),
-        Some(pioneer_optical::receiver::BridgeKind::PersistentBanks)
-    );
-    let startup = prepared
-        .startup_setting()
-        .expect("preserve target startup policy");
-    assert_eq!(
-        (startup.parameter, startup.value, startup.explicit),
-        (0x9f, 0xffff, false)
-    );
-    assert!(prepared.settings().adaptation_id().is_none());
-    assert!(prepared.settings().requirements().is_empty());
-}
-
-// Literal routing answers are independent of the production resolver. The
-// full corpus KAT below additionally checks the resulting transformed bytes.
-#[test]
-fn pioneer_crossflash_transition_routing_known_answers() {
-    use pioneer_optical::production::ProductCode;
-    use pioneer_optical::settings::routing::{Decision, Table};
-    let table = Table::new(pioneer_optical::settings::adaptation::hardware_rules().unwrap());
-    for (source, target, expected) in [
-        ("BDR-212U", "BDR-213U", Decision::Unscoped),
-        ("BDR-213U", "BDR-212U", Decision::Unscoped),
-        (
-            "BDR-UD02TBD",
-            "BDR-UD04",
-            Decision::Profile("pioneer.ud02-to-ud04-1.14"),
-        ),
-        (
-            "BDR-UD04ABC",
-            "BDR-UD02",
-            Decision::Profile("pioneer.ud04-to-ud02-1.00"),
-        ),
-        (
-            "BDR-UD03FAL",
-            "BDR-UD02",
-            Decision::Profile("pioneer.ud03-to-ud02-1.00"),
-        ),
-        ("BDR-UD02TBD", "BDR-UD02", Decision::OriginalPlatform),
-        ("BDR-UD02TBD", "BDR-213U", Decision::UnsupportedDestination),
-        ("BDR-UD020TBD", "BDR-UD04", Decision::Unscoped),
-    ] {
-        assert_eq!(
-            table.resolve(
-                ProductCode::parse(source).unwrap(),
-                ProductCode::parse(target).unwrap()
-            ),
-            expected,
-            "{source} -> {target}"
-        );
-    }
-    for invalid in ["", "UNKNOWN", "BDR-UD02 TBD"] {
-        assert!(ProductCode::parse(invalid).is_none(), "{invalid:?}");
-    }
-}
-
-#[test]
-#[ignore = "requires retained Pioneer OEM corpus; mandatory for settings release sign-off"]
-fn held_ud02_ud04_settings_are_prepared_by_the_normal_live_authorization_path() {
-    let root = std::env::var("PIONEER_SETTINGS_HOARD")
-        .expect("mandatory corpus KAT requires PIONEER_SETTINGS_HOARD");
-    let root = std::path::Path::new(&root);
-    let component = |kind: &str, sha: &str, directory: &str| {
-        std::fs::read(root.join(directory).join(kind).join(format!("{sha}.enc"))).unwrap()
-    };
-    let source_dir = "dump/pioneer/sat/8410/ID84/1.00";
-    let kernel = component(
-        "kernel",
-        "7e1104a2843825aea6d03bde6359d94254f3cea192e576450f3f94c4afcee824",
-        source_dir,
-    );
-    let normal = component(
-        "normal",
-        "a37a4f222e2fa7e225f6451b30eb2e459f1933ab38c81a4d7967c10d77bc1373",
-        source_dir,
-    );
-    let mut archive = tar::Builder::new(Vec::new());
-    for (name, data) in [("kernel.enc", kernel), ("normal.enc", normal)] {
-        let mut header = tar::Header::new_gnu();
-        header.set_size(data.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        archive
-            .append_data(&mut header, name, data.as_slice())
-            .unwrap();
-    }
-    let installed = archive.into_inner().unwrap();
-    let target_kernel = component(
-        "kernel",
-        "36996326ae5eaa369ef34a8434514ca137b31a3f144af0955c2d12f4a8b2ea83",
-        "oem/pioneer/sat/8A10/GENERAL/1.00",
-    );
-    let target_normal = component(
-        "normal",
-        "8e02ed7244d8de7564f6e0606ba803f8614a6e2b87b5e24f7ee344cdcea71141",
-        "oem/pioneer/sat/8A10/GENERAL/1.14",
-    );
-    let mut target_archive = tar::Builder::new(Vec::new());
-    for (name, data) in [
-        ("kernel.enc", &target_kernel),
-        ("normal.enc", &target_normal),
-    ] {
-        let mut header = tar::Header::new_gnu();
-        header.set_size(data.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        target_archive
-            .append_data(&mut header, name, data.as_slice())
-            .unwrap();
-    }
-    let native_ud04 = target_archive.into_inner().unwrap();
-    assert_eq!(
-        crate::crossflash::decide(
-            crate::crossflash::Platform::Pioneer,
-            &installed,
-            &native_ud04
+        assert!(authorize_installed(
+            FlashPlan::new(execute_plan(target).unwrap()),
+            Some(installed)
         )
-        .status,
-        crate::crossflash::CompatibilityStatus::Conditional
-    );
-    assert_eq!(
-        crate::crossflash::decide(
-            crate::crossflash::Platform::Pioneer,
-            &native_ud04,
-            &installed
-        )
-        .status,
-        crate::crossflash::CompatibilityStatus::Conditional
-    );
-    // Both paths prepare the same certified pair without any factory-SKU read.
-    let current = recovery::Current::load(&installed).unwrap();
-    recovery::Target::load(&native_ud04)
-        .unwrap()
-        .bind(&current, false)
-        .unwrap();
-    let authorized = authorize_installed(
-        FlashPlan::new(ExecutePlan {
-            kernel: Some(target_kernel.clone()),
-            normal: target_normal.clone(),
-            selection: FlashSelection::KernelAndNormal,
-        }),
-        Some(&installed),
-    )
-    .unwrap();
-    let prepared: &Prepared = authorized.state().unwrap();
-    let complete = prepared.complete.as_ref().unwrap();
-    assert_eq!(
-        complete.settings().adaptation_id(),
-        Some("pioneer.ud02-to-ud04-1.14")
-    );
-    assert_eq!(
-        complete.settings().requirements(),
-        &[pioneer_optical::settings::adaptation::Requirement {
-            parameter: 0x28f,
-            value: 1
-        }]
-    );
-    let kernel = Envelope::load(&target_kernel).unwrap();
-    let normal = Envelope::load_with_kernel(complete.normal_transfer(), &kernel).unwrap();
-    use sha2::{Digest, Sha256};
-    assert_eq!(
-        format!("{:x}", Sha256::digest(normal.image.as_slice())),
-        "ca09032288c62b8b26bb983431af11b52aaeec8da9bd0e80afcccdf3b07f0815"
-    );
-
-    struct FactoryOnly {
-        parameters: Vec<u8>,
-        reads: usize,
-        writes: usize,
-    }
-    impl ScsiDevice for FactoryOnly {
-        fn describe(&self) -> String {
-            "factory-route software fixture".into()
-        }
-        fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
-            assert_eq!(command, pioneer_optical::production::parameters());
-            assert_eq!(len, self.parameters.len());
-            self.reads += 1;
-            Ok(self.parameters.clone())
-        }
-        fn command_out(&mut self, _command: &[u8], _data: &[u8]) -> Result<()> {
-            self.writes += 1;
-            bail!("preparation must never write")
-        }
-    }
-    let factory_drive = |code: &str| {
-        let mut parameters = vec![0xff; pioneer_optical::production::PARAMETERS_LEN];
-        parameters[0x84..0x88].copy_from_slice(b"kw01");
-        parameters[0x90..0x9f].fill(b' ');
-        parameters[0x90..0x90 + code.len()].copy_from_slice(code.as_bytes());
-        FactoryOnly {
-            parameters,
-            reads: 0,
-            writes: 0,
-        }
-    };
-    let mut ud03_archive = tar::Builder::new(Vec::new());
-    for (name, bytes) in [
-        (
-            "kernel.enc",
-            component(
-                "kernel",
-                "36d0e3542a34a653250295f86d489d5e1e4f7931043351d856f27e57477d72ae",
-                "oem/pioneer/sat/8510/ID19/1.03",
-            ),
-        ),
-        (
-            "normal.enc",
-            component(
-                "normal",
-                "6042da6069fec90d0e8052613f3f2d6e8ebb7e0d41dc770a5cf4c601f3960d4e",
-                "oem/pioneer/sat/8510/ID19/1.03",
-            ),
-        ),
-    ] {
-        let mut header = tar::Header::new_gnu();
-        header.set_size(bytes.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        ud03_archive
-            .append_data(&mut header, name, bytes.as_slice())
-            .unwrap();
-    }
-    let native_ud03 = ud03_archive.into_inner().unwrap();
-    let routes = crate::crossflash::classified_routes(
-        crate::crossflash::Platform::Pioneer,
-        &[&installed, &native_ud04, &native_ud03],
-    );
-    for source in 0..3 {
-        for target in 0..3 {
-            if source == target {
-                continue;
-            }
-            let actual: Vec<_> = routes
-                .iter()
-                .filter(|(i, j, _)| *i == source && *j == target)
-                .map(|(_, _, r)| r)
-                .collect();
-            assert_eq!(
-                actual.len(),
-                3,
-                "every reviewed original platform gets a separate alternative"
-            );
-            assert!(
-                actual.iter().any(|route| route.native_supported),
-                "native conversion is a normal Cross Flash"
-            );
-            let without_native: Vec<_> = actual
-                .iter()
-                .filter(|route| !route.native_supported)
-                .collect();
-            assert!(
-                !without_native.is_empty(),
-                "other original hardware retains return alternatives"
-            );
-            assert!(
-                without_native.iter().all(|route| !route.native_supported),
-                "removing native conversion leaves only hardware-specific fallback"
-            );
-            assert!(
-                actual.iter().any(|route| route.native_supported),
-                "restoring native conversion suppresses hardware fallback"
-            );
-            for (route, platform) in actual.iter().zip(["UD02", "UD03", "UD04"]) {
-                assert_eq!(route.status, crate::crossflash::RouteStatus::Conditional);
-                assert_eq!(
-                    route.native_supported,
-                    platform == ["UD02", "UD04", "UD03"][source]
-                );
-                assert_eq!(
-                    route.requirements,
-                    vec![crate::crossflash::RouteRequirement::OriginalHardware {
-                        platform: platform.into(),
-                        prefix: None,
-                        suffix: None
-                    }]
-                );
-            }
-        }
-    }
-    for original in ["BDR-UD02TBD", "BDU-UD02ABC", "BDR-UD02FAN"] {
-        for (target, allowed, profile) in [
-            (&native_ud04, true, Some("pioneer.ud02-to-ud04-1.14")),
-            (&native_ud03, true, Some("pioneer.ud02-to-ud03-1.03")),
-            (&installed, true, Some("pioneer.ud02-stock-return-1.00")),
-        ] {
-            let mut drive = factory_drive(original);
-            let authorized = authorize_installed_inner(
-                FlashPlan::new(execute_plan(target).unwrap()),
-                Some(&native_ud04),
-                Some(&mut ReadDevice::for_backend(&mut drive, &Pioneer)),
-            );
-            assert_eq!(authorized.is_ok(), allowed, "{original}: ordinary Flash");
-            if let Ok(authorized) = authorized {
-                let prepared: &Prepared = authorized.state().unwrap();
-                let plan = prepared.complete.as_ref().unwrap();
-                assert_eq!(plan.settings().adaptation_id(), profile);
-                assert!(plan.settings().requires_original_hardware());
-                if profile == Some("pioneer.ud02-stock-return-1.00") {
-                    assert!(plan.settings().requirements().is_empty());
-                }
-            }
-            for bypass in [false, true] {
-                let receiver = RecoveryTarget::new(
-                    "software fixture".into(),
-                    Some(recovery::Current::load(&native_ud04).unwrap()),
-                );
-                let recovered = RecoveryFacet::prepare(
-                    &Pioneer,
-                    &mut ReadDevice::for_backend(&mut drive, &Pioneer),
-                    &receiver,
-                    None,
-                    target,
-                    bypass,
-                );
-                assert_eq!(
-                    recovered.is_ok(),
-                    allowed,
-                    "{original}: Recovery, override={bypass}"
-                );
-            }
-            assert_eq!(drive.reads, 3);
-            assert_eq!(drive.writes, 0);
-        }
-    }
-    for original in ["BDR-UD03FAL", "BDR-UD04ABC"] {
-        let mut drive = factory_drive(original);
-        let authorized = authorize_installed_inner(
-            FlashPlan::new(execute_plan(&installed).unwrap()),
-            Some(&native_ud04),
-            Some(&mut ReadDevice::for_backend(&mut drive, &Pioneer)),
-        )
-        .unwrap();
-        let prepared: &Prepared = authorized.state().unwrap();
-        let complete = prepared.complete.as_ref().unwrap();
-        assert_eq!(
-            complete.settings().adaptation_id(),
-            Some(if original == "BDR-UD03FAL" {
-                "pioneer.ud03-to-ud02-1.00-packed"
-            } else {
-                "pioneer.ud04-to-ud02-1.00"
-            })
-        );
-        assert!(complete.settings().requirements().is_empty());
+        .is_err());
+        let current = recovery::Current::load(installed).unwrap();
         for bypass in [false, true] {
-            let receiver = RecoveryTarget::new(
-                "native inverse software fixture".into(),
-                Some(recovery::Current::load(&native_ud04).unwrap()),
+            assert!(
+                recovery::Target::load(target)
+                    .unwrap()
+                    .bind(&current, bypass)
+                    .is_err(),
+                "Recovery, override={bypass}"
             );
-            let recovered = RecoveryFacet::prepare(
-                &Pioneer,
-                &mut ReadDevice::for_backend(&mut drive, &Pioneer),
-                &receiver,
-                None,
-                &installed,
-                bypass,
-            )
-            .unwrap();
-            let _ = recovered;
-        }
-        assert_eq!(drive.reads, 3);
-        assert_eq!(drive.writes, 0);
-    }
-    // Supplied but invalid factory identity must never fall back to the
-    // installed firmware's branding, even with Recovery's family override.
-    for code in ["", "UNKNOWN", "BDR-UD02 TBD"] {
-        for target in [&native_ud04, &native_ud03, &installed] {
-            let mut drive = factory_drive(code);
-            assert!(authorize_installed_inner(
-                FlashPlan::new(execute_plan(target).unwrap()),
-                Some(&native_ud04),
-                Some(&mut ReadDevice::for_backend(&mut drive, &Pioneer)),
-            )
-            .is_err());
-            for bypass in [false, true] {
-                let receiver = RecoveryTarget::new(
-                    "invalid factory fixture".into(),
-                    Some(recovery::Current::load(&native_ud04).unwrap()),
-                );
-                assert!(RecoveryFacet::prepare(
-                    &Pioneer,
-                    &mut ReadDevice::for_backend(&mut drive, &Pioneer),
-                    &receiver,
-                    None,
-                    target,
-                    bypass,
-                )
-                .is_err());
-            }
-            assert_eq!(drive.reads, 3);
-            assert_eq!(drive.writes, 0);
         }
     }
-}
-
-#[test]
-fn held_native_inverse_rules_preserve_existing_oem_brand_crossflashes() {
-    let Ok(root) = std::env::var("PIONEER_CATALOGUE_FIXTURES") else {
-        return;
-    };
-    let read =
-        |sha: &str| std::fs::read(std::path::Path::new(&root).join(format!("{sha}.tar"))).unwrap();
-    let installed = read("349da8b41479735437872a898556c9bc9ddca135ddac0ef90a0684949f96dfb6");
-    for target in [
-        "504bcb44041b78c2d97df6f112923da61dad22d293dca91c1418e51e4a96b990",
-        "7c87d7fe7b9a6212ea51e57728257046d98db5e4348a9a14ed35f4eadcf16c1c",
-        "f6754ddce55ed49d15bc1b78e71034a9e01bdc73c4ad858480499d05f098b038",
-    ] {
-        let target = read(target);
-        decide_offline(&installed, &target).unwrap();
-        let routes = offline_routes(&installed, &target).unwrap().routes;
-        for platform in ["UD03", "UD04"] {
-            assert!(routes.iter().any(|r| r.requirements
-                == vec![crate::crossflash::RouteRequirement::OriginalHardware {
-                    platform: platform.into(),
-                    prefix: None,
-                    suffix: None
-                }]));
-        }
-    }
-}
-
-#[test]
-fn reported_ud02_capture_prepares_flash_and_recovery_without_factory_identity() {
-    let Ok(root) = std::env::var("PIONEER_UD02_REPORT_FIXTURES") else {
-        return;
-    };
-    let root = std::path::Path::new(&root);
-    let installed =
-        std::fs::read(root.join("BDR-UD04_1.14_8A10_349da8b4.tar.preflash.backup.tar")).unwrap();
-    let target = std::fs::read(root.join("BDR-UD04_1.14_8A10_349da8b4.tar")).unwrap();
-    assert_eq!(
-        crate::crossflash::decide(crate::crossflash::Platform::Pioneer, &installed, &target).status,
-        crate::crossflash::CompatibilityStatus::Yes
-    );
-    let current = recovery::Current::load(&installed).unwrap();
-    recovery::Target::load(&target)
-        .unwrap()
-        .bind(&current, false)
-        .unwrap();
-    let plan = FlashPlan::new(execute_plan(&target).unwrap());
-    let authorized = authorize_installed(plan, Some(&installed)).unwrap();
-    let prepared: &Prepared = authorized.state().unwrap();
-    let complete = prepared.complete.as_ref().unwrap();
-    assert_eq!(
-        complete.settings().adaptation_id(),
-        Some("pioneer.ud02-to-ud04-1.14")
-    );
-    assert_eq!(
-        complete.settings().requirements(),
-        &[pioneer_optical::settings::adaptation::Requirement {
-            parameter: 0x28f,
-            value: 1
-        }]
-    );
 }
 
 fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
@@ -684,7 +115,8 @@ fn balance(bytes: &mut [u8]) {
 pub(super) fn pair(gated: bool, marker: u8) -> Update {
     let mut kernel = vec![0; 0x10000];
     crate::kernel_handoff_fixture(&mut kernel);
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    // SAT8 tag: the matrix family needs a structured platform partition.
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT 8600GENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
     kernel[0x100..0x114].copy_from_slice(&[
@@ -711,8 +143,10 @@ pub(super) fn pair(gated: bool, marker: u8) -> Update {
     }
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    // Complete synthetic SAT8 matrix contract (pioneer-optical's
+    // `install_test_contract(_, 0x12)`), including the startup bank fixture,
+    // so the receiver establishes an installed and target hardware family.
+    let mut normal = include_bytes!("../../test-fixtures/pioneer-matrix-normal.bin").to_vec();
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
@@ -784,7 +218,7 @@ impl Drive {
         inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
         inquiry[32..36].copy_from_slice(b"1.00");
         let mut vendor = [0; pioneer_optical::IDENTITY_LEN];
-        vendor[16..24].copy_from_slice(b"SAT FFFE");
+        vendor[16..24].copy_from_slice(b"SAT 8600");
         vendor[24..32].copy_from_slice(b"GENERAL ");
         vendor[32..40].copy_from_slice(b"GENERAL ");
         Self {
@@ -1013,8 +447,8 @@ fn flash_stops_before_firmware_when_a0_read_is_unsupported() {
     let mut drive = Drive::new(&plan);
     drive.reject_parameter_read = true;
     let error = execute(&mut drive, &plan).unwrap_err();
-    assert!(format!("{error:#}").contains("A0 startup parameter read failed"));
-    assert!(format!("{error:#}").contains("no firmware was written"));
+    assert!(format!("{error:#}").contains("initial A0 startup parameter read failed"));
+    assert!(format!("{error:#}").contains("no settings or firmware were written"));
     assert!(drive.writes.is_empty());
     assert_eq!(drive.finishes, 0);
 }
@@ -1096,28 +530,6 @@ fn pair_with_normal_readback(marker: u8) -> Update {
     .unwrap();
     assert!(update.kernel().normal_layout().is_ok());
     update
-}
-
-#[test]
-fn temporary_bank_bridge_backup_is_usable_current_and_rejects_wrong_pair() {
-    let bridge = pair(false, 1);
-    let bytes = super::backup::assemble_tar(&[
-        bridge.kernel_transfer().to_vec(),
-        bridge.normal_transfer().to_vec(),
-    ])
-    .unwrap();
-    let dir = std::env::temp_dir().join(crate::diagnostics::new_operation_id());
-    std::fs::create_dir(&dir).unwrap();
-    let path = dir.join("bridge.tar");
-    assert!(super::bank_backup::persist_bridge_at(&path, &bytes, &pair(false, 0)).is_err());
-    assert!(!path.exists());
-    super::bank_backup::persist_bridge_at(&path, &bytes, &bridge).unwrap();
-    let saved = std::fs::read(&path).unwrap();
-    assert_eq!(saved, bytes);
-    recovery::Current::load(&saved).expect("saved bridge must be usable as Current for recovery");
-    assert!(super::bank_backup::persist_bridge_at(&path, &bytes, &bridge).is_err());
-    assert_eq!(std::fs::read(&path).unwrap(), saved);
-    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
@@ -1285,171 +697,4 @@ fn real_207m_to_pr1ml_flash_uses_a0_without_code_surface_match() {
         )
     );
     assert_eq!(drive.memory, plan.final_kernel_image());
-}
-
-#[test]
-fn held_oem_branded_routes_retain_exact_prepared_hardware_requirements() {
-    let Ok(root) = std::env::var("PIONEER_CATALOGUE_FIXTURES") else {
-        return;
-    };
-    struct FactoryFixture {
-        code: &'static str,
-        reads: usize,
-        writes: usize,
-    }
-    impl ScsiDevice for FactoryFixture {
-        fn describe(&self) -> String {
-            "factory parameter software fixture".into()
-        }
-        fn command_in(&mut self, command: &[u8], len: usize) -> Result<Vec<u8>> {
-            assert_eq!(command, pioneer_optical::production::parameters());
-            assert_eq!(len, pioneer_optical::production::PARAMETERS_LEN);
-            self.reads += 1;
-            let mut bytes = vec![0xff; len];
-            bytes[0x84..0x88].copy_from_slice(b"kw01");
-            bytes[0x90..0x9f].fill(b' ');
-            bytes[0x90..0x90 + self.code.len()].copy_from_slice(self.code.as_bytes());
-            Ok(bytes)
-        }
-        fn command_out(&mut self, _command: &[u8], _data: &[u8]) -> Result<()> {
-            self.writes += 1;
-            bail!("preparation must never write")
-        }
-    }
-    let read =
-        |sha: &str| std::fs::read(std::path::Path::new(&root).join(format!("{sha}.tar"))).unwrap();
-    let pairs: Vec<serde_json::Value> =
-        serde_json::from_str(include_str!("oem_route_pairs.json")).unwrap();
-    for pair in pairs {
-        let installed = read(pair["source"].as_str().unwrap());
-        let target = read(pair["target"].as_str().unwrap());
-        let decision =
-            crate::crossflash::decide(crate::crossflash::Platform::Pioneer, &installed, &target);
-        if pair["expected"] == "hard_no" {
-            assert_eq!(
-                decision.status,
-                crate::crossflash::CompatibilityStatus::HardNo,
-                "{pair}"
-            );
-            assert!(decision.routes.is_empty());
-            for platform in ["UD02", "UD03", "UD04"] {
-                let scope = pioneer_optical::settings::adaptation::hardware_rules()
-                    .unwrap()
-                    .iter()
-                    .find(|r| r.hardware.platform == platform)
-                    .unwrap()
-                    .hardware;
-                let error = authorize_installed_context(
-                    FlashPlan::new(execute_plan(&target).unwrap()),
-                    Some(&installed),
-                    None,
-                    Some(scope),
-                )
-                .err()
-                .unwrap();
-                assert_eq!(
-                    crate::user_error::UserError::of(&error).id,
-                    "errors.settings_unresolved"
-                );
-                assert!(
-                    error.chain().any(|e| matches!(
-                        e.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
-                        Some(pioneer_optical::settings::adaptation::Error::Guard)
-                    )),
-                    "{pair}: {error:#}"
-                );
-            }
-            for code in ["BDR-UD02TBD", "BDR-UD03FAL", "BDR-UD04ABC"] {
-                let mut factory = FactoryFixture {
-                    code,
-                    reads: 0,
-                    writes: 0,
-                };
-                let error = authorize_installed_inner(
-                    FlashPlan::new(execute_plan(&target).unwrap()),
-                    Some(&installed),
-                    Some(&mut ReadDevice::for_backend(&mut factory, &Pioneer)),
-                )
-                .err()
-                .unwrap();
-                assert_eq!(
-                    crate::user_error::UserError::of(&error).id,
-                    "errors.settings_unresolved"
-                );
-                assert!(
-                    error.chain().any(|e| matches!(
-                        e.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
-                        Some(pioneer_optical::settings::adaptation::Error::Guard)
-                    )),
-                    "live {code}: {pair}: {error:#}"
-                );
-                assert_eq!(factory.reads, 1);
-                assert_eq!(factory.writes, 0);
-            }
-            // This old no-context success still needs a live guard. Dropping
-            // that guard was the former ordinary catalogue false positive.
-            let old = authorize_installed(
-                FlashPlan::new(execute_plan(&target).unwrap()),
-                Some(&installed),
-            )
-            .unwrap();
-            let prepared: &Prepared = old.state().unwrap();
-            let settings = prepared.normal.as_ref().unwrap().settings();
-            assert!(settings.requires_original_hardware());
-            assert!(settings.original_hardware_scope().is_err());
-            continue;
-        }
-        assert_eq!(
-            decision.status,
-            crate::crossflash::CompatibilityStatus::Conditional,
-            "{pair}"
-        );
-        let expected: Vec<_> = ["UD03", "UD04"]
-            .into_iter()
-            .map(|platform| crate::crossflash::Route {
-                native_supported: false,
-                status: crate::crossflash::RouteStatus::Conditional,
-                requirements: vec![crate::crossflash::RouteRequirement::OriginalHardware {
-                    platform: platform.into(),
-                    prefix: None,
-                    suffix: None,
-                }],
-            })
-            .collect();
-        // This fixture checks exact live prerequisites; native catalogue
-        // classification is covered by the six-direction OEM matrix above.
-        let requirements_only: Vec<_> = decision
-            .routes
-            .iter()
-            .cloned()
-            .map(|mut route| {
-                route.native_supported = false;
-                route
-            })
-            .collect();
-        assert_eq!(requirements_only, expected, "{pair}");
-        for platform in ["UD03", "UD04"] {
-            let scope = pioneer_optical::settings::adaptation::hardware_rules()
-                .unwrap()
-                .iter()
-                .find(|r| r.hardware.platform == platform)
-                .unwrap()
-                .hardware;
-            let authorized = authorize_installed_context(
-                FlashPlan::new(execute_plan(&target).unwrap()),
-                Some(&installed),
-                None,
-                Some(scope),
-            )
-            .unwrap();
-            let prepared: &Prepared = authorized.state().unwrap();
-            let settings = match &prepared.complete {
-                Some(plan) => plan.settings(),
-                None => prepared.normal.as_ref().unwrap().settings(),
-            };
-            assert!(settings.requires_original_hardware());
-            assert_eq!(settings.original_hardware_scope().unwrap(), Some(scope));
-            assert_eq!(settings.adaptation_id(), None);
-        }
-    }
 }

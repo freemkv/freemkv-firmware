@@ -9,10 +9,11 @@ const REQUIRED: u16 = 0xfe24;
 fn override_plan() -> PreparedUpdate {
     let installed = pair(false, 1);
     let mut normal = installed.normal().image.clone();
-    // Native 009F comparison, with a recognized loader-rejection wrapper.
+    // Native 009F comparison, with a recognized loader-rejection wrapper. The
+    // getter call targets the matrix fixture's parameter reader at 0x1000.
     normal[0x600..0x614].copy_from_slice(&[
-        0x79, 0, 0, 0x9f, 0x5e, 0x41, 1, 0, 0x79, 0x20, 0xfe, 0x24, 0x47, 6, 0xf8, 1, 0x5e, 0x41,
-        7, 0x80,
+        0x79, 0, 0, 0x9f, 0x5e, 0x41, 0x10, 0, 0x79, 0x20, 0xfe, 0x24, 0x47, 6, 0xf8, 1, 0x5e,
+        0x41, 7, 0x80,
     ]);
     normal[0x780..0x786].copy_from_slice(&[0x5e, 0x40, 0x0a, 0x1a, 0x54, 0x70]);
     balance(&mut normal);
@@ -32,8 +33,6 @@ fn override_plan() -> PreparedUpdate {
         (setting.parameter, setting.value, setting.explicit),
         (0x9f, REQUIRED, true)
     );
-    assert!(plan.settings().adaptation_id().is_none());
-    assert!(plan.settings().requirements().is_empty());
     plan
 }
 

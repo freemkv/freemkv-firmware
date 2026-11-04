@@ -11,7 +11,7 @@
 
 use anyhow::{Context, Result};
 use freemkv_flash::crossflash::{
-    classified_routes, decide, CompatibilityStatus, Platform, RouteRequirement, RouteStatus,
+    classified_routes, decide, CompatibilityStatus, Platform, RouteStatus,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -59,8 +59,7 @@ fn run() -> Result<()> {
         )
         .context(freemkv_flash::user_error::IssueCode::CommandOptions));
     };
-    let mut groups: BTreeMap<(String, RouteStatus, Vec<RouteRequirement>, bool), Vec<String>> =
-        BTreeMap::new();
+    let mut groups: BTreeMap<(String, RouteStatus), Vec<String>> = BTreeMap::new();
     let mut evaluated_packages = Vec::new();
     for (dir, ext, platform) in [
         ("pioneer", "tar", Platform::Pioneer),
@@ -77,25 +76,24 @@ fn run() -> Result<()> {
         evaluated_packages.extend(ids.iter().cloned());
         for (i, j, route) in found {
             groups
-                .entry((
-                    ids[i].clone(),
-                    route.status,
-                    route.requirements,
-                    route.native_supported,
-                ))
+                .entry((ids[i].clone(), route.status))
                 .or_default()
                 .push(ids[j].clone());
         }
     }
     evaluated_packages.sort();
     evaluated_packages.dedup();
-    let groups: Vec<_> = groups.into_iter().map(|((source,status,requirements,native_supported),mut targets)| {
-        targets.sort(); targets.dedup();
-        serde_json::json!({"source":source,"status":status,"requirements":requirements,"native_supported":native_supported,"targets":targets})
-    }).collect();
+    let groups: Vec<_> = groups
+        .into_iter()
+        .map(|((source, status), mut targets)| {
+            targets.sort();
+            targets.dedup();
+            serde_json::json!({"source": source, "status": status, "targets": targets})
+        })
+        .collect();
     let doc = serde_json::json!({
         "format": "freemkv-crossflash-routes",
-        "version": 1,
+        "version": 2,
         "freemkv_flash": env!("CARGO_PKG_VERSION"),
         "evaluated_packages": evaluated_packages,
         "groups": groups,
@@ -113,18 +111,6 @@ fn why(installed: &Path, target: &Path) -> Result<()> {
     let decision = decide(platform, &installed, &target);
     match decision.status {
         CompatibilityStatus::Yes => println!("admitted"),
-        CompatibilityStatus::Conditional => {
-            println!(
-                "conditional: {}",
-                decision
-                    .reason
-                    .as_deref()
-                    .unwrap_or("live requirements apply")
-            );
-            for route in decision.routes {
-                println!("  requires {}", serde_json::to_string(&route.requirements)?);
-            }
-        }
         _ => println!(
             "refused: {}",
             decision.reason.as_deref().unwrap_or("no supported route")

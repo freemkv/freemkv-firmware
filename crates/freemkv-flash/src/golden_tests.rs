@@ -838,14 +838,14 @@ fn balance(bytes: &mut [u8]) {
 /// stamped verbatim, which yields a valid, reproducible signed package.
 fn pair_signature(kind: &str, gated: bool, marker: u8) -> Vec<u8> {
     const SIGS: &[(&str, &str)] = &[
-        ("prepared-false-0", "05923da2785f09b86e472e9ed01ccf55780c8f9ed55dd298c367ebec0e17736f850d1663960ae65e0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("prepared-false-1", "c4e4616400e79367b32f91bd86ff3be1a835f6634e1cfa357da2222c6d0c45c1822c836c8f77e75a0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("prepared-true-1", "94e603f35c61d3c72fccc0c7eb25e22b096c236f0a0618ed605e66132f6985ea93f8b4a602148c7c0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("recovery-false-0", "b261e04c66510d551d53d303907ffdcb87e850d16d498630e82813232170364b5ab19716a0a1e64c0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-false-0", "971336f25f92fb3dc7696a3f3048060e7da45c495099a3b1d9c30a69c6cf57dbde9ca379360c14180b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-true-1", "a5833e2f11fd3c16442f8c58ff24620d18aa2d4a536b6ac89bef346d5b13398e3620c88caa701b990b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-id58-false-0", "65a62c8799f2501976e44e7935c87e1eb45b3804728b835f098a4d0f8c50b1e19ddb221f935457ea0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("recovery-false-1", "238f8ee95e4e3df8126d980fa28824a7bddd93ad06f5f9a0ce6e69b6c3dae52a98aadedfe1862af40b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-false-0", "af9bccb9863bf148ea097f910cd5e101ecd1870fdd03e626fb28b47ae292f5dfc1abb5c2d251bb5b0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-false-1", "2eadaee6a7df36ee4615ce1a0b85d2068fabcae345852591a92bd6ce5620ecdaacf5d00cfa2504720b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-true-1", "3864afe48da93be70afb7a1c550c25968b93127d13f230b80ada54fb15861313575118264fc053990b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-false-0", "0c48376d8b1871b2443e3d4927a6bcb2c6423550498326f2a1276070ddd82cc3198ac131c818b65b0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-false-0", "69807c8a8643c3c51b29c9c8225cebaebb068597c532c80a5823cd96c79e3373fc3887fc474717870b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-true-1", "438e7c341ed9f3edd6aa04c32d95b2bfac5784095c83c3d941c931e0ee18bee853cc8a6658a63a710b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-id58-false-0", "b87468ac3989d625fd95e55f44680dd5f81ac2362c39c68129265d8cdc4e1f856d503d00a0b6b2c00b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-false-1", "0054136c1c33acb675976c44aa15e540a7a73d6ec376f4be6365eef49291e4eb4176d56274a647b50b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
     ];
     let key = format!("{kind}-{gated}-{marker}");
     let (_, hex) = SIGS
@@ -860,7 +860,7 @@ fn pair_signature(kind: &str, gated: bool, marker: u8) -> Vec<u8> {
 fn fixture_pair(gated: bool, marker: u8) -> Update {
     let mut kernel = vec![0; 0x10000];
     crate::kernel_handoff_fixture(&mut kernel);
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT 8600GENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
     kernel[0x100..0x114].copy_from_slice(&[
@@ -887,8 +887,7 @@ fn fixture_pair(gated: bool, marker: u8) -> Update {
     }
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    let mut normal = include_bytes!("test-fixtures/pioneer-matrix-normal.bin").to_vec();
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
@@ -958,7 +957,7 @@ impl ScsiDevice for RecoveryDrive {
             bytes[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
             bytes[32..36].copy_from_slice(if kernel { b"0000" } else { b"1.00" });
         } else if command == pioneer_optical::cdb::vendor_identity() {
-            bytes[16..24].copy_from_slice(b"SAT FFFE");
+            bytes[16..24].copy_from_slice(b"SAT 8600");
             bytes[24..32].copy_from_slice(b"GENERAL ");
             if !kernel {
                 bytes[32..40].copy_from_slice(b"GENERAL ");
@@ -1032,7 +1031,7 @@ impl ScsiDevice for RecoveryDrive {
 fn prepared_pair(gated: bool, marker: u8) -> Update {
     let mut kernel = vec![0; 0x10000];
     crate::kernel_handoff_fixture(&mut kernel);
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT 8600GENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
     kernel[0x100..0x114].copy_from_slice(&[
@@ -1059,8 +1058,7 @@ fn prepared_pair(gated: bool, marker: u8) -> Update {
     }
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    let mut normal = include_bytes!("test-fixtures/pioneer-matrix-normal.bin").to_vec();
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
@@ -1123,8 +1121,8 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
     put(&mut kernel, 0x200, "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 20 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de");
     put(&mut kernel, 0x400, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6");
     fix(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    // SAT8 matrix contract (includes the startup fixture) so the family is established.
+    let mut normal = include_bytes!("test-fixtures/pioneer-matrix-normal.bin").to_vec();
     normal[..16].copy_from_slice(&id[..16]);
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[24..32].copy_from_slice(b"GENERAL ");
@@ -2845,6 +2843,7 @@ const ALLOWED_REASONS: &[&str] = &[
     "M-BAK",
     "M-ENC",
     "M-LIFECYCLE",
+    "M18_IDENTITY_READ",
     "FMT",
 ];
 
@@ -2875,6 +2874,7 @@ const PIONEER_REASONS: &[&str] = &[
     "P10",
     "P11",
     "P12",
+    "P18_MATRIX_FIXTURE",
     "RECOVERY_TRAY",
     "FMT",
 ];

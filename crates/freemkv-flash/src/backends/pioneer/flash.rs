@@ -210,9 +210,6 @@ fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
             crate::diagnostics::record(format!("Pioneer startup check: {check:?}"));
         }
     }
-    if let Some(id) = plan.adaptation_id() {
-        crate::diagnostics::record(format!("Pioneer settings adaptation: {id}; original factory mechanism and live prerequisites must match before writing"));
-    }
     for setting in plan.entries() {
         match setting.effect() {
             Effect::ParameterWord {
@@ -258,10 +255,7 @@ where
     let code = error.code();
     let issue = if matches!(
         code,
-        "pioneer.settings.compatibility_unresolved"
-            | "pioneer.settings.conversion_unavailable"
-            | "pioneer.settings.adaptation_guard_failed"
-            | "pioneer.startup.bank_unknown_installed"
+        "pioneer.startup.bank_unknown_installed"
             | "pioneer.startup.bank_unknown_target"
             | "pioneer.startup.bank_conversion_required"
     ) {
@@ -270,9 +264,7 @@ where
         crate::user_error::IssueCode::from(error.kind())
     };
     let status = crate::crossflash::refusal_status(&error);
-    let guidance = if status == crate::crossflash::CompatibilityStatus::Conditional {
-        "This supported conversion requires verification of the drive’s original hardware and settings. No firmware was written."
-    } else if code.starts_with("pioneer.settings.") {
+    let guidance = if code.starts_with("pioneer.settings.") {
         "A validated settings mapping is required for this firmware and is unavailable. No firmware was written."
     } else if status == crate::crossflash::CompatibilityStatus::SoftNo {
         "No validated bridge could be prepared for this transition. No firmware was written."
@@ -331,7 +323,6 @@ fn execution_error(
     completed_stages: usize,
 ) -> anyhow::Error {
     let code = error.code();
-    let bank_bridge_remains = error.temporary_bank_bridge();
     let completed_stages = completed_stages.max(error.completed_stages());
     // Startup parameter writes are device mutations, but do not enter UPDATE.
     // Only expose rollback guidance before any update command or completed stage.
@@ -383,8 +374,7 @@ fn execution_error(
             crate::backend::UpdateProgress::Preflight
         },
         payload_bytes_accepted: None,
-        temporary_firmware: bank_bridge_remains
-            || (bridge_required && error.firmware_write_started()),
+        temporary_firmware: bridge_required && error.firmware_write_started(),
         completed_stages: (1..=completed_stages)
             .map(|stage| format!("Pioneer update stage {stage}"))
             .collect(),
@@ -396,11 +386,9 @@ fn execution_error(
     };
     if failure.temporary_firmware {
         error
-            .context(if bank_bridge_remains {
-                "the firmware sequence did not complete; temporary Normal firmware may remain installed; retain the saved bridge archive and drive data backup"
-            } else {
-                "the firmware sequence did not complete; the temporary Kernel may remain installed"
-            })
+            .context(
+                "the firmware sequence did not complete; the temporary Kernel may remain installed",
+            )
             .context(failure)
     } else {
         error.context(failure)
@@ -480,18 +468,6 @@ impl UpdateRuntime for Runtime<'_, '_> {
 }
 
 impl ExecutionRuntime<anyhow::Error> for Runtime<'_, '_> {
-    fn persist_bank_bridge(&mut self, pair: &pioneer_optical::envelope::Update) -> Result<bool> {
-        super::bank_backup::persist_bridge(pair)?;
-        Ok(true)
-    }
-
-    fn persist_bank_backup(
-        &mut self,
-        backup: &pioneer_optical::startup::bank::backup::BankBackup,
-    ) -> Result<Option<pioneer_optical::startup::bank::backup::BackupReceipt>> {
-        super::bank_backup::persist(backup).map(Some)
-    }
-
     fn verified(&mut self, stage: FlashStage, role: Role, matched: bool) {
         let state = if matched {
             ComponentVerification::Matched

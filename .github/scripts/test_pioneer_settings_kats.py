@@ -3,7 +3,6 @@ import subprocess
 
 TESTS = (
     'backends::pioneer::recovery::tests::pioneer_212u_213u_bank_contract_regression',
-    'backends::pioneer::prepared_tests::pioneer_crossflash_transition_routing_known_answers',
     *('backends::pioneer::prepared_tests::bypass_transaction_tests::' + name for name in (
         'bypass_preserves_verified_startup_transaction',
         'bypass_startup_failures_stop_before_firmware_and_restore_original',
@@ -11,13 +10,11 @@ TESTS = (
         'bypass_matching_startup_word_never_writes_settings',
     )),
 )
-NATIVE_BOOT = ('backends::pioneer::prepared_tests::native_startup_tests::'
-               'native_212u_unchanged_banks_are_rejected')
 COMMAND = ['cargo', 'test', '--locked', '-p', 'freemkv-flash', '--lib']
 
 
 def main():
-    for name in (*TESTS, NATIVE_BOOT):
+    for name in TESTS:
         options = ['--exact']
         result = subprocess.run(
             [*COMMAND, name, '--', *options],

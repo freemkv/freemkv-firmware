@@ -50,7 +50,7 @@ fn balance(bytes: &mut [u8]) {
     bytes[at..].copy_from_slice(&sum.wrapping_neg().to_be_bytes());
 }
 fn fixture_pair(gated: bool, marker: u8) -> Update {
-    fixture_pair_sat(gated, marker, b"SAT FFFEGENERAL 0000")
+    fixture_pair_sat(gated, marker, b"SAT 8600GENERAL 0000")
 }
 
 fn fixture_pair_sat(gated: bool, marker: u8, sat: &[u8; 20]) -> Update {
@@ -124,8 +124,9 @@ fn fixture_pair_class_with_model(
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     tweak(&mut kernel);
     balance(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    // Complete synthetic SAT8 matrix contract (pioneer-optical's
+    // `install_test_contract(_, 0x12)`), including the startup bank fixture.
+    let mut normal = include_bytes!("../../test-fixtures/pioneer-matrix-normal.bin").to_vec();
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
@@ -153,7 +154,7 @@ fn fixture_pair_class_with_model(
 }
 
 #[test]
-fn startup_format_refusal_is_shared_by_catalog_and_preparation() {
+fn differing_startup_formats_are_hard_refusals_even_with_the_family_override() {
     use crate::crossflash::{decide, CompatibilityStatus, Platform};
     let source = fixture_pair(false, 1);
     let mut normal = source.normal().image.clone();
@@ -171,27 +172,35 @@ fn startup_format_refusal_is_shared_by_catalog_and_preparation() {
     let target = Update::load(source.kernel_transfer(), &target_normal).unwrap();
     let source = archive(&source, false);
     let target = archive(&target, false);
+    // The persistent layout is never correctable, so the catalogue and Flash
+    // refuse at the family gate. No bank conversion exists under any policy.
     let decision = decide(Platform::Pioneer, &source, &target);
-    assert_eq!(decision.status, CompatibilityStatus::SoftNo);
-    assert!(decision
-        .reason
-        .unwrap()
-        .contains("pioneer.startup.bank_conversion_required"));
-    let legacy = crate::crossflash::admits(Platform::Pioneer, &source, &target).unwrap_err();
     assert_eq!(
-        crate::crossflash::refusal_status(legacy.as_ref()),
-        CompatibilityStatus::SoftNo
+        decision.status,
+        CompatibilityStatus::HardNo,
+        "{:?}",
+        decision.reason
     );
-    assert!(legacy
-        .to_string()
-        .contains("pioneer.startup.bank_conversion_required"));
-    let error = Plan::prepare(&source, &target)
+    assert!(decision.routes.is_empty());
+    let refused = crate::crossflash::admits(Platform::Pioneer, &source, &target).unwrap_err();
+    assert_eq!(
+        crate::crossflash::refusal_status(refused.as_ref()),
+        CompatibilityStatus::HardNo
+    );
+    assert!(Plan::prepare(&source, &target).is_err());
+    // Recovery's family override reaches the bank gate, which still refuses.
+    let current = Current::load(&source).unwrap();
+    let error = Plan::with_family_override(&current, &target, true)
         .err()
-        .expect("startup format must refuse preparation");
+        .expect("startup format must refuse preparation under the override");
     assert!(error.chain().any(|e| matches!(
         e.downcast_ref::<pioneer_optical::startup::bank::Error>(),
         Some(pioneer_optical::startup::bank::Error::ConversionRequired { .. })
     )));
+    assert_eq!(
+        crate::crossflash::refusal_status(error.as_ref()),
+        CompatibilityStatus::HardNo
+    );
 }
 
 // Native bank guard, capacity calculation, startup call pair, and rejection
@@ -466,9 +475,9 @@ impl ScsiDevice for Drive {
             bytes[32..36].copy_from_slice(if kernel { b"0000" } else { b"1.00" });
         } else if command == cdb::vendor_identity() {
             let hardware = if self.finished_passes > 0 {
-                self.post_flash_hardware.as_deref().unwrap_or("SAT FFFE")
+                self.post_flash_hardware.as_deref().unwrap_or("SAT 8600")
             } else {
-                "SAT FFFE"
+                "SAT 8600"
             };
             let kernel_tag = if self.finished_passes > 0 {
                 self.post_flash_kernel_tag.as_deref().unwrap_or("GENERAL ")
@@ -681,7 +690,7 @@ fn recognized_handoff_bridge_is_prepared_by_flash_offline_and_recovery() {
     let target = fixture_pair_class_with(
         false,
         1,
-        b"SAT FFFEGENERAL 0000",
+        b"SAT 8600GENERAL 0000",
         [0x100, 0x200],
         |kernel| {
             kernel.copy_within(0x20..0x30, 0x2a);
@@ -737,7 +746,7 @@ fn unknown_programmer_is_not_bypassed_by_recovery() {
     let current = fixture_pair_class_with(
         false,
         1,
-        b"SAT FFFEGENERAL 0000",
+        b"SAT 8600GENERAL 0000",
         [0x100, 0x200],
         |kernel| {
             kernel[0xe000..0xe016].fill(0);
@@ -764,7 +773,7 @@ fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
     let same = archive(&fixture_pair(false, 1), false);
     assert_eq!(decide(Platform::Pioneer, &installed, &same).status, Yes);
     let unknown = archive(
-        &fixture_pair_class_with(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200], |k| {
+        &fixture_pair_class_with(false, 1, b"SAT 8600GENERAL 0000", [0x100, 0x200], |k| {
             k[0xe000..0xe016].fill(0)
         }),
         false,
@@ -774,7 +783,7 @@ fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
     // A receiver-class change does not add a hard refusal to a paired update:
     // the incoming Kernel receives its own Normal after the handoff.
     let incompatible = archive(
-        &fixture_pair_class_with(false, 1, b"SAT FFFEGENERAL 0000", [0x104, 0x204], |k| {
+        &fixture_pair_class_with(false, 1, b"SAT 8600GENERAL 0000", [0x104, 0x204], |k| {
             k.copy_within(0x20..0x30, 0x2a);
             k[0x20..0x2a].fill(0);
         }),
@@ -934,11 +943,11 @@ fn two_region_kernel_recovery_preserves_oem_header_key_body_placement() {
     let installed = fixture_pair_class_with(
         false,
         1,
-        b"SAT FFFEGENERAL 0000",
+        b"SAT 8600GENERAL 0000",
         [0x100, 0x200],
         plant_two_region_signature,
     );
-    let target = fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]);
+    let target = fixture_pair_class(false, 0, b"SAT 8600GENERAL 0000", [0x400, 0x800]);
     let plan = Plan::from_updates(installed, target).unwrap();
     let mut drive = Drive {
         updating: true,
@@ -1735,8 +1744,8 @@ fn check_receiver_admits_a_different_sat_same_receiver_class() {
     // 0.11.x behaviour (e.g. BDR-UD03 SAT 8510 -> BDR-UD04 SAT 8A10). Only the
     // receiver encoding is gated, so a different SAT with the same receiver
     // class must be admitted. Regression guard against re-adding a SAT gate.
-    let installed = fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000");
-    let target = fixture_pair_sat(false, 0, b"SAT FFFDGENERAL 0000");
+    let installed = fixture_pair_sat(false, 1, b"SAT 8600GENERAL 0000");
+    let target = fixture_pair_sat(false, 0, b"SAT 8601GENERAL 0000");
     let ik = installed
         .kernel()
         .repack(&installed.kernel().image)
@@ -1756,8 +1765,8 @@ fn check_receiver_admits_a_different_sat_same_receiver_class() {
 fn paired_normal_uses_incoming_receiver_class() {
     use crate::backends::pioneer::flash_plan::receiver_class;
     // Different XOR-skip rules prove that the old Kernel is not Normal's receiver.
-    let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
-    let target = fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]);
+    let installed = fixture_pair_class(false, 1, b"SAT 8600GENERAL 0000", [0x100, 0x200]);
+    let target = fixture_pair_class(false, 0, b"SAT 8600GENERAL 0000", [0x400, 0x800]);
     let ik = installed
         .kernel()
         .repack(&installed.kernel().image)
@@ -1785,8 +1794,8 @@ fn paired_normal_uses_incoming_receiver_class() {
 fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
     use crate::backend::FlashPlan;
     use crate::backends::pioneer::{authorize_installed, execute_plan};
-    let target = fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]);
-    let installed = fixture_pair_class(false, 1, b"SAT FFFEGENERAL 0000", [0x100, 0x200]);
+    let target = fixture_pair_class(false, 0, b"SAT 8600GENERAL 0000", [0x400, 0x800]);
+    let installed = fixture_pair_class(false, 1, b"SAT 8600GENERAL 0000", [0x100, 0x200]);
     let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
     let authorized = authorize_installed(plan, Some(&archive(&installed, false))).unwrap();
 
@@ -1814,8 +1823,8 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
     assert_eq!(proof.image, target.normal().image);
     assert!(be32_sum_zero(&proof.image));
 
-    let target = fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000");
-    let installed = fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000");
+    let target = fixture_pair_sat(false, 0, b"SAT 8600GENERAL 0000");
+    let installed = fixture_pair_sat(false, 1, b"SAT 8601GENERAL 0000");
     let plan = FlashPlan::new(execute_plan(&archive(&target, false)).unwrap());
     if let Err(e) = authorize_installed(plan, Some(&archive(&installed, false))) {
         panic!("a different-SAT, same-class installed Kernel must be admitted: {e:#}");
@@ -1826,7 +1835,7 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
 fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() {
     let installed = fixture_pair(false, 1);
     let mut normal = installed.normal().image.clone();
-    normal[0x401] = 0x13;
+    normal[0x701] = 0x13; // matrix fixture: the IRQ variant field that distinguishes families
     balance(&mut normal);
     let mut scalar = [0; 20];
     scalar[19] = 5;
@@ -1940,8 +1949,8 @@ fn recover_admits_a_different_sat_target_in_the_same_family() {
     // `image::family` does not hash the SAT, and a hardware family spans several
     // SATs. recover gates on family + re-encode, never SAT, so a same-family,
     // different-SAT target must prepare. Regression guard against a SAT gate.
-    let current = archive(&fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000"), false);
-    let other_sat = archive(&fixture_pair_sat(false, 0, b"SAT FFFDGENERAL 0000"), false);
+    let current = archive(&fixture_pair_sat(false, 1, b"SAT 8600GENERAL 0000"), false);
+    let other_sat = archive(&fixture_pair_sat(false, 0, b"SAT 8601GENERAL 0000"), false);
     if let Err(e) = Plan::prepare(&current, &other_sat) {
         panic!("a same-family, different-SAT target must prepare: {e:#}");
     }
@@ -1973,10 +1982,10 @@ fn crossflash_links_follow_the_flash_gates() {
     // decision: a different SAT with the same receiver class links both ways; a
     // different receiver class also links when the incoming Kernel receives Normal.
     use crate::crossflash::{links, Platform};
-    let sat_a = archive(&fixture_pair_sat(false, 0, b"SAT FFFEGENERAL 0000"), false);
-    let sat_b = archive(&fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000"), false);
+    let sat_a = archive(&fixture_pair_sat(false, 0, b"SAT 8600GENERAL 0000"), false);
+    let sat_b = archive(&fixture_pair_sat(false, 1, b"SAT 8601GENERAL 0000"), false);
     let class_y = archive(
-        &fixture_pair_class(false, 0, b"SAT FFFEGENERAL 0000", [0x400, 0x800]),
+        &fixture_pair_class(false, 0, b"SAT 8600GENERAL 0000", [0x400, 0x800]),
         false,
     );
     let found = links(Platform::Pioneer, &[&sat_a, &sat_b, &class_y]);
@@ -2057,7 +2066,7 @@ fn current_assisted_identity_requires_exact_receiver_evidence_before_firmware_io
     inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
     inquiry[32..36].copy_from_slice(b"1.00");
     let mut identity = vec![b' '; pioneer_optical::IDENTITY_LEN];
-    identity[16..24].copy_from_slice(b"SAT FFFE");
+    identity[16..24].copy_from_slice(b"SAT 8600");
     identity[24..32].copy_from_slice(b"GENERAL ");
     identity[32..40].copy_from_slice(b"GENERAL ");
     for (field, expected_reads) in [(8..16, 1), (16..32, 1), (0..1, 0), (32..36, 1)] {
@@ -2116,7 +2125,7 @@ fn invalid_current_is_refused_before_probe_and_missing_current_uses_read_only_de
     let unsupported = fixture_pair_class_with(
         false,
         1,
-        b"SAT FFFEGENERAL 0000",
+        b"SAT 8600GENERAL 0000",
         [0x100, 0x200],
         |kernel| kernel[0x300..0x400].fill(0),
     );
@@ -2289,7 +2298,7 @@ fn normal_only_installed_tag_mismatch_has_specific_guidance() {
     use crate::backend::FlashPlan;
     use crate::localization::{self, Language};
     let current = fixture_pair(false, 1);
-    let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    let target = fixture_pair_sat(false, 1, b"SAT 8600ID72    0000");
     let installed = archive(&current, false);
     let issue = installed_compatibility_issue(&installed, target.normal_transfer());
     assert_eq!(issue.id, "errors.installed_kernel_mismatch");
@@ -2319,7 +2328,7 @@ fn normal_only_installed_tag_mismatch_has_specific_guidance() {
     assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
 
     // A complete incoming pair may replace the installed Kernel generation.
-    let complete_target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    let complete_target = fixture_pair_sat(false, 1, b"SAT 8600ID72    0000");
     let plan =
         FlashPlan::new(super::super::execute_plan(&archive(&complete_target, false)).unwrap());
     assert!(super::super::authorize_installed(plan, Some(&installed)).is_ok());
@@ -2330,15 +2339,15 @@ fn normal_only_tag_match_still_requires_matching_sat_and_model_headers() {
     use crate::backend::{FlashPlan, UpdateFailure};
     use crate::user_error::{explain, IssueCode, UserError};
 
-    let installed_pair = fixture_pair_sat(false, 1, b"SAT FFFEGENERAL 0000");
+    let installed_pair = fixture_pair_sat(false, 1, b"SAT 8600GENERAL 0000");
     let installed = archive(&installed_pair, false);
     let installed_kernel = installed_pair.kernel_transfer();
 
-    let different_sat = fixture_pair_sat(false, 1, b"SAT FFFDGENERAL 0000");
+    let different_sat = fixture_pair_sat(false, 1, b"SAT 8601GENERAL 0000");
     let different_model = fixture_pair_class_with_model(
         false,
         1,
-        b"SAT FFFEGENERAL 0000",
+        b"SAT 8600GENERAL 0000",
         [0x100, 0x200],
         "PIONEER BDR-OTHER",
         |_| {},
@@ -2420,7 +2429,7 @@ fn installed_tag_mismatch_does_not_hide_invalid_current_or_target() {
     use crate::backend::FlashPlan;
     use crate::user_error::{IssueCode, UserError};
     let current = fixture_pair(false, 1);
-    let target = fixture_pair_sat(false, 1, b"SAT FFFEID72    0000");
+    let target = fixture_pair_sat(false, 1, b"SAT 8600ID72    0000");
     // Missing installed Normal must fail receiver validation before comparing
     // the valid GENERAL Kernel with the independently valid ID72 target.
     for installed in [b"invalid Current".as_slice(), current.kernel_transfer()] {
@@ -2527,7 +2536,7 @@ fn composed_bridge_warnings_describe_the_final_stage_without_assuming_two_passes
     let target = fixture_pair_class_with(
         false,
         0,
-        b"SAT FFFEGENERAL 0000",
+        b"SAT 8600GENERAL 0000",
         [0x100, 0x200],
         |kernel| {
             kernel.copy_within(0x20..0x30, 0x2a);
@@ -2579,7 +2588,7 @@ fn current_vendor_mismatch_on_a_detected_pioneer_drive_is_a_specific_error() {
     inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
     inquiry[32..36].copy_from_slice(b"1.00");
     let mut identity = vec![b' '; pioneer_optical::IDENTITY_LEN];
-    identity[16..24].copy_from_slice(b"SAT FFFE");
+    identity[16..24].copy_from_slice(b"SAT 8600");
     identity[24..32].copy_from_slice(b"GENERAL ");
     identity[32..40].copy_from_slice(b"GENERAL ");
     let mut dev = UnsupportedDrive {

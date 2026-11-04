@@ -91,10 +91,10 @@ result: OK
 result: OK
 --- text (2) ---
 Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
-validate_backup: ok, 146432 bytes sha256=1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
+validate_backup: ok, 146432 bytes sha256=a9f96d3eda761220ac1dcca7d27ecbdf2d6ba896581f671f4b5fbbf64b40cd1f
 --- events (2) ---
 MSG      Unverified: User provided: firmware captured from this drive; update metadata was reconstructed. Not identified as an original OEM release.
-MSG      validate_backup: ok, 146432 bytes sha256=1ced085abfc3355e183d916efb4b88ee0f6b42040fc2b514787417ef649b6b49
+MSG      validate_backup: ok, 146432 bytes sha256=a9f96d3eda761220ac1dcca7d27ecbdf2d6ba896581f671f4b5fbbf64b40cd1f
 
 === verify_preflash_backup: Kernel-only (partial) backup vs Kernel+Normal bundle ===
 result: ERR pre-flash backup is incomplete: the Normal region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.
@@ -110,10 +110,10 @@ result: ERR pre-flash backup is incomplete: the Normal region (which the flash o
 result: OK
 --- text (2) ---
 Unverified: PARTIAL BACKUP: saved the Kernel only (as kernel.enc). The Normal region could not be read — `freemkv-flash dump <device>` can save a best-effort raw salvage image (not a flashable backup).
-validate_backup: ok, 71680 bytes sha256=c1ec202edd046d128003e6e488f961f02f93fa7533f42c967527b6919eb98ae8
+validate_backup: ok, 71680 bytes sha256=9f3325102dc1a7bbd1f962fa85d03480a3352f305c52c543ce2aaf9e9cdc9bda
 --- events (2) ---
 MSG      Unverified: PARTIAL BACKUP: saved the Kernel only (as kernel.enc). The Normal region could not be read — `freemkv-flash dump <device>` can save a best-effort raw salvage image (not a flashable backup).
-MSG      validate_backup: ok, 71680 bytes sha256=c1ec202edd046d128003e6e488f961f02f93fa7533f42c967527b6919eb98ae8
+MSG      validate_backup: ok, 71680 bytes sha256=9f3325102dc1a7bbd1f962fa85d03480a3352f305c52c543ce2aaf9e9cdc9bda
 
 === verify_preflash_backup: Normal-only (partial) backup vs Kernel+Normal bundle ===
 result: ERR pre-flash backup is incomplete: the Kernel region (which the flash overwrites) could not be captured, so it has no rollback. Refusing to flash. Resolve the read error first (`freemkv-flash dump <device>` saves a raw salvage image, which is NOT a flashable backup), and capture a complete backup before retrying.

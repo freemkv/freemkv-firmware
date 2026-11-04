@@ -26,9 +26,7 @@ pub(crate) fn offline_routes(
             mtk::decide_offline(installed, target)?;
             Ok(crate::crossflash::Evaluation {
                 routes: vec![crate::crossflash::Route {
-                    native_supported: true,
                     status: crate::crossflash::RouteStatus::Allowed,
-                    requirements: Vec::new(),
                 }],
                 reason: None,
             })

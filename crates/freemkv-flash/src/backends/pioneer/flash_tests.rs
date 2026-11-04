@@ -25,44 +25,6 @@ fn source_readback_mismatch_before_writes_remains_preflight_evidence() {
 }
 
 #[test]
-fn bank_transition_failures_preserve_temporary_normal_and_backup_guidance() {
-    use pioneer_optical::receiver::ExecutionError;
-    for (temporary, bank_started, completed) in
-        [(false, false, 0), (true, false, 0), (true, true, 1)]
-    {
-        let source = Box::new(ExecutionError::Plan("original bank failure"));
-        let error = ExecutionError::BankTransition {
-            temporary_firmware: temporary,
-            bank_write_started: bank_started,
-            phase: "bank-transition-test",
-            source: if completed == 0 {
-                source
-            } else {
-                Box::new(ExecutionError::AfterStage { completed, source })
-            },
-        };
-        let error = execution_error(error, false, 0);
-        let failure = error
-            .downcast_ref::<crate::backend::UpdateFailure>()
-            .unwrap();
-        assert_eq!(failure.temporary_firmware, temporary);
-        // An already installed bridge is recovery state, not evidence that
-        // this invocation attempted a write.
-        assert_eq!(failure.write_started, bank_started);
-        assert_eq!(failure.completed_stages.len(), completed);
-        let message = format!("{error:#}");
-        assert!(message.contains("original bank failure"));
-        assert_eq!(message.contains("temporary Normal firmware"), temporary);
-        assert!(!message.contains("temporary Kernel may remain"));
-        if temporary {
-            assert!(message.contains("saved bridge archive and drive data backup"));
-        } else {
-            assert_eq!(failure.progress, crate::backend::UpdateProgress::Preflight);
-        }
-    }
-}
-
-#[test]
 fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
     let source = || anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::BrokenPipe));
     for error in [
@@ -1162,52 +1124,42 @@ fn startup_wrapper_never_hides_firmware_or_completed_pass_consequences() {
 }
 
 #[test]
-fn settings_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
-    use pioneer_optical::{receiver::PreparationError, settings::update::Error};
+fn bank_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
+    use pioneer_optical::{
+        receiver::PreparationError,
+        startup::{
+            bank::{Error, Storage},
+            checks,
+        },
+    };
+    let storage = |base| Storage::KernelSequences {
+        sequences: [base, base + 1],
+        bases: [base + 2, base + 3],
+    };
     for (error, code) in [
         (
-            Error::ConversionUnavailable,
-            "pioneer.settings.conversion_unavailable",
+            Error::UnknownInstalled,
+            "pioneer.startup.bank_unknown_installed",
         ),
+        (Error::UnknownTarget, "pioneer.startup.bank_unknown_target"),
         (
-            Error::Unresolved,
-            "pioneer.settings.compatibility_unresolved",
+            Error::ConversionRequired {
+                installed: storage(1),
+                target: storage(5),
+            },
+            "pioneer.startup.bank_conversion_required",
         ),
     ] {
-        let report = super::preparation_error(PreparationError::Settings(error));
+        let report =
+            super::preparation_error(PreparationError::Startup(checks::Error::Banks(error)));
         assert_eq!(
             crate::user_error::UserError::of(&report).id,
             "errors.settings_unresolved"
         );
         let message = format!("{report:#}");
-        assert!(message.contains(code));
-        assert!(message.contains("settings mapping"));
+        assert!(message.contains(code), "{message}");
         assert!(message.contains("No firmware was written"));
         assert!(!message.contains("hardware mismatch"));
-    }
-}
-
-#[test]
-fn adaptation_guard_is_settings_refusal_and_other_categories_are_preserved() {
-    use pioneer_optical::{receiver::PreparationError, settings::adaptation::Error};
-    let report = super::preparation_error(PreparationError::Adaptation(Error::Guard));
-    assert_eq!(
-        crate::user_error::UserError::of(&report).id,
-        "errors.settings_unresolved"
-    );
-    assert_eq!(
-        crate::crossflash::refusal_status(report.as_ref()),
-        crate::crossflash::CompatibilityStatus::HardNo
-    );
-    assert!(report
-        .chain()
-        .any(|e| matches!(e.downcast_ref::<Error>(), Some(Error::Guard))));
-    for (error, expected) in [
-        (Error::Registry, "errors.unexpected"),
-        (Error::Representation, "errors.unsupported_firmware"),
-    ] {
-        let report = super::preparation_error(PreparationError::Adaptation(error));
-        assert_eq!(crate::user_error::UserError::of(&report).id, expected);
     }
 }
 

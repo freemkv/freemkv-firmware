@@ -181,11 +181,8 @@ impl FamilyKey {
         FamilyKey(id.into())
     }
 
-    /// Profile an envelope-DECODED firmware body (`decode_envelope(..).image`).
-    /// `None` for a body that cannot be profiled (a Kernel component, a
-    /// non-Pioneer blob, ...).
-    pub fn from_body(body: &[u8]) -> Option<Self> {
-        pioneer_optical::image::family(body).map(|id| FamilyKey(id.to_string()))
+    fn from_family(family: pioneer_optical::image::Family) -> Self {
+        FamilyKey(family.to_string())
     }
 }
 
@@ -199,13 +196,17 @@ impl std::fmt::Display for FamilyKey {
 pub fn normal_family_with_kernel(normal: &[u8], kernel: &[u8]) -> Option<FamilyKey> {
     let kernel = pioneer_optical::envelope::decode_envelope(kernel)?;
     let normal = pioneer_optical::envelope::decode_envelope_with_kernel(normal, &kernel)?;
-    FamilyKey::from_body(&normal.image)
+    normal
+        .family_with_kernel(&kernel)
+        .map(FamilyKey::from_family)
 }
 
-/// Family of a NORMAL component's raw envelope bytes: decode the envelope and
-/// profile the decoded body. `None` if it does not decode or cannot be profiled.
+/// Matrix family of a NORMAL component's raw envelope bytes. `None` if it does
+/// not decode or its family needs the associated Kernel.
 pub fn normal_family(normal: &[u8]) -> Option<FamilyKey> {
-    FamilyKey::from_body(&pioneer_optical::envelope::decode_envelope(normal)?.image)
+    pioneer_optical::envelope::decode_envelope(normal)?
+        .family()
+        .map(FamilyKey::from_family)
 }
 
 // ---- Receiver class and the installed-Kernel receiver gate ------------------
@@ -410,8 +411,8 @@ pub fn family_gate(
 ) -> Result<(), String> {
     use crate::firmware_comparison::FamilyRelationship;
     let relation = FamilyRelationship::compare(
-        installed.map(|f| (pioneer_optical::image::FAMILY_SCHEME, f.0.as_str())),
-        target.map(|f| (pioneer_optical::image::FAMILY_SCHEME, f.0.as_str())),
+        installed.map(|f| (pioneer_optical::image::MATRIX_FAMILY_SCHEME, f.0.as_str())),
+        target.map(|f| (pioneer_optical::image::MATRIX_FAMILY_SCHEME, f.0.as_str())),
     );
     match (installed, target) {
         (Some(_), Some(_)) if relation == FamilyRelationship::Same => Ok(()),
@@ -614,7 +615,16 @@ pub(super) fn target_from_loaded(
     normal: &pioneer_optical::envelope::Envelope,
     kernel_bytes: Option<&[u8]>,
     normal_bytes: &[u8],
+    installed_kernel: Option<&pioneer_optical::envelope::Envelope>,
 ) -> Result<Target> {
+    // Kernel-resident family evidence comes from the package's own Kernel, or
+    // for a Normal-only update (same edition only) from the unchanged installed
+    // Kernel that keeps running.
+    let family = normal.family().or_else(|| {
+        kernel
+            .or(installed_kernel)
+            .and_then(|k| normal.family_with_kernel(k))
+    });
     let controller_id = kernel
         .and_then(|k| controller_id_from_sat(&k.info().hardware_version))
         .or_else(|| controller_id_from_sat(&normal.info().hardware_version))
@@ -637,7 +647,7 @@ pub(super) fn target_from_loaded(
             date: component_date(normal_bytes),
         }),
         kernel,
-        family: normal.family().map(|f| FamilyKey::new(f.to_string())),
+        family: family.map(FamilyKey::from_family),
         required_kernel_tag: (!tag.is_empty()).then(|| tag.to_owned()),
     })
 }
@@ -654,7 +664,7 @@ pub(super) fn installed_from_loaded(
             .installed_kernel()
             .and_then(|k| super::k::receiver_generation(&k.image)),
         normal_date: FwDate::parse(&header.generated_date),
-        family: receiver.family().map(|f| FamilyKey::new(f.to_string())),
+        family: receiver.family().map(FamilyKey::from_family),
         kernel_tag: (!tag.is_empty()).then(|| tag.to_owned()),
     })
 }

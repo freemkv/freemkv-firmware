@@ -5,6 +5,31 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.18.0] - 2026-11-03
+
+### freemkv Flash
+
+- A cleaner design for Pioneer drives: new hardware family matching and filter rules replace the previous matching criteria. A cross-flash is offered only when the drive's hardware family matches and every hardware difference is covered by a proven correction.
+- Cross-flashes the new rules do not support are no longer offered, including BDR-212U ↔ BDR-213U and the earlier UD02 conversions.
+- Refreshing the drive list no longer freezes the window while a slow drive is scanned, and no longer replaces the log of an operation you just ran.
+- Failed or partly unreadable reads are reported as failures instead of looking like success, and a log saved after a failure keeps the right details.
+- Drives and file paths are recognised more reliably on Windows, including long and network paths.
+- Clearer messages when a drive cannot be identified, instead of reporting it as stock firmware.
+- Linux packages declare the system libraries they need, and Windows installers carry the correct version number.
+
+### freemkv Modify
+
+- `info --full` no longer saves empty capture files or reports success when a memory region could not be read.
+- `verify` on a drive reports "NOT DETERMINED" once, with the reason, when the drive does not answer.
+- Firmware is never overwritten by accident through a different spelling of the same path.
+- New output files follow your normal file permissions.
+- The drive scan runs in the background, so the window stays responsive.
+
+### Under the hood
+
+- Updated to pioneer-optical 1.6.0 and mediatek-optical 1.3.0, with old and replaced interfaces removed.
+- A full code audit; every high and medium issue it found has been fixed.
+
 ## [0.17.3] - 2026-11-02
 
 ### freemkv Flash
