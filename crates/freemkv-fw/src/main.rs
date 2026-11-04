@@ -251,7 +251,7 @@ enum VerifyTarget {
 /// True for a Windows device-namespace path (`\\.\CdRom0`, `\\?\scsi#...`).
 /// A `\\.\` or `\\?\` path with components below its root (`\\?\C:\fw.bin`,
 /// `\\?\UNC\srv\share\fw.bin`, `\\?\Volume{..}\fw.bin`) names a file, except
-/// below `\\?\GLOBALROOT\`, the NT object namespace, which is always a device.
+/// below `GLOBALROOT\`, the NT object namespace, which is always a device.
 fn is_windows_device_path(s: &str) -> bool {
     let Some(rest) = s.strip_prefix(r"\\.\").or_else(|| s.strip_prefix(r"\\?\")) else {
         return false;

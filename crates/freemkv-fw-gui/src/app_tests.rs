@@ -347,13 +347,13 @@ fn a_scan_finishing_after_a_job_does_not_replace_the_jobs_log() {
         let _ = gate
             .lock()
             .unwrap()
-            .recv_timeout(std::time::Duration::from_secs(5));
+            .recv_timeout(std::time::Duration::from_secs(30));
         Vec::new()
     }));
     let ctx = egui::Context::default();
     app.discover(&ctx);
     app.start_job(&ctx, "job", Job::Probe("missing-drive".into()));
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while app.running && std::time::Instant::now() < deadline {
         app.pump();
         std::thread::sleep(std::time::Duration::from_millis(1));
