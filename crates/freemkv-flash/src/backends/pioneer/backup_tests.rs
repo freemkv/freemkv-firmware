@@ -103,6 +103,39 @@ fn read_access_probe_retries_only_short_reads_and_reknocks() {
     }
 }
 
+/// Only the head of a span is bad: the readable remainder must still be recovered.
+#[test]
+fn deep_read_recovers_the_readable_tail_after_a_long_bad_head() {
+    struct Head {
+        calls: usize,
+    }
+    impl ScsiDevice for Head {
+        fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+            self.calls += 1;
+            let start = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            if start < 0x800 {
+                bail!("unreadable head");
+            }
+            Ok((0..len).map(|i| ((start + i) & 0xff) as u8).collect())
+        }
+        fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        fn describe(&self) -> String {
+            "head".into()
+        }
+    }
+    let mut dev = Head { calls: 0 };
+    let (image, gaps) = read_region_deep_gaps(&mut dev, 0, 0x10000).unwrap();
+    assert_eq!(gaps, vec![(0, 0x800)]);
+    assert!(image[..0x800].iter().all(|b| *b == 0));
+    for (i, b) in image.iter().enumerate().skip(0x800) {
+        assert_eq!(*b, (i & 0xff) as u8, "byte {i:#x}");
+    }
+    // Each readable unit is read once; the bad head costs a few hundred reads.
+    assert!(dev.calls < 8192, "too many reads: {}", dev.calls);
+}
+
 /// A wholly unreadable chunk must not cost one full retry ladder per unit.
 #[test]
 fn deep_read_bounds_attempts_on_a_wholly_unreadable_chunk() {

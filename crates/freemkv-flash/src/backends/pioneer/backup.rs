@@ -573,8 +573,10 @@ const DEEP_RETRIES: usize = 6;
 const DEEP_MIN_CHUNK: usize = 4;
 /// Consecutive unreadable units after which salvage tries each unit once.
 const DEEP_FAST_FAIL_UNITS: usize = 16;
-/// Consecutive unreadable units after which the rest of the span is zero-filled.
+/// Consecutive unreadable units after which salvage probes in blocks.
 const DEEP_GIVE_UP_UNITS: usize = 256;
+/// Probe block size once salvage has given up on per-unit reads.
+const DEEP_PROBE_BLOCK: usize = 1024;
 
 /// One vendor firmware read at `off` of exactly `n` bytes, through
 /// `pioneer_optical::drive::read_memory` (which issues the read-unlock knock
@@ -753,18 +755,37 @@ fn salvage_span(
     }
     let mut good = None;
     let mut p = pos;
+    let end = pos + n;
     let mut failed_run = 0usize;
-    while p < pos + n {
-        let m = DEEP_MIN_CHUNK.min(pos + n - p);
+    // Start of the unresolved bad region while probing in blocks, and the
+    // start of the last failed probe block.
+    let mut pending: Option<(usize, usize)> = None;
+    while p < end {
         if failed_run >= DEEP_GIVE_UP_UNITS {
-            let rest = pos + n - p;
-            crate::diagnostics::record(format!(
-                "salvage giving up: {failed_run} consecutive unreadable units; zero-filling {rest} byte(s) from {:#x}",
-                start + p
-            ));
-            push_gap(gaps, start + p, rest);
-            break;
+            let m = DEEP_PROBE_BLOCK.min(end - p);
+            let Some(data) = retry_read_n(dev, start + p, m, 1) else {
+                let (first, _) = *pending.get_or_insert_with(|| {
+                    crate::diagnostics::record(format!(
+                        "salvage probing in blocks: {failed_run} consecutive unreadable units before {:#x}",
+                        start + p
+                    ));
+                    (p, p)
+                });
+                pending = Some((first, p));
+                p += m;
+                continue;
+            };
+            image[p..p + m].copy_from_slice(&data);
+            good = Some((start + p, m));
+            if let Some((first, last)) = pending.take() {
+                let resume = bisect_bad_end(dev, start, image, (last, p));
+                push_gap(gaps, start + first, resume - first);
+            }
+            failed_run = 0;
+            p += m;
+            continue;
         }
+        let m = DEEP_MIN_CHUNK.min(end - p);
         let attempts = if failed_run >= DEEP_FAST_FAIL_UNITS {
             1
         } else {
@@ -783,7 +804,43 @@ fn salvage_span(
         }
         p += m;
     }
+    if let Some((first, _)) = pending {
+        push_gap(gaps, start + first, end - first);
+    }
     Ok(good)
+}
+
+/// The failed block `[last, ok)` precedes a readable block. Find the earliest
+/// unit-aligned `s` whose tail `[s, ok)` reads, store those bytes, and return `s`.
+fn bisect_bad_end(
+    dev: &mut dyn ScsiDevice,
+    start: usize,
+    image: &mut [u8],
+    (last, ok): (usize, usize),
+) -> usize {
+    let units = (ok - last).div_ceil(DEEP_MIN_CHUNK);
+    let (mut lo, mut hi) = (0usize, units);
+    let mut tail: Option<Vec<u8>> = None;
+    while hi - lo > 1 {
+        let mid = lo + (hi - lo) / 2;
+        match retry_read_n(
+            dev,
+            start + last + mid * DEEP_MIN_CHUNK,
+            ok - last - mid * DEEP_MIN_CHUNK,
+            1,
+        ) {
+            Some(data) => {
+                hi = mid;
+                tail = Some(data);
+            }
+            None => lo = mid,
+        }
+    }
+    let s = last + hi * DEEP_MIN_CHUNK;
+    if let Some(data) = tail {
+        image[s..ok].copy_from_slice(&data);
+    }
+    s
 }
 
 /// Read `off..off+n` up to `DEEP_RETRIES` times. Every attempt re-knocks (the
