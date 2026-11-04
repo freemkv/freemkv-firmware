@@ -431,9 +431,8 @@ pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     capture(dev, false)
 }
 
-/// Recover: same capture, but any region that the strict read cannot get is
-/// retried with a deeper, instability-tolerant salvage read. Issues no flash
-/// commands.
+/// Recover: same capture, but a failing chunk is retried before giving up;
+/// a chunk that never reads means no backup. Issues no flash commands.
 pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     capture(dev, true)
 }
@@ -450,7 +449,7 @@ fn capture(dev: &mut dyn ScsiDevice, deep: bool) -> Result<Vec<u8>> {
     // Kernel we cannot read leaves nothing buildable. Say so and point at dump.
     let kernel = read_region(dev, KERNEL_IMAGE_BASE, kernel_len, deep).with_context(|| {
         if deep {
-            "could not read the Kernel firmware region even with a deeper salvage read"
+            "could not read the Kernel firmware region even with retries"
         } else {
             "could not read the Kernel firmware region; run `freemkv-flash dump <device>` for a raw salvage read"
         }
@@ -564,13 +563,10 @@ fn zero_be32_sum(image: &[u8]) -> bool {
 /// field, so the ceiling is `0xFFFFFF`, but the drive's receive buffer caps
 /// transfers in practice. `0x8000` (32 KiB) is well below any observed buffer
 /// limit and is ~200x the historical `0xA4` OEM read, which turns a full ~6
-/// MiB dump from ~10 min into seconds. If a chunk fails the deep-read salvage
-/// path subdivides down to `DEEP_MIN_CHUNK = 4` automatically.
+/// MiB dump from ~10 min into seconds.
 const READ_CHUNK: usize = 0x8000;
-/// Deep-read retry budget per failing span before it is subdivided / given up.
+/// Recover-read retry budget per failing chunk before the capture is abandoned.
 const DEEP_RETRIES: usize = 6;
-/// Smallest span a deep read drops to while isolating a bad region.
-const DEEP_MIN_CHUNK: usize = 4;
 
 /// One vendor firmware read at `off` of exactly `n` bytes, through
 /// `pioneer_optical::drive::read_memory` (which issues the read-unlock knock
@@ -586,9 +582,8 @@ fn read_chunk(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Result<Vec<u8>>
 
 /// Capture a firmware region. `deep == false` is the fast, strict read used by a
 /// normal backup (read twice, fail on the first error or any instability);
-/// `deep == true` is the recover salvage read (retry, subdivide, tolerate
-/// instability, zero-fill and report unreadable gaps). Progress for large
-/// regions is printed to stderr.
+/// `deep == true` is the recover read (retry each failing chunk; abort if one
+/// never reads). Progress for large regions is printed to stderr.
 fn read_region(dev: &mut dyn ScsiDevice, start: usize, len: usize, deep: bool) -> Result<Vec<u8>> {
     if deep {
         read_region_deep(dev, start, len)
@@ -658,109 +653,33 @@ fn read_region_strict(
     Ok(image)
 }
 
-/// Salvage pass: read `READ_CHUNK` at a time; on a failing chunk, retry, then
-/// subdivide down to `DEEP_MIN_CHUNK`, zero-filling spans that never read and
-/// recording them. Returns `len` bytes (with zero-filled gaps) as long as
-/// anything at all was read; errors only if the whole region is unreadable.
+/// Recover pass: read `READ_CHUNK` at a time, retrying a failing chunk up to
+/// `DEEP_RETRIES` times. A chunk that never reads aborts the capture: a backup
+/// with holes cannot restore the drive, so none is produced.
 fn read_region_deep(dev: &mut dyn ScsiDevice, start: usize, len: usize) -> Result<Vec<u8>> {
-    read_region_deep_gaps(dev, start, len).map(|(image, _)| image)
-}
-
-/// Zero-filled unreadable spans, `(offset, len)`.
-type Gaps = Vec<(usize, usize)>;
-
-/// [`read_region_deep`], also returning the zero-filled gaps `(offset, len)`.
-fn read_region_deep_gaps(
-    dev: &mut dyn ScsiDevice,
-    start: usize,
-    len: usize,
-) -> Result<(Vec<u8>, Gaps)> {
-    let mut image = vec![0u8; len];
-    let mut pos = 0usize;
-    // Offset of the last chunk that read cleanly: the liveness probe re-reads it,
-    // so it never depends on any one region (e.g. the Kernel base) being readable.
-    let mut last_good: Option<(usize, usize)> = None;
-    let mut gaps: Vec<(usize, usize)> = Vec::new();
-    let mut any = false;
+    let mut image = Vec::with_capacity(len);
     let mut progress = crate::style::Progress::new(region_label("recovering", start), len);
-    while pos < len {
-        let off = start + pos;
-        let n = (len - pos).min(READ_CHUNK);
-        match read_chunk(dev, off, n) {
-            Ok(data) => {
-                image[pos..pos + n].copy_from_slice(&data);
-                any = true;
-                last_good = Some((off, n.min(DEEP_MIN_CHUNK)));
-                pos += n;
-            }
+    while image.len() < len {
+        let off = start + image.len();
+        let n = (len - image.len()).min(READ_CHUNK);
+        let data = match read_chunk(dev, off, n) {
+            Ok(data) => data,
             Err(error) => {
                 crate::diagnostics::record(format!(
-                    "salvage bulk failure: offset={off:#x} length={n} error={error:#}"
+                    "recover read failed: offset={off:#x} length={n} error={error:#}"
                 ));
-                let good = salvage_span(dev, start, &mut image, (pos, n), &mut gaps, last_good)?;
-                any |= good.is_some();
-                last_good = good.or(last_good);
-                pos += n;
+                retry_read(dev, off, n).with_context(|| {
+                    format!(
+                        "firmware at {off:#x}..{:#x} could not be read after {DEEP_RETRIES} retries; backup not possible",
+                        off + n
+                    )
+                })?
             }
-        }
-        progress.set(pos);
+        };
+        image.extend(data);
+        progress.set(image.len());
     }
-    if !any {
-        bail!(
-            "region {start:#x}..{:#x} was entirely unreadable",
-            start + len
-        );
-    }
-    if !gaps.is_empty() {
-        let total: usize = gaps.iter().map(|(_, l)| l).sum();
-        crate::diagnostics::record(format!(
-            "recover: {total} byte(s) across {} gap(s) could not be read and were zero-filled",
-            gaps.len()
-        ));
-        crate::output::guidance("errors.backup_partial");
-        for (off, l) in &gaps {
-            crate::diagnostics::record(format!("gap {off:#x}..{:#x}", off + l));
-        }
-    }
-    Ok((image, gaps))
-}
-
-/// Salvage one `READ_CHUNK` span that failed a bulk read. First retry the whole
-/// span (for a transient error); if it is hard-failing, re-read it in
-/// `DEEP_MIN_CHUNK` units so only the units that truly never read are
-/// zero-filled and recorded as gaps. Check a known-readable location before
-/// expensive subdivision, so a disconnect does not trigger thousands of reads.
-fn salvage_span(
-    dev: &mut dyn ScsiDevice,
-    start: usize,
-    image: &mut [u8],
-    span: (usize, usize),
-    gaps: &mut Vec<(usize, usize)>,
-    last_good: Option<(usize, usize)>,
-) -> Result<Option<(usize, usize)>> {
-    let (pos, n) = span;
-    if let Some(data) = retry_read(dev, start + pos, n) {
-        image[pos..pos + n].copy_from_slice(&data);
-        return Ok(Some((start + pos, n.min(DEEP_MIN_CHUNK))));
-    }
-    if let Some((off, len)) = last_good {
-        crate::platform::trace_commands(|| read_chunk(dev, off, len))
-            .with_context(|| format!("the drive stopped responding at {:#x}; known-readable location {off:#x} also failed; aborting salvage", start + pos))?;
-    }
-    let mut good = None;
-    let mut p = pos;
-    while p < pos + n {
-        let m = DEEP_MIN_CHUNK.min(pos + n - p);
-        match retry_read(dev, start + p, m) {
-            Some(data) => {
-                image[p..p + m].copy_from_slice(&data);
-                good = Some((start + p, m));
-            }
-            None => push_gap(gaps, start + p, m),
-        }
-        p += m;
-    }
-    Ok(good)
+    Ok(image)
 }
 
 /// Read `off..off+n` up to `DEEP_RETRIES` times. Every attempt re-knocks (the
@@ -770,22 +689,10 @@ fn retry_read(dev: &mut dyn ScsiDevice, off: usize, n: usize) -> Option<Vec<u8>>
     for attempt in 1..=DEEP_RETRIES {
         match read_chunk(dev, off, n) {
             Ok(data) => return Some(data),
-            Err(error) => crate::diagnostics::record(format!("salvage read failed: address={off:#x} length={n} attempt={attempt}/{DEEP_RETRIES} error={error:#}")),
+            Err(error) => crate::diagnostics::record(format!("recover read failed: address={off:#x} length={n} attempt={attempt}/{DEEP_RETRIES} error={error:#}")),
         }
     }
     None
-}
-
-/// Append an unreadable `[off, off+len)` gap, merging it with the previous gap
-/// when they are contiguous.
-fn push_gap(gaps: &mut Vec<(usize, usize)>, off: usize, len: usize) {
-    if let Some(last) = gaps.last_mut() {
-        if last.0 + last.1 == off {
-            last.1 += len;
-            return;
-        }
-    }
-    gaps.push((off, len));
 }
 
 /// Shared H8/SAT image map observed in decoded Kernels from 28 hardware
