@@ -45,8 +45,9 @@ sends commands such as WRITE BUFFER that the Linux kernel's SCSI command filter
 only passes for privileged processes (CAP_SYS_RAWIO), so a flash normally has to
 run as root, e.g.: sudo freemkv-flash flash ...
 A flash can brick a drive given the wrong image; dump a backup first."
-fw_note="freemkv-fw works on firmware image files only and never opens a drive. Pair it
-with freemkv-flash to write a modified image."
+fw_note="freemkv-fw edits firmware image files offline. Its verify and info commands
+(and the desktop app's probe) only read from a drive; it never writes to one.
+Pair it with freemkv-flash to write a modified image."
 
 # mkdeb <pkg> <cli-binary> <gui-binary|''> <depends> <recommends> <summary> <long description> <homepage-slug> <readme>
 # <pkg> is the CLI name (freemkv-flash); with a GUI binary it builds <pkg>-gui.
@@ -134,8 +135,9 @@ $flash_note"
 mkdeb freemkv-fw "$cli_dir/freemkv-fw-cli-$triple-linux" '' '' '' \
   'freemkv drive firmware modifier (command line)' \
   ' Builds and verifies modified optical-drive firmware images offline
- (MediaTek MT19xx integrity tables). It does not touch a drive itself;
- pair it with freemkv-flash to write one.' modify \
+ (MediaTek MT19xx integrity tables). It only reads from a drive (verify,
+ info, probe) and never writes to one; pair it with freemkv-flash to write
+ a modified image.' modify \
   "Static $arch command-line build with no library dependencies.
 Run freemkv-fw --help for usage. Install freemkv-fw-gui instead for the
 desktop app; it includes this command too.
