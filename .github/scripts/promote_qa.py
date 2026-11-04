@@ -58,6 +58,11 @@ def stage_assets(source, destination, tag):
                 or (p.name.endswith('.pkg.tar.zst') and not p.with_name(p.name + '.sig').is_file())]
     if unsigned:
         raise ValueError('QA Linux packages are unsigned: ' + ', '.join(map(str, unsigned)))
+    # Inno Setup writes AppVersion into the setup.exe version resource (UTF-16).
+    stamp = tag.lstrip('v').encode('utf-16-le')
+    unstamped = [p for p in files if p.name.endswith('-setup.exe') and stamp not in p.read_bytes()]
+    if unstamped:
+        raise ValueError(f'Windows installer is not stamped {tag}: ' + ', '.join(map(str, unstamped)))
     destination.mkdir()
     for path in files:
         name = re.sub(r'-dev-[0-9a-f]{7,40}-', '-' + tag + '-', path.name)

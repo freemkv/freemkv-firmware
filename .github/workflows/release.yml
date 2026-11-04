@@ -690,11 +690,13 @@ jobs:
             choco install innosetup --version 6.4.3 -y --no-progress
             $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           }
-          # A branch build has no version tag; the installer only needs a numeric one.
-          $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:TAG.TrimStart('v') } else { '0.0.0' }
+          # Releases promote QA builds, so stamp the Cargo.toml version (promotion requires it == tag).
+          $ver = ((Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value -split '-')[0]
           foreach ($t in 'freemkv-flash','freemkv-fw','freemkv-firmware') {
             & $iscc "/DTool=$t" "/DArch=$env:ARCH" "/DAppVersion=$ver" "/DBinDir=$((Resolve-Path "stage/$t").Path)" "/O$PWD" packaging/windows/freemkv-firmware.iss
             if ($LASTEXITCODE -ne 0) { throw "iscc ($t) exited $LASTEXITCODE" }
+            $pv = (Get-Item "$t-$env:ARCH-windows-setup.exe").VersionInfo.ProductVersion
+            if (-not "$pv".StartsWith($ver)) { throw "$t installer is stamped '$pv', expected $ver" }
           }
       # Round-trip each installer: files, shortcuts and PATH land; uninstall
       # removes them and leaves the user's other PATH entries intact.

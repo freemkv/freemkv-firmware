@@ -84,6 +84,16 @@ class PromotionTests(unittest.TestCase):
                 (signed / (name + '.sig')).write_bytes(b'sig')
                 self.assertEqual(promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0'), 1)
 
+    def test_installer_without_release_version_cannot_be_promoted(self):
+        name = 'freemkv-flash-x86_64-windows-setup.exe'
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.artifact(root / 'download/old', name=name, data=b'MZ' + '0.0.0.0'.encode('utf-16-le'))
+            with self.assertRaisesRegex(ValueError, 'not stamped'):
+                promote.stage_assets(root / 'download/old', root / 'old-assets', 'v0.15.0')
+            self.artifact(root / 'download/new', name=name, data=b'MZ' + '0.15.0.0'.encode('utf-16-le'))
+            self.assertEqual(promote.stage_assets(root / 'download/new', root / 'assets', 'v0.15.0'), 1)
+
     def test_unfetchable_run_is_skipped(self):
         runs = {'workflow_runs': [{'id': 1, 'head_sha': 'a' * 40, 'conclusion': 'success'}, {'id': 2, 'head_sha': 'b' * 40, 'conclusion': 'success'}]}
         def run(args, **kwargs):
