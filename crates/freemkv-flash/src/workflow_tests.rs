@@ -52,6 +52,21 @@ fn packaging_errors_keep_file_causes_and_prove_no_firmware_write() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
+#[test]
+fn failed_package_write_leaves_no_partial_output() {
+    let dir = std::env::temp_dir().join(format!("freemkv-package-fail-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let output = dir.join("result.tar");
+    let error = write_new_file(&output, |_| Err(std::io::Error::other("disk full")));
+    assert!(error.is_err());
+    assert!(!output.exists());
+    let existing = dir.join("existing.tar");
+    std::fs::write(&existing, b"keep").unwrap();
+    assert!(write_new_file(&existing, |_| Ok(())).is_err());
+    assert_eq!(std::fs::read(&existing).unwrap(), b"keep");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 mod prepared_recovery {
     use super::*;
     use crate::backend::{Descriptor, Identity, PreparedRecoveryUpdate, WriteDevice};
