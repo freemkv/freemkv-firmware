@@ -29,7 +29,7 @@ FEATURE_FACTS={'speed':{'speed':'speed_stub_va'},'region':{'region':'region_stub
  'encryption':{'ake':'ake_stub_va','deny-reset':'deny_stub_va','vid':'gatea_stub_va'},'hrl':{'hrl':'hrl_stub_va'},
  'unrestricted':{'auth_cell':'auth_cell_stub_va',
                  'bd_site':'bd_stub_va','uhd_site':'uhd_stub_va'}}
-MINIMUM_FEATURE_ROLE={'speed':'speed','region':'region','encryption':'ake','hrl':'hrl','unrestricted':'auth_cell'}
+MINIMUM_FEATURE_ROLE={'speed':'speed','region':'region','encryption':'ake','hrl':'hrl'}
 
 
 # Exact reviewed boundary statements only. Missing source contracts, absent
