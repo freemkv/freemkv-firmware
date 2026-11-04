@@ -239,3 +239,77 @@ fn old_modified_table_corruption_is_refused_before_modification() {
     );
     assert!(super::modify_with_defaults(&image, &crate::boot::BootSettings::standard()).is_err());
 }
+
+fn stub_report(levers: Vec<engine::lever::LeverReport>) -> engine::ModifyReport {
+    engine::ModifyReport {
+        engine: "TEST",
+        family: String::new(),
+        vendor: String::new(),
+        model: String::new(),
+        rev: String::new(),
+        vendor_specific: String::new(),
+        media: String::new(),
+        levers,
+        image: vec![1, 2, 3],
+        validation: engine::lever::Validation::StaticOnly,
+    }
+}
+
+fn stub_plan(_: &[u8]) -> Option<engine::CoverageRetry> {
+    Some(engine::CoverageRetry {
+        image: vec![9],
+        entry: 0,
+        old_end: 0,
+        new_end: 0,
+    })
+}
+
+#[test]
+fn failed_coverage_retry_keeps_the_degraded_first_result() {
+    use std::cell::Cell;
+    let calls = Cell::new(0);
+    let limited = engine::lever::LeverReport::missed(
+        engine::lever::LeverId::Identity,
+        "no CMAC-covered free space of 64 bytes",
+    );
+    let result = modify_with_retry(
+        &[0],
+        &crate::boot::BootSettings::standard(),
+        |_, _| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                let report = stub_report(vec![limited.clone()]);
+                let support = crate::boot::BootSupport::from_modify(&report);
+                Ok((report, support))
+            } else {
+                Err(anyhow::anyhow!("retry exploded"))
+            }
+        },
+        stub_plan,
+    );
+    let (report, _) = result.expect("a usable degraded first build must survive a failed retry");
+    assert_eq!(report.image, vec![1, 2, 3]);
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn failed_coverage_retry_reports_the_original_no_code_space_cause() {
+    use std::cell::Cell;
+    let calls = Cell::new(0);
+    let result = modify_with_retry(
+        &[0],
+        &crate::boot::BootSettings::standard(),
+        |_, _| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                Err(engine::NoCodeSpace { need: 64 }.into())
+            } else {
+                Err(anyhow::anyhow!("retry exploded"))
+            }
+        },
+        stub_plan,
+    );
+    let error = format!("{:#}", result.err().expect("no usable build exists"));
+    assert!(error.contains("no CMAC-covered free space"), "{error}");
+    assert!(!error.contains("retry exploded"), "{error}");
+}

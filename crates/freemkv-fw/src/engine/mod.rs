@@ -22,7 +22,7 @@ pub mod audit;
 mod code_space;
 mod sram;
 pub use code_space::NoCodeSpace;
-pub(crate) use code_space::{coverage_retry, validate_metadata};
+pub(crate) use code_space::{coverage_retry, validate_metadata, CoverageRetry};
 pub mod core;
 pub mod lever;
 pub mod mt1939;

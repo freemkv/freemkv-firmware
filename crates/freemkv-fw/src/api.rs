@@ -254,7 +254,18 @@ pub fn modify_with_defaults(
     image: &[u8],
     defaults: &crate::boot::BootSettings,
 ) -> Result<(engine::ModifyReport, crate::boot::BootSupport)> {
-    let first = modify_once(image, defaults);
+    modify_with_retry(image, defaults, modify_once, engine::coverage_retry)
+}
+
+type ModifyResult = Result<(engine::ModifyReport, crate::boot::BootSupport)>;
+
+fn modify_with_retry(
+    image: &[u8],
+    defaults: &crate::boot::BootSettings,
+    modify: impl Fn(&[u8], &crate::boot::BootSettings) -> ModifyResult,
+    plan_retry: impl FnOnce(&[u8]) -> Option<engine::CoverageRetry>,
+) -> ModifyResult {
+    let first = modify(image, defaults);
     let needs_space = match &first {
         Err(error) => error.chain().any(|e| {
             e.downcast_ref::<engine::NoCodeSpace>().is_some()
@@ -263,21 +274,29 @@ pub fn modify_with_defaults(
         Ok((report, _)) => allocation_limited(report),
     };
     if needs_space {
-        if let Some(plan) = engine::coverage_retry(image) {
-            let (mut report, support) = modify_once(&plan.image, defaults)?;
-            engine::validate_metadata(image, &report.image)?;
-            if let Some(identity) = report
-                .levers
-                .iter_mut()
-                .find(|p| p.id == engine::lever::LeverId::Identity)
-            {
-                identity.facts.extend([
-                    ("coverage_entry", plan.entry),
-                    ("coverage_original_end", plan.old_end),
-                    ("coverage_new_end", plan.new_end),
-                ]);
+        if let Some(plan) = plan_retry(image) {
+            let retried = (|| -> ModifyResult {
+                let (mut report, support) = modify(&plan.image, defaults)?;
+                engine::validate_metadata(image, &report.image)?;
+                if let Some(identity) = report
+                    .levers
+                    .iter_mut()
+                    .find(|p| p.id == engine::lever::LeverId::Identity)
+                {
+                    identity.facts.extend([
+                        ("coverage_entry", plan.entry),
+                        ("coverage_original_end", plan.old_end),
+                        ("coverage_new_end", plan.new_end),
+                    ]);
+                }
+                Ok((report, support))
+            })();
+            match retried {
+                Ok(result) => return Ok(result),
+                Err(error) => diagnostics::record(format!(
+                    "coverage retry failed; keeping the first result: {error:#}"
+                )),
             }
-            return Ok((report, support));
         }
     }
     first
