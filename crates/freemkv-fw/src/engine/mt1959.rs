@@ -604,17 +604,7 @@ impl Mt1959Engine {
         let speed_bytes =
             self.build_speed_stub(flag_base, fallthrough, ramp_exit, speed_idx_reg)?;
         let speed_stub_va = self.free_space(out, speed_bytes.len())?;
-        let bl = thumb::encode_bl(cmp_at, speed_stub_va)
-            .ok_or_else(|| anyhow!("Speed detour `bl` out of range"))?;
-        thumb::write(out, speed_stub_va as usize, &speed_bytes);
-        thumb::write(out, cmp_at, &bl);
-        crate::install_guard::verify_branch(
-            out,
-            cmp_at,
-            thumb::BranchKind::Bl,
-            speed_stub_va,
-            "Speed",
-        )?;
+        commit_detour(out, cmp_at, speed_stub_va, &speed_bytes, "Speed")?;
         Ok((speed_gate, speed_stub_va))
     }
 
@@ -625,17 +615,7 @@ impl Mt1959Engine {
         let region_site = region_emitter as usize + 6;
         let region_bytes = self.build_region_stub(flag_base)?;
         let region_stub_va = self.free_space(out, region_bytes.len())?;
-        let bl = thumb::encode_bl(region_site, region_stub_va)
-            .ok_or_else(|| anyhow!("Region detour `bl` out of range"))?;
-        thumb::write(out, region_stub_va as usize, &region_bytes);
-        thumb::write(out, region_site, &bl);
-        crate::install_guard::verify_branch(
-            out,
-            region_site,
-            thumb::BranchKind::Bl,
-            region_stub_va,
-            "Region",
-        )?;
+        commit_detour(out, region_site, region_stub_va, &region_bytes, "Region")?;
         Ok((region_emitter, region_stub_va))
     }
 
@@ -992,6 +972,45 @@ impl Mt1959Engine {
             hooks,
         })
     }
+}
+
+/// Write `stub` at `stub_va` and a `bl` to it at `site`, then verify the branch.
+/// Atomic: on any failure `out` is restored to its bytes before the call.
+fn commit_detour(
+    out: &mut [u8],
+    site: usize,
+    stub_va: u32,
+    stub: &[u8],
+    label: &str,
+) -> Result<()> {
+    commit_detour_checked(out, site, stub_va, stub, label, |o| {
+        crate::install_guard::verify_branch(o, site, thumb::BranchKind::Bl, stub_va, label)
+    })
+}
+
+fn commit_detour_checked(
+    out: &mut [u8],
+    site: usize,
+    stub_va: u32,
+    stub: &[u8],
+    label: &str,
+    verify: impl FnOnce(&[u8]) -> Result<()>,
+) -> Result<()> {
+    let bl = thumb::encode_bl(site, stub_va)
+        .ok_or_else(|| anyhow!("{label} detour `bl` out of range"))?;
+    let stub_at = stub_va as usize;
+    let saved_stub = out[stub_at..stub_at + stub.len()].to_vec();
+    let saved_site = out[site..site + bl.len()].to_vec();
+    thumb::write(out, stub_at, stub);
+    thumb::write(out, site, &bl);
+    if let Err(e) = verify(out) {
+        // The stub range is restored first so an overlap with the site keeps the
+        // original site bytes.
+        out[stub_at..stub_at + saved_stub.len()].copy_from_slice(&saved_stub);
+        out[site..site + saved_site.len()].copy_from_slice(&saved_site);
+        return Err(e);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

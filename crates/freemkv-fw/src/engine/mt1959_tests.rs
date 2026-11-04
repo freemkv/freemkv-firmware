@@ -1658,3 +1658,21 @@ fn modify_does_not_require_the_report_only_sense_setter_anchor() {
         .expect("modify must tolerate the same miss");
     assert_eq!(modify.image, create.image);
 }
+
+/// `emit_speed`/`emit_region` are documented atomic: a failed branch verification
+/// must leave the image byte-identical, stub and `bl` site both.
+#[test]
+fn failed_detour_verification_leaves_the_image_untouched() {
+    let mut out = fixture();
+    let before = out.clone();
+    let stub_va = Mt1959Engine.free_space(&out, 8).unwrap();
+    let site = 0x20000;
+    let r = commit_detour_checked(&mut out, site, stub_va, &[0xAB; 8], "Test", |_| {
+        bail!("forced verification failure")
+    });
+    assert!(r.is_err());
+    assert!(out == before, "failed commit must restore stub and site bytes");
+
+    commit_detour(&mut out, site, stub_va, &[0xAB; 8], "Test").unwrap();
+    assert!(out != before, "successful commit writes the detour");
+}
