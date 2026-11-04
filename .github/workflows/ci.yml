@@ -17,7 +17,7 @@ on:
 
 # Rapid dev pushes supersede their own in-progress runs instead of stacking.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Every build job checks itself out into `freemkv-firmware/` and runs there.
@@ -49,7 +49,7 @@ jobs:
           event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
           base = event.get('pull_request', {}).get('base', {}).get('sha') or event.get('before', '')
           changed = True
-          if base and set(base) != {'0'}:
+          if os.environ.get('GITHUB_EVENT_NAME') == 'pull_request' and base and set(base) != {'0'}:
               result = subprocess.run(['git', 'diff', '--name-only', base, 'HEAD'], capture_output=True, text=True)
               if result.returncode == 0:
                   changed = any(not path.startswith('.github/') or path == '.github/workflows/ci.yml' or path.startswith('.github/scripts/') for path in result.stdout.splitlines())

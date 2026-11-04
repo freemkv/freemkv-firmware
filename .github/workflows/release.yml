@@ -800,11 +800,16 @@ jobs:
           git commit -aqm "freemkv-firmware ${VER#v}"
           # The app release job pushes to the same branch; rebase and retry if
           # it landed first.
+          pushed=
           for attempt in 1 2 3; do
             echo "tap push attempt $attempt"
-            git push && break
-            git pull --rebase -q
+            if git push; then pushed=1; break; fi
+            git pull --rebase -q || true
           done
+          if [ -z "$pushed" ]; then
+            echo "::warning::homebrew tap push failed after 3 attempts; the tap was NOT updated"
+            exit 0
+          fi
           echo "tap updated to ${VER#v}" >> "$GITHUB_STEP_SUMMARY"
 
   # The APT repository at freemkv.org/apt indexes every .deb on the latest

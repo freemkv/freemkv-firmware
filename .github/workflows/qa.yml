@@ -66,7 +66,7 @@ jobs:
   # gates — a red candidate needs a name more than a green one does. Only reads
   # Cargo.toml + tags.
   rc-tag:
-    if: ${{ !inputs.native_only }}
+    if: ${{ !inputs.native_only && github.ref == 'refs/heads/qa' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
