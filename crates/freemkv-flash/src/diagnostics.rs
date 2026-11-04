@@ -158,7 +158,7 @@ pub fn log_directory() -> PathBuf {
 }
 
 /// XDG base directories must be absolute; empty or relative values are ignored.
-#[cfg(any(not(any(target_os = "windows", target_os = "macos")), test))]
+#[cfg(any(not(any(target_os = "windows", target_os = "macos")), all(test, unix)))]
 fn linux_log_directory(
     state: Option<std::ffi::OsString>,
     cache: Option<std::ffi::OsString>,

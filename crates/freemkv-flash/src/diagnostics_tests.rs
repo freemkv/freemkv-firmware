@@ -422,6 +422,8 @@ fn prefix_closes_at_the_first_line_that_does_not_fit() {
     std::fs::remove_dir(directory).unwrap();
 }
 
+// Linux XDG semantics: a leading `/` is not absolute on Windows.
+#[cfg(unix)]
 #[test]
 fn empty_or_relative_xdg_directories_fall_through() {
     use std::ffi::OsString;
