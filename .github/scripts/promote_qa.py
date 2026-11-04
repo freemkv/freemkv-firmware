@@ -53,6 +53,11 @@ def stage_assets(source, destination, tag):
     unverified = [p for p in files if p not in verified and not p.name.endswith(('.sha256', '.sig', '.asc'))]
     if unverified:
         raise ValueError('QA artifact lacks checksum evidence: ' + ', '.join(map(str, unverified)))
+    # QA dry runs without APT_SIGNING_KEY upload unsigned packages; never release them.
+    unsigned = [p for p in files if (p.name.endswith('.rpm') and not (p.parent / 'freemkv.asc').is_file())
+                or (p.name.endswith('.pkg.tar.zst') and not p.with_name(p.name + '.sig').is_file())]
+    if unsigned:
+        raise ValueError('QA Linux packages are unsigned: ' + ', '.join(map(str, unsigned)))
     destination.mkdir()
     for path in files:
         name = re.sub(r'-dev-[0-9a-f]{7,40}-', '-' + tag + '-', path.name)

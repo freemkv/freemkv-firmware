@@ -72,6 +72,18 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'lacks checksum evidence'):
                 promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
 
+    def test_unsigned_linux_packages_cannot_be_promoted(self):
+        for name in ('freemkv-flash-x86_64.rpm', 'freemkv-flash-x86_64.pkg.tar.zst'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.artifact(root / 'download/pkg', name=name, data=b'package')
+                with self.assertRaisesRegex(ValueError, 'unsigned'):
+                    promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
+                signed = root / 'download/pkg'
+                (signed / 'freemkv.asc').write_text('key')
+                (signed / (name + '.sig')).write_bytes(b'sig')
+                self.assertEqual(promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0'), 1)
+
     def test_unfetchable_run_is_skipped(self):
         runs = {'workflow_runs': [{'id': 1, 'head_sha': 'a' * 40, 'conclusion': 'success'}, {'id': 2, 'head_sha': 'b' * 40, 'conclusion': 'success'}]}
         def run(args, **kwargs):
