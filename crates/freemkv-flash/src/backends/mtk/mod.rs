@@ -743,11 +743,18 @@ pub(crate) fn read_mt19_banner(dev: &mut dyn ScsiDevice) -> Option<String> {
 /// Read `len` bytes at `offset`, retrying once: the chip gate must not fail
 /// open on a transient read error.
 fn read_exact_retry(dev: &mut dyn ScsiDevice, offset: u32, len: u32) -> Option<Vec<u8>> {
-    (0..2).find_map(|_| {
-        dev.command_in(&cdb::read_memory(offset, len), len as usize)
-            .ok()
-            .filter(|data| data.len() == len as usize)
-    })
+    let mut last = String::new();
+    for _ in 0..2 {
+        match dev.command_in(&cdb::read_memory(offset, len), len as usize) {
+            Ok(data) if data.len() == len as usize => return Some(data),
+            Ok(data) => last = format!("short read: {} of {len} bytes", data.len()),
+            Err(error) => last = format!("{error:#}"),
+        }
+    }
+    crate::diagnostics::record(format!(
+        "MTK read at {offset:#x} length {len} failed: {last}"
+    ));
+    None
 }
 
 /// The drive's identity descriptor and its boot banner: what the chip and family
@@ -755,10 +762,23 @@ fn read_exact_retry(dev: &mut dyn ScsiDevice, offset: u32, len: u32) -> Option<V
 /// the banner is ALWAYS read (never skipped for a "tagged" drive — the tag is a
 /// stale vendor label). Unreadable regions stay empty.
 pub(crate) fn live_identity(dev: &mut dyn ScsiDevice) -> mediatek_optical::Identity {
-    let descriptor = read_exact_retry(dev, ROM_1EC000_OFFSET, ROM_1EC000_LEN).unwrap_or_default();
-    let banner = read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN).unwrap_or_default();
-    mediatek_optical::Identity::parse(&[0; mediatek_optical::INQUIRY_LEN], &banner, &descriptor)
-        .expect("a full-length INQUIRY")
+    live_identity_checked(dev).0
+}
+
+/// [`live_identity`], plus whether both regions were read.
+pub(crate) fn live_identity_checked(
+    dev: &mut dyn ScsiDevice,
+) -> (mediatek_optical::Identity, bool) {
+    let descriptor = read_exact_retry(dev, ROM_1EC000_OFFSET, ROM_1EC000_LEN);
+    let banner = read_exact_retry(dev, ROM_003000_OFFSET, ROM_003000_LEN);
+    let complete = descriptor.is_some() && banner.is_some();
+    let identity = mediatek_optical::Identity::parse(
+        &[0; mediatek_optical::INQUIRY_LEN],
+        &banner.unwrap_or_default(),
+        &descriptor.unwrap_or_default(),
+    )
+    .expect("a full-length INQUIRY");
+    (identity, complete)
 }
 
 /// The drive's controller generation for display, decided by its boot banner.

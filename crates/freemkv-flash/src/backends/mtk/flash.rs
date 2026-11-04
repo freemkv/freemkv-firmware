@@ -28,7 +28,7 @@ use mediatek_optical::Identity;
 use super::crossflash::{Build, Verdict};
 use super::{
     backup, cdb, crossflash, describe_sequence, detect_receiver, ensure_flashable_boot_page,
-    live_identity, Mtk, DESCRIPTOR, IMAGE_SIZE, ROM_003000_LEN, ROM_003000_OFFSET,
+    live_identity_checked, Mtk, DESCRIPTOR, IMAGE_SIZE, ROM_003000_LEN, ROM_003000_OFFSET,
 };
 use crate::backend::{
     AuthorizedPlan, FlashFacet, FlashPlan, FlashRequest, FormatRole, PlanLine, ReadDevice,
@@ -818,8 +818,17 @@ impl Mtk {
         drive_product: &str,
     ) -> Result<(Identity, Verdict)> {
         check_image(image)?;
-        let live = live_identity(dev);
-        PreparedUpdate::check(image, &live).map_err(refusal)?;
+        let (live, identity_read) = live_identity_checked(dev);
+        PreparedUpdate::check(image, &live).map_err(|error| {
+            let error = refusal(error);
+            if identity_read {
+                error
+            } else {
+                error
+                    .context("the drive identity regions could not be read")
+                    .context(crate::user_error::IssueCode::Connection)
+            }
+        })?;
         let target = Build::of_image(image)?;
         let mut drive = Build::of_drive(&live);
         // A crossflash gates on the boot banner too (its loader tells apart the

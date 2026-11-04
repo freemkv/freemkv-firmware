@@ -454,6 +454,27 @@ fn the_flash_path_decides_every_jb8_pair_like_the_pure_gates() {
     assert!(crossed > 0, "{crossed} crossflash pairs on the flash path");
 }
 
+/// Unreadable identity regions are named in the refusal, not shown as an
+/// unsupported chip.
+#[test]
+fn unreadable_identity_regions_are_reported_in_the_refusal() {
+    use super::super::Mtk;
+    use crate::backend::ReadDevice;
+    use crate::platform::MockScsiDevice;
+    let (_, image) = fixture::stand_ins().into_iter().next().unwrap();
+    let product = Build::of_image(&image).unwrap().product;
+    let mut dev = MockScsiDevice::new()
+        .with_firmware_image(image.clone())
+        .on_fail(|cdb| cdb.first() == Some(&0x3C), "read buffer lost");
+    let error = Mtk
+        .validate_image(&mut ReadDevice::without_unlocks(&mut dev), &image, &product)
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("identity regions could not be read"),
+        "{error:#}"
+    );
+}
+
 // ---- architecture ------------------------------------------------------------
 
 /// Nothing in the gate can be switched off: no function takes an allow, force
