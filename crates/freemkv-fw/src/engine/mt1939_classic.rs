@@ -565,7 +565,7 @@ impl Mt1959Engine {
         // Idempotency: a re-fed freemkv-modified classic image reports every lever
         // AlreadyPresent and returns byte-identical (see `build_modify`).
         if is_freemkv_patched(image) {
-            return Ok(self.already_present_report(image, chip, cap, "MT1959"));
+            return Ok(self.already_present_report(image, chip, cap, "MT1939"));
         }
 
         // Base prerequisites (classic): scanner + CDB base (r5) + the chip-agnostic

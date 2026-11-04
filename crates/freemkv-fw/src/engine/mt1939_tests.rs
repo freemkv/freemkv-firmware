@@ -622,6 +622,14 @@ fn be14nu40_101_classic_create_and_modify_emit_identical_audited_images() {
     );
 }
 
+#[test]
+fn refed_classic_image_keeps_the_mt1939_engine_label() {
+    let image = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let first = Mt1939Engine.modify(image).expect("classic modify");
+    let again = Mt1939Engine.modify(&first.image).expect("re-fed classic modify");
+    assert_eq!(again.engine, "MT1939");
+}
+
 /// Minimal recursive `.bin` walk (std-only).
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
