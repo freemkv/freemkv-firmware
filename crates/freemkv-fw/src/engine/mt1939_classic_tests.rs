@@ -1036,11 +1036,7 @@ fn classic_hrl_refuses_a_revoke_target_without_room_for_the_head() {
     let bl_at = img.len() - 0x40;
     let bl = thumb::encode_bl(bl_at, HRL as u32).expect("bl in range");
     thumb::write(&mut img, bl_at, &bl);
-    put_hw(
-        &mut img,
-        bl_at + 4,
-        &[0x2800, bne_to(bl_at + 6, revoke)],
-    );
+    put_hw(&mut img, bl_at + 4, &[0x2800, bne_to(bl_at + 6, revoke)]);
     let mut out = img.clone();
     let error = Mt1959Engine
         .emit_hrl_classic(&img, &mut out, FLAG_BASE)
@@ -1321,12 +1317,9 @@ fn the_modern_fixture_carries_none_of_the_classic_signatures() {
 fn commit_classic_detour_leaves_the_image_untouched_on_decode_back_mismatch() {
     let mut out = fixture();
     let before = out.clone();
-    let result = Mt1959Engine.commit_classic_detour_checked(
-        &mut out,
-        0x001c_4800,
-        &[0u8; 32],
-        |_, _| Some(0),
-    );
+    let result =
+        Mt1959Engine
+            .commit_classic_detour_checked(&mut out, 0x001c_4800, &[0u8; 32], |_, _| Some(0));
     assert_eq!(result, None);
     assert!(out == before, "a refused detour must not modify the image");
 }

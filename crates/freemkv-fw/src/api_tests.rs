@@ -309,7 +309,7 @@ fn failed_coverage_retry_reports_the_original_no_code_space_cause() {
         },
         stub_plan,
     );
-    let error = format!("{:#}", result.err().expect("no usable build exists"));
+    let error = format!("{:#}", result.expect_err("no usable build exists"));
     assert!(error.contains("no CMAC-covered free space"), "{error}");
     assert!(!error.contains("retry exploded"), "{error}");
 }
@@ -329,7 +329,12 @@ fn create_with_defaults_logs_the_input_image_fingerprint() {
                 }
             }
         },
-        || create_with_defaults(b"not a firmware image", &crate::boot::BootSettings::standard()),
+        || {
+            create_with_defaults(
+                b"not a firmware image",
+                &crate::boot::BootSettings::standard(),
+            )
+        },
     );
     assert!(result.is_err());
     let path = path.lock().unwrap().clone().expect("diagnostic log path");
@@ -353,7 +358,11 @@ fn probe_transport_failure_is_not_called_stock_firmware() {
     let outcome = classify_probe(Err(io));
     assert!(!outcome.detected);
     assert!(!outcome.detail.contains("stock/OEM"), "{}", outcome.detail);
-    assert!(outcome.detail.contains("device vanished"), "{}", outcome.detail);
+    assert!(
+        outcome.detail.contains("device vanished"),
+        "{}",
+        outcome.detail
+    );
 
     let sense = anyhow::Error::new(platform::ScsiSenseError::new(5, 0x20, 0, "invalid opcode"));
     let outcome = classify_probe(Err(sense));

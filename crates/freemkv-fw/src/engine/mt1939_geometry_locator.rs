@@ -134,10 +134,7 @@ impl Copy {
             target(data, block + 28, "b")? == join,
             "DI second-copy join"
         );
-        ensure!(
-            target(data, join, "bl")? == leaf,
-            "DI copy calls disagree"
-        );
+        ensure!(target(data, join, "bl")? == leaf, "DI copy calls disagree");
         let _metadata = target(data, metadata_call, "bl")?;
         let entry = unique(
             find(
@@ -582,8 +579,8 @@ mod tests {
     #[test]
     fn copy_signature_at_the_image_start_is_refused_not_underflowed() {
         let code: [u16; 15] = [
-            0x490a, 0x6908, 0x2202, 0x4310, 0x6108, 0x6828, 0x2240, 0x0021, 0xf000, 0xf800,
-            0x6828, 0x2240, 0x18a1, 0x3070, 0xe000,
+            0x490a, 0x6908, 0x2202, 0x4310, 0x6108, 0x6828, 0x2240, 0x0021, 0xf000, 0xf800, 0x6828,
+            0x2240, 0x18a1, 0x3070, 0xe000,
         ];
         let mut data = vec![0u8; 64];
         for (i, op) in code.iter().enumerate() {

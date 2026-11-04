@@ -141,7 +141,10 @@ pub fn execute(job: &Job) -> Result<()> {
                 field(
                     "freemkv firmware",
                     if outcome.detected {
-                        message("modify.detected", &[("version", detected_version(&outcome))])
+                        message(
+                            "modify.detected",
+                            &[("version", detected_version(&outcome))],
+                        )
                     } else {
                         "modify.not_detected".into()
                     },
@@ -169,7 +172,10 @@ mod tests {
             detail: "DETECTED (version 0x01)".into(),
             version: Some(1),
         };
-        let text = message("modify.detected", &[("version", detected_version(&outcome))]);
+        let text = message(
+            "modify.detected",
+            &[("version", detected_version(&outcome))],
+        );
         assert!(text.contains("0x01"), "{text}");
         assert!(!text.contains("DETECTED"), "{text}");
     }
