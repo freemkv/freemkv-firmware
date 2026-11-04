@@ -2570,3 +2570,31 @@ fn partial_loader_identity_requests_current_without_authorizing_io() {
         .is_none());
     assert_eq!(dev.writes, 0);
 }
+
+#[test]
+fn current_vendor_mismatch_on_a_detected_pioneer_drive_is_a_specific_error() {
+    let mut inquiry = vec![b' '; pioneer_optical::INQUIRY_LEN];
+    inquiry[0] = 5;
+    inquiry[8..16].copy_from_slice(b"SONY    ");
+    inquiry[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
+    inquiry[32..36].copy_from_slice(b"1.00");
+    let mut identity = vec![b' '; pioneer_optical::IDENTITY_LEN];
+    identity[16..24].copy_from_slice(b"SAT FFFE");
+    identity[24..32].copy_from_slice(b"GENERAL ");
+    identity[32..40].copy_from_slice(b"GENERAL ");
+    let mut dev = UnsupportedDrive {
+        inquiry,
+        vendor_identity: identity,
+        vendor_reads: 0,
+        writes: 0,
+    };
+    let matching = Current::load(&oem_recovery_package("SONY")).unwrap();
+    assert!(find_receiver_with_current(&mut dev, Some(&matching))
+        .unwrap()
+        .is_some());
+    let other = Current::load(&oem_recovery_package("PIONEER")).unwrap();
+    let error = find_receiver_with_current(&mut dev, Some(&other)).unwrap_err();
+    let text = format!("{error:#}");
+    assert!(text.contains("does not match this drive"), "{text}");
+    assert_eq!(dev.writes, 0);
+}
