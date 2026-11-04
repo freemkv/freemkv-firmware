@@ -1238,7 +1238,13 @@ impl App {
                 .find(|d| d.path == self.device)
                 .map(DriveChoice::display)
         {
+            // Another drive at this path never inherits the previous drive's consent.
             self.report_artifact = None;
+            self.recovery_bypass_family = false;
+            self.risk_ack = false;
+            self.pending = None;
+            self.recovery_family_mismatch = false;
+            self.prepared_recovery = None;
         }
         if !drives.iter().any(|d| d.path == self.device) {
             self.device = drives.first().map(|d| d.path.clone()).unwrap_or_default();

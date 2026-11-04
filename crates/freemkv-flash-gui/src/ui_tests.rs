@@ -1868,6 +1868,23 @@ fn refresh_removes_disconnected_selection_and_its_consent() {
 }
 
 #[test]
+fn refresh_with_another_drive_at_the_same_path_clears_its_consent() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("target.tar".into());
+    app.recovery_family_mismatch = true;
+    app.recovery_bypass_family = true;
+    app.risk_ack = true;
+    app.prepared_recovery = Some(workflow::PreparedRecovery::default());
+    app.refresh(vec![drive("drive-a", "drive-a", "Swapped drive")]);
+    assert_eq!(app.device, "drive-a");
+    assert!(!app.recovery_family_mismatch && !app.recovery_bypass_family);
+    assert!(!app.risk_ack && app.prepared_recovery.is_none());
+    app.dispatch(Input::Recover);
+    assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.bypass_family_check));
+}
+
+#[test]
 fn selecting_another_drive_clears_its_results() {
     let mut app = ready(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
     app.rows = vec![row("Model", "A", Group::General)];
