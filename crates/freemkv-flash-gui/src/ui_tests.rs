@@ -683,6 +683,29 @@ fn refresh_reads_the_profile_again() {
 }
 
 #[test]
+fn refresh_enumerates_drives_off_the_ui_thread() {
+    let mut app = one_drive();
+    let (release, gate) = mpsc::channel::<()>();
+    let gate = std::sync::Mutex::new(gate);
+    app.enumerator = Some(Arc::new(move || {
+        let _ = gate.lock().unwrap().recv_timeout(Duration::from_secs(2));
+        vec![drive("drive-b", "drive-b", "Drive B")]
+    }));
+    app.profile_worker = None;
+    assert_eq!(app.dispatch(Input::Refresh), [Effect::StartTicking]);
+    assert!(app.busy(), "discovery owns busy state");
+    assert!(app.profile_worker.is_none());
+    release.send(()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.discover_rx.is_some() && Instant::now() < deadline {
+        app.poll();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(app.device, "drive-b");
+    assert!(app.profile_worker.is_some(), "the new drive is profiled");
+}
+
+#[test]
 fn info_without_a_drive_offers_only_check_file() {
     let view = dry(Vec::new()).view();
     assert!(!button(&view, "Read drive information").enabled);

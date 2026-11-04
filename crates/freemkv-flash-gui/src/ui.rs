@@ -800,6 +800,10 @@ pub(crate) struct Pending {
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
 /// Report progress is distinct from its authoritative terminal result.
+/// A finished drive scan: its drives and events, or `None` if the scan panicked.
+type Discovered = Option<(Vec<DriveChoice>, Vec<Event>)>;
+type Enumerator = Arc<dyn Fn() -> Vec<DriveChoice> + Send + Sync>;
+
 enum ReportMsg {
     Progress(String),
     Diagnostic(String),
@@ -910,6 +914,10 @@ pub struct App {
     pub(crate) worker: Option<Sender<Msg>>,
     #[cfg(test)]
     pub(crate) profile_worker: Option<Sender<Result<Profile, String>>>,
+    /// Test seam: enumerate drives with this instead of the host's real drives.
+    #[cfg(test)]
+    enumerator: Option<Enumerator>,
+    discover_rx: Option<Receiver<Discovered>>,
 }
 
 impl App {
@@ -1064,6 +1072,9 @@ impl App {
             worker: None,
             #[cfg(test)]
             profile_worker: None,
+            #[cfg(test)]
+            enumerator: None,
+            discover_rx: None,
         }
     }
 
@@ -1189,28 +1200,93 @@ impl App {
             || self.pending.is_some()
             || self.report_prompt.is_some()
             || self.profile_rx.is_some()
+            || self.discover_rx.is_some()
     }
 
-    fn discover(&mut self) {
+    /// How drives are enumerated, or `None` when this model must never scan.
+    fn enumerator(&self) -> Option<Enumerator> {
         #[cfg(debug_assertions)]
         if self.inert {
-            return;
+            return None;
+        }
+        #[cfg(test)]
+        if let Some(enumerate) = &self.enumerator {
+            return Some(enumerate.clone());
         }
         // Tests must not enumerate the host's real drives.
         #[cfg(test)]
         if self.dry_run.is_some() {
-            return;
+            return None;
         }
+        Some(Arc::new(ops::enumerate))
+    }
+
+    fn scan(enumerate: &Enumerator) -> (Vec<DriveChoice>, Vec<Event>) {
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
         let received = events.clone();
         let drives = workflow::capture_events(
             move |event| received.lock().unwrap().push(event),
-            ops::enumerate,
+            || enumerate(),
         );
+        let events = std::mem::take(&mut *events.lock().unwrap());
+        (drives, events)
+    }
+
+    /// The first scan, before the window is shown.
+    fn discover(&mut self) {
+        if let Some(enumerate) = self.enumerator() {
+            let (drives, events) = Self::scan(&enumerate);
+            self.apply_discovery(drives, events);
+        }
+    }
+
+    fn apply_discovery(&mut self, drives: Vec<DriveChoice>, events: Vec<Event>) {
         self.refresh(drives);
-        for event in events.lock().unwrap().drain(..) {
+        for event in events {
             self.discovery_event(event);
         }
+    }
+
+    /// Refresh scans on a worker: a slow or wedged drive must not freeze the window.
+    fn start_discovery(&mut self) -> Vec<Effect> {
+        let Some(enumerate) = self.enumerator() else {
+            return self.start_profile();
+        };
+        let (tx, rx) = mpsc::channel();
+        self.discover_rx = Some(rx);
+        let waker = self.waker.clone();
+        std::thread::spawn(move || {
+            let found =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Self::scan(&enumerate)));
+            let _ = tx.send(found.ok());
+            if let Some(wake) = waker {
+                wake();
+            }
+        });
+        vec![Effect::StartTicking]
+    }
+
+    /// Take a finished drive scan, if one arrived; true when the scan ended.
+    fn poll_discovery(&mut self) -> bool {
+        let Some(rx) = &self.discover_rx else {
+            return false;
+        };
+        let found = match rx.try_recv() {
+            Ok(found) => found,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => None,
+        };
+        self.discover_rx = None;
+        match found {
+            Some((drives, events)) => {
+                self.apply_discovery(drives, events);
+                self.start_profile();
+            }
+            None => self
+                .log
+                .push("Drive scan stopped unexpectedly; the drive list was not changed.".into()),
+        }
+        true
     }
 
     fn discovery_event(&mut self, event: Event) {
@@ -1336,10 +1412,7 @@ impl App {
                     }
                 }
             }
-            Input::Refresh if !self.busy() => {
-                self.discover();
-                return self.start_profile();
-            }
+            Input::Refresh if !self.busy() => return self.start_discovery(),
             Input::SelectTask(task) if !self.busy() => {
                 if task != self.task {
                     self.recovery_bypass_family = false;
@@ -2341,6 +2414,7 @@ impl App {
                 self.report_control = None;
             }
         }
+        let discovered = self.poll_discovery();
         let origin_done = self.poll_origin();
         let profiled = self.poll_profile();
         let mut finished = false;
@@ -2588,8 +2662,9 @@ impl App {
         if self.diagnostics_open && due {
             self.refresh_diagnostic_view();
         }
-        if (finished || profiled || origin_done || report_done || update_done)
+        if (finished || profiled || discovered || origin_done || report_done || update_done)
             && !self.profile_refresh_due
+            && self.discover_rx.is_none()
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
