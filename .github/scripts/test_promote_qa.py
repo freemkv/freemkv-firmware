@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import json
 import subprocess
 import tempfile
 import unittest
@@ -22,10 +23,11 @@ class PromotionTests(unittest.TestCase):
         self.assertFalse(promote.eligible({'conclusion': 'success'}, complete))
 
     def test_shipping_source_changes_block_reuse(self):
-        for path in ['Cargo.toml', 'Cargo.lock', 'src/receiver.rs', 'assets/icon.png', 'README.md']:
+        for path in ['Cargo.toml', 'Cargo.lock', 'src/receiver.rs', 'assets/icon.png', 'README.md',
+                     'crates/freemkv-flash/src/main.rs', 'crates/freemkv-flash-gui/src/ui.rs']:
             with self.subTest(path=path), patch.object(promote, 'command', return_value=path):
                 self.assertFalse(promote.same_shipping_source('qa'))
-        for path in ['.github/workflows/qa.yml', 'crates/freemkv-flash-gui/src/windows/gate.rs']:
+        for path in ['.github/workflows/qa.yml', 'internal/docs/release.md', 'crates/freemkv-flash-gui/src/windows/gate.rs']:
             with self.subTest(path=path), patch.object(promote, 'command', return_value=path):
                 self.assertTrue(promote.same_shipping_source('qa'))
 
@@ -59,10 +61,24 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'collide'):
                 promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
 
+    def test_unfetchable_run_is_skipped(self):
+        runs = {'workflow_runs': [{'id': 1, 'head_sha': 'a' * 40, 'conclusion': 'success'}, {'id': 2, 'head_sha': 'b' * 40, 'conclusion': 'success'}]}
+        def run(args, **kwargs):
+            code = 1 if args[1] in ('cat-file', 'fetch') and 'a' * 40 in ' '.join(args) else 0
+            return subprocess.CompletedProcess(args, code)
+        def command(*args):
+            return json.dumps(runs if 'runs?' in args[-1] else {'artifacts': [{'name': n} for n in promote.REQUIRED]})
+        with patch.object(promote, 'command', side_effect=command), \
+                patch.object(promote.subprocess, 'run', side_effect=run), \
+                patch.object(promote, 'same_shipping_source', return_value=True):
+            self.assertEqual(promote.find_candidate('o/r', 'HEAD')['id'], 2)
+
     def test_workflow_has_no_tag_build_path(self):
         text = Path('.github/workflows/release.yml').read_text()
         self.assertTrue('promote-qa:' in text, 'tag artifact-promotion job missing')
-        self.assertIn("!startsWith(github.ref, 'refs/tags/')", text)
+        block = text.split('\n  resolve-msrv:\n', 1)[1].split('\n    runs-on:', 1)[0]
+        self.assertIn("!startsWith(github.ref, 'refs/tags/')", block)
+        self.assertIn('needs: resolve-msrv', text)
         self.assertIn('needs.promote-qa.result', text)
 
 

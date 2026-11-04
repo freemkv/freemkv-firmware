@@ -27,7 +27,10 @@ def eligible(run, jobs):
 def verify(repo):
     runs = json.loads(command('gh', 'api', f'repos/{repo}/actions/workflows/ci.yml/runs?branch=dev&event=push&status=success&per_page=30'))['workflow_runs']
     for run in runs:
-        command('git', 'fetch', '--no-tags', 'origin', run['head_sha'])
+        fetched = subprocess.run(['git', 'fetch', '--no-tags', 'origin', run['head_sha']], capture_output=True)
+        if fetched.returncode:
+            print(f'Skipping dev run {run["id"]}: commit {run["head_sha"]} is not fetchable')
+            continue
         if not same_tree(run['head_sha']):
             continue
         # The complete job set matters: never rely on the first API page alone.

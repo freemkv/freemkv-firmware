@@ -52,13 +52,26 @@ class DevProofTests(unittest.TestCase):
                 self.assertIn('--paginate', args)
                 return json.dumps([{'jobs': []}, {'jobs': [{'name': 'lint', 'conclusion': 'success', 'steps': [{'name': 'Lint Rust targets', 'conclusion': 'success'}]}]}])
             return json.dumps({'workflow_runs': [run]})
-        with patch.object(proof, 'command', side_effect=command), patch.object(proof, 'same_tree', return_value=True):
+        ok = subprocess.CompletedProcess([], 0)
+        with patch.object(proof, 'command', side_effect=command), patch.object(proof.subprocess, 'run', return_value=ok), patch.object(proof, 'same_tree', return_value=True):
             self.assertEqual(proof.verify('owner/repo'), 7)
         queries.clear()
-        with patch.object(proof, 'command', side_effect=command), patch.object(proof, 'same_tree', return_value=False):
+        with patch.object(proof, 'command', side_effect=command), patch.object(proof.subprocess, 'run', return_value=ok), patch.object(proof, 'same_tree', return_value=False):
             with self.assertRaises(RuntimeError):
                 proof.verify('owner/repo')
         self.assertFalse(any('jobs?' in args[-1] for args in queries))
+
+    def test_unfetchable_run_is_skipped(self):
+        runs = [{'id': i, 'head_sha': c * 40, 'conclusion': 'success', 'event': 'push', 'head_branch': 'dev'} for i, c in ((1, 'a'), (2, 'b'))]
+        job = {'name': 'lint', 'conclusion': 'success', 'steps': [{'name': 'Lint Rust targets', 'conclusion': 'success'}]}
+        import json
+        def command(*args):
+            return json.dumps({'workflow_runs': runs} if 'ci.yml/runs' in args[-1] else [{'jobs': [job]}])
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args, 1 if 'a' * 40 in args else 0)
+        with patch.object(proof, 'command', side_effect=command), \
+                patch.object(proof.subprocess, 'run', side_effect=run), patch.object(proof, 'same_tree', return_value=True):
+            self.assertEqual(proof.verify('owner/repo'), 2)
 
     def test_missing_matching_proof_fails(self):
         with patch.object(proof, 'command', return_value='{"workflow_runs": []}'):

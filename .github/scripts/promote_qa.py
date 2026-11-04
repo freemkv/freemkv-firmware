@@ -66,7 +66,10 @@ def find_candidate(repo, ref):
     runs = json.loads(command('gh', 'api', f'repos/{repo}/actions/workflows/qa.yml/runs?branch=qa&status=success&per_page=30'))['workflow_runs']
     for run in runs:
         if subprocess.run(['git', 'cat-file', '-e', run['head_sha'] + '^{commit}'], capture_output=True).returncode:
-            command('git', 'fetch', '--no-tags', 'origin', run['head_sha'])
+            fetched = subprocess.run(['git', 'fetch', '--no-tags', 'origin', run['head_sha']], capture_output=True)
+            if fetched.returncode:
+                print(f'Skipping QA run {run["id"]}: commit {run["head_sha"]} is not fetchable')
+                continue
         if not same_shipping_source(run['head_sha'], ref):
             continue
         artifacts = json.loads(command('gh', 'api', f'repos/{repo}/actions/runs/{run["id"]}/artifacts?per_page=100'))['artifacts']
