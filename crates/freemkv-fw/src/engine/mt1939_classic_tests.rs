@@ -1285,3 +1285,19 @@ fn the_modern_fixture_carries_none_of_the_classic_signatures() {
         );
     }
 }
+
+/// A decode-back mismatch must leave the image untouched, matching the
+/// "feature left unwired" contract; otherwise the overwritten `bl` ships.
+#[test]
+fn commit_classic_detour_leaves_the_image_untouched_on_decode_back_mismatch() {
+    let mut out = fixture();
+    let before = out.clone();
+    let result = Mt1959Engine.commit_classic_detour_checked(
+        &mut out,
+        0x001c_4800,
+        &[0u8; 32],
+        |_, _| Some(0),
+    );
+    assert_eq!(result, None);
+    assert!(out == before, "a refused detour must not modify the image");
+}

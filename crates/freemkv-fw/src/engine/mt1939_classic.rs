@@ -502,16 +502,28 @@ impl Mt1959Engine {
     /// the feature is left unwired, the base still ships). Mirrors the per-feature
     /// commit block modern `emit_rawread` uses, but for the classic report path.
     fn commit_classic_detour(&self, out: &mut [u8], site: usize, bytes: &[u8]) -> Option<u32> {
+        self.commit_classic_detour_checked(out, site, bytes, thumb::decode_bl)
+    }
+
+    /// Writes into a copy and publishes it only after the decode-back check
+    /// passes, so a refused detour leaves `out` byte-identical.
+    fn commit_classic_detour_checked(
+        &self,
+        out: &mut [u8],
+        site: usize,
+        bytes: &[u8],
+        decode: impl Fn(&[u8], usize) -> Option<u32>,
+    ) -> Option<u32> {
         let stub_va = self.free_space(out, bytes.len() + 16).ok()?;
         let bl = thumb::encode_bl(site, stub_va)?;
-        thumb::write(out, stub_va as usize, bytes);
-        thumb::write(out, site, &bl);
-        // Emit-time decode-back guard — miss-is-graceful per this fn's
-        // `Option` contract, so an install-shape failure returns None
-        // (feature left unwired, base still ships) rather than panicking.
-        if thumb::decode_bl(out, site) != Some(stub_va) {
+        let mut staged = out.to_vec();
+        thumb::write(&mut staged, stub_va as usize, bytes);
+        thumb::write(&mut staged, site, &bl);
+        // Emit-time decode-back guard: a failure is a graceful miss.
+        if decode(&staged, site) != Some(stub_va) {
             return None;
         }
+        out.copy_from_slice(&staged);
         Some(stub_va)
     }
 
