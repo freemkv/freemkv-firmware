@@ -229,7 +229,7 @@ def main():
     p.add_argument('--baseline-receipt',type=Path,help='Optional JSON or JSON.gz prior receipt for exact canonical/output preservation comparisons; CPU failures remain failures')
     p.add_argument('--disc-fixtures',type=Path,help='Compact captured-DI/ISO fixture directory; execute all bound OEM and modified geometry contracts')
     p.add_argument('--disc-worker-receipt',type=Path,help='Source-bound DI worker receipt (JSON or JSON.gz); required with --disc-fixtures')
-    p.add_argument('--dependency-commit',default='45e5a98b6085e938986456b098434720dd8ae368',help='Explicit expected mediatek-optical commit; verified against its Cargo.lock package source')
+    p.add_argument('--dependency-commit',default='21031df434cff7fb2a4efbaa54a824b245933a95',help='Explicit expected mediatek-optical commit; verified against its Cargo.lock package source')
     p.add_argument('--only-ordinary',action='store_true',help='Focused ordinary hook run; conversion helpers are explicitly not-requested')
     p.add_argument('--only-conversion',action='store_true',help='Focused installed conversion helper run; every omitted ordinary hook is explicitly not-requested')
     p.add_argument('--producer-only',action='store_true',help='Actual API/CLI and structural output checks only; every CPU hook explicitly not-requested')
