@@ -1023,7 +1023,13 @@ impl Mt1959Engine {
                     if !hopped && (h & 0xF800) == 0xE000 {
                         let d = (h & 0x7FF) as i32;
                         let d = if d >= 0x400 { d - 0x800 } else { d };
-                        p = (p as i32 + 4 + d * 2) as usize;
+                        let Some(next) = usize::try_from(p as i64 + 4 + i64::from(d) * 2)
+                            .ok()
+                            .filter(|&n| n + 4 <= image.len())
+                        else {
+                            break;
+                        };
+                        p = next;
                         hopped = true;
                         steps += 1;
                         continue;
