@@ -60,6 +60,18 @@ fn private_file(path: &Path, append: bool) -> io::Result<File> {
     options.open(path)
 }
 
+fn ends_without_newline(path: &Path) -> io::Result<bool> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = File::open(path)?;
+    if file.metadata()?.len() == 0 {
+        return Ok(false);
+    }
+    file.seek(SeekFrom::End(-1))?;
+    let mut last = [0];
+    file.read_exact(&mut last)?;
+    Ok(last[0] != b'\n')
+}
+
 /// Own only a report created exclusively by this attempt; errors leave no partial ZIP.
 struct PartialReport(Option<PathBuf>);
 
@@ -104,7 +116,11 @@ impl Journal {
                 dir.join(format!("events-{}-{session_id}.jsonl", stamp())),
             )?;
         }
-        let file = private_file(&path, true)?;
+        let mut file = private_file(&path, true)?;
+        // An interrupted write leaves a partial line; end it so this session parses.
+        if ends_without_newline(&path)? {
+            file.write_all(b"\n")?;
+        }
         let mut journal = Self {
             dir,
             file: Some(file),
@@ -1186,5 +1202,27 @@ mod retained_capture_tests {
                 fs::remove_dir_all(dir).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn partial_journal_line_does_not_swallow_next_session_opening() {
+        let dir = std::env::temp_dir().join(format!("freemkv-partial-{}", random_id().unwrap()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("events.jsonl"), br#"{"schema":1"#).unwrap();
+        let journal = Journal::open_at(dir.clone()).unwrap();
+        let built = journal
+            .source()
+            .bundle_with_control(Scope::Session, None)
+            .unwrap();
+        let mut zip = zip::ZipArchive::new(File::open(&built.path).unwrap()).unwrap();
+        let mut events = String::new();
+        zip.by_name("events.jsonl")
+            .unwrap()
+            .read_to_string(&mut events)
+            .unwrap();
+        assert!(events.contains("app_opened"), "{events}");
+        drop(zip);
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
     }
 }
