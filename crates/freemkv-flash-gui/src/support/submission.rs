@@ -124,19 +124,26 @@ fn submit_at(
     let poll_token = request["poll_token"]
         .as_str()
         .context("Missing polling token")?;
-    open(
-        request["approval_url"]
-            .as_str()
-            .context("Missing approval URL")?,
-    )
-    .context("Could not open report approval")?;
+    let approval_url = request["approval_url"]
+        .as_str()
+        .context("Missing approval URL")?;
+    if !same_origin(base, approval_url) {
+        bail!("Invalid report approval URL");
+    }
+    // Without a browser handler the request can still be approved by hand.
+    if open(approval_url).is_err() {
+        progress(crate::localization::message(
+            "report.open_approval_manually",
+            &[("url", approval_url.into())],
+        ));
+    }
     let approval_deadline = (Instant::now() + control.approval_limit).min(control.deadline);
     let approved = loop {
         control.pause()?;
         if Instant::now() >= approval_deadline {
             bail!("Report approval timed out");
         }
-        let mut reply = agent
+        let reply = agent
             .get(&format!("{base}/requests/{id}/poll"))
             .header("Authorization", &format!("Bearer {poll_token}"))
             .config()
@@ -146,9 +153,18 @@ fn submit_at(
                     .min(approval_deadline.saturating_duration_since(Instant::now())),
             ))
             .build()
-            .call()
-            .context("Report approval failed")?;
+            .call();
         control.check()?;
+        // One poll of many: a transient failure waits for the next interval.
+        let mut reply = match reply {
+            Err(
+                ureq::Error::StatusCode(500..=599)
+                | ureq::Error::Io(_)
+                | ureq::Error::Timeout(_)
+                | ureq::Error::ConnectionFailed,
+            ) => continue,
+            reply => reply.context("Report approval failed")?,
+        };
         match reply.status().as_u16() {
             200 => break reply.body_mut().read_json::<Value>()?,
             202 => {}
@@ -231,6 +247,16 @@ fn submit_at(
         }
     }
     unreachable!("last upload either returns a receipt or an error")
+}
+
+/// The approval page must be served by the report endpoint's own origin.
+fn same_origin(base: &str, candidate: &str) -> bool {
+    match (url::Url::parse(base), url::Url::parse(candidate)) {
+        (Ok(base), Ok(candidate)) => {
+            matches!(candidate.scheme(), "http" | "https") && base.origin() == candidate.origin()
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]

@@ -683,6 +683,63 @@ fn refresh_reads_the_profile_again() {
 }
 
 #[test]
+fn refresh_enumerates_drives_off_the_ui_thread() {
+    let mut app = one_drive();
+    let (release, gate) = mpsc::channel::<()>();
+    let gate = std::sync::Mutex::new(gate);
+    app.enumerator = Some(Arc::new(move || {
+        let _ = gate.lock().unwrap().recv_timeout(Duration::from_secs(2));
+        vec![drive("drive-b", "drive-b", "Drive B")]
+    }));
+    app.profile_worker = None;
+    assert_eq!(app.dispatch(Input::Refresh), [Effect::StartTicking]);
+    assert!(app.busy(), "discovery owns busy state");
+    assert!(app.profile_worker.is_none());
+    release.send(()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.discover_rx.is_some() && Instant::now() < deadline {
+        app.poll();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(app.device, "drive-b");
+    assert!(app.profile_worker.is_some(), "the new drive is profiled");
+}
+
+#[test]
+fn per_window_progress_is_journaled_once_per_phase() {
+    let mut app = one_drive();
+    let dir =
+        std::env::temp_dir().join(format!("progress-journal-{}", workflow::new_operation_id()));
+    app.journal = Some(Journal::memory_at(dir));
+    let total = 2 * 1024 * 1024;
+    for done in (64..=total).step_by(1024) {
+        app.event(Event::Phase {
+            phase: "reading",
+            component: "filter.firmware",
+            done: Some(done),
+            total: Some(total),
+        });
+    }
+    let path = app
+        .journal
+        .as_ref()
+        .unwrap()
+        .source()
+        .bundle(crate::support::Scope::Session)
+        .unwrap();
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut contents = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("events.jsonl").unwrap(), &mut contents)
+        .unwrap();
+    let progress = contents
+        .lines()
+        .filter(|line| line.contains("operation_progress"))
+        .count();
+    assert!((1..=2).contains(&progress), "{progress} progress records");
+    assert_eq!(app.progress.as_ref().unwrap().1, 2 * 1024 * 1024 - 960);
+}
+
+#[test]
 fn info_without_a_drive_offers_only_check_file() {
     let view = dry(Vec::new()).view();
     assert!(!button(&view, "Read drive information").enabled);
@@ -1868,6 +1925,23 @@ fn refresh_removes_disconnected_selection_and_its_consent() {
 }
 
 #[test]
+fn refresh_with_another_drive_at_the_same_path_clears_its_consent() {
+    let mut app = one_drive();
+    app.task = Task::Recovery;
+    app.recovery_input = Some("target.tar".into());
+    app.recovery_family_mismatch = true;
+    app.recovery_bypass_family = true;
+    app.risk_ack = true;
+    app.prepared_recovery = Some(workflow::PreparedRecovery::default());
+    app.refresh(vec![drive("drive-a", "drive-a", "Swapped drive")]);
+    assert_eq!(app.device, "drive-a");
+    assert!(!app.recovery_family_mismatch && !app.recovery_bypass_family);
+    assert!(!app.risk_ack && app.prepared_recovery.is_none());
+    app.dispatch(Input::Recover);
+    assert!(matches!(&last_job(&app).2, Job::Recovery(o) if !o.bypass_family_check));
+}
+
+#[test]
 fn selecting_another_drive_clears_its_results() {
     let mut app = ready(vec![drive("a", "a", "A"), drive("b", "b", "B")]);
     app.rows = vec![row("Model", "A", Group::General)];
@@ -2206,6 +2280,26 @@ fn mtk_inspection(name: &str, edit: impl FnOnce(&mut [u8])) -> Arc<workflow::Ins
     let result = workflow::inspect(&Source::File(path.clone()), &Control::default());
     let _ = std::fs::remove_file(&path);
     result.unwrap()
+}
+
+#[test]
+fn comparison_family_heading_is_localized_text() {
+    use workflow::FamilyRelationship;
+    let fixture = Source::File(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../freemkv-flash/tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin"),
+    );
+    for (family, text) in [
+        (FamilyRelationship::Same, "Same"),
+        (FamilyRelationship::Different, "Different"),
+        (FamilyRelationship::Unknown, "Unknown"),
+        (FamilyRelationship::NotComparable, "Not comparable"),
+    ] {
+        let mut report = workflow::compare(&fixture, &fixture, &Control::default()).unwrap();
+        report.family = family;
+        let tree = analysis_tree(&ResultView::Compare(report));
+        assert_eq!(tree.heading, format!("Hardware family: {text}"));
+    }
 }
 
 /// The "Changes by region" rows of a comparison tree, plus its text lines.
@@ -2699,6 +2793,38 @@ fn current_selection_reprofiles_unknown_receiver_and_rechecks_replacement() {
     app.answer_profile(Ok(Profile::default()));
     assert!(app.ready_profile().unwrap().tasks.is_empty());
     assert_eq!(app.recovery_current, Some("other.tar".into()));
+}
+
+#[test]
+fn current_file_reprobe_waits_for_a_running_job() {
+    let mut app = dry(vec![drive("drive-a", "drive-a", "Drive A")]);
+    app.start();
+    app.answer_profile(Ok(Profile {
+        recovery_without_live_protocol: true,
+        ..Profile::every_task()
+    }));
+    app.dispatch(Input::SelectTask(Task::Backup));
+    app.dispatch(Input::Chosen(Pick::Backup, "backup.tar".into()));
+    assert!(app.running());
+    app.recovery_current = Some("installed.tar".into());
+    let (tx, rx) = mpsc::channel();
+    app.origin_rx = vec![(0, Pick::RecoveryCurrent, "installed.tar".into(), rx)];
+    tx.send((
+        Pick::RecoveryCurrent,
+        "installed.tar".into(),
+        Ok(workflow::SelectedFileInfo {
+            origin: workflow::FileOrigin::Unknown,
+            members: Vec::new(),
+        }),
+    ))
+    .unwrap();
+    app.poll();
+    assert!(app.profile_rx.is_none(), "no probe beside a running job");
+    assert!(matches!(app.profile, ProfileState::Ready(_)));
+    finish(&mut app, Ok(()));
+    assert!(!app.running());
+    assert!(matches!(app.profile, ProfileState::Probing));
+    assert!(app.profile_rx.is_some());
 }
 
 fn recovery_plan_passes(app: &mut App) -> workflow::PreparedRecovery {
@@ -3637,7 +3763,8 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
-    app.report_endpoint = Some(format!("http://{}", listener.local_addr().unwrap()));
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    app.report_endpoint = Some(endpoint.clone());
     let requests = Arc::new(AtomicUsize::new(0));
     let observed = requests.clone();
     let description = "Backup failed.\n日本語 — description 🐈";
@@ -3702,12 +3829,12 @@ fn report_prompt_uploads_exact_dump_description_and_preserves_receipt() {
                 )));
             }
             let body = match index {
-                0 => {
-                    r#"{"id":"joined","poll_token":"poll","approval_url":"http://localhost/approval"}"#
-                }
-                1 => r#"{"scope":"session","upload_token":"upload"}"#,
-                2 => r#"{"saved":true}"#,
-                _ => r#"{"report_id":"joined-receipt"}"#,
+                0 => format!(
+                    r#"{{"id":"joined","poll_token":"poll","approval_url":"{endpoint}/approval"}}"#
+                ),
+                1 => r#"{"scope":"session","upload_token":"upload"}"#.into(),
+                2 => r#"{"saved":true}"#.into(),
+                _ => r#"{"report_id":"joined-receipt"}"#.into(),
             };
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
         }

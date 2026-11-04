@@ -294,3 +294,60 @@ fn unicode_ui_languages_have_renderable_cjk_glyphs() {
         })
     });
 }
+
+#[test]
+fn boot_preview_refuses_an_oversized_input_at_the_shared_cap() {
+    let path =
+        std::env::temp_dir().join(format!("freemkv-fw-oversized-{}.bin", std::process::id()));
+    std::fs::File::create(&path)
+        .unwrap()
+        .set_len(65 * 1024 * 1024)
+        .unwrap();
+    let error = boot_options_at(&path).unwrap_err();
+    std::fs::remove_file(&path).unwrap();
+    assert!(format!("{error:#}").contains("MiB cap"), "{error:#}");
+}
+
+#[test]
+fn refresh_keeps_a_displayed_failure_log() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    app.failure = Some("probe failed".into());
+    app.diagnostic_log = Some("probe.log".into());
+    app.apply_discovery(
+        Vec::new(),
+        vec![freemkv_flash::output::Event::Report(
+            freemkv_flash::report::Row::gui("field", "Diagnostic log", "discovery.log".into())
+                .into(),
+        )],
+    );
+    assert_eq!(app.diagnostic_log, Some("probe.log".into()));
+}
+
+#[test]
+fn refresh_enumerates_drives_off_the_ui_thread() {
+    let mut app = FwApp::with_preferences(Preferences::Memory);
+    let (release, gate) = mpsc::channel::<()>();
+    let gate = std::sync::Mutex::new(gate);
+    app.enumerator = Some(std::sync::Arc::new(move || {
+        let _ = gate
+            .lock()
+            .unwrap()
+            .recv_timeout(std::time::Duration::from_secs(2));
+        vec![DriveChoice {
+            path: "drive-a".into(),
+            name: "drive-a".into(),
+            label: "Drive A".into(),
+        }]
+    }));
+    let started = std::time::Instant::now();
+    app.discover(&egui::Context::default());
+    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    assert!(app.discover_rx.is_some());
+    release.send(()).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while app.discover_rx.is_some() && std::time::Instant::now() < deadline {
+        app.pump();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert_eq!(app.device, "drive-a");
+}

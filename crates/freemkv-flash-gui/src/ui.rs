@@ -800,6 +800,10 @@ pub(crate) struct Pending {
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
 /// Report progress is distinct from its authoritative terminal result.
+/// A finished drive scan: its drives and events, or `None` if the scan panicked.
+type Discovered = Option<(Vec<DriveChoice>, Vec<Event>)>;
+type Enumerator = Arc<dyn Fn() -> Vec<DriveChoice> + Send + Sync>;
+
 enum ReportMsg {
     Progress(String),
     Diagnostic(String),
@@ -822,7 +826,7 @@ pub struct App {
     report_rx: Option<Receiver<ReportMsg>>,
     update_rx: Option<Receiver<Result<Option<String>, String>>>,
     update_checked: bool,
-    available_update: Option<String>,
+    pub(crate) available_update: Option<String>,
     successful_flash: bool,
     report_prompt: Option<crate::support::BundleSource>,
     report_description: String,
@@ -838,6 +842,8 @@ pub struct App {
     origin_rx: Vec<(u64, Pick, PathBuf, Receiver<OriginReply>)>,
     origin_pending: Vec<(u64, Pick, PathBuf)>,
     origin_versions: [u64; 4],
+    /// A Current-file reprobe that waits for the drive to be free.
+    profile_refresh_due: bool,
     origin_next: u64,
     flash_origin: Option<Result<workflow::FileOrigin, String>>,
     recovery_origin: Option<Result<workflow::FileOrigin, String>>,
@@ -908,6 +914,10 @@ pub struct App {
     pub(crate) worker: Option<Sender<Msg>>,
     #[cfg(test)]
     pub(crate) profile_worker: Option<Sender<Result<Profile, String>>>,
+    /// Test seam: enumerate drives with this instead of the host's real drives.
+    #[cfg(test)]
+    enumerator: Option<Enumerator>,
+    discover_rx: Option<Receiver<Discovered>>,
 }
 
 impl App {
@@ -1000,6 +1010,7 @@ impl App {
             origin_rx: Vec::new(),
             origin_pending: Vec::new(),
             origin_versions: [0; 4],
+            profile_refresh_due: false,
             origin_next: 0,
             flash_origin: None,
             recovery_origin: None,
@@ -1061,6 +1072,9 @@ impl App {
             worker: None,
             #[cfg(test)]
             profile_worker: None,
+            #[cfg(test)]
+            enumerator: None,
+            discover_rx: None,
         }
     }
 
@@ -1186,28 +1200,93 @@ impl App {
             || self.pending.is_some()
             || self.report_prompt.is_some()
             || self.profile_rx.is_some()
+            || self.discover_rx.is_some()
     }
 
-    fn discover(&mut self) {
+    /// How drives are enumerated, or `None` when this model must never scan.
+    fn enumerator(&self) -> Option<Enumerator> {
         #[cfg(debug_assertions)]
         if self.inert {
-            return;
+            return None;
+        }
+        #[cfg(test)]
+        if let Some(enumerate) = &self.enumerator {
+            return Some(enumerate.clone());
         }
         // Tests must not enumerate the host's real drives.
         #[cfg(test)]
         if self.dry_run.is_some() {
-            return;
+            return None;
         }
+        Some(Arc::new(ops::enumerate))
+    }
+
+    fn scan(enumerate: &Enumerator) -> (Vec<DriveChoice>, Vec<Event>) {
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
         let received = events.clone();
         let drives = workflow::capture_events(
             move |event| received.lock().unwrap().push(event),
-            ops::enumerate,
+            || enumerate(),
         );
+        let events = std::mem::take(&mut *events.lock().unwrap());
+        (drives, events)
+    }
+
+    /// The first scan, before the window is shown.
+    fn discover(&mut self) {
+        if let Some(enumerate) = self.enumerator() {
+            let (drives, events) = Self::scan(&enumerate);
+            self.apply_discovery(drives, events);
+        }
+    }
+
+    fn apply_discovery(&mut self, drives: Vec<DriveChoice>, events: Vec<Event>) {
         self.refresh(drives);
-        for event in events.lock().unwrap().drain(..) {
+        for event in events {
             self.discovery_event(event);
         }
+    }
+
+    /// Refresh scans on a worker: a slow or wedged drive must not freeze the window.
+    fn start_discovery(&mut self) -> Vec<Effect> {
+        let Some(enumerate) = self.enumerator() else {
+            return self.start_profile();
+        };
+        let (tx, rx) = mpsc::channel();
+        self.discover_rx = Some(rx);
+        let waker = self.waker.clone();
+        std::thread::spawn(move || {
+            let found =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Self::scan(&enumerate)));
+            let _ = tx.send(found.ok());
+            if let Some(wake) = waker {
+                wake();
+            }
+        });
+        vec![Effect::StartTicking]
+    }
+
+    /// Take a finished drive scan, if one arrived; true when the scan ended.
+    fn poll_discovery(&mut self) -> bool {
+        let Some(rx) = &self.discover_rx else {
+            return false;
+        };
+        let found = match rx.try_recv() {
+            Ok(found) => found,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => None,
+        };
+        self.discover_rx = None;
+        match found {
+            Some((drives, events)) => {
+                self.apply_discovery(drives, events);
+                self.start_profile();
+            }
+            None => self
+                .log
+                .push("Drive scan stopped unexpectedly; the drive list was not changed.".into()),
+        }
+        true
     }
 
     fn discovery_event(&mut self, event: Event) {
@@ -1238,7 +1317,13 @@ impl App {
                 .find(|d| d.path == self.device)
                 .map(DriveChoice::display)
         {
+            // Another drive at this path never inherits the previous drive's consent.
             self.report_artifact = None;
+            self.recovery_bypass_family = false;
+            self.risk_ack = false;
+            self.pending = None;
+            self.recovery_family_mismatch = false;
+            self.prepared_recovery = None;
         }
         if !drives.iter().any(|d| d.path == self.device) {
             self.device = drives.first().map(|d| d.path.clone()).unwrap_or_default();
@@ -1327,10 +1412,7 @@ impl App {
                     }
                 }
             }
-            Input::Refresh if !self.busy() => {
-                self.discover();
-                return self.start_profile();
-            }
+            Input::Refresh if !self.busy() => return self.start_discovery(),
             Input::SelectTask(task) if !self.busy() => {
                 if task != self.task {
                     self.recovery_bypass_family = false;
@@ -2332,6 +2414,7 @@ impl App {
                 self.report_control = None;
             }
         }
+        let discovered = self.poll_discovery();
         let origin_done = self.poll_origin();
         let profiled = self.poll_profile();
         let mut finished = false;
@@ -2569,13 +2652,19 @@ impl App {
                 .collect();
             self.ask(target, Sheet::Recovery { options, plan });
         }
+        if self.profile_refresh_due && !self.busy() {
+            self.profile_refresh_due = false;
+            self.refresh_current_profile();
+        }
         let due = self.diagnostic_checked.is_none_or(|checked| {
             finished || (self.running() && checked.elapsed() >= DIAGNOSTIC_REFRESH)
         });
         if self.diagnostics_open && due {
             self.refresh_diagnostic_view();
         }
-        if (finished || profiled || origin_done || report_done || update_done)
+        if (finished || profiled || discovered || origin_done || report_done || update_done)
+            && !self.profile_refresh_due
+            && self.discover_rx.is_none()
             && !self.running()
             && self.profile_rx.is_none()
             && self.origin_rx.is_empty()
@@ -2697,7 +2786,12 @@ impl App {
                 Pick::FlashCurrent => self.flash_current_members = members,
                 Pick::RecoveryCurrent => {
                     self.recovery_current_members = members;
-                    self.refresh_current_profile();
+                    // Never probe the drive beside a running job or probe.
+                    if self.busy() {
+                        self.profile_refresh_due = true;
+                    } else {
+                        self.refresh_current_profile();
+                    }
                 }
                 _ => {}
             }
@@ -2769,12 +2863,6 @@ impl App {
                 total,
             } => {
                 self.structured_progress = true;
-                self.record_event(
-                    "operation_progress",
-                    serde_json::json!({
-                        "phase": phase, "component": component, "done": done, "total": total,
-                    }),
-                );
                 let key = match phase {
                     "reading" => "phase.reading",
                     "preparing" => "phase.preparing",
@@ -2785,11 +2873,20 @@ impl App {
                     _ => "ui.working",
                 };
                 let label = crate::localization::message(key, &[("component", component.into())]);
-                if self
+                let changed = self
                     .progress
                     .as_ref()
-                    .is_none_or(|(previous, _, _)| previous != &label)
-                {
+                    .is_none_or(|(previous, _, _)| previous != &label);
+                // Journal phase boundaries, not every window of a large read.
+                if changed || (done.is_some() && done == total) {
+                    self.record_event(
+                        "operation_progress",
+                        serde_json::json!({
+                            "phase": phase, "component": component, "done": done, "total": total,
+                        }),
+                    );
+                }
+                if changed {
                     self.log.push(crate::localization::english(&label));
                 }
                 self.progress = Some((label, done.unwrap_or(0), total.unwrap_or(0)));
@@ -4192,10 +4289,13 @@ pub(crate) fn analysis_tree(result: &ResultView) -> AnalysisView {
                 children.push(Node::section("ui.technical_details", false, technical));
                 nodes.push(Node::section(&s.name, true, children));
             }
-            crate::localization::message(
-                "ui.hardware_family_arg0",
-                &[("arg0", format!("{:?}", report.family))],
-            )
+            let family = match report.family {
+                workflow::FamilyRelationship::Same => "compare.family_same",
+                workflow::FamilyRelationship::Different => "ui.different",
+                workflow::FamilyRelationship::Unknown => "ui.unknown",
+                workflow::FamilyRelationship::NotComparable => "compare.family_not_comparable",
+            };
+            crate::localization::message("ui.hardware_family_arg0", &[("arg0", family.into())])
         }
     };
     AnalysisView {

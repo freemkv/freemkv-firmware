@@ -27,6 +27,7 @@ fn server_with_inspection(
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
+    let origin = base.clone();
     let task = std::thread::spawn(move || {
         let mut seen = Vec::new();
         for reply in script {
@@ -88,7 +89,8 @@ fn server_with_inspection(
                 control.cancel();
             }
             std::thread::sleep(reply.delay);
-            let _ = write!(stream, "HTTP/1.1 {} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", reply.status, reply.body.len(), reply.body);
+            let body = reply.body.replace("{BASE}", &origin);
+            let _ = write!(stream, "HTTP/1.1 {} Test\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", reply.status, body.len(), body);
         }
         seen
     });
@@ -115,8 +117,9 @@ fn source() -> (BundleSource, std::path::PathBuf) {
         dir,
     )
 }
+/// `{BASE}` in a reply body is replaced with the local server's origin.
 fn created() -> Value {
-    json!({"id":"test-id","poll_token":"poll-secret","approval_url":"http://localhost/approve"})
+    json!({"id":"test-id","poll_token":"poll-secret","approval_url":"{BASE}/approve"})
 }
 fn approved() -> Value {
     json!({"scope":"session","upload_token":"upload-secret"})
@@ -140,7 +143,7 @@ fn approval_pending_then_upload_notification_retry_returns_a_receipt() {
         &control(),
         &base,
         |url| {
-            assert_eq!(url, "http://localhost/approve");
+            assert_eq!(url, format!("{base}/approve"));
             opened = true;
             Ok(())
         },
@@ -421,5 +424,77 @@ fn empty_server_receipt_is_not_submission_success() {
         "empty receipt must not claim success: {result:?}"
     );
     assert_eq!(server.join().unwrap().len(), 4);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn approval_url_outside_the_report_origin_is_never_opened() {
+    for url in ["file:///etc/passwd", "https://example.invalid/approve"] {
+        let (base, server) = server(vec![reply(
+            200,
+            json!({"id":"test-id","poll_token":"poll-secret","approval_url":url}),
+        )]);
+        let (source, dir) = source();
+        let mut opened = false;
+        let result = submit_at(
+            source,
+            &control(),
+            &base,
+            |_| {
+                opened = true;
+                Ok(())
+            },
+            |_| {},
+        );
+        assert!(result.is_err(), "{url} must be refused");
+        assert!(!opened, "{url} must never reach the browser");
+        server.join().unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[test]
+fn missing_browser_shows_the_approval_url_and_keeps_waiting() {
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(200, approved()),
+        reply(200, json!({"saved":true})),
+        reply(200, json!({"report_id":"manual-approval"})),
+    ]);
+    let (source, dir) = source();
+    let mut progress = Vec::new();
+    let receipt = submit_at(
+        source,
+        &control(),
+        &base,
+        |_| anyhow::bail!("no browser handler"),
+        |message| progress.push(message),
+    )
+    .unwrap();
+    assert!(receipt.contains("manual-approval"));
+    let url = format!("{base}/approve");
+    assert!(
+        progress
+            .iter()
+            .any(|message| crate::localization::english(message).contains(&url)),
+        "approval URL must be shown: {progress:?}"
+    );
+    assert_eq!(server.join().unwrap().len(), 4);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn transient_approval_poll_failure_keeps_waiting() {
+    let (base, server) = server(vec![
+        reply(200, created()),
+        reply(502, json!({})),
+        reply(200, approved()),
+        reply(200, json!({"saved":true})),
+        reply(200, json!({"report_id":"after-502"})),
+    ]);
+    let (source, dir) = source();
+    let receipt = submit_at(source, &control(), &base, |_| Ok(()), |_| {}).unwrap();
+    assert!(receipt.contains("after-502"));
+    assert_eq!(server.join().unwrap().len(), 5);
     std::fs::remove_dir_all(dir).unwrap();
 }

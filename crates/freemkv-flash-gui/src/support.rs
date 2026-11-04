@@ -60,6 +60,18 @@ fn private_file(path: &Path, append: bool) -> io::Result<File> {
     options.open(path)
 }
 
+fn ends_without_newline(path: &Path) -> io::Result<bool> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = File::open(path)?;
+    if file.metadata()?.len() == 0 {
+        return Ok(false);
+    }
+    file.seek(SeekFrom::End(-1))?;
+    let mut last = [0];
+    file.read_exact(&mut last)?;
+    Ok(last[0] != b'\n')
+}
+
 /// Own only a report created exclusively by this attempt; errors leave no partial ZIP.
 struct PartialReport(Option<PathBuf>);
 
@@ -104,7 +116,11 @@ impl Journal {
                 dir.join(format!("events-{}-{session_id}.jsonl", stamp())),
             )?;
         }
-        let file = private_file(&path, true)?;
+        let mut file = private_file(&path, true)?;
+        // An interrupted write leaves a partial line; end it so this session parses.
+        if ends_without_newline(&path)? {
+            file.write_all(b"\n")?;
+        }
         let mut journal = Self {
             dir,
             file: Some(file),
@@ -190,31 +206,40 @@ impl Journal {
                     fs::symlink_metadata(&path)?.file_type().is_file(),
                     "invalid firmware cache file"
                 );
-                anyhow::ensure!(
-                    fs::metadata(&path)?.len() == input.bytes.len() as u64,
-                    "firmware cache length changed"
-                );
-                let mut bytes = Vec::new();
-                File::open(&path)?
-                    .take(input.bytes.len() as u64 + 1)
-                    .read_to_end(&mut bytes)?;
-                anyhow::ensure!(
-                    format!("{:x}", Sha256::digest(&bytes)) == sha256,
-                    "firmware cache checksum changed"
-                );
-            } else {
-                let mut options = OpenOptions::new();
-                options.write(true).create_new(true);
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::OpenOptionsExt;
-                    options.mode(0o600);
+                let intact = fs::metadata(&path)?.len() == input.bytes.len() as u64 && {
+                    let mut bytes = Vec::new();
+                    File::open(&path)?
+                        .take(input.bytes.len() as u64 + 1)
+                        .read_to_end(&mut bytes)?;
+                    format!("{:x}", Sha256::digest(&bytes)) == sha256
+                };
+                if intact {
+                    return Ok(());
                 }
-                let mut file = options.open(&path)?;
+                // A short or damaged snapshot is replaced from the exact bytes held here.
+                fs::remove_file(&path)?;
+            }
+            let temp = cache.join(format!("{sha256}.tmp-{}", random_id()?));
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let written = (|| -> Result<()> {
+                let mut file = options.open(&temp)?;
                 file.write_all(&input.bytes)?;
                 file.flush()?;
+                file.sync_all()?;
+                drop(file);
+                fs::rename(&temp, &path)?;
+                Ok(())
+            })();
+            if written.is_err() {
+                let _ = fs::remove_file(&temp);
             }
-            Ok(())
+            written
         })();
         let filename = input
             .filename
@@ -464,6 +489,9 @@ impl BundleSource {
             }
         }
         events.sort_by_key(|e| e["ts_ms"].as_u64().unwrap_or(0));
+        // Accepted logs share one canonical directory, so another spelling is a duplicate.
+        let mut names = std::collections::BTreeSet::new();
+        logs.retain(|log| names.insert(log.file_name().map(ToOwned::to_owned)));
         logs.sort();
         if logs.len() > MAX_LOGS {
             return Err(anyhow::Error::new(ReportProblem::TooLarge)
@@ -1186,5 +1214,87 @@ mod retained_capture_tests {
                 fs::remove_dir_all(dir).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn partial_journal_line_does_not_swallow_next_session_opening() {
+        let dir = std::env::temp_dir().join(format!("freemkv-partial-{}", random_id().unwrap()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("events.jsonl"), br#"{"schema":1"#).unwrap();
+        let journal = Journal::open_at(dir.clone()).unwrap();
+        let built = journal
+            .source()
+            .bundle_with_control(Scope::Session, None)
+            .unwrap();
+        let mut zip = zip::ZipArchive::new(File::open(&built.path).unwrap()).unwrap();
+        let mut events = String::new();
+        zip.by_name("events.jsonl")
+            .unwrap()
+            .read_to_string(&mut events)
+            .unwrap();
+        assert!(events.contains("app_opened"), "{events}");
+        drop(zip);
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn aliased_log_spelling_is_bundled_once() {
+        let root = std::env::temp_dir().join(format!("freemkv-alias-{}", random_id().unwrap()));
+        let dir = root.join("logs");
+        fs::create_dir_all(&dir).unwrap();
+        let alias = root.join("alias");
+        std::os::unix::fs::symlink(&dir, &alias).unwrap();
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        fs::write(dir.join("freemkv-flash-x.log"), b"evidence").unwrap();
+        journal
+            .record(
+                "operation_finished",
+                json!({"log_file": alias.join("freemkv-flash-x.log")}),
+            )
+            .unwrap();
+        let path = journal.source().bundle(Scope::AllHistory).unwrap();
+        let mut zip = zip::ZipArchive::new(File::open(&path).unwrap()).unwrap();
+        let logs = (0..zip.len())
+            .filter(|&i| zip.by_index(i).unwrap().name().unwrap() == "logs/freemkv-flash-x.log")
+            .count();
+        assert_eq!(logs, 1);
+        drop(journal);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn truncated_firmware_snapshot_is_repaired_from_exact_bytes() {
+        use sha2::{Digest, Sha256};
+        let dir = std::env::temp_dir().join(format!("freemkv-snapshot-{}", random_id().unwrap()));
+        let mut journal = Journal::open_at(dir.clone()).unwrap();
+        let bytes = b"complete firmware input bytes";
+        let cache = dir.join("firmware-inputs");
+        fs::create_dir_all(&cache).unwrap();
+        let path = cache.join(format!("{:x}", Sha256::digest(bytes)));
+        fs::write(&path, &bytes[..8]).unwrap();
+        journal
+            .retain_firmware(
+                &freemkv_flash::workflow::FirmwareInput {
+                    role: "target",
+                    filename: "target.bin".into(),
+                    member: None,
+                    bytes: std::sync::Arc::from(bytes.as_slice()),
+                },
+                "abc123",
+            )
+            .unwrap();
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        let built = journal
+            .source()
+            .bundle_with_control(Scope::Session, None)
+            .unwrap();
+        assert!(built
+            .firmware_inputs
+            .iter()
+            .any(|v| v["role"] == "target" && v["available"] == true));
+        drop(journal);
+        fs::remove_dir_all(dir).unwrap();
     }
 }
