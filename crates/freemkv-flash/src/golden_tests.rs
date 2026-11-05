@@ -1752,8 +1752,17 @@ fn golden_backup_capture() {
 #[test]
 fn golden_pioneer_recover() {
     let mut g = Golden::default();
-    let current = archive(&fixture_pair(false, 1), false);
-    let target = archive(&fixture_pair(false, 0), false);
+    let current_pair = fixture_pair(false, 1);
+    let target_pair = fixture_pair(false, 0);
+    // Exercise Kernel recovery while preserving the installed Normal. A
+    // changed Normal without a native startup proof must remain refused.
+    let target_pair = Update::load(
+        target_pair.kernel_transfer(),
+        current_pair.normal_transfer(),
+    )
+    .unwrap();
+    let current = archive(&current_pair, false);
+    let target = archive(&target_pair, false);
     let unsigned_current = archive(&fixture_pair(false, 1), true);
 
     let cases: Vec<(&str, RecoveryDrive, Vec<u8>, Vec<u8>, bool)> = vec![
