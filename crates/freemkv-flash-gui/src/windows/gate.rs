@@ -784,7 +784,9 @@ throw ('No actionable disclosure control: ' + $env:FREEMKV_GATE_CAPTION)
         .stderr(std::process::Stdio::piped())
         .spawn();
     let Ok(mut child) = child else { return false };
-    let deadline = Instant::now() + Duration::from_secs(8);
+    // The first PowerShell/UIAutomation load can exceed eight seconds on a
+    // hosted runner. Keep pumping the dialog while that provider initializes.
+    let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
