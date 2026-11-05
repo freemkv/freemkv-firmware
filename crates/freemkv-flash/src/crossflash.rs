@@ -344,27 +344,31 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
         .flat_map(|i| (0..packages.len()).map(move |j| (i, j)))
         .filter(|&(i, j)| i != j && keys[i].may_admit(&keys[j]))
         .collect();
-    let chunk = candidates.len().div_ceil(workers).max(1);
+    // Pair costs vary substantially by family. Claim one pair at a time so
+    // workers finishing cheap candidates can help with the expensive ones.
+    // Relaxed ordering suffices: the counter only assigns immutable work.
+    let next_pair = std::sync::atomic::AtomicUsize::new(0);
     let mut admitted: Vec<(usize, usize, Route)> = std::thread::scope(|scope| {
-        let handles: Vec<_> = candidates
-            .chunks(chunk)
-            .map(|pairs| {
+        let handles: Vec<_> = (0..workers.min(candidates.len()))
+            .map(|_| {
                 let pioneer_packages = &pioneer_packages;
+                let candidates = &candidates;
+                let next_pair = &next_pair;
                 scope.spawn(move || {
-                    pairs
-                        .iter()
-                        .copied()
-                        .flat_map(|(i, j)| {
-                            let routes = match (pioneer_packages.get(i), pioneer_packages.get(j)) {
-                                (Some(Some(source)), Some(Some(target))) => source
-                                    .routes_to(target)
-                                    .map(|evaluation| evaluation.routes)
-                                    .unwrap_or_default(),
-                                _ => decide(platform, packages[i], packages[j]).routes,
-                            };
-                            routes.into_iter().map(move |route| (i, j, route))
-                        })
-                        .collect::<Vec<_>>()
+                    let mut admitted = Vec::new();
+                    while let Some(&(i, j)) =
+                        candidates.get(next_pair.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+                    {
+                        let routes = match (pioneer_packages.get(i), pioneer_packages.get(j)) {
+                            (Some(Some(source)), Some(Some(target))) => source
+                                .routes_to(target)
+                                .map(|evaluation| evaluation.routes)
+                                .unwrap_or_default(),
+                            _ => decide(platform, packages[i], packages[j]).routes,
+                        };
+                        admitted.extend(routes.into_iter().map(|route| (i, j, route)));
+                    }
+                    admitted
                 })
             })
             .collect();
