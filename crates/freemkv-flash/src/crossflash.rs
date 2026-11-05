@@ -310,29 +310,59 @@ pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
 
 /// Admitted and known future-adapter candidates; hard refusals stay unlisted.
 pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize, Route)> {
-    let keys: Vec<Prefilter> = packages
-        .iter()
-        .map(|p| Prefilter::of(platform, p))
-        .collect();
+    // Reuse only package-local immutable evidence. Unsupported or incomplete
+    // packages retain the ordinary path, including its exact typed refusals.
+    // Package validation uses the same worker bound as pair evaluation.
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let package_chunk = packages.len().div_ceil(workers).max(1);
+    let (keys, pioneer_packages): (Vec<_>, Vec<_>) = std::thread::scope(|scope| {
+        let handles: Vec<_> = packages
+            .chunks(package_chunk)
+            .map(|chunk| {
+                scope.spawn(move || {
+                    chunk
+                        .iter()
+                        .map(|bytes| {
+                            let key = Prefilter::of(platform, bytes);
+                            let evidence = if platform == Platform::Pioneer {
+                                crate::backends::pioneer::OfflinePackage::load(bytes).ok()
+                            } else {
+                                None
+                            };
+                            (key, evidence)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("package validation worker panicked"))
+            .unzip()
+    });
     let candidates: Vec<(usize, usize)> = (0..packages.len())
         .flat_map(|i| (0..packages.len()).map(move |j| (i, j)))
         .filter(|&(i, j)| i != j && keys[i].may_admit(&keys[j]))
         .collect();
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     let chunk = candidates.len().div_ceil(workers).max(1);
     let mut admitted: Vec<(usize, usize, Route)> = std::thread::scope(|scope| {
         let handles: Vec<_> = candidates
             .chunks(chunk)
             .map(|pairs| {
+                let pioneer_packages = &pioneer_packages;
                 scope.spawn(move || {
                     pairs
                         .iter()
                         .copied()
                         .flat_map(|(i, j)| {
-                            decide(platform, packages[i], packages[j])
-                                .routes
-                                .into_iter()
-                                .map(move |route| (i, j, route))
+                            let routes = match (pioneer_packages.get(i), pioneer_packages.get(j)) {
+                                (Some(Some(source)), Some(Some(target))) => source
+                                    .routes_to(target)
+                                    .map(|evaluation| evaluation.routes)
+                                    .unwrap_or_default(),
+                                _ => decide(platform, packages[i], packages[j]).routes,
+                            };
+                            routes.into_iter().map(move |route| (i, j, route))
                         })
                         .collect::<Vec<_>>()
                 })
