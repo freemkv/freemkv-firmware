@@ -325,7 +325,7 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
                         .map(|bytes| {
                             let key = Prefilter::of(platform, bytes);
                             let evidence = if platform == Platform::Pioneer {
-                                crate::backends::pioneer::OfflinePackage::load(bytes).ok()
+                                crate::backend::registry::OfflinePackage::load(bytes).ok()
                             } else {
                                 None
                             };
