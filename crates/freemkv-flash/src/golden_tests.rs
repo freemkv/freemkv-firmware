@@ -2884,6 +2884,7 @@ const PIONEER_REASONS: &[&str] = &[
     "P11",
     "P12",
     "P18_MATRIX_FIXTURE",
+    "P18_IMAGE_STARTUP",
     "RECOVERY_TRAY",
     "FMT",
 ];
