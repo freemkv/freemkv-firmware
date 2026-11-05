@@ -4,10 +4,11 @@ import subprocess
 TESTS = (
     'backends::pioneer::recovery::tests::pioneer_212u_213u_bank_contract_regression',
     *('backends::pioneer::prepared_tests::bypass_transaction_tests::' + name for name in (
-        'bypass_preserves_verified_startup_transaction',
-        'bypass_startup_failures_stop_before_firmware_and_restore_original',
-        'bypass_firmware_attempt_failure_never_restores_old_startup_word',
-        'bypass_matching_startup_word_never_writes_settings',
+        'native_startup_correction_preserves_live_word_in_flash_and_recovery',
+        'read_only_prerequisite_failures_stop_flash_and_bypass_before_firmware',
+        'firmware_failures_never_write_persistent_startup_parameters',
+        'matching_native_startup_still_requires_read_only_live_word',
+        'offline_routes_retain_the_executors_read_only_prerequisites',
     )),
 )
 COMMAND = ['cargo', 'test', '--locked', '-p', 'freemkv-flash', '--lib']

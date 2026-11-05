@@ -24,7 +24,7 @@ fn be16(bytes: &[u8], at: usize) -> u16 {
 
 #[test]
 #[ignore = "requires the supplied S12JX backup and held WX1DM installer package"]
-fn real_packages_select_forward_and_reverse_flash_startup_settings() {
+fn real_packages_require_native_source_startup_evidence_for_image_correction() {
     use freemkv_flash::backends::pioneer::bundle::{Bundle, Role};
     use pioneer_optical::{envelope::Update, receiver::Receiver};
     let load = |key: &str| {
@@ -67,28 +67,41 @@ fn real_packages_select_forward_and_reverse_flash_startup_settings() {
     };
     let original = load("PIONEER_STARTUP_ORIGINAL_PACKAGE");
     let wx = load("PIONEER_STARTUP_WX_PACKAGE");
-    let forward = Receiver::from_installed(&original)
-        .unwrap()
-        .prepare(wx.clone())
-        .unwrap();
-    let selected = forward
-        .startup_setting()
-        .expect("source native A0 write surface");
-    assert_eq!(
-        (selected.parameter, selected.value, selected.explicit),
-        (0x9f, 0xfe24, true)
-    );
-    let reverse = Receiver::from_installed(&wx)
-        .unwrap()
-        .prepare(original)
-        .unwrap();
-    let selected = reverse
-        .startup_setting()
-        .expect("WX native A0 write surface");
-    assert_eq!(
-        (selected.parameter, selected.value, selected.explicit),
-        (0x9f, 0xffff, false)
-    );
+    for (source, target) in [(&original, &wx), (&wx, &original)] {
+        let receiver = Receiver::from_installed(source).unwrap();
+        let source_requirement =
+            pioneer_optical::startup::discover(&source.normal().image).unwrap();
+        if pioneer_optical::startup::discover(&target.normal().image)
+            .unwrap()
+            .is_none()
+        {
+            assert!(receiver.prepare(target.clone()).is_err());
+            continue;
+        }
+        if let Some(requirement) = source_requirement {
+            let plan = receiver.prepare(target.clone()).unwrap();
+            assert!(plan.startup_setting().is_none());
+            assert!(plan
+                .settings()
+                .required_words()
+                .iter()
+                .any(|required| required.filter == "startup-prerequisite"
+                    && required.word.parameter == requirement.parameter
+                    && required.word.value == requirement.required));
+            assert_eq!(
+                pioneer_optical::startup::discover(plan.stages().last().unwrap().normal_image())
+                    .unwrap()
+                    .unwrap()
+                    .required,
+                requirement.required
+            );
+        } else {
+            assert!(
+                receiver.prepare(target.clone()).is_err(),
+                "a missing native comparison cannot select a default startup word"
+            );
+        }
+    }
 }
 
 #[test]

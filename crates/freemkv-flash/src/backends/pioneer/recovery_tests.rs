@@ -130,8 +130,10 @@ fn fixture_pair_class_with_model(
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
+    // Keep Normal identical across Kernel marker variants: these tests cover
+    // receiver restoration, without inventing an unresolved startup change.
     normal[0x500..0x510].copy_from_slice(&[
-        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, marker, 0x46, 0x4e,
+        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 4, 0x46, 0x4e,
     ]);
     balance(&mut normal);
     let mut scalar = [0; 20];
@@ -584,7 +586,7 @@ fn application_flash_and_recovery_share_the_pioneer_executor_and_wire_bytes() {
 }
 
 #[test]
-fn normal_recovery_changes_startup_word_before_update_entry() {
+fn normal_recovery_preserves_persistent_parameters() {
     let plan = recovery_plan();
     let mut drive = Drive {
         parameter: Some(0xff01),
@@ -592,25 +594,32 @@ fn normal_recovery_changes_startup_word_before_update_entry() {
     };
     plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
         .unwrap();
-    assert_eq!(drive.parameter, Some(0xffff));
-    assert_eq!(drive.parameter_reads, 2);
-    assert_eq!(drive.writes[0].0, cdb::write_parameter_word(0x9f).unwrap());
-    assert_eq!(drive.writes[1].0, cdb::enter_update());
+    assert_eq!(drive.parameter, Some(0xff01));
+    assert_eq!(drive.parameter_reads, 0);
+    assert_eq!(drive.writes[0].0, cdb::enter_update());
+    assert!(!drive
+        .writes
+        .iter()
+        .any(|(cdb, _)| cdb.get(2) == Some(&0xa0)));
 }
 
 #[test]
-fn recovery_parameter_write_failure_stops_before_update_entry() {
+fn recovery_without_correction_does_not_need_parameter_write_support() {
     let plan = recovery_plan();
     let mut drive = Drive {
         parameter: Some(0xff01),
         reject_parameter_write: true,
         ..Default::default()
     };
-    assert!(plan
-        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
-        .is_err());
-    assert!(drive.writes.is_empty());
-    assert!(!drive.updating);
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+    assert_eq!(drive.parameter, Some(0xff01));
+    assert_eq!(drive.parameter_reads, 0);
+    assert!(!drive
+        .writes
+        .iter()
+        .any(|(cdb, _)| cdb.get(2) == Some(&0xa0)));
+    assert!(drive.finished);
 }
 
 #[test]
@@ -630,13 +639,10 @@ fn recovery_in_update_mode_does_not_issue_normal_parameter_command() {
 
 #[test]
 #[ignore = "requires the supplied BDR-207M 1.60 backup and BDR-PR1ML 1.30 package"]
-fn real_207m_to_pr1ml_recovery_selects_ff01() {
+fn real_207m_to_pr1ml_recovery_refuses_unresolved_startup_evidence() {
     let current = std::fs::read(std::env::var("PIONEER_RECOVERY_CURRENT").unwrap()).unwrap();
     let target = std::fs::read(std::env::var("PIONEER_RECOVERY_TARGET").unwrap()).unwrap();
-    let plan = Plan::prepare(&current, &target).unwrap();
-    assert_eq!(plan.prepared.startup_setting().unwrap().parameter, 0x9f);
-    assert_eq!(plan.prepared.startup_setting().unwrap().value, 0xff01);
-    assert!(plan.prepared.startup_setting().unwrap().explicit);
+    assert!(Plan::prepare(&current, &target).is_err());
 }
 
 #[test]

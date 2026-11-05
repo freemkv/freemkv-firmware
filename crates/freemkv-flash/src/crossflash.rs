@@ -6,12 +6,14 @@
 
 use anyhow::Result;
 
-/// Shared direct-transfer compatibility result. Only Yes permits writing.
+/// Offline compatibility result. Conditional routes need live preflight checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompatibilityStatus {
     /// The existing flash path admits the transfer.
     Yes,
+    /// Prepared correction requires live read-only prerequisites.
+    Conditional,
     /// Known same-hardware transition requiring an unimplemented adapter.
     SoftNo,
     /// Incompatible, invalid, or insufficiently understood transition.
@@ -21,7 +23,7 @@ pub enum CompatibilityStatus {
 /// Offline decision returned to catalogue and diagnostic consumers.
 #[derive(Debug, serde::Serialize)]
 pub struct Decision {
-    /// Yes, soft_no or hard_no.
+    /// Yes, conditional, soft_no or hard_no.
     pub status: CompatibilityStatus,
     /// Explanation for a refusal; absent for an admitted transfer.
     pub reason: Option<String>,
@@ -32,8 +34,10 @@ pub struct Decision {
 /// A prepared alternative for one explicit installed/target pair.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub struct Route {
-    /// Allowed or future.
+    /// Allowed, conditional, or future.
     pub status: RouteStatus,
+    /// Read-only conditions enforced by the prepared firmware executor.
+    pub requirements: Vec<RouteRequirement>,
 }
 
 /// Catalogue route availability, separate from legacy diagnostic verdicts.
@@ -42,8 +46,25 @@ pub struct Route {
 pub enum RouteStatus {
     /// Prepared by the flash admission gates.
     Allowed,
+    /// Prepared, subject to live read-only prerequisites.
+    Conditional,
     /// A known transition awaits an implemented adapter.
     Future,
+}
+
+/// A filter-owned condition; no persistent write is authorized by this value.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RouteRequirement {
+    /// An existing parameter word must match before any firmware write.
+    ParameterWord {
+        /// Filter that proved this prerequisite.
+        filter: String,
+        /// Native parameter index.
+        parameter: u16,
+        /// Required existing value.
+        value: u16,
+    },
 }
 
 /// Internal planner result keeps typed refusal explanations with its routes.
@@ -92,6 +113,8 @@ pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
             routes.dedup();
             let status = if routes.iter().any(|r| r.status == RouteStatus::Allowed) {
                 CompatibilityStatus::Yes
+            } else if routes.iter().any(|r| r.status == RouteStatus::Conditional) {
+                CompatibilityStatus::Conditional
             } else {
                 CompatibilityStatus::SoftNo
             };
@@ -99,6 +122,7 @@ pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
                 status,
                 reason: match status {
                     CompatibilityStatus::SoftNo => reason,
+                    CompatibilityStatus::Conditional => Some("Read-only live correction prerequisites must hold before firmware transfer".into()),
                     _ => None,
                 },
                 routes,
@@ -109,6 +133,7 @@ pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
             let routes = if status == CompatibilityStatus::SoftNo {
                 vec![Route {
                     status: RouteStatus::Future,
+                    requirements: Vec::new(),
                 }]
             } else {
                 Vec::new()
@@ -199,10 +224,34 @@ fn compose_routes(first: &[Route], second: &[Route]) -> Vec<Route> {
         for b in second {
             let status = if a.status == RouteStatus::Future || b.status == RouteStatus::Future {
                 RouteStatus::Future
+            } else if a.status == RouteStatus::Conditional || b.status == RouteStatus::Conditional {
+                RouteStatus::Conditional
             } else {
                 RouteStatus::Allowed
             };
-            routes.push(Route { status });
+            let mut requirements = a.requirements.clone();
+            requirements.extend(b.requirements.iter().cloned());
+            requirements.sort();
+            requirements.dedup();
+            if requirements.iter().enumerate().any(|(index, requirement)| {
+                let RouteRequirement::ParameterWord {
+                    parameter, value, ..
+                } = requirement;
+                requirements[index + 1..].iter().any(|other| {
+                    let RouteRequirement::ParameterWord {
+                        parameter: other_parameter,
+                        value: other_value,
+                        ..
+                    } = other;
+                    parameter == other_parameter && value != other_value
+                })
+            }) {
+                continue;
+            }
+            routes.push(Route {
+                status,
+                requirements,
+            });
         }
     }
     routes.sort();
@@ -217,6 +266,7 @@ pub(crate) fn collect_route(result: Result<()>) -> Result<Evaluation> {
         Ok(()) => Ok(Evaluation {
             routes: vec![Route {
                 status: RouteStatus::Allowed,
+                requirements: Vec::new(),
             }],
             reason: None,
         }),
@@ -224,6 +274,7 @@ pub(crate) fn collect_route(result: Result<()>) -> Result<Evaluation> {
             Ok(Evaluation {
                 routes: vec![Route {
                     status: RouteStatus::Future,
+                    requirements: Vec::new(),
                 }],
                 reason: Some(format!("{error:#}")),
             })
@@ -232,7 +283,7 @@ pub(crate) fn collect_route(result: Result<()>) -> Result<Evaluation> {
     }
 }
 
-/// Whether a fully prepared route is admitted.
+/// Whether a route is admitted without unresolved live prerequisites.
 pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()> {
     let decision = decide(platform, installed, target);
     if decision.status == CompatibilityStatus::Yes {
@@ -305,6 +356,7 @@ pub fn classified_links(
     for (i, j, route) in classified_routes(platform, packages) {
         let status = match route.status {
             RouteStatus::Allowed => CompatibilityStatus::Yes,
+            RouteStatus::Conditional => CompatibilityStatus::Conditional,
             RouteStatus::Future => CompatibilityStatus::SoftNo,
         };
         pairs.entry((i, j)).or_insert(status);
@@ -380,7 +432,10 @@ impl Prefilter {
 mod route_tests {
     use super::*;
     fn route(status: RouteStatus) -> Route {
-        Route { status }
+        Route {
+            status,
+            requirements: Vec::new(),
+        }
     }
     #[test]
     fn intermediate_stages_are_future_when_either_stage_is() {
@@ -395,6 +450,56 @@ mod route_tests {
             vec![route(RouteStatus::Future)]
         );
     }
+    #[test]
+    fn intermediate_stages_preserve_read_only_requirements() {
+        let required = RouteRequirement::ParameterWord {
+            filter: "phase".into(),
+            parameter: 0x28f,
+            value: 1,
+        };
+        let conditional = Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![required.clone()],
+        };
+        assert_eq!(
+            compose_routes(
+                &[route(RouteStatus::Allowed)],
+                std::slice::from_ref(&conditional)
+            ),
+            std::slice::from_ref(&conditional)
+        );
+        assert_eq!(
+            compose_routes(
+                std::slice::from_ref(&conditional),
+                std::slice::from_ref(&conditional)
+            ),
+            std::slice::from_ref(&conditional)
+        );
+        assert_eq!(
+            compose_routes(&[conditional], &[route(RouteStatus::Future)]),
+            [Route {
+                status: RouteStatus::Future,
+                requirements: vec![required],
+            }]
+        );
+    }
+
+    #[test]
+    fn stages_cannot_require_conflicting_values_of_one_read_only_word() {
+        let stage = |filter: &str, value| Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![RouteRequirement::ParameterWord {
+                filter: filter.into(),
+                parameter: 0x28f,
+                value,
+            }],
+        };
+        assert!(compose_routes(&[stage("phase", 1)], &[stage("other", 0)]).is_empty());
+        let compatible = compose_routes(&[stage("phase", 1)], &[stage("other", 1)]);
+        assert_eq!(compatible.len(), 1);
+        assert_eq!(compatible[0].requirements.len(), 2);
+    }
+
     #[test]
     fn only_a_typed_adapter_refusal_becomes_a_future_route() {
         use pioneer_optical::image::KernelHandoffError;

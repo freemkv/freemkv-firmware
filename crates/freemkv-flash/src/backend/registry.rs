@@ -27,6 +27,7 @@ pub(crate) fn offline_routes(
             Ok(crate::crossflash::Evaluation {
                 routes: vec![crate::crossflash::Route {
                     status: crate::crossflash::RouteStatus::Allowed,
+                    requirements: Vec::new(),
                 }],
                 reason: None,
             })

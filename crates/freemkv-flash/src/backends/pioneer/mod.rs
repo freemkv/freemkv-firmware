@@ -480,9 +480,44 @@ pub(crate) fn offline_routes(
 ) -> Result<crate::crossflash::Evaluation> {
     let input = execute_plan(target)?;
     verify_coverage(installed, input.kernel.is_some(), true)?;
-    crate::crossflash::collect_route(
-        authorize_installed(FlashPlan::new(input), Some(installed)).map(|_| ()),
-    )
+    let authorized = match authorize_installed(FlashPlan::new(input), Some(installed)) {
+        Ok(authorized) => authorized,
+        Err(error) => return crate::crossflash::collect_route(Err(error)),
+    };
+    let prepared: &Prepared = authorized.state()?;
+    let settings: Vec<_> = match (&prepared.complete, &prepared.normal) {
+        (Some(complete), None) => complete
+            .stages()
+            .iter()
+            .map(|stage| stage.settings())
+            .collect(),
+        (None, Some(normal)) => vec![normal.settings()],
+        _ => bail!("prepared firmware plan is incomplete"),
+    };
+    let mut requirements: Vec<_> = settings
+        .into_iter()
+        .flat_map(|plan| plan.required_words())
+        .map(
+            |requirement| crate::crossflash::RouteRequirement::ParameterWord {
+                filter: requirement.filter.into(),
+                parameter: requirement.word.parameter,
+                value: requirement.word.value,
+            },
+        )
+        .collect();
+    requirements.sort();
+    requirements.dedup();
+    Ok(crate::crossflash::Evaluation {
+        routes: vec![crate::crossflash::Route {
+            status: if requirements.is_empty() {
+                crate::crossflash::RouteStatus::Allowed
+            } else {
+                crate::crossflash::RouteStatus::Conditional
+            },
+            requirements,
+        }],
+        reason: None,
+    })
 }
 
 /// The routing facts the offline crossflash pre-filter compares: the family
