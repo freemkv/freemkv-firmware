@@ -12,6 +12,8 @@ use super::{Backend, Confidence, FileFormat, Identity, Match, Recognized};
 use crate::backends::{mtk, pioneer};
 use crate::platform::ScsiDevice;
 
+pub(crate) use pioneer::OfflinePackage;
+
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
@@ -27,6 +29,7 @@ pub(crate) fn offline_routes(
             Ok(crate::crossflash::Evaluation {
                 routes: vec![crate::crossflash::Route {
                     status: crate::crossflash::RouteStatus::Allowed,
+                    requirements: Vec::new(),
                 }],
                 reason: None,
             })

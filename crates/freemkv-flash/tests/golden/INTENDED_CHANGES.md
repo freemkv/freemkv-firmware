@@ -48,6 +48,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 | M-CHIP | MediaTek chip generation (MT1959 vs MT1939) is now decided by the boot loader banner at 0x3000, never the stale `MTEKMT19xx` identity tag (which is shown only as a curiosity). Consequences visible in the goldens: the `chipset` line reads "from boot banner; identity tag …" (was "via identity string; tag …"); the `banner` row shows the real banner (the chip gate always reads it, so the SCSI transcript gains one `3c06…3000…2000` read even when the descriptor has a tag); a legacy `.tar` backup is described from its rebuilt image, so a synthetic fixture with no 0x3000 banner now reads as unrecognized rather than keying on the embedded tag; and an image/drive whose banner names the chip is labelled by that banner (an MT1939-tagged JB8 build is MT1959) |
 | M-BAK | MediaTek backup/dump now probes for freemkv-modified firmware before reading: a READ BUFFER Identity knock (`3c 0e c0 de 01 00 00 00 60 00`, alloc 96) precedes the OEM read on every capture, so a drive already running freemkv firmware is read through its injected `DumpAll` command (stock MediaTek firmware exposes no full-flash read). The transcript gains one `3c0ec0de010000006000 alloc=96` read; on a stock/mock drive the reply is not the `freemkv` magic, so it falls through to the OEM read and the rest of the sequence is unchanged. Also: when a MediaTek pre-flash backup cannot be captured, the operator may consent to flash without one (every other gate still runs), so a declined/failed capture now aborts with "pre-flash backup failed and flashing without one was declined; aborting flash: <cause>" |
 | P5 | Pioneer: when the pre-flash backup cannot be captured, the flow now offers to flash without a rollback backup; the default (non-interactive / scripted front-end) declines, so the abort message reads "pre-flash backup failed and flashing without one was declined; aborting flash: <cause>" (was the bare cause). No device commands change |
+| P18_IMAGE_STARTUP | 0.18.0 corrects bound startup gates in the Normal image and enforces read-only prerequisites. Exact preserved images no longer invent a neutral FFFF selection or read word009F without a proved requirement, removing the obsolete field and read from these transcripts. The recovery fixture preserves installed Normal bytes while exercising its changed Kernel, so its Normal transfer hashes change. No persistent parameter write is added. |
 | P18_MATRIX_FIXTURE | 0.18.0 / pioneer-optical 1.6.0 identifies Pioneer drives by the hardware matrix family, so synthetic Pioneer fixtures now carry a complete SAT8 matrix identity (hardware tag `SAT 8600` instead of `SAT FFFE`, Normal built from pioneer-optical's test contract) and their deterministic test signatures were re-recorded. Only fixture SHA-256 values and the hardware tag change; commands, ordering, payload structure and gates are unchanged. |
 | M18_IDENTITY_READ | MediaTek 0.18.0 (mediatek-optical 1.3.0, which includes 1.2.0): receiver detection begins its encoding scan 32 bytes before the code window, reading that leading context separately (`3c06 0009 7fe0 ... alloc 32`, READ BUFFER at 0x97fe0, so a header-decrypt call at the window start keeps its setup), and `Receiver::revalidate` re-reads INQUIRY identity last, after the code/table snapshot (one extra `12 00 00 00 24 00` alloc 36). Both are read-only; the transcript count rises by two. No write is added or removed and no write payload, order or gate changes. |
 
@@ -32317,7 +32318,7 @@ reason: P10
 ## pioneer_execute.txt
 
 ### Pioneer CLI execute: stdin is not a TTY
-reason: P4, P7, P8, P9, P10, OPERATION_015, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P8, P9, P10, OPERATION_015, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- terminal (13) ---
 +--- terminal (35) ---
@@ -32350,8 +32351,7 @@ reason: P4, P7, P8, P9, P10, OPERATION_015, P12, P18_MATRIX_FIXTURE
 +Verifying Normal: 0%
 +Verifying Normal: 100%
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
-+--- scsi transcript (58) ---
-+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++--- scsi transcript (57) ---
 +MEDIUM -> ClosedEmpty
 +IN   cdb=120000002400 alloc=36 -> ok 36
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -32377,22 +32377,22 @@ reason: P4, P7, P8, P9, P10, OPERATION_015, P12, P18_MATRIX_FIXTURE
 ```
 
 ### Pioneer execute: Kernel+Normal update
-reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- text (12) ---
 +--- text (11) ---
 -flash complete; drive returned ready.
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+---- events (12) ---
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
++--- events (11) ---
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      flash complete; drive returned ready.
 -MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
-+--- scsi transcript (58) ---
-+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++--- scsi transcript (57) ---
 +MEDIUM -> ClosedEmpty
 +IN   cdb=120000002400 alloc=36 -> ok 36
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -32418,15 +32418,16 @@ reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE
 ```
 
 ### Pioneer execute: Kernel+Normal update with kernel restoration pass
-reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- text (17) ---
 +--- text (16) ---
 -flash complete; drive returned ready.
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+---- events (17) ---
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
++--- events (16) ---
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      
 +MSG
@@ -32434,8 +32435,7 @@ reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE
 -MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (69) ---
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
-+--- scsi transcript (85) ---
-+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++--- scsi transcript (84) ---
 +MEDIUM -> ClosedEmpty
 +IN   cdb=120000002400 alloc=36 -> ok 36
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -32488,22 +32488,22 @@ reason: P2, PRECHECK, OPERATION_015, P12, P18_MATRIX_FIXTURE
 ```
 
 ### Pioneer execute: Normal-only update
-reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- text (12) ---
 +--- text (11) ---
 -flash complete; drive returned ready.
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+---- events (12) ---
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
++--- events (11) ---
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      flash complete; drive returned ready.
 -MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (40) ---
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
-+--- scsi transcript (51) ---
-+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++--- scsi transcript (50) ---
 +MEDIUM -> ClosedEmpty
 +IN   cdb=120000002400 alloc=36 -> ok 36
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -32570,7 +32570,7 @@ reason: P2, FMT, PRECHECK, OPERATION_015, P12, P18_MATRIX_FIXTURE
 ```
 
 ### Pioneer CLI execute: TTY answers y
-reason: P4, P7, P8, P9, FMT, P10, OPERATION_015, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P8, P9, FMT, P10, OPERATION_015, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- terminal (12) ---
 +--- terminal (34) ---
@@ -32603,8 +32603,7 @@ reason: P4, P7, P8, P9, FMT, P10, OPERATION_015, P12, P18_MATRIX_FIXTURE
 +Verifying Normal: 0%
 +Verifying Normal: 100%
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
-+--- scsi transcript (58) ---
-+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++--- scsi transcript (57) ---
 +MEDIUM -> ClosedEmpty
 +IN   cdb=120000002400 alloc=36 -> ok 36
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -32732,22 +32731,22 @@ reason: P1, PRECHECK
 ```
 
 ### Pioneer execute: target is the installed firmware (no change)
-reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P8, P9, FMT, P10, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- text (12) ---
 +--- text (11) ---
 -flash complete; drive returned ready.
 -post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
+---- events (12) ---
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
++--- events (11) ---
 -MSG      
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 -MSG      flash complete; drive returned ready.
 -MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.14' platform='SAT 8A10' kernel-tag=''
 ---- scsi transcript (47) ---
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-UD04' rev='1.20' platform='SAT 8A10' kernel-tag='GENERAL'
-+--- scsi transcript (58) ---
-+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
++--- scsi transcript (57) ---
 +MEDIUM -> ClosedEmpty
 +IN   cdb=120000002400 alloc=36 -> ok 36
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
@@ -32881,7 +32880,7 @@ reason: PROTO, F-OVERRIDE
 ```
 
 ### Pioneer recover execute: receiver in kernel mode
-reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- text (0) ---
 ---- events (3) ---
@@ -32894,9 +32893,8 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE
 +EXECUTING flash — do not power off or disconnect the drive...
 +  update mode entered
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT 8600' kernel-tag='GENERAL'
-+--- events (6) ---
++--- events (5) ---
 +FIELD    Recovery = recovery.family_retained
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
@@ -32912,9 +32910,9 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=3fb9b68437e04b4e88fab5b7bae1b35d8b0efa44fb2728c843793a07a8ca3d0b -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=e79c0307bff5bafc2088fb7e94bbd89a16abbe4723213f7ebf03c3409fa38c00 -> ok
-+OUTS cdb=3b07f000000000800000 len=32768 sha256=42122c14a9af134cddcaf5322aef9c66218d8686ad6b750746b2eba4d65044fc -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=1e328ea95ca5e3484a1de6e51f2a8fb6754c604a98c8997ce7f25c47cf6cf25d -> ok
 -OUTS cdb=3b07f001000000220000 len=8704 sha256=95915e21d81a5905d7d923e02d0eac2b383fd44e96925a16403e30de79841ad2 -> ok
-+OUTS cdb=3b07f001000000220000 len=8704 sha256=d90f646d3b1721b32d8ac3ffffb662c90b72744af466cd63cda5d6efc76be094 -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=387abf1cdffd13836895959544e8ee9a49c30e3ab497e3860a4078384c14e74b -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
@@ -32923,7 +32921,7 @@ reason: P4, P7, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE
 ```
 
 ### Pioneer recover execute: receiver in normal mode
-reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE
+reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 ---- text (0) ---
 ---- events (3) ---
@@ -32936,14 +32934,13 @@ reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTU
 +EXECUTING flash — do not power off or disconnect the drive...
 +  update mode entered
 +post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT 8600' kernel-tag='GENERAL'
-+--- events (6) ---
++--- events (5) ---
 +FIELD    Recovery = recovery.family_retained
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered
 +MSG      post-flash: vendor='PIONEER' product='BD-RW   BDR-TEST' rev='1.00' platform='SAT 8600' kernel-tag='GENERAL'
-+--- scsi transcript (34) ---
++--- scsi transcript (33) ---
 +IN   cdb=120000006000 alloc=96 -> ok 96
 +IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 +IN   cdb=3c060000300000002000 alloc=32 -> ok 32
@@ -32951,7 +32948,6 @@ reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTU
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
-+IN   cdb=3c02a000013e00000200 alloc=2 -> ok 2
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b041000000001000 alloc=16 -> ok 16
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
@@ -32964,9 +32960,9 @@ reason: P4, P7, P8, P10, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTU
 +OUTS cdb=3b07fe00000000800000 len=32768 sha256=3fb9b68437e04b4e88fab5b7bae1b35d8b0efa44fb2728c843793a07a8ca3d0b -> ok
 +OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 +OUTS cdb=3b07fe01000000120000 len=4608 sha256=e79c0307bff5bafc2088fb7e94bbd89a16abbe4723213f7ebf03c3409fa38c00 -> ok
-+OUTS cdb=3b07f000000000800000 len=32768 sha256=42122c14a9af134cddcaf5322aef9c66218d8686ad6b750746b2eba4d65044fc -> ok
++OUTS cdb=3b07f000000000800000 len=32768 sha256=1e328ea95ca5e3484a1de6e51f2a8fb6754c604a98c8997ce7f25c47cf6cf25d -> ok
 -OUTS cdb=3b07f001000000220000 len=8704 sha256=95915e21d81a5905d7d923e02d0eac2b383fd44e96925a16403e30de79841ad2 -> ok
-+OUTS cdb=3b07f001000000220000 len=8704 sha256=d90f646d3b1721b32d8ac3ffffb662c90b72744af466cd63cda5d6efc76be094 -> ok
++OUTS cdb=3b07f001000000220000 len=8704 sha256=387abf1cdffd13836895959544e8ee9a49c30e3ab497e3860a4078384c14e74b -> ok
 +IN   cdb=030000001200 alloc=18 -> ok 18
 +OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=3c02b040000000800000 alloc=32768 -> ok 32768
@@ -32984,7 +32980,7 @@ reason: P10, PRECHECK, PROTO
 ```
 
 ### Pioneer recover execute: write fails on the 2nd command
-reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE
+reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIXTURE, P18_IMAGE_STARTUP
 ```diff
 -result: ERR Kernel write failed at 0x8000; firmware may be partial; write was not retried: injected write failure
 ---- text (0) ---
@@ -32997,9 +32993,8 @@ reason: P4, P10, PRECHECK, PROTO, F-OVERRIDE, RECOVERY_TRAY, P12, P18_MATRIX_FIX
 +
 +EXECUTING flash — do not power off or disconnect the drive...
 +  update mode entered
-+--- events (5) ---
++--- events (4) ---
 +FIELD    Recovery = recovery.family_retained
-+FIELD    Startup setting = target word 0x9f = FFFF (neutral startup policy; target comparison not established)
 +MSG
 +MSG      EXECUTING flash — do not power off or disconnect the drive...
 +MSG        update mode entered

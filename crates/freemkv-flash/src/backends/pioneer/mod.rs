@@ -438,6 +438,7 @@ pub(crate) fn routing_warnings(
 
 /// The components an execute plan resolved from the input; the installed
 /// firmware is not needed to build it.
+#[derive(Clone)]
 pub(crate) struct ExecutePlan {
     kernel: Option<Vec<u8>>,
     normal: Vec<u8>,
@@ -480,9 +481,95 @@ pub(crate) fn offline_routes(
 ) -> Result<crate::crossflash::Evaluation> {
     let input = execute_plan(target)?;
     verify_coverage(installed, input.kernel.is_some(), true)?;
-    crate::crossflash::collect_route(
-        authorize_installed(FlashPlan::new(input), Some(installed)).map(|_| ()),
-    )
+    offline_evaluation(authorize_installed(FlashPlan::new(input), Some(installed)))
+}
+
+fn offline_evaluation(result: Result<AuthorizedPlan>) -> Result<crate::crossflash::Evaluation> {
+    let authorized = match result {
+        Ok(authorized) => authorized,
+        Err(error) => return crate::crossflash::collect_route(Err(error)),
+    };
+    let prepared: &Prepared = authorized.state()?;
+    let settings: Vec<_> = match (&prepared.complete, &prepared.normal) {
+        (Some(complete), None) => complete
+            .stages()
+            .iter()
+            .map(|stage| stage.settings())
+            .collect(),
+        (None, Some(normal)) => vec![normal.settings()],
+        _ => bail!("prepared firmware plan is incomplete"),
+    };
+    let mut requirements: Vec<_> = settings
+        .into_iter()
+        .flat_map(|plan| plan.required_words())
+        .map(
+            |requirement| crate::crossflash::RouteRequirement::ParameterWord {
+                filter: requirement.filter.into(),
+                parameter: requirement.word.parameter,
+                value: requirement.word.value,
+            },
+        )
+        .collect();
+    requirements.sort();
+    requirements.dedup();
+    Ok(crate::crossflash::Evaluation {
+        routes: vec![crate::crossflash::Route {
+            status: if requirements.is_empty() {
+                crate::crossflash::RouteStatus::Allowed
+            } else {
+                crate::crossflash::RouteStatus::Conditional
+            },
+            requirements,
+        }],
+        reason: None,
+    })
+}
+
+/// Immutable package evidence scoped to one offline catalogue evaluation.
+/// Construction runs the ordinary package gates once. Pair admission is never cached.
+pub(crate) struct OfflinePackage {
+    input: ExecutePlan,
+    receiver: Receiver,
+    target: pioneer_optical::envelope::Update,
+    target_facts: flash_plan::Target,
+    receiver_check: std::result::Result<(), String>,
+}
+impl OfflinePackage {
+    pub(crate) fn load(bytes: &[u8]) -> Result<Self> {
+        let input = execute_plan(bytes)?;
+        let kernel = input
+            .kernel
+            .as_deref()
+            .context("Normal-only package requires pair-local decoding")?;
+        verify_coverage(bytes, true, true)?;
+        let receiver = receiver_from_components(Some(kernel), Some(&input.normal))?;
+        let target = normal_prepare::pair(kernel, &input.normal)?;
+        let target_facts = flash_plan::target_from_loaded(
+            Some(target.kernel()),
+            target.normal(),
+            Some(kernel),
+            &input.normal,
+            None,
+        )?;
+        let receiver_check = flash_plan::check_loaded_receiver(&target);
+        Ok(Self {
+            input,
+            receiver,
+            target,
+            target_facts,
+            receiver_check,
+        })
+    }
+
+    pub(crate) fn routes_to(&self, target: &Self) -> Result<crate::crossflash::Evaluation> {
+        // Both packages passed full Kernel+Normal backup coverage at construction.
+        // The exact same receiver.prepare and app routing gates run for every pair.
+        offline_evaluation(authorize_installed_inner(
+            FlashPlan::new(target.input.clone()),
+            None,
+            Some((self, target)),
+        ))
+    }
 }
 
 /// The routing facts the offline crossflash pre-filter compares: the family
@@ -522,27 +609,46 @@ pub(crate) fn authorize_installed(
     plan: FlashPlan,
     installed: Option<&[u8]>,
 ) -> Result<AuthorizedPlan> {
+    authorize_installed_inner(plan, installed, None)
+}
+
+fn authorize_installed_inner(
+    plan: FlashPlan,
+    installed: Option<&[u8]>,
+    evidence: Option<(&OfflinePackage, &OfflinePackage)>,
+) -> Result<AuthorizedPlan> {
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
-    let (installed_kernel, installed_normal) = classify_flash_input(installed.context(
-        "installed firmware backup is required to recover the receiver control key; refusing update entry"
-    ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
-    let receiver =
-        receiver_from_components(installed_kernel.as_deref(), installed_normal.as_deref())?;
+    let owned_components;
+    let owned_receiver;
+    let (installed_kernel, installed_normal, receiver) = if let Some((source, _)) = evidence {
+        (
+            source.input.kernel.as_deref(),
+            Some(source.input.normal.as_slice()),
+            &source.receiver,
+        )
+    } else {
+        owned_components = classify_flash_input(installed.context(
+            "installed firmware backup is required to recover the receiver control key; refusing update entry"
+        ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
+        owned_receiver =
+            receiver_from_components(owned_components.0.as_deref(), owned_components.1.as_deref())?;
+        (
+            owned_components.0.as_deref(),
+            owned_components.1.as_deref(),
+            &owned_receiver,
+        )
+    };
     if kernel.is_none() {
         // Validate both sides as independent images before comparing their
         // tags. Pair validation would call an installed-drive mismatch a
         // malformed target bundle and lose the actionable values.
         flash_plan::validate_component_headers(None, Some(normal))
-            .and_then(|()| {
-                flash_plan::validate_component_headers(installed_kernel.as_deref(), None)
-            })
+            .and_then(|()| flash_plan::validate_component_headers(installed_kernel, None))
             .map_err(anyhow::Error::msg)
             .context(crate::user_error::IssueCode::InstalledFirmwareMismatch)?;
-        let installed_tag = installed_kernel
-            .as_deref()
-            .and_then(flash_plan::component_kernel_tag);
+        let installed_tag = installed_kernel.and_then(flash_plan::component_kernel_tag);
         let required_tag = flash_plan::component_kernel_tag(normal);
         let (Some(installed), Some(required)) = (installed_tag, required_tag) else {
             return Err(anyhow!("Normal-only update lacks a readable Kernel tag")
@@ -558,26 +664,38 @@ pub(crate) fn authorize_installed(
         // Keep the pre-existing installed-Kernel/target-Normal pair checks
         // after the typed tag comparison. Besides the Kernel generation, the
         // headers must still agree on the hardware/SAT and model identity.
-        flash_plan::validate_component_headers(installed_kernel.as_deref(), Some(normal))
+        flash_plan::validate_component_headers(installed_kernel, Some(normal))
             .map_err(anyhow::Error::msg)
             .context(crate::user_error::IssueCode::InstalledFirmwareMismatch)?;
     }
     let (prepared, target_facts, receiver_check) = match p.selection {
         FlashSelection::KernelAndNormal => {
-            let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
-            let facts = flash_plan::target_from_loaded(
-                Some(target.kernel()),
-                target.normal(),
-                kernel,
-                normal,
-                None,
-            )?;
-            let check = if installed_kernel.as_deref() == kernel {
+            let owned_target;
+            let target = if let Some((_, package)) = evidence {
+                &package.target
+            } else {
+                owned_target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
+                &owned_target
+            };
+            let facts = if let Some((_, package)) = evidence {
+                package.target_facts.clone()
+            } else {
+                flash_plan::target_from_loaded(
+                    Some(target.kernel()),
+                    target.normal(),
+                    kernel,
+                    normal,
+                    None,
+                )?
+            };
+            let check = if installed_kernel == kernel {
                 // Preserve the existing identical-envelope fast path. The
                 // library still validates the complete pair and live plan.
                 Ok(())
+            } else if let Some((_, package)) = evidence {
+                package.receiver_check.clone()
             } else {
-                flash_plan::check_loaded_receiver(&target)
+                flash_plan::check_loaded_receiver(target)
             };
             let prepared = receiver.prepare(target.clone());
             let prepared = prepared.map(|complete| (Some(complete), None));
@@ -610,7 +728,6 @@ pub(crate) fn authorize_installed(
                 )
             ) {
                 let installed_model = installed_normal
-                    .as_deref()
                     .and_then(pioneer_optical::envelope::header_info)
                     .map(|header| header.model)
                     .unwrap_or_default();
@@ -632,10 +749,8 @@ pub(crate) fn authorize_installed(
     // Keep preparation errors ahead of the routing/receiver presentation.
     receiver_check.map_err(|reason| anyhow!("refusing to flash: {reason}"))?;
     let installed_facts = flash_plan::installed_from_loaded(
-        &receiver,
-        installed_normal
-            .as_deref()
-            .context("installed Normal is required")?,
+        receiver,
+        installed_normal.context("installed Normal is required")?,
     );
     let route = plan_for(installed_facts.as_ref(), &target_facts);
     let mut warnings = routing_warnings(&route)?;
@@ -1235,3 +1350,6 @@ mod prepared_tests;
 pub(crate) fn test_oem_recovery_package(vendor: &str) -> Vec<u8> {
     recovery::tests::oem_recovery_package(vendor)
 }
+
+#[cfg(test)]
+mod offline_cache_tests;

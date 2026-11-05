@@ -130,8 +130,10 @@ fn fixture_pair_class_with_model(
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
     normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
+    // Keep Normal identical across Kernel marker variants: these tests cover
+    // receiver restoration, without inventing an unresolved startup change.
     normal[0x500..0x510].copy_from_slice(&[
-        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, marker, 0x46, 0x4e,
+        0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 4, 0x46, 0x4e,
     ]);
     balance(&mut normal);
     let mut scalar = [0; 20];
@@ -584,7 +586,7 @@ fn application_flash_and_recovery_share_the_pioneer_executor_and_wire_bytes() {
 }
 
 #[test]
-fn normal_recovery_changes_startup_word_before_update_entry() {
+fn normal_recovery_preserves_persistent_parameters() {
     let plan = recovery_plan();
     let mut drive = Drive {
         parameter: Some(0xff01),
@@ -592,25 +594,32 @@ fn normal_recovery_changes_startup_word_before_update_entry() {
     };
     plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
         .unwrap();
-    assert_eq!(drive.parameter, Some(0xffff));
-    assert_eq!(drive.parameter_reads, 2);
-    assert_eq!(drive.writes[0].0, cdb::write_parameter_word(0x9f).unwrap());
-    assert_eq!(drive.writes[1].0, cdb::enter_update());
+    assert_eq!(drive.parameter, Some(0xff01));
+    assert_eq!(drive.parameter_reads, 0);
+    assert_eq!(drive.writes[0].0, cdb::enter_update());
+    assert!(!drive
+        .writes
+        .iter()
+        .any(|(cdb, _)| cdb.get(2) == Some(&0xa0)));
 }
 
 #[test]
-fn recovery_parameter_write_failure_stops_before_update_entry() {
+fn recovery_without_correction_does_not_need_parameter_write_support() {
     let plan = recovery_plan();
     let mut drive = Drive {
         parameter: Some(0xff01),
         reject_parameter_write: true,
         ..Default::default()
     };
-    assert!(plan
-        .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
-        .is_err());
-    assert!(drive.writes.is_empty());
-    assert!(!drive.updating);
+    plan.run(&mut ungated_for_tests(&mut drive), &mut |_| {})
+        .unwrap();
+    assert_eq!(drive.parameter, Some(0xff01));
+    assert_eq!(drive.parameter_reads, 0);
+    assert!(!drive
+        .writes
+        .iter()
+        .any(|(cdb, _)| cdb.get(2) == Some(&0xa0)));
+    assert!(drive.finished);
 }
 
 #[test]
@@ -630,13 +639,10 @@ fn recovery_in_update_mode_does_not_issue_normal_parameter_command() {
 
 #[test]
 #[ignore = "requires the supplied BDR-207M 1.60 backup and BDR-PR1ML 1.30 package"]
-fn real_207m_to_pr1ml_recovery_selects_ff01() {
+fn real_207m_to_pr1ml_recovery_refuses_unresolved_startup_evidence() {
     let current = std::fs::read(std::env::var("PIONEER_RECOVERY_CURRENT").unwrap()).unwrap();
     let target = std::fs::read(std::env::var("PIONEER_RECOVERY_TARGET").unwrap()).unwrap();
-    let plan = Plan::prepare(&current, &target).unwrap();
-    assert_eq!(plan.prepared.startup_setting().unwrap().parameter, 0x9f);
-    assert_eq!(plan.prepared.startup_setting().unwrap().value, 0xff01);
-    assert!(plan.prepared.startup_setting().unwrap().explicit);
+    assert!(Plan::prepare(&current, &target).is_err());
 }
 
 #[test]
@@ -1181,10 +1187,31 @@ fn supplied_real_recovery_packages_preserve_normal_for_the_receiving_kernel() {
         .unwrap();
 }
 
+// Supply real bound startup evidence when a test changes Normal bytes. These
+// fixtures preserve FF01 through a read-only prerequisite, without migration.
+fn with_native_startup(update: Update, control_key: u8) -> Update {
+    let mut normal = update.normal().image.clone();
+    normal[0x50d] = control_key;
+    normal[0x600..0x614].copy_from_slice(&[
+        0x79, 0, 0, 0x9f, 0x5e, 0x41, 0x10, 0, 0x79, 0x20, 0xff, 1, 0x47, 6, 0xf8, 1, 0x5e, 0x41,
+        7, 0x80,
+    ]);
+    normal[0x780..0x786].copy_from_slice(&[0x5e, 0x40, 0x0a, 0x1a, 0x54, 0x70]);
+    balance(&mut normal);
+    let mut transfer = update.normal().repack(&normal).unwrap();
+    let mut scalar = [0; 20];
+    scalar[19] = 5;
+    SigningKey::from_bytes(scalar)
+        .unwrap()
+        .sign_normal(&mut transfer)
+        .unwrap();
+    Update::load(update.kernel_transfer(), &transfer).unwrap()
+}
+
 #[test]
 fn credentials_come_from_current_not_target() {
-    let current = fixture_pair(false, 1);
-    let target = fixture_pair(false, 0);
+    let current = with_native_startup(fixture_pair(false, 1), 1);
+    let target = with_native_startup(fixture_pair(false, 0), 0);
     let ReceiverControl::Key(expected) =
         pioneer_optical::image::receiver_control(&current.normal().image).unwrap()
     else {
@@ -1833,7 +1860,7 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
 
 #[test]
 fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() {
-    let installed = fixture_pair(false, 1);
+    let installed = with_native_startup(fixture_pair(false, 1), 4);
     let mut normal = installed.normal().image.clone();
     normal[0x701] = 0x13; // matrix fixture: the IRQ variant field that distinguishes families
     balance(&mut normal);
@@ -1903,12 +1930,26 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
     assert!(refusal.is::<crate::backend::HardwareMismatch>());
     assert!(format!("{refusal:#}").contains("family mismatch"));
     let overridden = Plan::with_family_override(&current, &target_bytes, true).unwrap();
+    // A read-only obligation may produce a freshly signed transfer copy;
+    // preserve the target image and its encrypted payload exactly.
     assert_eq!(
-        overridden.prepared.normal_transfer(),
-        target.normal_transfer()
+        overridden.prepared.stages()[0].normal_image(),
+        target.normal().image
+    );
+    assert_eq!(
+        &overridden.prepared.normal_transfer()[..0x170],
+        &target.normal_transfer()[..0x170]
+    );
+    assert_eq!(
+        &overridden.prepared.normal_transfer()[0x1c0..],
+        &target.normal_transfer()[0x1c0..]
     );
     assert!(Plan::with_family_override(&current, b"invalid firmware", true).is_err());
     let mut drive = loader_for_target(&overridden, &target);
+    // The override retains live startup prerequisites; establish them while
+    // Normal is running, before the receiver enters the loader.
+    drive.updating = false;
+    drive.parameter = Some(0xff01);
     let outcome = overridden
         .run(&mut ungated_for_tests(&mut drive), &mut |_| {})
         .unwrap();
@@ -1920,6 +1961,10 @@ fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() 
     // This synthetic Kernel has no Normal address map; that limitation remains explicit.
     assert_eq!(evidence.unverified_regions, ["Normal"]);
     let mut drive = loader_for_target(&overridden, &target);
+    // The override retains live startup prerequisites; establish them while
+    // Normal is running, before the receiver enters the loader.
+    drive.updating = false;
+    drive.parameter = Some(0xff01);
     drive.readback_images[0][0x400] ^= 1;
     let error = overridden
         .run(&mut ungated_for_tests(&mut drive), &mut |_| {})

@@ -210,6 +210,14 @@ fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
             crate::diagnostics::record(format!("Pioneer startup check: {check:?}"));
         }
     }
+    for requirement in plan.required_words() {
+        let text = format!(
+            "{}: word {:#06x} must already equal {:#06x} (read-only)",
+            requirement.filter, requirement.word.parameter, requirement.word.value
+        );
+        crate::diagnostics::record(format!("Pioneer correction prerequisite: {text}"));
+        crate::output::field("Correction prerequisite", crate::report::Value::text(&text));
+    }
     for setting in plan.entries() {
         match setting.effect() {
             Effect::ParameterWord {
