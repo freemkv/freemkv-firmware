@@ -3283,7 +3283,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pioneer-optical"
 version = "1.6.0"
-source = "git+https://github.com/MattJackson/pioneer-optical?rev=ad564bffa399a06cf25e5409431b3e0a01d967b1#ad564bffa399a06cf25e5409431b3e0a01d967b1"
+source = "git+https://github.com/MattJackson/pioneer-optical?rev=e745584c842018e75b57dfca3cf60342435e9848#e745584c842018e75b57dfca3cf60342435e9848"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
