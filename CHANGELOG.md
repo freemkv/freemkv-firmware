@@ -5,13 +5,13 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
-## [0.18.0] - 2026-11-04
+## [0.18.0] - Unreleased
 
 ### freemkv Flash
 
-- A cleaner design for Pioneer drives: new hardware family matching and filter rules replace the previous matching criteria. A cross-flash is offered only when the drive's hardware family matches and every hardware difference is covered by a proven correction.
-- Cross-flashes the new rules do not support are no longer offered, including BDR-212U ↔ BDR-213U and the earlier UD02 conversions.
-- Across the firmware we hold, 2,716 Pioneer drive-to-drive cross-flashes are available (2,772 in 0.17.3). New: BDR-209MIO joins the BDR-208/209/211/212 family, and BDR-UD03, UD04, SBW, SBC and SlimtypeEB1 cross-flash with each other without extra conditions. Removed: XD and XS UHD slim drives no longer cross-flash with each other because they use different tray sensors, and BD-W26SS-B ↔ BDR-US01 is no longer offered.
+- Pioneer cross-flash planning now checks each hardware contract and admits differences only when a proven firmware correction covers them. Supported corrections preserve the other filters and require any existing calibration or startup values to match; they do not write persistent settings.
+- Supported UD02, UD03, UD04 and related slim-drive conversions use complete phase corrections. Some directions require existing calibration word `0x28F` to equal `1`. Unsupported directions remain unavailable; a missing correction proof does not establish physical incompatibility.
+- Recognise the native hardware contracts of BDR-L12SH and BDR-L13SH firmware carrying REC tags, so their families and supported destinations appear correctly. Keep the original REC tags and show any direction-specific requirements.
 - Refreshing the drive list no longer freezes the window while a slow drive is scanned, and no longer replaces the log of an operation you just ran.
 - Failed or partly unreadable reads are reported as failures instead of looking like success, and a log saved after a failure keeps the right details.
 - Drives and file paths are recognised more reliably on Windows, including long and network paths.

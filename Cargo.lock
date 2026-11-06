@@ -3283,7 +3283,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pioneer-optical"
 version = "1.6.0"
-source = "git+https://github.com/MattJackson/pioneer-optical?rev=3b6a68e7cfcd1743136162b44b00f97bc1efe3d6#3b6a68e7cfcd1743136162b44b00f97bc1efe3d6"
+source = "git+https://github.com/MattJackson/pioneer-optical?rev=ad564bffa399a06cf25e5409431b3e0a01d967b1#ad564bffa399a06cf25e5409431b3e0a01d967b1"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
@@ -3295,6 +3295,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "zopfli",
 ]
 
 [[package]]
@@ -5699,7 +5700,6 @@ dependencies = [
  "memchr",
  "nix",
  "typed-path",
- "zopfli",
 ]
 
 [[package]]
@@ -5716,9 +5716,9 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zopfli"
-version = "0.8.4"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aaf7fc5d30c28483d93805c4a5e12b05bbb52407fa67c5f8bd552374cd01fb11"
+checksum = "edfc5ee405f504cd4984ecc6f14d02d55cfda60fa4b689434ef4102aae150cd7"
 dependencies = [
  "bumpalo",
  "crc32fast",
