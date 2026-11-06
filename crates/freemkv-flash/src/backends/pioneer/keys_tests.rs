@@ -30,6 +30,11 @@ fn sat_tag_and_bare_hex_both_resolve_the_controller_id() {
     assert_eq!(controller_id_from_sat("8A10"), Some(0x8A10));
     assert_eq!(controller_id_from_sat("SAT 8600"), Some(0x8600));
     assert_eq!(controller_id_from_sat("nonsense"), None);
+    assert_eq!(controller_id_from_sat("REC 8900"), Some(0x8900));
+    assert_eq!(controller_id_from_sat("REC 8C00"), Some(0x8C00));
+    for invalid in ["REC 1000", "REC 9000", "REC 8xxx", "REC8900"] {
+        assert_eq!(controller_id_from_sat(invalid), None);
+    }
 }
 
 #[test]

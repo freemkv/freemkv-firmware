@@ -794,11 +794,16 @@ fn decoded_kernel_marker(bytes: &[u8]) -> Result<u8> {
 }
 
 /// Parse a controller id from a `SAT xxxx` hardware tag (as it appears in a
-/// Pioneer banner's `Hardware Version :` field) or a bare hex string. The SAT
+/// Pioneer banner's `Hardware Version :` field), a recognized REC hardware tag,
+/// or a bare hex string. The SAT
 /// value is the controller id in hex, e.g. `"SAT 8A10"` / `"8A10"` -> `0x8A10`.
 pub fn controller_id_from_sat(hardware: &str) -> Option<u16> {
+    let hardware = hardware.trim();
+    if let Some(token) = hardware.strip_prefix("REC ") {
+        pioneer_optical::image::matrix::SatPlatform::from_hardware(hardware)?;
+        return u16::from_str_radix(token, 16).ok();
+    }
     let token = hardware
-        .trim()
         .strip_prefix("SAT")
         .or_else(|| hardware.trim().strip_prefix("sat"))
         .unwrap_or(hardware)
