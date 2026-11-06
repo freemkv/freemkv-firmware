@@ -38,7 +38,8 @@ url = "2"
 serde_json = "1"
 semver = "1"
 getrandom = "0.3"
-zip = { version = "9.0", default-features = false, features = ["deflate"] }
+# Support ZIPs use flate2; the firmware codec pins its own Zopfli version.
+zip = { version = "9.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 ureq = { version = "3.4", features = ["json"] }
 sha2 = "0.10"
 
