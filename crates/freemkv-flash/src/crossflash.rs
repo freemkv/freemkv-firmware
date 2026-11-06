@@ -348,12 +348,20 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
     // workers finishing cheap candidates can help with the expensive ones.
     // Relaxed ordering suffices: the counter only assigns immutable work.
     let next_pair = std::sync::atomic::AtomicUsize::new(0);
+    let completed_pairs = std::sync::atomic::AtomicUsize::new(0);
+    let started = std::time::Instant::now();
+    let pair_workers = workers.min(candidates.len());
+    eprintln!(
+        "{platform:?}: {} scheduled pairs, {pair_workers} workers",
+        candidates.len()
+    );
     let mut admitted: Vec<(usize, usize, Route)> = std::thread::scope(|scope| {
-        let handles: Vec<_> = (0..workers.min(candidates.len()))
+        let handles: Vec<_> = (0..pair_workers)
             .map(|_| {
                 let pioneer_packages = &pioneer_packages;
                 let candidates = &candidates;
                 let next_pair = &next_pair;
+                let completed_pairs = &completed_pairs;
                 scope.spawn(move || {
                     let mut admitted = Vec::new();
                     while let Some(&(i, j)) =
@@ -367,6 +375,15 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
                             _ => decide(platform, packages[i], packages[j]).routes,
                         };
                         admitted.extend(routes.into_iter().map(|route| (i, j, route)));
+                        let completed =
+                            completed_pairs.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        if completed.is_multiple_of(1000) && completed < candidates.len() {
+                            eprintln!(
+                                "{platform:?}: {completed}/{} pairs completed ({:.1}s)",
+                                candidates.len(),
+                                started.elapsed().as_secs_f64()
+                            );
+                        }
                     }
                     admitted
                 })
@@ -377,6 +394,12 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
             .flat_map(|h| h.join().expect("crossflash worker panicked"))
             .collect()
     });
+    eprintln!(
+        "{platform:?}: {}/{} pairs completed ({:.1}s)",
+        completed_pairs.load(std::sync::atomic::Ordering::Relaxed),
+        candidates.len(),
+        started.elapsed().as_secs_f64()
+    );
     admitted.sort_unstable_by(|a, b| (a.0, a.1, &a.2).cmp(&(b.0, b.1, &b.2)));
     admitted
 }
