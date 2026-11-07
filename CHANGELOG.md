@@ -29,8 +29,9 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 ### Under the hood
 
 - Updated to pioneer-optical 1.6.0 and mediatek-optical 1.3.0, with old and replaced interfaces removed.
-- At the prior Pioneer `e745584` measurement checkpoint, the fixed 724-package reference inventory admitted 1,638 directed cross-identity routes: 1,142 unconditional and 496 requiring existing read-only prerequisites. These cover 10,264 directed package pairs, including 6,442 unconditional pairs. The same 118-package MediaTek inventory retains 3,166 package alternatives.
-- At that same measurement checkpoint, separate checks of the two added REC packages admitted 157 directed package alternatives: 138 unconditional and 19 conditional. Native family membership alone does not establish an admitted route.
+- Measured with Pioneer `796b94e`, the fixed 724-package reference inventory admits 1,917 directed cross-identity routes: 1,420 unconditional and 497 requiring existing read-only prerequisites. These cover 11,113 directed package pairs, including 7,282 unconditional pairs. The same 118-package MediaTek inventory retains all 3,166 package alternatives.
+- The current inventory retains every route admitted at the prior 0.18.0 `e745584` checkpoint and adds 279 available directed identities. Compared with 0.17.3 on the same inputs, 153 available identities are gained and 1,036 are no longer admitted by the current checks; a refusal does not establish physical incompatibility.
+- Separate checks of all 458 directions between the two added REC packages and their candidate peers admit 212 directed package alternatives: 192 unconditional and 20 conditional; 246 directions remain refused. Native family membership alone does not establish an admitted route.
 - A full code audit; every high and medium issue it found has been fixed.
 
 ## [0.17.3] - 2026-11-02
