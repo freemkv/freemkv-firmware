@@ -10,7 +10,8 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 ### freemkv Flash
 
 - Pioneer cross-flash planning now checks each hardware contract and admits differences only when a proven firmware correction covers them. Supported corrections preserve the other filters and require any existing calibration or startup values to match; they do not write persistent settings.
-- Supported UD02, UD03, UD04 and related slim-drive conversions use complete phase corrections. Some directions require existing calibration word `0x28F` to equal `1`. Unsupported directions remain unavailable; a missing correction proof does not establish physical incompatibility.
+- Native phase corrections change the incoming firmware's output assignment while preserving its DSP program, waveform tables, calibration and motion behavior. Architecture and output interface must agree; unsupported directions remain unavailable. Other hardware and startup requirements still apply.
+- Correct bound loading interrupt-channel assignments while preserving independent input and callback requirements. Unsupported loading programs remain unavailable; channel correction alone does not admit a firmware pair.
 - Recognise the native hardware contracts of BDR-L12SH and BDR-L13SH firmware carrying REC tags, so their families and supported destinations appear correctly. Keep the original REC tags and show any direction-specific requirements.
 - Refreshing the drive list no longer freezes the window while a slow drive is scanned, and no longer replaces the log of an operation you just ran.
 - Failed or partly unreadable reads are reported as failures instead of looking like success, and a log saved after a failure keeps the right details.
@@ -29,8 +30,8 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 ### Under the hood
 
 - Updated to pioneer-optical 1.6.0 and mediatek-optical 1.3.0, with old and replaced interfaces removed.
-- On the fixed 724-package Pioneer reference inventory, the planner admits 1,638 directed cross-identity routes: 1,142 unconditional and 496 requiring existing read-only prerequisites. These cover 10,264 directed package pairs, including 6,442 unconditional pairs. The same 118-package MediaTek inventory retains 3,166 package alternatives.
-- Separate checks of the two added REC packages admit 157 directed package alternatives: 138 unconditional and 19 conditional. Native family membership alone does not establish an admitted route.
+- At the prior Pioneer `e745584` measurement checkpoint, the fixed 724-package reference inventory admitted 1,638 directed cross-identity routes: 1,142 unconditional and 496 requiring existing read-only prerequisites. These cover 10,264 directed package pairs, including 6,442 unconditional pairs. The same 118-package MediaTek inventory retains 3,166 package alternatives.
+- At that same measurement checkpoint, separate checks of the two added REC packages admitted 157 directed package alternatives: 138 unconditional and 19 conditional. Native family membership alone does not establish an admitted route.
 - A full code audit; every high and medium issue it found has been fixed.
 
 ## [0.17.3] - 2026-11-02
