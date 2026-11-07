@@ -11,7 +11,7 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 
 - Pioneer cross-flash planning now checks each hardware contract and admits differences only when a proven firmware correction covers them. Supported corrections preserve the other filters and require any existing calibration or startup values to match; they do not write persistent settings.
 - Native phase corrections change the incoming firmware's output assignment while preserving its DSP program, waveform tables, calibration and motion behavior. Architecture and output interface must agree; unsupported directions remain unavailable. Other hardware and startup requirements still apply.
-- Correct bound loading interrupt-channel assignments while preserving independent input and callback requirements. Unsupported loading programs remain unavailable; channel correction alone does not admit a firmware pair.
+- Correct bound loading interrupt-channel assignments while preserving independent input and callback requirements. Matching hardware remains grouped even when a rewrite is unavailable; each incoming image still needs a proven correction. Channel correction alone does not admit a firmware pair.
 - Recognise the native hardware contracts of BDR-L12SH and BDR-L13SH firmware carrying REC tags, so their families and supported destinations appear correctly. Keep the original REC tags and show any direction-specific requirements.
 - Refreshing the drive list no longer freezes the window while a slow drive is scanned, and no longer replaces the log of an operation you just ran.
 - Failed or partly unreadable reads are reported as failures instead of looking like success, and a log saved after a failure keeps the right details.
