@@ -266,6 +266,7 @@ where
         "pioneer.startup.bank_unknown_installed"
             | "pioneer.startup.bank_unknown_target"
             | "pioneer.startup.bank_conversion_required"
+            | "pioneer.startup.capacity_relation_unproved"
     ) {
         crate::user_error::IssueCode::SettingsUnresolved
     } else {

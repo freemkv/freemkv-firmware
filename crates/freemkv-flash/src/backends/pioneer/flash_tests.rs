@@ -1138,20 +1138,26 @@ fn bank_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
     };
     for (error, code) in [
         (
-            Error::UnknownInstalled,
+            checks::Error::Banks(Error::UnknownInstalled),
             "pioneer.startup.bank_unknown_installed",
         ),
-        (Error::UnknownTarget, "pioneer.startup.bank_unknown_target"),
         (
-            Error::ConversionRequired {
+            checks::Error::Banks(Error::UnknownTarget),
+            "pioneer.startup.bank_unknown_target",
+        ),
+        (
+            checks::Error::Banks(Error::ConversionRequired {
                 installed: storage(1),
                 target: storage(5),
-            },
+            }),
             "pioneer.startup.bank_conversion_required",
         ),
+        (
+            checks::Error::CapacityRelationUnproved,
+            "pioneer.startup.capacity_relation_unproved",
+        ),
     ] {
-        let report =
-            super::preparation_error(PreparationError::Startup(checks::Error::Banks(error)));
+        let report = super::preparation_error(PreparationError::Startup(error));
         assert_eq!(
             crate::user_error::UserError::of(&report).id,
             "errors.settings_unresolved"
