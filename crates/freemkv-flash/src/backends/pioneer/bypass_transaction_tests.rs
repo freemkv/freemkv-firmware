@@ -1,5 +1,5 @@
-//! Image-only startup correction and read-only preflight through the actual
-//! Flash/Recovery adapters, including Recovery's explicit family override.
+//! Startup lifecycle refusal and unchanged-comparison read-only preflight
+//! through Flash/Recovery, including Recovery's explicit family override.
 use super::*;
 
 const ORIGINAL: u16 = 0xff01;
@@ -27,9 +27,26 @@ fn startup_pair(value: u16) -> Update {
     Update::load(original.kernel_transfer(), &transfer).unwrap()
 }
 
-fn correction_plan(bypass: bool, target_value: u16) -> PreparedUpdate {
-    let installed = startup_pair(ORIGINAL);
-    let target = startup_pair(target_value);
+fn archive(update: &Update, normal_only: bool) -> Vec<u8> {
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, bytes) in [
+        ("kernel.enc", update.kernel_transfer()),
+        ("normal.enc", update.normal_transfer()),
+    ] {
+        if normal_only && name == "kernel.enc" {
+            continue;
+        }
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, name, bytes).unwrap();
+    }
+    tar.into_inner().unwrap()
+}
+
+fn unchanged_comparison_plan(bypass: bool, installed: Update) -> PreparedUpdate {
+    let target = startup_pair(ORIGINAL);
     let receiver = Receiver::from_installed(&installed).unwrap();
     let plan = if bypass {
         receiver.prepare_without_family_check(target.clone())
@@ -44,25 +61,17 @@ fn correction_plan(bypass: bool, target_value: u16) -> PreparedUpdate {
     assert_eq!(required[0].filter, "startup-prerequisite");
     assert_eq!(required[0].word.parameter, 0x9f);
     assert_eq!(required[0].word.value, ORIGINAL);
-    // Independent expected-image construction limits changes to the compared
-    // operand and the normal integrity word. The encoded transfer must decode
-    // to exactly that output, not merely report an operational correction.
-    let mut expected = target.normal().image.clone();
-    expected[0x60a..0x60c].copy_from_slice(&ORIGINAL.to_be_bytes());
-    expected[16..20].fill(0);
-    let sum = expected.as_chunks::<4>().0.iter().fold(0u32, |sum, word| {
-        sum.wrapping_add(u32::from_be_bytes(*word))
-    });
-    expected[16..20].copy_from_slice(&sum.wrapping_neg().to_be_bytes());
-    assert!(
-        plan.stages().last().unwrap().normal_image() == expected,
-        "prepared Normal differs from the independently corrected image"
+    // A live prerequisite may authorize the existing target comparison only;
+    // no comparison operand or checksum is rewritten.
+    assert_eq!(
+        plan.stages().last().unwrap().normal_image(),
+        target.normal().image
     );
     assert_eq!(
         Envelope::load_with_kernel(plan.normal_transfer(), target.kernel())
             .unwrap()
             .image,
-        expected
+        target.normal().image
     );
     plan
 }
@@ -175,10 +184,87 @@ fn execute_mode(
 }
 
 #[test]
-fn native_startup_correction_preserves_live_word_in_flash_and_recovery() {
+fn startup_comparison_rewrites_are_refused_before_firmware_io() {
+    use crate::backend::{FlashFacet, ReadDevice, RecoveryFacet, RecoveryTarget};
+    use crate::crossflash::{CompatibilityStatus, Platform, RouteStatus};
+    use crate::platform::MockScsiDevice;
+    for (source_value, target_value) in [(ORIGINAL, TARGET), (TARGET, ORIGINAL)] {
+        let installed = archive(&startup_pair(source_value), false);
+        let target_update = startup_pair(target_value);
+        let target = archive(&target_update, false);
+
+        let mut flash = MockScsiDevice::new();
+        let plan = FlashPlan::new(execute_plan(&target).unwrap());
+        let saved = crate::engine::gates::saved_for_tests(installed.clone());
+        let error = Pioneer::new()
+            .authorize(
+                &mut ReadDevice::without_unlocks(&mut flash),
+                plan,
+                Some(&saved),
+            )
+            .err()
+            .expect("unproved comparison rewrite must refuse Flash preparation");
+        assert_unsupported_startup(&error);
+        assert!(flash.reads.is_empty() && flash.writes.is_empty());
+
+        for bypass in [false, true] {
+            let mut recovery = MockScsiDevice::new();
+            let current = RecoveryTarget::new(
+                "test".into(),
+                Some(recovery::Current::load(&installed).unwrap()),
+            );
+            let error = Pioneer::new()
+                .prepare(
+                    &mut ReadDevice::without_unlocks(&mut recovery),
+                    &current,
+                    None,
+                    &target,
+                    bypass,
+                )
+                .err()
+                .expect("family override cannot authorize unproved writer lifecycle");
+            assert_unsupported_startup(&error);
+            assert!(recovery.reads.is_empty() && recovery.writes.is_empty());
+        }
+
+        for normal_only in [false, true] {
+            let target = archive(&target_update, normal_only);
+            let decision = crate::crossflash::decide(Platform::Pioneer, &installed, &target);
+            assert!(
+                matches!(
+                    decision.status,
+                    CompatibilityStatus::HardNo | CompatibilityStatus::SoftNo
+                ),
+                "{decision:?}"
+            );
+            assert!(decision
+                .routes
+                .iter()
+                .all(|route| route.status == RouteStatus::Future));
+            assert!(crate::crossflash::admits(Platform::Pioneer, &installed, &target).is_err());
+        }
+    }
+}
+
+fn assert_unsupported_startup(error: &anyhow::Error) {
+    assert!(
+        error.chain().any(|cause| matches!(
+            cause.downcast_ref::<pioneer_optical::receiver::PreparationError>(),
+            Some(
+                pioneer_optical::receiver::PreparationError::PhaseCorrection(
+                    pioneer_optical::compatibility::Error::Unsupported
+                )
+            )
+        )),
+        "{error:#}"
+    );
+}
+
+#[test]
+fn unchanged_native_startup_preserves_live_word_in_flash_and_recovery() {
     use pioneer_optical::receiver::ExecutionMode::{Flash, Recovery};
     for (bypass, mode) in [(false, Flash), (false, Recovery), (true, Recovery)] {
-        let plan = correction_plan(bypass, TARGET);
+        let plan = unchanged_comparison_plan(bypass, startup_pair(ORIGINAL));
         let mut drive = ObservedDrive::new(&plan, Fault::None);
         execute_mode(&mut drive, &plan, mode).unwrap();
         assert_eq!(drive.events[0], Event::ReadParameter);
@@ -201,7 +287,7 @@ fn native_startup_correction_preserves_live_word_in_flash_and_recovery() {
 fn read_only_prerequisite_failures_stop_flash_and_bypass_before_firmware() {
     use pioneer_optical::receiver::ExecutionMode::{Flash, Recovery};
     for (bypass, mode) in [(false, Flash), (true, Recovery)] {
-        let plan = correction_plan(bypass, TARGET);
+        let plan = unchanged_comparison_plan(bypass, startup_pair(ORIGINAL));
         for fault in [Fault::Read, Fault::ShortRead, Fault::Mismatch] {
             let mut drive = ObservedDrive::new(&plan, fault);
             let original = drive.inner.parameter;
@@ -224,7 +310,7 @@ fn read_only_prerequisite_failures_stop_flash_and_bypass_before_firmware() {
 
 #[test]
 fn firmware_failures_never_write_persistent_startup_parameters() {
-    let plan = correction_plan(true, TARGET);
+    let plan = unchanged_comparison_plan(true, startup_pair(ORIGINAL));
     for fault in [
         Fault::Entry,
         Fault::KernelTransfer,
@@ -247,7 +333,7 @@ fn firmware_failures_never_write_persistent_startup_parameters() {
 
 #[test]
 fn matching_native_startup_still_requires_read_only_live_word() {
-    let plan = correction_plan(true, ORIGINAL);
+    let plan = unchanged_comparison_plan(true, startup_pair(ORIGINAL));
     let mut drive = ObservedDrive::new(&plan, Fault::None);
     execute_mode(
         &mut drive,
@@ -268,28 +354,33 @@ fn matching_native_startup_still_requires_read_only_live_word() {
 }
 
 #[test]
+fn unresolved_source_keeps_target_comparison_and_read_only_fallback() {
+    use pioneer_optical::receiver::ExecutionMode::{Flash, Recovery};
+    for (bypass, mode) in [(false, Flash), (false, Recovery), (true, Recovery)] {
+        let installed = pair(false, 1);
+        assert!(matches!(
+            pioneer_optical::startup::bound_selection(&installed.normal().image),
+            pioneer_optical::image::layout::Observation::Unresolved(_)
+        ));
+        let plan = unchanged_comparison_plan(bypass, installed);
+        let mut drive = ObservedDrive::new(&plan, Fault::None);
+        execute_mode(&mut drive, &plan, mode).unwrap();
+        assert_eq!(drive.events[0], Event::ReadParameter);
+        assert_eq!(drive.inner.parameter_reads, 1);
+        assert_eq!(drive.inner.parameter, Some(ORIGINAL));
+        let mut mismatch = ObservedDrive::new(&plan, Fault::Mismatch);
+        execute_mode(&mut mismatch, &plan, mode).unwrap_err();
+        assert_eq!(mismatch.events, [Event::ReadParameter]);
+        assert_eq!(mismatch.firmware_attempts(), 0);
+    }
+}
+
+#[test]
 fn offline_routes_retain_the_executors_read_only_prerequisites() {
     use crate::crossflash::{decide, CompatibilityStatus, Platform, RouteRequirement, RouteStatus};
-    let archive = |update: &Update, normal_only: bool| {
-        let mut tar = tar::Builder::new(Vec::new());
-        for (name, bytes) in [
-            ("kernel.enc", update.kernel_transfer()),
-            ("normal.enc", update.normal_transfer()),
-        ] {
-            if normal_only && name == "kernel.enc" {
-                continue;
-            }
-            let mut header = tar::Header::new_gnu();
-            header.set_size(bytes.len() as u64);
-            header.set_mode(0o644);
-            header.set_cksum();
-            tar.append_data(&mut header, name, bytes).unwrap();
-        }
-        tar.into_inner().unwrap()
-    };
     let installed = archive(&startup_pair(ORIGINAL), false);
     for normal_only in [false, true] {
-        let target = archive(&startup_pair(TARGET), normal_only);
+        let target = archive(&startup_pair(ORIGINAL), normal_only);
         let decision = decide(Platform::Pioneer, &installed, &target);
         assert_eq!(
             decision.status,

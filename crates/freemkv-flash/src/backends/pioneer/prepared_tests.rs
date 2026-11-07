@@ -573,7 +573,7 @@ fn missing_descriptor_is_reported_before_update_entry() {
 
 #[test]
 #[ignore = "requires supplied S12JX and WX1DM packages; mock device only"]
-fn real_package_flash_preserves_native_startup_word_or_refuses_unresolved_source() {
+fn real_package_flash_requires_unchanged_startup_primary_or_refuses() {
     let load = |key: &str| {
         let bytes = std::fs::read(std::env::var(key).unwrap()).unwrap();
         let (kernel, normal) = classify_flash_input(&bytes).unwrap();
@@ -585,17 +585,20 @@ fn real_package_flash_preserves_native_startup_word_or_refuses_unresolved_source
         let receiver = Receiver::from_installed(source).unwrap();
         let source_requirement =
             pioneer_optical::startup::discover(&source.normal().image).unwrap();
-        if pioneer_optical::startup::discover(&target.normal().image)
-            .unwrap()
-            .is_none()
-        {
+        let Some(target_requirement) =
+            pioneer_optical::startup::discover(&target.normal().image).unwrap()
+        else {
             assert!(receiver.prepare(target.clone()).is_err());
             continue;
-        }
+        };
         let Some(source_requirement) = source_requirement else {
             assert!(receiver.prepare(target.clone()).is_err());
             continue;
         };
+        if source_requirement.required != target_requirement.required {
+            assert!(receiver.prepare(target.clone()).is_err());
+            continue;
+        }
         let plan = receiver.prepare(target.clone()).unwrap();
         assert!(plan.startup_setting().is_none());
         assert!(plan

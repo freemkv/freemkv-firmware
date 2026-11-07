@@ -4,7 +4,9 @@ import subprocess
 TESTS = (
     'backends::pioneer::recovery::tests::pioneer_212u_213u_bank_contract_regression',
     *('backends::pioneer::prepared_tests::bypass_transaction_tests::' + name for name in (
-        'native_startup_correction_preserves_live_word_in_flash_and_recovery',
+        'startup_comparison_rewrites_are_refused_before_firmware_io',
+        'unchanged_native_startup_preserves_live_word_in_flash_and_recovery',
+        'unresolved_source_keeps_target_comparison_and_read_only_fallback',
         'read_only_prerequisite_failures_stop_flash_and_bypass_before_firmware',
         'firmware_failures_never_write_persistent_startup_parameters',
         'matching_native_startup_still_requires_read_only_live_word',
