@@ -216,6 +216,10 @@ fn pair_with_customer_bank_contract(profile: &str) -> Update {
     ))
     .unwrap();
     let mut normal = original.normal().image.clone();
+    // This fixture supplies its own complete native bank contract. Remove the
+    // synthetic preservation tail so its second validator cannot make that
+    // contract ambiguous. This test exercises refusal before device transfer.
+    normal[0x2000..0x3000].fill(0);
     for fragment in fixtures[profile]["fragments"].as_array().unwrap() {
         let offset = fragment["offset"].as_u64().unwrap() as usize;
         let hex = fragment["bytes"].as_str().unwrap();
