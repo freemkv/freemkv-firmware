@@ -132,16 +132,12 @@ fn flash_authorize_runs_pioneer_installed_gates_after_backup() {
         &pair.normal().repack(&pair.normal().image).unwrap(),
     )]);
     let error = authorize(pioneer_plan(target), normal_only).err().unwrap();
-    // Native preparation needs the installed Kernel before it can prove the
-    // complete source. This refusal now precedes marker-policy selection.
+    // The synthetic Normal now has positive Startup preservation evidence,
+    // but an installed backup without Kernel still lacks receiver marker policy.
     assert!(
         error.chain().any(|cause| matches!(
             cause.downcast_ref::<pioneer_optical::receiver::PreparationError>(),
-            Some(
-                pioneer_optical::receiver::PreparationError::PhaseCorrection(
-                    pioneer_optical::compatibility::Error::UnresolvedIdentity
-                )
-            )
+            Some(pioneer_optical::receiver::PreparationError::UnknownInstalledKernel)
         )),
         "{error:#}"
     );

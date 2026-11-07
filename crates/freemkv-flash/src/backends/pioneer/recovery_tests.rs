@@ -126,12 +126,13 @@ fn fixture_pair_class_with_model(
     balance(&mut kernel);
     // Complete synthetic SAT8 matrix contract (pioneer-optical's
     // `install_test_contract(_, 0x12)`), including the startup bank fixture.
-    let mut normal = include_bytes!("../../test-fixtures/pioneer-matrix-normal.bin").to_vec();
+    let mut normal = crate::pioneer_preservation_normal_fixture();
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
-    normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
+    let normal_len = normal.len() as u32;
+    normal[20..24].copy_from_slice(&normal_len.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
-    // Keep Normal identical across Kernel marker variants: these tests cover
-    // receiver restoration, without inventing an unresolved startup change.
+    // The shared native sink inventory proves local Startup preservation
+    // across these Kernel marker variants, without a live-word prerequisite.
     normal[0x500..0x510].copy_from_slice(&[
         0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 4, 0x46, 0x4e,
     ]);
@@ -160,7 +161,7 @@ fn differing_startup_formats_are_hard_refusals_even_with_the_family_override() {
     use crate::crossflash::{decide, CompatibilityStatus, Platform};
     let source = fixture_pair(false, 1);
     let mut normal = source.normal().image.clone();
-    for at in [0x180a, 0x190a] {
+    for at in [0x180a, 0x190a, 0x220e] {
         normal[at..at + 4].copy_from_slice(&0xfedc4322u32.to_be_bytes());
     }
     balance(&mut normal);

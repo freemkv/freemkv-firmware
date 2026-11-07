@@ -69,6 +69,21 @@ pub(crate) fn kernel_handoff_fixture(kernel: &mut [u8]) {
 }
 
 #[cfg(test)]
+pub(crate) fn pioneer_preservation_normal_fixture() -> Vec<u8> {
+    // Complete synthetic loader-flag inventory, independent of a fixed word
+    // comparison. Kernel-changing transport mocks must establish preservation
+    // rather than infer it from byte-identical Normal alone. The 4 KiB tail
+    // mirrors pioneer-optical's synthetic sink_fixture: complete modern bank,
+    // host callback, copied checksum/C-startup and helper bodies. It has no
+    // generation predicate, fixed-word requirement or private firmware bytes.
+    let mut normal = include_bytes!("test-fixtures/pioneer-matrix-normal.bin").to_vec();
+    normal.extend_from_slice(include_bytes!(
+        "test-fixtures/pioneer-preservation-tail.bin"
+    ));
+    normal
+}
+
+#[cfg(test)]
 pub(crate) fn startup_checks_fixture(normal: &mut [u8]) {
     // Synthetic blank-initialize/select code, matching the startup behavior
     // assumed by the transport mocks. This is never a production firmware.

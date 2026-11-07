@@ -18,7 +18,7 @@ Verifying Normal: 100%
 Saving Backup
 Verifying Backup: 0%
 Verifying Backup: 100%
-backup: saved <TMP>/tty-yes/backup.tar (146432 bytes)
+backup: saved <TMP>/tty-yes/backup.tar (150528 bytes)
 Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 Proceed? [Yes/No]
@@ -27,8 +27,8 @@ EXECUTING flash — do not power off or disconnect the drive...
 Writing Kernel: 46%
 Writing Kernel: 93%
 Writing Kernel: 100%
-Writing Normal: 44%
-Writing Normal: 88%
+Writing Normal: 41%
+Writing Normal: 83%
 Writing Normal: 100%
 Waiting for the drive to restart…
 Verifying Kernel: 0%
@@ -55,9 +55,9 @@ IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=3c02b041000000300000 alloc=12288 -> ok 12288
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=3c02b041000000300000 alloc=12288 -> ok 12288
 IN   cdb=120000006000 alloc=96 -> ok 96
 MEDIUM -> ClosedEmpty
 MEDIUM -> ClosedEmpty
@@ -79,9 +79,9 @@ IN   cdb=120000006000 alloc=96 -> ok 96
 OUTS cdb=3b07fe00000000800000 len=32768 sha256=b27e9828c31d13da52eb9574af0918e7937d21dd393b90cdcc56f9cf9d1a1ef5 -> ok
 OUTS cdb=3b07fe00800000800000 len=32768 sha256=17e83a8e810f281bd942c9e5542fdddceef801d6e8d54cdc04dade22edae2208 -> ok
 OUTS cdb=3b07fe01000000120000 len=4608 sha256=45a85ecf70cdb2f95b905fbbb288ac414cb18bd6a063b2da4414063f1f6385b6 -> ok
-OUTS cdb=3b07f000000000800000 len=32768 sha256=63873a96a5078ef8722a16ca3fd388683f91bd6099b0660fa217e26b4fe0dd5a -> ok
+OUTS cdb=3b07f000000000800000 len=32768 sha256=b3cfe086bd3ab7a408f378d875707e0282e6a65fd7dfbc70717de9a8ba4e855b -> ok
 OUTS cdb=3b07f000800000800000 len=32768 sha256=bf19aad20f94e40c3f66bfab9da1d3f0fb2e2d902761059d5d693fea1e5e3ade -> ok
-OUTS cdb=3b07f001000000220000 len=8704 sha256=a459e5b1cfde4fdfaf14ddd5eb9b9da548b7fdcc0136e32382701c250e107c13 -> ok
+OUTS cdb=3b07f001000000320000 len=12800 sha256=3bf816796bd027700703a9205f08678fbdb10fe29d45086fc29f99d96a1f92d3 -> ok
 OUTS cdb=3b05ff00000000010000 len=256 sha256=c8958b30983a0b64cf62bb2c00c0e8c7d683175ee743b6a053d18c0145c09332 -> ok
 IN   cdb=030000001200 alloc=18 -> ok 18
 IN   cdb=4a000000100000000800 alloc=8 -> ok 8
@@ -93,8 +93,8 @@ IN   cdb=3c02b040800000800000 alloc=32768 -> ok 32768
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c02f100000000003000 alloc=48 -> ok 48
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
-saved pre-flash backup: 146432 bytes sha256=31e5e6144bb9570b7b50e58f0a26d1a80ea29f1ff9a356524f56e402061699c4
+IN   cdb=3c02b041000000300000 alloc=12288 -> ok 12288
+saved pre-flash backup: 150528 bytes sha256=29e07e3b120e634d3fab1769ed37ac40caabe7845c785486e15741f577093caa
 
 === Pioneer CLI execute: TTY answers n ===
 result: ERR update failed during confirmation (write started: false; temporary firmware: false; completed stages: []): ui.cancelled_no_firmware_was_written: flash aborted at confirmation prompt
@@ -115,7 +115,7 @@ Verifying Normal: 100%
 Saving Backup
 Verifying Backup: 0%
 Verifying Backup: 100%
-backup: saved <TMP>/tty-no/backup.tar (146432 bytes)
+backup: saved <TMP>/tty-no/backup.tar (150528 bytes)
 Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 Proceed? [Yes/No]
@@ -138,11 +138,11 @@ IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=3c02b041000000300000 alloc=12288 -> ok 12288
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=3c02b041000000300000 alloc=12288 -> ok 12288
 IN   cdb=120000006000 alloc=96 -> ok 96
-saved pre-flash backup: 146432 bytes sha256=31e5e6144bb9570b7b50e58f0a26d1a80ea29f1ff9a356524f56e402061699c4
+saved pre-flash backup: 150528 bytes sha256=29e07e3b120e634d3fab1769ed37ac40caabe7845c785486e15741f577093caa
 
 === Pioneer CLI execute: disc inserted after the backup, TTY answers y ===
 result: ERR update failed during final tray check (write started: false; temporary firmware: false; completed stages: []): errors.disc_present: a disc is loaded — refusing to flash. Eject the disc, close the empty tray, and retry. This update pass has not started.
@@ -163,7 +163,7 @@ Verifying Normal: 100%
 Saving Backup
 Verifying Backup: 0%
 Verifying Backup: 100%
-backup: saved <TMP>/tty-disc/backup.tar (146432 bytes)
+backup: saved <TMP>/tty-disc/backup.tar (150528 bytes)
 Preparing Firmware
 This will flash: KERNEL (rev 0000) + NORMAL (rev 1.20)
 Proceed? [Yes/No]
@@ -186,9 +186,9 @@ IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 IN   cdb=3c02b041000000001800 alloc=24 -> ok 24
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=3c02b041000000300000 alloc=12288 -> ok 12288
 OUT  cdb=3b0241a5aaaa00000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
-IN   cdb=3c02b041000000200000 alloc=8192 -> ok 8192
+IN   cdb=3c02b041000000300000 alloc=12288 -> ok 12288
 IN   cdb=120000006000 alloc=96 -> ok 96
 MEDIUM -> DiscPresent
-saved pre-flash backup: 146432 bytes sha256=31e5e6144bb9570b7b50e58f0a26d1a80ea29f1ff9a356524f56e402061699c4
+saved pre-flash backup: 150528 bytes sha256=29e07e3b120e634d3fab1769ed37ac40caabe7845c785486e15741f577093caa
