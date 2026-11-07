@@ -40,7 +40,7 @@ sha2 = "0.10"
 getrandom = "0.3"
 time = "0.3"
 # Exact reviewed development commit with the shared verified update executor.
-pioneer-optical = { version = "=1.6.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "c62917ffd45e20b66ae0b213c689fe2f9162d636", features = ["drive", "envelope", "analysis", "firmware-info"] }
+pioneer-optical = { version = "=1.6.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "9e00256d2cf1757a74cf71f2ff81233c9aa657f6", features = ["drive", "envelope", "analysis", "firmware-info"] }
 # Shared step-1 chipset detection (MTEKMT19xx family key) — the same detector
 # freemkv-fw uses, so the flash tool and the modify tool never disagree on a
 # firmware image's family. Detection-only crate (std + anyhow); no cycle.
