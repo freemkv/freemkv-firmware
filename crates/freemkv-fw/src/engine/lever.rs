@@ -27,7 +27,6 @@ pub enum LeverId {
 }
 
 impl LeverId {
-    /// Human label used in the report.
     pub fn label(self) -> &'static str {
         match self {
             LeverId::BootSettings => "Boot settings",
@@ -39,7 +38,7 @@ impl LeverId {
         }
     }
 
-    /// Stable serialization key.
+    /// Stable serialization key (JSON/audit); unlike `label`, never reworded.
     pub fn key(self) -> &'static str {
         match self {
             LeverId::BootSettings => "BootSettings",
@@ -87,7 +86,6 @@ impl LeverOutcome {
 /// One audited byte edit (for the audit trail + KAT).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PatchSite {
-    /// File offset written.
     pub off: u32,
     /// The `u16` before the edit.
     pub before: u16,
@@ -130,9 +128,7 @@ impl HookReport {
 /// The outcome of one lever, with its grounded facts.
 #[derive(Debug, Clone)]
 pub struct LeverReport {
-    /// Which lever.
     pub id: LeverId,
-    /// The outcome.
     pub outcome: LeverOutcome,
     /// Grounded addresses (name → value) for the `details:` block and audit.
     pub facts: Vec<(&'static str, u32)>,
@@ -188,10 +184,10 @@ impl LeverReport {
     }
 }
 
-/// Hardware-validation confidence of a modification. Today every family/lever is
-/// `StaticOnly` — the emitted bytes are structurally valid and self-verify, but no
-/// modification has been confirmed on a real drive yet. A label, never a gate: it
-/// never blocks producing a structurally-valid modification.
+/// Hardware-validation confidence of a modification. `StaticOnly` means the emitted
+/// bytes are structurally valid and self-verify but were not confirmed on a real
+/// drive. A label, never a gate: it never blocks producing a structurally-valid
+/// modification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Validation {
     /// Confirmed working on real hardware.
@@ -201,14 +197,13 @@ pub enum Validation {
 }
 
 impl Validation {
-    /// Short machine key.
+    /// Stable machine key for JSON.
     pub fn key(self) -> &'static str {
         match self {
             Validation::HardwareConfirmed => "hardware-confirmed",
             Validation::StaticOnly => "static-only",
         }
     }
-    /// Human note.
     pub fn note(self) -> &'static str {
         match self {
             Validation::HardwareConfirmed => "hardware-confirmed",
@@ -228,11 +223,9 @@ pub struct ModifyReport {
     /// The chip generation, taken from the boot-loader banner (the authoritative
     /// rule). Emitted in `--json` as both `family` and `chip`.
     pub family: String,
-    /// Drive vendor/model/rev (display), from the descriptor.
+    /// Drive vendor from the descriptor; `model` and `rev` follow.
     pub vendor: String,
-    /// Drive model.
     pub model: String,
-    /// Drive revision.
     pub rev: String,
     /// Vendor-specific region/SKU code from the descriptor (e.g. `"N003600"`).
     pub vendor_specific: String,

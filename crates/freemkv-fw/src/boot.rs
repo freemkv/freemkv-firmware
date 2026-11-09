@@ -206,7 +206,7 @@ impl BootSettings {
                     .choices()
                     .iter()
                     .filter(|(_, _, v)| support.supports_value(f, *v))
-                    // Withhold the UHD-enabling "on" choice until it is proven.
+                    // Wire value 1 is "on"; withhold it until UHD is hardware-confirmed.
                     .filter(|(_, _, v)| !(gated && *v == 1))
                     .map(|(key, _, _)| format!("\"{key}\""))
                     .collect::<Vec<_>>()

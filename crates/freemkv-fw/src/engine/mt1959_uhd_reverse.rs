@@ -54,6 +54,8 @@ pub(super) fn reverse_stub(b: &ReverseBindings) -> Result<Vec<u8>> {
     emit_case(&mut a, b, 0x8000_0000);
     let end = a.pos();
     let bytes = a.finish()?;
+    // Only 16-bit Thumb-1 is allowed; the literal pool starts at `end`, so only
+    // code is decoded.
     for at in (0..end).step_by(2) {
         let h = u16::from_le_bytes([bytes[at], bytes[at + 1]]);
         let ordinary = h & 0xf800 < 0xe800;
@@ -66,6 +68,8 @@ pub(super) fn reverse_stub(b: &ReverseBindings) -> Result<Vec<u8>> {
     }
     Ok(bytes)
 }
+/// Branch to `target` preserving R0-R3 and flags: overwrite the saved slot
+/// with the Thumb-tagged address and pop into PC.
 fn tail(a: &mut Asm, target: usize) {
     a.push(0x108);
     a.ldr_lit(3, target as u32 | 1);

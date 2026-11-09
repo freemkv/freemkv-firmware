@@ -140,7 +140,7 @@ impl Mt1959Engine {
             ).context(freemkv_flash::user_error::IssueCode::AlreadyModified));
         }
 
-        // ---- BASE (mandatory) — the verb handler + boot hook + save/reset need these;
+        // Base prerequisites: the verb handler, boot hook and save/reset need these;
         // a miss means this image cannot carry a freemkv base, so refuse.
         let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
         let commands = analysis.commands().context("native command ownership")?;
@@ -152,11 +152,10 @@ impl Mt1959Engine {
         // it never blocks the base; byte-identical on every path (emit ignores it).
         let sense_setter = Self::sense_setter_at(image, commands.scanner().entry()).unwrap_or(0);
         let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)?;
-        // ---- FEATURE facts (best-effort) — these are per-feature report anchors, NOT
-        // required by the base handler. A miss = that feature is unavailable on this
-        // image (0/None), advertised as such; it must never fail the base build.
-        // (BASE/GATE DECOUPLING: was hard-`?`, which made a single drifted feature
-        // signature refuse an otherwise-perfect base — e.g. the JBC6 lineage.)
+        // Feature facts are best-effort per-feature anchors, not base requirements.
+        // A miss leaves that feature unavailable (0/None) and unadvertised; it must
+        // never fail the base build, or one drifted signature would refuse an
+        // otherwise-valid base (e.g. the JBC6 lineage).
         let (vid_producer, vid_out_buf) = self.find_vid_producer(image).unwrap_or((0, 0));
         let vid_gate_setter = self.find_vid_gate_setter(image).unwrap_or(0);
         let setdiscmode = self.find_setdiscmode(image).unwrap_or(0);
@@ -235,21 +234,13 @@ impl Mt1959Engine {
             "boot_init_site drifted between resolve and emit"
         );
 
-        // Speed / Region / Raw-read levers are emitted through the exact same
-        // `emit_*` helpers `build_modify` uses (single source of truth), so a fresh
-        // `create` and a `modify` on the same base produce byte-for-byte identical
-        // images — asserted by `create_and_modify_agree_on_base`. Each helper
-        // re-finds its own anchors and preserves the `free_space` allocation order
-        // (handler → speed → region → raw-read[ake → gatea → deny → uhd →
-        // hrl → bd → auth-cell]). The AKE gate is resolved via `ake_detour`
-        // (desktop → NB → V5), and uhd/hrl/bd/auth-cell are graceful
-        // (unwired = 0/empty on unknown shapes),
-        // exactly as `modify` treats them — so `create` no longer diverges on the
-        // NB/V5 images the old inline `find_ake_gate` path failed.
-        // BASE/GATE DECOUPLING: each feature emit is best-effort. A miss leaves the
-        // feature unwired (0) and off the advertised set, but the base image still
-        // ships. On the fully-resolving base (BU40N + the 91) every emit succeeds, so
-        // the free_space order and output are byte-identical (golden KAT unaffected).
+        // Levers use the same `emit_*` helpers as `build_modify`, so `create` and
+        // `modify` on the same base yield identical images (asserted by
+        // `create_and_modify_agree_on_base`). Each helper re-finds its own anchors and
+        // keeps the `free_space` order: handler → speed → region → raw-read
+        // [ake → gatea → deny → uhd → hrl → bd → auth-cell]. The AKE gate is resolved
+        // via `ake_detour` (desktop → NB → V5). Every emit is best-effort: a miss
+        // leaves that feature unwired (0/empty) and unadvertised; the base still ships.
         let (speed_gate, speed_stub_va) = self
             .emit_speed(image, &mut out, flag_base)
             .unwrap_or((0, 0));
@@ -291,7 +282,7 @@ impl Mt1959Engine {
         };
         table.replace(&mut out, &record, handler_va | 1, None);
         debug_assert_eq!(out[record.off + 1], LIVE_FLAGS, "flags must remain live");
-        let _ = CHAIN_FLAG; // (documented; walk uses it — kept for the record format)
+        let _ = CHAIN_FLAG; // documents the record format; the walk uses it
 
         let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
 
@@ -372,8 +363,8 @@ impl Mt1959Engine {
             return Ok(self.already_present_report(image, chip, cap, "MT1959"));
         }
 
-        // ---- Base prerequisites: if these fail the vendor command cannot exist
-        //      at all → whole-run abort ("nothing modifiable"). ----
+        // Base prerequisites: if these fail the vendor command cannot exist, so
+        // abort the whole run ("nothing modifiable").
         let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
         let commands = analysis
             .commands()
@@ -630,7 +621,7 @@ impl Mt1959Engine {
         out: &mut Vec<u8>,
         flag_base: u32,
     ) -> Result<RawReadFacts> {
-        // ---- validate (read-only) ----
+        // Validate read-only first; nothing is written until every find succeeds.
         self.find_transition_state_setter(image)?;
         // AKE accept gate — BU40N/desktop (reject-writer detour) or NB-class
         // (shared-`bl` detour). Resolved by `ake_detour`; BU40N matches the
@@ -678,7 +669,7 @@ impl Mt1959Engine {
         let (vid_producer, _vid_out_buf) = self.find_vid_producer(image)?;
         self.find_vid_gate_setter(image)?;
 
-        // ---- commit on a working copy (atomic) ----
+        // Commit on a working copy so a mid-commit failure leaves `out` untouched.
         let mut w = out.clone();
         let ake_stub_va = self.free_space(&w, ake_bytes.len())?;
         thumb::write(&mut w, ake_stub_va as usize, &ake_bytes);

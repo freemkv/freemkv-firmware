@@ -148,6 +148,8 @@ pub(super) fn density_stub(b: &DensityBindings) -> Result<Vec<u8>> {
     }
     let end = a.pos();
     let bytes = a.finish()?;
+    // Only 16-bit Thumb-1 is allowed; the literal pool starts at `end`, so only
+    // code is decoded. Rejects Thumb-2 and non-Thumb-1 stack/conditional forms.
     for at in (0..end).step_by(2) {
         let h = u16::from_le_bytes([bytes[at], bytes[at + 1]]);
         let ordinary = h & 0xf800 < 0xe800;
@@ -161,6 +163,8 @@ pub(super) fn density_stub(b: &DensityBindings) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// Record which of N/Z/neither is set (as `base` + 0/1/2) in R3, using only
+/// branches, since the displaced flags cannot be read without MRS.
 fn capture_nz(a: &mut Asm, common: u16, base: u8) {
     let negative = a.label();
     let zero = a.label();
@@ -175,6 +179,8 @@ fn capture_nz(a: &mut Asm, common: u16, base: u8) {
     a.movs_imm(3, base + 2);
     a.b(common);
 }
+/// Branch to `target` without touching R0-R3 or flags: write its Thumb-tagged
+/// address over the saved R3/LR slot and pop into PC.
 fn tail(a: &mut Asm, target: usize) {
     a.push(0x108);
     a.ldr_lit(3, target as u32 | 1);
