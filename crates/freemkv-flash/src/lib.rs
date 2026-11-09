@@ -2,7 +2,8 @@
 //!
 //! Layers:
 //! * [`platform`] — OS SCSI pass-through transport ([`platform::ScsiDevice`])
-//!   with a real Linux `SG_IO` backend, Windows/macOS stubs, and a
+//!   over the per-OS backends in `libfreemkv` (Linux `SG_IO`, macOS
+//!   `SCSITaskDeviceInterface`, Windows SPTI), plus a
 //!   [`platform::MockScsiDevice`] for host-independent tests.
 //! * [`backend`] — the backend contract ([`backend::Backend`] and its facets),
 //!   devices and the explicit registry; [`backends`] holds the protocol
