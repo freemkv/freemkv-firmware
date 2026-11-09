@@ -1080,7 +1080,7 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
     }
     let mut kernel = vec![0; 0x10000];
     crate::kernel_handoff_fixture(&mut kernel);
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT 8600GENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
     kernel[0x100..0x114].copy_from_slice(&[
@@ -1097,8 +1097,9 @@ fn invented_controller_and_variable_normal_sizes_need_no_catalog_entry() {
     scalar[19] = 5;
     let signer = SigningKey::from_bytes(scalar).unwrap();
     for len in [0x2000usize, 0x3000, 0x8000] {
-        let mut normal = vec![0; len];
-        crate::startup_checks_fixture(&mut normal);
+        // SAT8 matrix contract (includes the startup fixture), zero-extended to `len`.
+        let mut normal = include_bytes!("../../test-fixtures/pioneer-matrix-normal.bin").to_vec();
+        normal.resize(len, 0);
         normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
         normal[20..24].copy_from_slice(&(len as u32).to_be_bytes());
         normal[0x400..0x41e].copy_from_slice(&[

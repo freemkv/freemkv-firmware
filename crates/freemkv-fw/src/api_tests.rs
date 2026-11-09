@@ -232,11 +232,15 @@ fn old_modified_table_corruption_is_refused_before_modification() {
         .find(|entry| entry.enabled == u32::MAX)
         .unwrap();
     image[entry.entry_off..entry.entry_off + 4].copy_from_slice(&0x02000e41u32.to_le_bytes());
-    let image = freemkv_flash::cmac::resign(&image).unwrap();
-    assert!(
-        freemkv_flash::cmac::verify(&image),
-        "the old host MAC check alone misses this corruption"
-    );
+    // mediatek-optical 1.3.0 refuses an unknown flag word in `resign` and
+    // `verify`, so the slot can no longer be re-signed into a MAC-valid image;
+    // the upstream refusal and the modifier's own refusal must both hold.
+    assert!(matches!(
+        freemkv_flash::cmac::resign(&image),
+        Err(freemkv_flash::cmac::CmacError::UnknownEnabled { index, enabled: 0x02000e41 })
+            if index == entry.index
+    ));
+    assert!(!freemkv_flash::cmac::verify(&image));
     assert!(super::modify_with_defaults(&image, &crate::boot::BootSettings::standard()).is_err());
 }
 

@@ -407,7 +407,7 @@ pub(super) fn failure_phase(
         FlashError::Fault { .. } => ("programming status", true),
         FlashError::ReadyTimeout(_) => ("waiting for programming to finish", true),
         FlashError::Startup(_) => ("target startup confirmation", true),
-        FlashError::Mismatch { .. } | FlashError::Incomplete { .. } => ("firmware readback", true),
+        FlashError::Mismatch { .. } => ("firmware readback", true),
         _ => ("firmware update", true),
     }
 }

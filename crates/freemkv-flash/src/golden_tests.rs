@@ -838,14 +838,16 @@ fn balance(bytes: &mut [u8]) {
 /// stamped verbatim, which yields a valid, reproducible signed package.
 fn pair_signature(kind: &str, gated: bool, marker: u8) -> Vec<u8> {
     const SIGS: &[(&str, &str)] = &[
-        ("prepared-false-0", "05923da2785f09b86e472e9ed01ccf55780c8f9ed55dd298c367ebec0e17736f850d1663960ae65e0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("prepared-false-1", "c4e4616400e79367b32f91bd86ff3be1a835f6634e1cfa357da2222c6d0c45c1822c836c8f77e75a0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("prepared-true-1", "94e603f35c61d3c72fccc0c7eb25e22b096c236f0a0618ed605e66132f6985ea93f8b4a602148c7c0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("recovery-false-0", "b261e04c66510d551d53d303907ffdcb87e850d16d498630e82813232170364b5ab19716a0a1e64c0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-false-0", "971336f25f92fb3dc7696a3f3048060e7da45c495099a3b1d9c30a69c6cf57dbde9ca379360c14180b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-true-1", "a5833e2f11fd3c16442f8c58ff24620d18aa2d4a536b6ac89bef346d5b13398e3620c88caa701b990b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("ud04-id58-false-0", "65a62c8799f2501976e44e7935c87e1eb45b3804728b835f098a4d0f8c50b1e19ddb221f935457ea0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
-        ("recovery-false-1", "238f8ee95e4e3df8126d980fa28824a7bddd93ad06f5f9a0ce6e69b6c3dae52a98aadedfe1862af40b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-preservation-false-0", "0a5b021bf3d67a6dfd5b790cc8a016c95c137347a084a3568a019894d7dde3be5659cda68c9929540b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-preservation-false-1", "d33f1733cd5fceca7f8738403e613e17acdd3b2295269fbf6ee03b897f2c892dd6a7d89ff77dc7ec0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-false-0", "70fedffb0fb4dfa9431ec48ce4ad5acef4cda2b025fe2de1330e1a66fcf47671fb025d66430b00ce0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-false-1", "3c575040ebac8e2c3ddb7bc8c0132f45daef8c36867cc8da6b3a22f3aa1c0f0a4bbb902501aff4a60b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("prepared-true-1", "099d163866a4e5cabe5c6d5f802e4e1ee6a257b7bc93e44d70453faa2f9a943e7caf157c9ea86f620b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-false-0", "0c48376d8b1871b2443e3d4927a6bcb2c6423550498326f2a1276070ddd82cc3198ac131c818b65b0b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-false-0", "9e5cc41cfebf7a781863de633f01a56674ef6ebbe0711e54f3d989c00999e79ca2ecc02df490e2240b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-true-1", "95508a2322dcb084337c1ddd00d09bd95078cb7753f48567a1c4f3b9a865ad09da3757930d2d83090b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("ud04-id58-false-0", "d216bde05082f966f3c325400436c31e4f6ddc853ca0eccb87d933b5d73b8a64370e9d567bd73c000b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
+        ("recovery-false-1", "0054136c1c33acb675976c44aa15e540a7a73d6ec376f4be6365eef49291e4eb4176d56274a647b50b168e124b15577167f694303e507938c30a76bd0d5f4b7e165c294b692d374c522e51ef99657a80"),
     ];
     let key = format!("{kind}-{gated}-{marker}");
     let (_, hex) = SIGS
@@ -858,9 +860,13 @@ fn pair_signature(kind: &str, gated: bool, marker: u8) -> Vec<u8> {
 }
 
 fn fixture_pair(gated: bool, marker: u8) -> Update {
+    fixture_pair_with_preservation(gated, marker, false)
+}
+
+fn fixture_pair_with_preservation(gated: bool, marker: u8, preservation: bool) -> Update {
     let mut kernel = vec![0; 0x10000];
     crate::kernel_handoff_fixture(&mut kernel);
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT 8600GENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
     kernel[0x100..0x114].copy_from_slice(&[
@@ -887,10 +893,14 @@ fn fixture_pair(gated: bool, marker: u8) -> Update {
     }
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    let mut normal = if preservation {
+        crate::pioneer_preservation_normal_fixture()
+    } else {
+        include_bytes!("test-fixtures/pioneer-matrix-normal.bin").to_vec()
+    };
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
-    normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
+    let normal_len = normal.len() as u32;
+    normal[20..24].copy_from_slice(&normal_len.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
     normal[0x500..0x510].copy_from_slice(&[
         0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, marker, 0x46, 0x4e,
@@ -906,7 +916,15 @@ fn fixture_pair(gated: bool, marker: u8) -> Update {
             kernel: KernelBuild::from_seed(7),
             normal_key_seed: 11,
         },
-        NormalSignature::Oem(&pair_signature("recovery", gated, marker)),
+        NormalSignature::Oem(&pair_signature(
+            if preservation {
+                "recovery-preservation"
+            } else {
+                "recovery"
+            },
+            gated,
+            marker,
+        )),
     )
     .unwrap();
     Update::load(&encoded.kernel, &encoded.normal).unwrap()
@@ -958,7 +976,7 @@ impl ScsiDevice for RecoveryDrive {
             bytes[16..32].copy_from_slice(b"BD-RW   BDR-TEST");
             bytes[32..36].copy_from_slice(if kernel { b"0000" } else { b"1.00" });
         } else if command == pioneer_optical::cdb::vendor_identity() {
-            bytes[16..24].copy_from_slice(b"SAT FFFE");
+            bytes[16..24].copy_from_slice(b"SAT 8600");
             bytes[24..32].copy_from_slice(b"GENERAL ");
             if !kernel {
                 bytes[32..40].copy_from_slice(b"GENERAL ");
@@ -1032,7 +1050,7 @@ impl ScsiDevice for RecoveryDrive {
 fn prepared_pair(gated: bool, marker: u8) -> Update {
     let mut kernel = vec![0; 0x10000];
     crate::kernel_handoff_fixture(&mut kernel);
-    kernel[0x1000..0x1014].copy_from_slice(b"SAT FFFEGENERAL 0000");
+    kernel[0x1000..0x1014].copy_from_slice(b"SAT 8600GENERAL 0000");
     kernel[0x40..0x42].copy_from_slice(&[0xae, 0xfe]);
     kernel[0x46..0x48].copy_from_slice(&[0xae, 0xf0]);
     kernel[0x100..0x114].copy_from_slice(&[
@@ -1059,10 +1077,10 @@ fn prepared_pair(gated: bool, marker: u8) -> Update {
     }
     kernel[pioneer_optical::envelope::KERNEL_MARKER_OFFSET] = marker;
     balance(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    let mut normal = crate::pioneer_preservation_normal_fixture();
     normal[..16].copy_from_slice(b"PIONEER TEST-NEW");
-    normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
+    let normal_len = normal.len() as u32;
+    normal[20..24].copy_from_slice(&normal_len.to_be_bytes());
     normal[0x400..0x408].copy_from_slice(&[0xf6, 0x12, 0x6a, 0x86, 0xe4, 0x36, 0, 0]);
     normal[0x500..0x510].copy_from_slice(&[
         0x7a, 0x20, 0x9a, 0x78, 0x23, 0x61, 0x47, 8, 0x7a, 0x20, 1, 2, 3, 4, 0x46, 0x4e,
@@ -1123,10 +1141,11 @@ fn bounded_backup_fixture() -> (Vec<u8>, Vec<u8>) {
     put(&mut kernel, 0x200, "18 bb 1a 91 0c b9 78 10 6a 2a 00 41 00 00 78 10 6a 28 00 40 20 00 1c 8a 47 04 5e 40 10 20 0a 0b ab 10 45 de");
     put(&mut kernel, 0x400, "1a a2 7a 01 00 40 00 00 01 00 6b 23 00 41 00 14 7a 13 00 41 00 00 40 06 01 00 6d 10 0a 82 1f b1 46 f6");
     fix(&mut kernel);
-    let mut normal = vec![0; 0x2000];
-    crate::startup_checks_fixture(&mut normal);
+    // SAT8 matrix contract (includes the startup fixture) so the family is established.
+    let mut normal = include_bytes!("test-fixtures/pioneer-matrix-normal.bin").to_vec();
     normal[..16].copy_from_slice(&id[..16]);
-    normal[20..24].copy_from_slice(&0x2000u32.to_be_bytes());
+    let normal_len = normal.len() as u32;
+    normal[20..24].copy_from_slice(&normal_len.to_be_bytes());
     normal[24..32].copy_from_slice(b"GENERAL ");
     fix(&mut normal);
     (kernel, normal)
@@ -1754,9 +1773,18 @@ fn golden_backup_capture() {
 #[test]
 fn golden_pioneer_recover() {
     let mut g = Golden::default();
-    let current = archive(&fixture_pair(false, 1), false);
-    let target = archive(&fixture_pair(false, 0), false);
-    let unsigned_current = archive(&fixture_pair(false, 1), true);
+    let current_pair = fixture_pair_with_preservation(false, 1, true);
+    let target_pair = fixture_pair_with_preservation(false, 0, true);
+    // Exercise Kernel recovery while preserving the installed Normal. A
+    // changed Normal without a native startup proof must remain refused.
+    let target_pair = Update::load(
+        target_pair.kernel_transfer(),
+        current_pair.normal_transfer(),
+    )
+    .unwrap();
+    let current = archive(&current_pair, false);
+    let target = archive(&target_pair, false);
+    let unsigned_current = archive(&fixture_pair_with_preservation(false, 1, true), true);
 
     let cases: Vec<(&str, RecoveryDrive, Vec<u8>, Vec<u8>, bool)> = vec![
         (
@@ -2297,6 +2325,11 @@ fn golden_pioneer_plan_and_gates() {
 /// layout from the former, and authorize needs the latter.
 fn ud04_images(gated: bool, marker: u8, tag: &[u8; 8]) -> (Vec<u8>, Vec<u8>) {
     let (mut kernel, mut normal) = bounded_backup_fixture();
+    normal.extend_from_slice(include_bytes!(
+        "test-fixtures/pioneer-preservation-tail.bin"
+    ));
+    let normal_len = normal.len() as u32;
+    normal[20..24].copy_from_slice(&normal_len.to_be_bytes());
     crate::kernel_handoff_fixture(&mut kernel);
     kernel[0x1008..0x1010].copy_from_slice(tag);
     let finalizer = if gated {
@@ -2845,6 +2878,7 @@ const ALLOWED_REASONS: &[&str] = &[
     "M-BAK",
     "M-ENC",
     "M-LIFECYCLE",
+    "M18_IDENTITY_READ",
     "FMT",
 ];
 
@@ -2875,6 +2909,8 @@ const PIONEER_REASONS: &[&str] = &[
     "P10",
     "P11",
     "P12",
+    "P18_MATRIX_FIXTURE",
+    "P18_IMAGE_STARTUP",
     "RECOVERY_TRAY",
     "FMT",
 ];

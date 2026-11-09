@@ -5,6 +5,39 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.18.0] - Unreleased
+
+### freemkv Flash
+
+- A supplied valid MediaTek Current file can select the transfer format without matching its model, version or build to the drive. The actual drive remains independently checked; target compatibility, backup policy and staged-update checks remain.
+- Use Command 1 for recognized MediaTek receiver entries while preserving existing native entry guards.
+- Firmware reads that require an exact length now reject short responses; the discovery probe retains its bounded partial-read retries.
+- Pioneer cross-flash planning now checks each hardware contract and admits differences only when a proven firmware correction covers them. Supported corrections preserve the other filters and require any existing calibration or startup values to match; they do not write persistent settings.
+- Native phase corrections change the incoming firmware's output assignment while preserving its DSP program, waveform tables, calibration and motion behavior. Architecture and output interface must agree; unsupported directions remain unavailable. Other hardware and startup requirements still apply.
+- Recognise the native hardware contracts of BDR-L12SH and BDR-L13SH firmware carrying REC tags, so their families and supported destinations appear correctly. Keep the original REC tags and show any direction-specific requirements.
+- Refreshing the drive list no longer freezes the window while a slow drive is scanned, and no longer replaces the log of an operation you just ran.
+- Failed or partly unreadable reads are reported as failures instead of looking like success, and a log saved after a failure keeps the right details.
+- Drives and file paths are recognised more reliably on Windows, including long and network paths.
+- Clearer messages when a drive cannot be identified, instead of reporting it as stock firmware.
+- Linux packages declare the system libraries they need, and Windows installers carry the correct version number.
+
+### freemkv Modify
+
+- `info --full` no longer saves empty capture files or reports success when a memory region could not be read.
+- `verify` on a drive reports "NOT DETERMINED" once, with the reason, when the drive does not answer.
+- Firmware is never overwritten by accident through a different spelling of the same path.
+- New output files follow your normal file permissions.
+- The drive scan runs in the background, so the window stays responsive.
+
+### Under the hood
+
+- Updated to pioneer-optical 1.6.0 and mediatek-optical 1.3.0, with old and replaced interfaces removed.
+- The shared flasher uses Pioneer and MediaTek backend interfaces for vendor policy; file selection, discovery, integrity, route classification and receiver details stay backend-owned.
+- Integrate the completed component-composition, paired-component, native-reader and static instruction-ownership packets. These establish bounded implementation contracts, not complete new crossflash corrections or family merges.
+- The frozen November 7 comparison against 0.17.3 records 2,800 → 87 available Pioneer directed hardware/destination identities and 21,485 → 1,848 cross-identity package directions on the same inputs. These are historical software-admission results before the current isolated packets, not a measurement of this commit or physical incompatibility. No new full-corpus result is claimed here.
+- Full Pioneer feasibility remains open at 26/48 analysis gates. Required behavior and remaining obligations are recorded in `filters.md`; no incomplete candidate is enabled merely by this integration.
+- A full code audit; every high and medium issue it found has been fixed.
+
 ## [0.17.3] - 2026-11-02
 
 ### freemkv Flash

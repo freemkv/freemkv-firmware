@@ -17,6 +17,7 @@ use crate::platform::ScsiDevice;
 pub use crate::backends::catalog::{flashset, imageid};
 pub use mtk::{cmac, package as mediatek_package, probe};
 pub use pioneer::transport as pioneer_transport;
+pub(crate) use pioneer::OfflinePackage;
 
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();

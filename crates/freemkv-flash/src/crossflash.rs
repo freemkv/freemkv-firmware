@@ -6,13 +6,13 @@
 
 use anyhow::Result;
 
-/// Shared direct-transfer compatibility result. Only Yes permits writing.
+/// Offline compatibility result. Conditional routes need live preflight checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompatibilityStatus {
     /// The existing flash path admits the transfer.
     Yes,
-    /// Implemented transition requiring live original-hardware evidence.
+    /// Prepared correction requires live read-only prerequisites.
     Conditional,
     /// Known same-hardware transition requiring an unimplemented adapter.
     SoftNo,
@@ -31,44 +31,40 @@ pub struct Decision {
     pub routes: Vec<Route>,
 }
 
-/// A live prerequisite attached to a specific prepared route. Requirements
-/// within one route are AND; separate routes for the same pair are OR.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum RouteRequirement {
-    /// Real factory hardware, independently checked before any write.
-    OriginalHardware {
-        /// Complete factory platform token.
-        platform: String,
-        /// Optional exact product prefix.
-        prefix: Option<String>,
-        /// Optional exact product suffix.
-        suffix: Option<String>,
-    },
-}
-
 /// A prepared alternative for one explicit installed/target pair.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub struct Route {
     /// Allowed, conditional, or future.
     pub status: RouteStatus,
-    /// Every listed prerequisite must hold for this alternative.
+    /// Read-only conditions enforced by the prepared firmware executor.
     pub requirements: Vec<RouteRequirement>,
-    /// Prepared for the source firmware’s native product scope. This catalogue
-    /// classification never removes live original-hardware requirements.
-    pub native_supported: bool,
 }
 
 /// Catalogue route availability, separate from legacy diagnostic verdicts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RouteStatus {
-    /// Prepared without any extra hardware predicate.
+    /// Prepared by the flash admission gates.
     Allowed,
-    /// Prepared with explicit live prerequisites.
+    /// Prepared, subject to live read-only prerequisites.
     Conditional,
     /// A known transition awaits an implemented adapter.
     Future,
+}
+
+/// A filter-owned condition; no persistent write is authorized by this value.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RouteRequirement {
+    /// An existing parameter word must match before any firmware write.
+    ParameterWord {
+        /// Filter that proved this prerequisite.
+        filter: String,
+        /// Native parameter index.
+        parameter: u16,
+        /// Required existing value.
+        value: u16,
+    },
 }
 
 /// Internal planner result keeps typed refusal explanations with its routes.
@@ -122,25 +118,17 @@ pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
             Decision {
                 status,
                 reason: match status {
-                    CompatibilityStatus::Conditional => Some(
-                        "original factory hardware must satisfy a listed route before any write"
-                            .into(),
-                    ),
                     CompatibilityStatus::SoftNo => reason,
+                    CompatibilityStatus::Conditional => Some("Read-only live correction prerequisites must hold before firmware transfer".into()),
                     _ => None,
                 },
                 routes,
             }
         }
         Err(error) => {
-            let mut status = refusal_status(error.as_ref());
-            // Missing evidence without a fully prepared predicate is not a route.
-            if status == CompatibilityStatus::Conditional {
-                status = CompatibilityStatus::HardNo;
-            }
+            let status = refusal_status(error.as_ref());
             let routes = if status == CompatibilityStatus::SoftNo {
                 vec![Route {
-                    native_supported: false,
                     status: RouteStatus::Future,
                     requirements: Vec::new(),
                 }]
@@ -180,24 +168,38 @@ fn evaluate(platform: Platform, installed: &[u8], target: &[u8]) -> Result<Evalu
 }
 
 /// Every alternative of one stage combines with every alternative of the next.
-/// Stage prerequisites accumulate as AND; alternative combinations remain OR.
+/// A combination is future when either stage is.
 pub(crate) fn compose_routes(first: &[Route], second: &[Route]) -> Vec<Route> {
     let mut routes = Vec::new();
     for a in first {
         for b in second {
+            let status = if a.status == RouteStatus::Future || b.status == RouteStatus::Future {
+                RouteStatus::Future
+            } else if a.status == RouteStatus::Conditional || b.status == RouteStatus::Conditional {
+                RouteStatus::Conditional
+            } else {
+                RouteStatus::Allowed
+            };
             let mut requirements = a.requirements.clone();
             requirements.extend(b.requirements.iter().cloned());
             requirements.sort();
             requirements.dedup();
-            let status = if a.status == RouteStatus::Future || b.status == RouteStatus::Future {
-                RouteStatus::Future
-            } else if requirements.is_empty() {
-                RouteStatus::Allowed
-            } else {
-                RouteStatus::Conditional
-            };
+            if requirements.iter().enumerate().any(|(index, requirement)| {
+                let RouteRequirement::ParameterWord {
+                    parameter, value, ..
+                } = requirement;
+                requirements[index + 1..].iter().any(|other| {
+                    let RouteRequirement::ParameterWord {
+                        parameter: other_parameter,
+                        value: other_value,
+                        ..
+                    } = other;
+                    parameter == other_parameter && value != other_value
+                })
+            }) {
+                continue;
+            }
             routes.push(Route {
-                native_supported: a.native_supported && b.native_supported,
                 status,
                 requirements,
             });
@@ -208,61 +210,31 @@ pub(crate) fn compose_routes(first: &[Route], second: &[Route]) -> Vec<Route> {
     routes
 }
 
-/// Every context ran all common admission gates. Only a typed adapter refusal
-/// deferred by that pipeline becomes Future, with that context's predicates.
-/// One failed alternative cannot erase another successful or future route.
-pub(crate) fn collect_routes(
-    contexts: impl IntoIterator<Item = (Vec<RouteRequirement>, Result<Vec<RouteRequirement>>)>,
-) -> Result<Evaluation> {
-    let mut routes = Vec::new();
-    let mut reasons = Vec::new();
-    let mut refusals = Vec::new();
-    for (context, result) in contexts {
-        let (status, mut requirements) = match result {
-            Ok(requirements) => (
-                if requirements.is_empty() {
-                    RouteStatus::Allowed
-                } else {
-                    RouteStatus::Conditional
-                },
-                requirements,
-            ),
-            Err(error) if refusal_status(error.as_ref()) == CompatibilityStatus::SoftNo => {
-                reasons.push(format!("{error:#}"));
-                (RouteStatus::Future, context)
-            }
-            Err(error) => {
-                refusals.push(error);
-                continue;
-            }
-        };
-        requirements.sort();
-        requirements.dedup();
-        routes.push(Route {
-            native_supported: status == RouteStatus::Allowed,
-            status,
-            requirements,
-        });
+/// The pair ran all common admission gates. Only a typed adapter refusal
+/// deferred by that pipeline becomes Future; every other refusal is returned.
+pub(crate) fn collect_route(result: Result<()>) -> Result<Evaluation> {
+    match result {
+        Ok(()) => Ok(Evaluation {
+            routes: vec![Route {
+                status: RouteStatus::Allowed,
+                requirements: Vec::new(),
+            }],
+            reason: None,
+        }),
+        Err(error) if refusal_status(error.as_ref()) == CompatibilityStatus::SoftNo => {
+            Ok(Evaluation {
+                routes: vec![Route {
+                    status: RouteStatus::Future,
+                    requirements: Vec::new(),
+                }],
+                reason: Some(format!("{error:#}")),
+            })
+        }
+        Err(error) => Err(error),
     }
-    routes.sort();
-    routes.dedup();
-    if routes.is_empty() {
-        refusals.sort_by_key(|error| format!("{error:#}"));
-        return Err(refusals
-            .into_iter()
-            .next()
-            .unwrap_or_else(|| anyhow::anyhow!("no supported original-hardware context")));
-    }
-    reasons.sort();
-    reasons.dedup();
-    Ok(Evaluation {
-        routes,
-        reason: (!reasons.is_empty()).then(|| reasons.join("; ")),
-    })
 }
 
-/// Whether a fully prepared route has no additional live prerequisites.
-/// Conditional routes are available through [`decide`], with exact predicates.
+/// Whether a route is admitted without unresolved live prerequisites.
 pub fn admits(platform: Platform, installed: &[u8], target: &[u8]) -> Result<()> {
     let decision = decide(platform, installed, target);
     if decision.status == CompatibilityStatus::Yes {
@@ -289,31 +261,82 @@ pub fn links(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize)> {
 
 /// Admitted and known future-adapter candidates; hard refusals stay unlisted.
 pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, usize, Route)> {
-    let keys: Vec<Prefilter> = packages
-        .iter()
-        .map(|p| Prefilter::of(platform, p))
-        .collect();
+    // Reuse only package-local immutable evidence. Unsupported or incomplete
+    // packages retain the ordinary path, including its exact typed refusals.
+    // Package validation uses the same worker bound as pair evaluation.
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let package_chunk = packages.len().div_ceil(workers).max(1);
+    let (keys, pioneer_packages): (Vec<_>, Vec<_>) = std::thread::scope(|scope| {
+        let handles: Vec<_> = packages
+            .chunks(package_chunk)
+            .map(|chunk| {
+                scope.spawn(move || {
+                    chunk
+                        .iter()
+                        .map(|bytes| {
+                            let key = Prefilter::of(platform, bytes);
+                            let evidence = if platform == Platform::Pioneer {
+                                crate::backend::registry::OfflinePackage::load(bytes).ok()
+                            } else {
+                                None
+                            };
+                            (key, evidence)
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("package validation worker panicked"))
+            .unzip()
+    });
     let candidates: Vec<(usize, usize)> = (0..packages.len())
         .flat_map(|i| (0..packages.len()).map(move |j| (i, j)))
         .filter(|&(i, j)| i != j && keys[i].may_admit(&keys[j]))
         .collect();
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
-    let chunk = candidates.len().div_ceil(workers).max(1);
+    // Pair costs vary substantially by family. Claim one pair at a time so
+    // workers finishing cheap candidates can help with the expensive ones.
+    // Relaxed ordering suffices: the counter only assigns immutable work.
+    let next_pair = std::sync::atomic::AtomicUsize::new(0);
+    let completed_pairs = std::sync::atomic::AtomicUsize::new(0);
+    let started = std::time::Instant::now();
+    let pair_workers = workers.min(candidates.len());
+    eprintln!(
+        "{platform:?}: {} scheduled pairs, {pair_workers} workers",
+        candidates.len()
+    );
     let mut admitted: Vec<(usize, usize, Route)> = std::thread::scope(|scope| {
-        let handles: Vec<_> = candidates
-            .chunks(chunk)
-            .map(|pairs| {
+        let handles: Vec<_> = (0..pair_workers)
+            .map(|_| {
+                let pioneer_packages = &pioneer_packages;
+                let candidates = &candidates;
+                let next_pair = &next_pair;
+                let completed_pairs = &completed_pairs;
                 scope.spawn(move || {
-                    pairs
-                        .iter()
-                        .copied()
-                        .flat_map(|(i, j)| {
-                            decide(platform, packages[i], packages[j])
-                                .routes
-                                .into_iter()
-                                .map(move |route| (i, j, route))
-                        })
-                        .collect::<Vec<_>>()
+                    let mut admitted = Vec::new();
+                    while let Some(&(i, j)) =
+                        candidates.get(next_pair.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+                    {
+                        let routes = match (pioneer_packages.get(i), pioneer_packages.get(j)) {
+                            (Some(Some(source)), Some(Some(target))) => source
+                                .routes_to(target)
+                                .map(|evaluation| evaluation.routes)
+                                .unwrap_or_default(),
+                            _ => decide(platform, packages[i], packages[j]).routes,
+                        };
+                        admitted.extend(routes.into_iter().map(|route| (i, j, route)));
+                        let completed =
+                            completed_pairs.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        if completed.is_multiple_of(1000) && completed < candidates.len() {
+                            eprintln!(
+                                "{platform:?}: {completed}/{} pairs completed ({:.1}s)",
+                                candidates.len(),
+                                started.elapsed().as_secs_f64()
+                            );
+                        }
+                    }
+                    admitted
                 })
             })
             .collect();
@@ -322,6 +345,12 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
             .flat_map(|h| h.join().expect("crossflash worker panicked"))
             .collect()
     });
+    eprintln!(
+        "{platform:?}: {}/{} pairs completed ({:.1}s)",
+        completed_pairs.load(std::sync::atomic::Ordering::Relaxed),
+        candidates.len(),
+        started.elapsed().as_secs_f64()
+    );
     admitted.sort_unstable_by(|a, b| (a.0, a.1, &a.2).cmp(&(b.0, b.1, &b.2)));
     admitted
 }
@@ -408,160 +437,111 @@ impl Prefilter {
 }
 
 #[cfg(test)]
-mod adaptation_tests {
-    use super::*;
-    #[test]
-    fn missing_original_evidence_is_conditional_but_native_mismatch_is_not() {
-        use pioneer_optical::settings::adaptation::Error;
-        assert_eq!(
-            refusal_status(&Error::OriginalRequired),
-            CompatibilityStatus::Conditional
-        );
-        for error in [Error::OriginalMismatch, Error::Guard, Error::Registry] {
-            assert_eq!(refusal_status(&error), CompatibilityStatus::HardNo);
-        }
-    }
-}
-
-#[cfg(test)]
 mod route_tests {
     use super::*;
-    fn hardware(platform: &str, prefix: Option<&str>) -> RouteRequirement {
-        RouteRequirement::OriginalHardware {
-            platform: platform.into(),
-            prefix: prefix.map(Into::into),
-            suffix: None,
+    fn route(status: RouteStatus) -> Route {
+        Route {
+            status,
+            requirements: Vec::new(),
         }
     }
     #[test]
-    fn native_conversion_wins_and_removal_exposes_hardware_return() {
-        for source in ["BDR-UD02", "BDR-UD03", "BDR-UD04"] {
-            let mut routes: Vec<_> = ["UD02", "UD03", "UD04"]
-                .into_iter()
-                .map(|platform| Route {
-                    status: RouteStatus::Conditional,
-                    requirements: vec![hardware(platform, None)],
-                    native_supported: false,
-                })
-                .collect();
-            let guards: Vec<_> = routes.iter().map(|r| r.requirements.clone()).collect();
-            bind_native_product(
-                &mut routes,
-                pioneer_optical::production::ProductCode::parse(source),
-            );
-            assert_eq!(routes.iter().filter(|r| r.native_supported).count(), 1);
-            assert_eq!(
-                routes
-                    .iter()
-                    .map(|r| r.requirements.clone())
-                    .collect::<Vec<_>>(),
-                guards
-            );
-            let native = routes.remove(routes.iter().position(|r| r.native_supported).unwrap());
-            assert!(routes.iter().all(|r| !r.native_supported));
-            assert!(routes.iter().all(|r| r.status == RouteStatus::Conditional));
-            routes.push(native);
-            assert!(routes.iter().any(|r| r.native_supported));
-        }
-    }
-
-    #[test]
-    fn native_classification_requires_complete_product_scope_and_prepared_route() {
-        let mut routes = vec![Route {
-            status: RouteStatus::Conditional,
-            requirements: vec![hardware("UD02", Some("BDU"))],
-            native_supported: false,
-        }];
-        bind_native_product(
-            &mut routes,
-            pioneer_optical::production::ProductCode::parse("BDR-UD02"),
+    fn intermediate_stages_are_future_when_either_stage_is() {
+        let first = [route(RouteStatus::Allowed)];
+        let second = [route(RouteStatus::Allowed), route(RouteStatus::Future)];
+        assert_eq!(
+            compose_routes(&first, &second),
+            vec![route(RouteStatus::Allowed), route(RouteStatus::Future)]
         );
-        assert!(!routes[0].native_supported);
-        bind_native_product(&mut routes, None);
-        assert!(!routes[0].native_supported);
-        routes[0].requirements = vec![hardware("UD02", Some("BDR"))];
-        routes[0].status = RouteStatus::Future;
-        bind_native_product(
-            &mut routes,
-            pioneer_optical::production::ProductCode::parse("BDR-UD02"),
+        assert_eq!(
+            compose_routes(&[route(RouteStatus::Future)], &second),
+            vec![route(RouteStatus::Future)]
         );
-        assert!(!routes[0].native_supported);
-    }
-
-    #[test]
-    fn intermediate_stages_preserve_and_requirements_and_or_alternatives() {
-        let broad = hardware("UD02", None);
-        let narrow = hardware("UD02", Some("BDR"));
-        let first = [Route {
-            native_supported: false,
-            status: RouteStatus::Conditional,
-            requirements: vec![broad.clone()],
-        }];
-        let second = [
-            Route {
-                native_supported: false,
-                status: RouteStatus::Allowed,
-                requirements: vec![],
-            },
-            Route {
-                native_supported: false,
-                status: RouteStatus::Conditional,
-                requirements: vec![narrow.clone()],
-            },
-        ];
-        let result = compose_routes(&first, &second);
-        assert_eq!(result.len(), 2);
-        assert!(result.contains(&Route {
-            native_supported: false,
-            status: RouteStatus::Conditional,
-            requirements: vec![broad.clone()]
-        }));
-        assert!(result.contains(&Route {
-            native_supported: false,
-            status: RouteStatus::Conditional,
-            requirements: vec![broad, narrow]
-        }));
     }
     #[test]
-    fn future_and_hard_refusal_context_order_cannot_erase_a_route() {
-        use pioneer_optical::startup::bank::{Error, Storage};
-        let contexts = || {
-            vec![
-                (
-                    vec![hardware("UD02", None)],
-                    Err(Error::ConversionRequired {
-                        installed: Storage::KernelSequences {
-                            sequences: [1, 2],
-                            bases: [3, 4],
-                        },
-                        target: Storage::KernelSequences {
-                            sequences: [5, 6],
-                            bases: [7, 8],
-                        },
-                    }
-                    .into()),
-                ),
-                (
-                    vec![hardware("UD03", None)],
-                    Err(pioneer_optical::settings::adaptation::Error::OriginalMismatch.into()),
-                ),
-            ]
+    fn intermediate_stages_preserve_read_only_requirements() {
+        let required = RouteRequirement::ParameterWord {
+            filter: "phase".into(),
+            parameter: 0x28f,
+            value: 1,
         };
-        let forward = collect_routes(contexts()).unwrap();
-        let reverse = collect_routes(contexts().into_iter().rev()).unwrap();
-        assert_eq!(forward, reverse);
-        assert!(forward
+        let conditional = Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![required.clone()],
+        };
+        assert_eq!(
+            compose_routes(
+                &[route(RouteStatus::Allowed)],
+                std::slice::from_ref(&conditional)
+            ),
+            std::slice::from_ref(&conditional)
+        );
+        assert_eq!(
+            compose_routes(
+                std::slice::from_ref(&conditional),
+                std::slice::from_ref(&conditional)
+            ),
+            std::slice::from_ref(&conditional)
+        );
+        assert_eq!(
+            compose_routes(&[conditional], &[route(RouteStatus::Future)]),
+            [Route {
+                status: RouteStatus::Future,
+                requirements: vec![required],
+            }]
+        );
+    }
+
+    #[test]
+    fn stages_cannot_require_conflicting_values_of_one_read_only_word() {
+        let stage = |filter: &str, value| Route {
+            status: RouteStatus::Conditional,
+            requirements: vec![RouteRequirement::ParameterWord {
+                filter: filter.into(),
+                parameter: 0x28f,
+                value,
+            }],
+        };
+        assert!(compose_routes(&[stage("phase", 1)], &[stage("other", 0)]).is_empty());
+        let compatible = compose_routes(&[stage("phase", 1)], &[stage("other", 1)]);
+        assert_eq!(compatible.len(), 1);
+        assert_eq!(compatible[0].requirements.len(), 2);
+    }
+
+    #[test]
+    fn only_a_typed_adapter_refusal_becomes_a_future_route() {
+        use pioneer_optical::image::KernelHandoffError;
+        let future = collect_route(Err(KernelHandoffError::Mismatch {
+            installed: 0x400100,
+            target: 0x400200,
+        }
+        .into()))
+        .unwrap();
+        assert_eq!(future.routes, vec![route(RouteStatus::Future)]);
+        assert!(future
             .reason
             .as_deref()
             .unwrap()
-            .contains("persistent bank format"));
+            .contains("Kernel handoff mismatch"));
+        assert!(collect_route(Err(KernelHandoffError::UnknownTarget.into())).is_err());
+        // No persistent-bank conversion exists under any policy.
+        use pioneer_optical::startup::bank::{Error, Storage};
+        let storage = |base| Storage::KernelSequences {
+            sequences: [base, base + 1],
+            bases: [base + 2, base + 3],
+        };
+        assert!(collect_route(Err(Error::ConversionRequired {
+            installed: storage(1),
+            target: storage(5),
+        }
+        .into()))
+        .is_err());
         assert_eq!(
-            forward.routes,
-            vec![Route {
-                native_supported: false,
-                status: RouteStatus::Future,
-                requirements: vec![hardware("UD02", None)]
-            }]
+            collect_route(Ok(())).unwrap(),
+            Evaluation {
+                routes: vec![route(RouteStatus::Allowed)],
+                reason: None
+            }
         );
     }
 }
@@ -582,6 +562,3 @@ mod platform_tests {
         assert_eq!(Platform::of_input(&tar), Platform::Pioneer);
     }
 }
-
-#[cfg(test)]
-use crate::backends::pioneer::routing::bind_native_product;

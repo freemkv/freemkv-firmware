@@ -36,7 +36,6 @@ pub(crate) fn single_stage(installed: &[u8], target: &[u8]) -> Result<Evaluation
     super::decide_offline(installed, target)?;
     Ok(Evaluation {
         routes: vec![Route {
-            native_supported: true,
             status: RouteStatus::Allowed,
             requirements: Vec::new(),
         }],

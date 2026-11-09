@@ -1644,7 +1644,10 @@ fn is_receiver_read(cdb: &[u8]) -> bool {
         return false;
     }
     let off = ((cdb[3] as u32) << 16) | ((cdb[4] as u32) << 8) | cdb[5] as u32;
-    ((0x98000..0xb4000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1088))
+    // mediatek-optical 1.3.0 `detect_encoding` reads 32 bytes of setup context
+    // just before the application window as a separate leading read.
+    (off == 0x97fe0 && read_len(cdb) == Some(32))
+        || ((0x98000..0xb4000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1088))
         || ((0x140000..0x1b0000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1024))
 }
 

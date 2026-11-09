@@ -3,21 +3,21 @@ import subprocess
 
 TESTS = (
     'backends::pioneer::recovery::tests::pioneer_212u_213u_bank_contract_regression',
-    'backends::pioneer::prepared_tests::pioneer_crossflash_transition_routing_known_answers',
     *('backends::pioneer::prepared_tests::bypass_transaction_tests::' + name for name in (
-        'bypass_preserves_verified_startup_transaction',
-        'bypass_startup_failures_stop_before_firmware_and_restore_original',
-        'bypass_firmware_attempt_failure_never_restores_old_startup_word',
-        'bypass_matching_startup_word_never_writes_settings',
+        'startup_comparison_rewrites_are_refused_before_firmware_io',
+        'unchanged_native_startup_preserves_live_word_in_flash_and_recovery',
+        'unresolved_source_keeps_target_comparison_and_read_only_fallback',
+        'read_only_prerequisite_failures_stop_flash_and_bypass_before_firmware',
+        'firmware_failures_never_write_persistent_startup_parameters',
+        'matching_native_startup_still_requires_read_only_live_word',
+        'offline_routes_retain_the_executors_read_only_prerequisites',
     )),
 )
-NATIVE_BOOT = ('backends::pioneer::prepared_tests::native_startup_tests::'
-               'native_212u_unchanged_banks_are_rejected')
 COMMAND = ['cargo', 'test', '--locked', '-p', 'freemkv-flash', '--lib']
 
 
 def main():
-    for name in (*TESTS, NATIVE_BOOT):
+    for name in TESTS:
         options = ['--exact']
         result = subprocess.run(
             [*COMMAND, name, '--', *options],

@@ -132,8 +132,13 @@ fn flash_authorize_runs_pioneer_installed_gates_after_backup() {
         &pair.normal().repack(&pair.normal().image).unwrap(),
     )]);
     let error = authorize(pioneer_plan(target), normal_only).err().unwrap();
+    // The synthetic Normal now has positive Startup preservation evidence,
+    // but an installed backup without Kernel still lacks receiver marker policy.
     assert!(
-        format!("{error:#}").contains("unknown_installed_kernel"),
+        error.chain().any(|cause| matches!(
+            cause.downcast_ref::<pioneer_optical::receiver::PreparationError>(),
+            Some(pioneer_optical::receiver::PreparationError::UnknownInstalledKernel)
+        )),
         "{error:#}"
     );
 }

@@ -256,7 +256,7 @@ pub fn flash_err(error: Error<anyhow::Error>) -> anyhow::Error {
 
 // Compatibility exports; vendor command sequences belong to their backend.
 pub use crate::backend::registry::pioneer_transport::{
-    identify, identify_on, identify_protocol, read_memory_exact,
+    identify, identify_on, identify_protocol, read_memory_exact, read_memory_partial,
 };
 
 #[cfg(test)]

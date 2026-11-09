@@ -439,7 +439,7 @@ PROGRESS flashing firmware 2097152/2097152
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
 MSG      verifying...
 FIELD    Firmware running = HL-DT-STBD-RE BU40N     1.00
---- scsi transcript (1917) ---
+--- scsi transcript (1920) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
@@ -556,6 +556,8 @@ IN   cdb=3c06000b300000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b340000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b380000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b3c0000040000 alloc=1024 -> ok 1024
+IN   cdb=3c0600097fe000002000 alloc=32 -> ok 32
+IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c060014000000040000 alloc=1024 -> ok 1024
@@ -2091,6 +2093,7 @@ IN   cdb=3c06001af00000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001af40000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001af80000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001afc0000040000 alloc=1024 -> ok 1024
+IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 OUTS cdb=3b01000000000000000b0000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
@@ -2799,7 +2802,7 @@ PROGRESS flashing firmware 2080768/2097152
 PROGRESS flashing firmware 2097152/2097152
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
 MSG      verifying...
---- scsi transcript (1915) ---
+--- scsi transcript (1918) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
@@ -2916,6 +2919,8 @@ IN   cdb=3c06000b300000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b340000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b380000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b3c0000040000 alloc=1024 -> ok 1024
+IN   cdb=3c0600097fe000002000 alloc=32 -> ok 32
+IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c060014000000040000 alloc=1024 -> ok 1024
@@ -4451,6 +4456,7 @@ IN   cdb=3c06001af00000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001af40000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001af80000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001afc0000040000 alloc=1024 -> ok 1024
+IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 OUTS cdb=3b01000000000000000b0000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
@@ -5159,7 +5165,7 @@ PROGRESS flashing firmware 2097152/2097152
 MSG      upload complete (2 MiB); waiting for the drive to finish programming...
 MSG      verifying...
 FIELD    Firmware running = HL-DT-STBD-RE BU40N     1.00
---- scsi transcript (1917) ---
+--- scsi transcript (1920) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
@@ -5276,6 +5282,8 @@ IN   cdb=3c06000b300000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b340000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b380000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b3c0000040000 alloc=1024 -> ok 1024
+IN   cdb=3c0600097fe000002000 alloc=32 -> ok 32
+IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c060014000000040000 alloc=1024 -> ok 1024
@@ -6811,6 +6819,7 @@ IN   cdb=3c06001af00000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001af40000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001af80000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06001afc0000040000 alloc=1024 -> ok 1024
+IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256
 IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 OUTS cdb=3b01000000000000000b0000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
@@ -7083,7 +7092,7 @@ saved pre-flash backup: 2097152 bytes sha256=b0ae07404e1f5d794174e8f1ce560d5afbb
 result: ERR update failed during risk acknowledgement (write started: false; temporary firmware: false; completed stages: []): errors.acknowledgement: SAFETY GATE: refusing to flash without --i-understand-risk (flashing can permanently brick the drive)
 --- text (0) ---
 --- events (0) ---
---- scsi transcript (568) ---
+--- scsi transcript (570) ---
 MEDIUM -> ClosedEmpty
 IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
@@ -7200,6 +7209,8 @@ IN   cdb=3c06000b300000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b340000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b380000040000 alloc=1024 -> ok 1024
 IN   cdb=3c06000b3c0000040000 alloc=1024 -> ok 1024
+IN   cdb=3c0600097fe000002000 alloc=32 -> ok 32
+IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=120000002400 alloc=36 -> ok 36
 IN   cdb=3c060000300000002000 alloc=32 -> ok 32
 IN   cdb=3c060014000000040000 alloc=1024 -> ok 1024

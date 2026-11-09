@@ -717,7 +717,7 @@ fn prepare_firmware_read(dev: &mut dyn ScsiDevice) -> Result<()> {
             std::env::consts::ARCH, dev.describe()
         );
         for attempt in 1..=3 {
-            let data = crate::transport::read_memory_exact(
+            let data = crate::transport::read_memory_partial(
                 dev, KERNEL_IMAGE_BASE as u32, 4,
             )?;
             eprintln!(
