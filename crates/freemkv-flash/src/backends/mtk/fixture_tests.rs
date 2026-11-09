@@ -273,7 +273,7 @@ pub(crate) fn stand_in(build: &CatalogBuild, seed: u8) -> Vec<u8> {
     {
         img[range.start..range.end()].copy_from_slice(contents);
     }
-    crate::cmac::resign(&img).unwrap()
+    crate::backends::mtk::cmac::resign(&img).unwrap()
 }
 
 /// Every catalog build with its stand-in image, whose family is the one the

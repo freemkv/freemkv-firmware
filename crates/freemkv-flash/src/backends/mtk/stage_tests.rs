@@ -403,7 +403,9 @@ fn recovery_uses_selected_current_intm_without_reflashing_it() {
 }
 
 #[test]
-fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
+fn recovery_prepares_the_user_reference_recipe_without_matching_running_revision() {
+    use crate::backend::RecoveryFacet;
+
     let mut current = image(b"INTM", 2);
     encrypted_receiver(&mut current);
     let original = image(b"1.V1", 1);
@@ -424,17 +426,14 @@ fn recovery_rejects_original_file_when_intm_is_running_without_writes() {
         wire_stages: vec![],
         restricted: true,
     };
-    let error =
-        crate::engine::recover(&mut dev, &Mtk, Some(&original), &target, true, true).unwrap_err();
-    assert_eq!(
-        crate::workflow::user_error(&error).id,
-        "errors.current_mismatch"
-    );
-    let evidence = error
-        .downcast_ref::<crate::backend::UpdateFailure>()
+    let identified = Mtk
+        .identify_with_current(&mut ReadDevice::without_unlocks(&mut dev), Some(&original))
+        .unwrap()
         .unwrap();
-    assert_eq!(evidence.phase, "recovery receiver checks");
-    assert!(!evidence.write_started);
+    assert!(identified.label.contains("Plaintext"));
+    let outcome =
+        crate::engine::recover(&mut dev, &Mtk, Some(&original), &target, false, true).unwrap();
+    assert!(matches!(outcome, UpdateOutcome::Planned));
     assert!(dev.wire_stages.is_empty());
     assert!(dev.inner.writes.is_empty());
 }
@@ -740,7 +739,7 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     );
     assert_eq!(
         state.receiver.provenance(),
-        mediatek_optical::receiver::reference::Provenance::CurrentReference
+        mediatek_optical::receiver::reference::Provenance::UserSuppliedReference
     );
     assert!(plan
         .dry_run
@@ -753,11 +752,11 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     assert!(sheet
         .notices
         .iter()
-        .any(|s| s.contains("Live receiver code was not compared.")));
+        .any(|s| s.contains("Its match to the installed firmware has not been verified.")));
     assert!(!sheet
         .technical_details
         .iter()
-        .any(|s| s.contains("Live receiver code was not compared.")));
+        .any(|s| s.contains("Its match to the installed firmware has not been verified.")));
     let executable = authorized.state::<Executable>().unwrap();
     assert_eq!(
         executable.prepared.plan().encoding().body,
@@ -780,7 +779,7 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
 }
 
 #[test]
-fn flash_current_never_substitutes_for_backup_or_accepts_stale_build_metadata() {
+fn flash_current_accepts_different_build_metadata_but_never_substitutes_for_backup() {
     struct Refuse;
     impl crate::backend::Confirm for Refuse {
         fn confirm(&mut self, _: &AuthorizedPlan) -> Result<bool> {
@@ -793,9 +792,9 @@ fn flash_current_never_substitutes_for_backup_or_accepts_stale_build_metadata() 
     let mut stale = current.clone();
     stale[0x1ec040] ^= 1;
     req.current = Some(crate::cmac::resign(&stale).unwrap());
-    assert!(Mtk
-        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
-        .is_err());
+    Mtk.plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    assert!(dev.inner.writes.is_empty());
     req.current = Some(current);
     let path = std::env::temp_dir().join(format!(
         "freemkv-current-not-backup-{}.bin",

@@ -54,7 +54,7 @@ impl std::error::Error for Unavailable {
         Some(self.source.as_ref())
     }
 }
-fn read(
+pub(crate) fn read(
     dev: &mut ReadDevice<'_>,
     name: &'static str,
     cdb: &[u8],
@@ -86,7 +86,7 @@ pub fn detect(dev: &mut dyn ScsiDevice) -> Result<Detection> {
     let inquiry = read(
         &mut dev,
         "INQUIRY",
-        &pioneer_optical::cdb::inquiry(96),
+        &super::inquiry_cdb(96),
         96,
         &mut observations,
     )?
@@ -112,75 +112,8 @@ pub fn detect(dev: &mut dyn ScsiDevice) -> Result<Detection> {
     // A bridge can fail a foreign vendor command without failing the native
     // protocol. Complete both bounded probes before drawing a conclusion.
     let mut failures = Vec::new();
-    let pioneer_response = read(
-        &mut dev,
-        "Pioneer F1 identity",
-        &pioneer_optical::cdb::vendor_identity(),
-        48,
-        &mut result.observations,
-    );
-    let pioneer = match pioneer_response {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            result.observations.push(format!("{error:#}"));
-            failures.push(error);
-            None
-        }
-    }
-    .and_then(
-        |b| match pioneer_optical::protocol::Response::parse(&inquiry, &b) {
-            Ok(response) => {
-                result.pioneer_identity = Some(response.identity().clone());
-                response.into_evidence()
-            }
-            Err(source) => {
-                result
-                    .observations
-                    .push("Pioneer F1 identity: incomplete structure".into());
-                failures.push(
-                    Unavailable {
-                        command: "Pioneer F1 identity",
-                        source: source.into(),
-                    }
-                    .into(),
-                );
-                None
-            }
-        },
-    );
-    let mediatek_response = read(
-        &mut dev,
-        "MediaTek boot banner",
-        &mediatek_optical::cdb::read_memory(0x3000, 32),
-        32,
-        &mut result.observations,
-    );
-    let mediatek = match mediatek_response {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            result.observations.push(format!("{error:#}"));
-            failures.push(error);
-            None
-        }
-    }
-    .and_then(
-        |b| match mediatek_optical::protocol::Evidence::parse(&inquiry, &b) {
-            Ok(e) => e,
-            Err(source) => {
-                result
-                    .observations
-                    .push("MediaTek boot banner: incomplete structure".into());
-                failures.push(
-                    Unavailable {
-                        command: "MediaTek boot banner",
-                        source: source.into(),
-                    }
-                    .into(),
-                );
-                None
-            }
-        },
-    );
+    let pioneer = super::registry::probe_pioneer(&mut dev, &inquiry, &mut result, &mut failures);
+    let mediatek = super::registry::probe_mediatek(&mut dev, &inquiry, &mut result, &mut failures);
     result.conclusion = match (pioneer, mediatek) {
         (Some(_), Some(_)) => Conclusion::Ambiguous,
         (Some(p), None) => Conclusion::Detected(Evidence::Pioneer(p)),

@@ -21,6 +21,8 @@ use anyhow::{anyhow, bail, Context, Result};
 pub(crate) mod backup;
 #[cfg(test)]
 pub(crate) mod bulk_receiver_fixture;
+/// MediaTek image integrity policy.
+pub mod cmac;
 pub(crate) mod crossflash;
 pub(crate) mod file_info;
 #[cfg(test)]
@@ -28,6 +30,11 @@ pub(crate) mod file_info;
 pub(crate) mod fixture;
 mod flash;
 pub mod fwdump;
+/// Validated MediaTek release packages.
+pub mod package;
+mod package_selection;
+/// MediaTek read-only acquisition probes.
+pub mod probe;
 mod receiver_reference;
 mod recovery;
 pub(crate) use flash::decide_offline;
@@ -926,8 +933,28 @@ impl Backend for Mtk {
 }
 
 impl FileFacet for Mtk {
+    fn recovery_package(&self, bytes: &[u8], member: Option<&str>) -> Option<Result<Vec<u8>>> {
+        match package_selection::claims(bytes) {
+            Ok(true) => Some(package_selection::recovery_target(bytes, member)),
+            Ok(false) => None,
+            Err(error) => Some(Err(error)),
+        }
+    }
+    fn recovery_members(&self, bytes: &[u8]) -> Option<Result<Vec<String>>> {
+        let package = package::Package::parse(bytes).ok()?;
+        Some(Ok(package
+            .manifest
+            .components
+            .into_iter()
+            .map(|component| component.path)
+            .collect()))
+    }
+    fn wrap_image(&self, image: Vec<u8>) -> Result<Vec<u8>> {
+        package_selection::wrap_image(image)
+    }
+
     fn family_evidence(&self, bytes: &[u8]) -> Option<(String, String)> {
-        let package = crate::mediatek_package::Package::parse(bytes).ok();
+        let package = crate::backends::mtk::package::Package::parse(bytes).ok();
         let image = package
             .as_ref()
             .map_or(bytes, |p| p.intermediate().unwrap_or(p.firmware()));
@@ -938,7 +965,7 @@ impl FileFacet for Mtk {
     /// chip signature found anywhere else is heuristic.
     fn recognize(&self, bytes: &[u8]) -> Option<crate::backend::Recognized> {
         use crate::backend::{Confidence, Recognized};
-        if crate::mediatek_package::Package::parse(bytes).is_ok() {
+        if crate::backends::mtk::package::Package::parse(bytes).is_ok() {
             return Some(Recognized {
                 format: &PACKAGE,
                 confidence: Confidence::Structural,
@@ -963,7 +990,7 @@ impl FileFacet for Mtk {
         // banner (the chip signal) is not at a fixed offset of the archive, so
         // rebuild the flashable image first and describe that. A raw .bin is
         // described directly.
-        if let Ok(package) = crate::mediatek_package::Package::parse(image) {
+        if let Ok(package) = crate::backends::mtk::package::Package::parse(image) {
             return file_info::describe(package.firmware());
         }
         if is_legacy_archive(image) {
@@ -1054,7 +1081,7 @@ impl BackupFacet for Mtk {
 }
 
 /// Capture raw bytes through the read path the installed firmware exposes.
-fn capture_raw(dev: &mut dyn ScsiDevice) -> Result<(crate::probe::FullImage, bool)> {
+fn capture_raw(dev: &mut dyn ScsiDevice) -> Result<(crate::backends::mtk::probe::FullImage, bool)> {
     crate::output::guidance("ui.mtk_read_limits");
     if fwdump::is_freemkv(dev) {
         crate::diagnostics::record("MTK capture: drive runs freemkv firmware; reading via DumpAll");
@@ -1062,7 +1089,8 @@ fn capture_raw(dev: &mut dyn ScsiDevice) -> Result<(crate::probe::FullImage, boo
             .map(|image| (image, false))
             .context("reading the drive's firmware via the freemkv dump command")
     } else {
-        crate::probe::read_full_image_with_restriction(dev).context("reading the drive's firmware")
+        crate::backends::mtk::probe::read_full_image_with_restriction(dev)
+            .context("reading the drive's firmware")
     }
 }
 
@@ -1096,3 +1124,7 @@ impl DumpFacet for Mtk {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+pub(crate) mod routing;
+
+pub(crate) mod detection;

@@ -12,6 +12,12 @@ use super::{Backend, Confidence, FileFormat, Identity, Match, Recognized};
 use crate::backends::{mtk, pioneer};
 use crate::platform::ScsiDevice;
 
+// Compatibility exports keep the public module paths stable without teaching
+// shared consumers which backend owns their implementation.
+pub use crate::backends::catalog::{flashset, imageid};
+pub use mtk::{cmac, package as mediatek_package, probe};
+pub use pioneer::transport as pioneer_transport;
+
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
@@ -22,17 +28,7 @@ pub(crate) fn offline_routes(
 ) -> Result<crate::crossflash::Evaluation> {
     match platform {
         crate::crossflash::Platform::Pioneer => pioneer::offline_routes(installed, target),
-        crate::crossflash::Platform::Mediatek => {
-            mtk::decide_offline(installed, target)?;
-            Ok(crate::crossflash::Evaluation {
-                routes: vec![crate::crossflash::Route {
-                    native_supported: true,
-                    status: crate::crossflash::RouteStatus::Allowed,
-                    requirements: Vec::new(),
-                }],
-                reason: None,
-            })
-        }
+        crate::crossflash::Platform::Mediatek => mtk::routing::single_stage(installed, target),
     }
 }
 
@@ -87,7 +83,7 @@ pub(crate) fn resolve_detection(
         Conclusion::Detected(Evidence::Mediatek(m)) => {
             // BOOT is recognized protocol evidence, but only Recovery can bind
             // its loader. Do not offer normal Flash/Backup merely from a banner.
-            if m.identity().revision() == "BOOT" {
+            if !mtk::detection::normal_operations_available(&m) {
                 return Ok(None);
             }
             (&MTK, "validated MT19 boot protocol signature")
@@ -194,3 +190,45 @@ pub fn update_input_format(
 #[cfg(test)]
 #[path = "registry_tests.rs"]
 mod tests;
+
+/// Informational family label for unsupported or legacy formats.
+/// This evidence does not select a writer or authorize any operation.
+pub(crate) fn catalog_family(bytes: &[u8]) -> Option<&'static str> {
+    crate::backends::catalog::family(bytes)
+}
+
+/// Print the backend-owned fallback file report.
+pub(crate) fn describe_catalog_file(bytes: &[u8], require_recognized: bool) -> Result<()> {
+    crate::backends::catalog::describe(bytes, require_recognized)
+}
+
+pub(crate) fn refusal_status(
+    error: &(dyn std::error::Error + 'static),
+) -> Option<crate::crossflash::CompatibilityStatus> {
+    pioneer::routing::refusal_status(error)
+}
+pub(crate) fn unsupported_backup_layout(error: &anyhow::Error) -> bool {
+    pioneer::routing::unsupported_backup_layout(error)
+}
+pub(crate) fn input_platform(target: &[u8]) -> crate::crossflash::Platform {
+    if mtk::package::Package::parse(target).is_ok() {
+        crate::crossflash::Platform::Mediatek
+    } else if pioneer::routing::claims_platform(target) {
+        crate::crossflash::Platform::Pioneer
+    } else {
+        crate::crossflash::Platform::Mediatek
+    }
+}
+pub(crate) fn offline_evaluate(
+    platform: crate::crossflash::Platform,
+    installed: &[u8],
+    target: &[u8],
+) -> Result<crate::crossflash::Evaluation> {
+    match platform {
+        crate::crossflash::Platform::Mediatek => mtk::routing::evaluate(installed, target),
+        crate::crossflash::Platform::Pioneer => offline_routes(platform, installed, target),
+    }
+}
+
+pub(crate) use mtk::detection::probe as probe_mediatek;
+pub(crate) use pioneer::detection::probe as probe_pioneer;

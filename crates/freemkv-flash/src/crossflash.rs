@@ -59,34 +59,6 @@ pub struct Route {
     pub native_supported: bool,
 }
 
-/// Attach catalogue provenance from a codec-validated source OEM descriptor.
-/// This does not authorize an update or remove any original-hardware guard.
-pub(crate) fn bind_native_product(
-    routes: &mut [Route],
-    native: Option<pioneer_optical::production::ProductCode<'_>>,
-) {
-    for route in routes {
-        route.native_supported = route.status != RouteStatus::Future
-            && route
-                .requirements
-                .iter()
-                .all(|requirement| match requirement {
-                    RouteRequirement::OriginalHardware {
-                        platform,
-                        prefix,
-                        suffix,
-                    } => native.is_some_and(|product| {
-                        pioneer_optical::settings::routing::ProductSelector {
-                            platform,
-                            prefix: prefix.as_deref(),
-                            suffix: suffix.as_deref(),
-                        }
-                        .matches(product)
-                    }),
-                });
-    }
-}
-
 /// Catalogue route availability, separate from legacy diagnostic verdicts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -124,23 +96,8 @@ pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> C
         if let Some(refusal) = error.downcast_ref::<RouteRefusal>() {
             return refusal.status;
         }
-        if matches!(
-            error.downcast_ref::<pioneer_optical::startup::bank::Error>(),
-            Some(pioneer_optical::startup::bank::Error::ConversionRequired { .. })
-        ) {
-            return CompatibilityStatus::SoftNo;
-        }
-        if matches!(
-            error.downcast_ref::<pioneer_optical::image::KernelHandoffError>(),
-            Some(pioneer_optical::image::KernelHandoffError::Mismatch { .. })
-        ) {
-            return CompatibilityStatus::SoftNo;
-        }
-        if matches!(
-            error.downcast_ref::<pioneer_optical::settings::adaptation::Error>(),
-            Some(pioneer_optical::settings::adaptation::Error::OriginalRequired)
-        ) {
-            return CompatibilityStatus::Conditional;
+        if let Some(status) = crate::backend::registry::refusal_status(error) {
+            return status;
         }
         match error.source() {
             Some(source) => error = source,
@@ -212,65 +169,19 @@ impl Platform {
     /// Platform of a flash input: a MediaTek package or image, a Pioneer tar, or a
     /// bare Pioneer Normal `.enc`.
     pub fn of_input(target: &[u8]) -> Self {
-        let is_tar = target.get(257..262) == Some(b"ustar");
-        if crate::mediatek_package::Package::parse(target).is_ok() {
-            return Platform::Mediatek;
-        }
-        if is_tar || pioneer_optical::ident::parse_banner(target).is_some() {
-            Platform::Pioneer
-        } else {
-            Platform::Mediatek
-        }
+        crate::backend::registry::input_platform(target)
     }
 }
 
 /// Whether `flash` admits `target` on a drive whose installed firmware is
 /// `installed` (refusal reason on `Err`).
 fn evaluate(platform: Platform, installed: &[u8], target: &[u8]) -> Result<Evaluation> {
-    if platform == Platform::Mediatek {
-        let installed_package = (installed.get(257..262) == Some(b"ustar"))
-            .then(|| crate::mediatek_package::Package::parse(installed))
-            .transpose()?;
-        let target_package = (target.get(257..262) == Some(b"ustar"))
-            .then(|| crate::mediatek_package::Package::parse(target))
-            .transpose()?;
-        let installed = installed_package
-            .as_ref()
-            .map_or(installed, |p| p.firmware());
-        if let Some(package) = &target_package {
-            if let Some(intermediate) = package.intermediate() {
-                let first =
-                    crate::backend::registry::offline_routes(platform, installed, intermediate)?;
-                let second = crate::backend::registry::offline_routes(
-                    platform,
-                    intermediate,
-                    package.firmware(),
-                )?;
-                let mut reasons: Vec<_> = [first.reason, second.reason]
-                    .into_iter()
-                    .flatten()
-                    .collect();
-                reasons.sort();
-                reasons.dedup();
-                return Ok(Evaluation {
-                    routes: compose_routes(&first.routes, &second.routes),
-                    reason: (!reasons.is_empty()).then(|| reasons.join("; ")),
-                });
-            }
-            return crate::backend::registry::offline_routes(
-                platform,
-                installed,
-                package.firmware(),
-            );
-        }
-        return crate::backend::registry::offline_routes(platform, installed, target);
-    }
-    crate::backend::registry::offline_routes(platform, installed, target)
+    crate::backend::registry::offline_evaluate(platform, installed, target)
 }
 
 /// Every alternative of one stage combines with every alternative of the next.
 /// Stage prerequisites accumulate as AND; alternative combinations remain OR.
-fn compose_routes(first: &[Route], second: &[Route]) -> Vec<Route> {
+pub(crate) fn compose_routes(first: &[Route], second: &[Route]) -> Vec<Route> {
     let mut routes = Vec::new();
     for a in first {
         for b in second {
@@ -671,3 +582,6 @@ mod platform_tests {
         assert_eq!(Platform::of_input(&tar), Platform::Pioneer);
     }
 }
+
+#[cfg(test)]
+use crate::backends::pioneer::routing::bind_native_product;

@@ -52,7 +52,8 @@ impl RecoveryFacet for Mtk {
                     crate::diagnostics::record("MediaTek BOOT recovery: using live boot receiver evidence; Current application reference is not used for receiver binding");
                     recovery::Receiver::identify(&mut reads)
                 } else {
-                    recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
+                    recovery::Receiver::identify_user_supplied_reference(&mut reads, &envelope)
+                        .map(Some)
                 }
             }
             None => recovery::Receiver::identify(&mut reads),
@@ -82,7 +83,12 @@ impl RecoveryFacet for Mtk {
             result => result
                 .map_err(|error| {
                     use mediatek_optical::CodedError;
-                    let issue = crate::user_error::IssueCode::from(error.kind());
+                    let issue = match &error {
+                        recovery::Error::Reference(error) => {
+                            super::receiver_reference::issue(error)
+                        }
+                        _ => crate::user_error::IssueCode::from(error.kind()),
+                    };
                     anyhow::Error::new(error).context(issue)
                 })
                 .map(|receiver| {
@@ -135,9 +141,9 @@ impl RecoveryFacet for Mtk {
         crate::output::field(
             "Receiver code source",
             if plan.plan().receiver().provenance()
-                == mediatek_optical::receiver::reference::Provenance::CurrentReference
+                == mediatek_optical::receiver::reference::Provenance::UserSuppliedReference
             {
-                "Selected Current file; live identity and build metadata matched"
+                "User-supplied Current file; its match to the installed firmware has not been verified"
             } else {
                 "Live drive reads"
             },

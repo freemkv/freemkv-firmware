@@ -548,7 +548,7 @@ pub(crate) fn offline_routes(
     let native = native_header
         .as_ref()
         .and_then(|h| pioneer_optical::production::ProductCode::parse(&h.model));
-    crate::crossflash::bind_native_product(&mut evaluation.routes, native);
+    routing::bind_native_product(&mut evaluation.routes, native);
     Ok(evaluation)
 }
 
@@ -1344,3 +1344,10 @@ mod prepared_tests;
 pub(crate) fn test_oem_recovery_package(vendor: &str) -> Vec<u8> {
     recovery::tests::oem_recovery_package(vendor)
 }
+
+/// Pioneer read and identity sequences.
+pub mod transport;
+
+pub(crate) mod routing;
+
+pub(crate) mod detection;

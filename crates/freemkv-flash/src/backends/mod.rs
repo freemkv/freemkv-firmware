@@ -3,3 +3,6 @@
 
 pub mod mtk;
 pub mod pioneer;
+
+/// Offline historical catalog; never participates in protocol detection.
+pub mod catalog;

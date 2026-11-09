@@ -1,7 +1,7 @@
 //! `info <file>` for a MediaTek MT19xx image: chip, descriptor, capability,
 //! flash tier and AES-CMAC integrity.
 
-use crate::cmac;
+use crate::backends::mtk::cmac;
 use crate::style::{self, ident_or_unknown};
 
 /// AES-CMAC integrity summary for a firmware image.
@@ -26,7 +26,10 @@ pub(crate) struct FileClass {
     /// unrecognized).
     pub capability: Option<freemkv_chipset::Capability>,
     /// This tool's flash recipe for the family — `(name, tier)` — if any.
-    pub flash: Option<(&'static str, crate::flashset::FlashStatus)>,
+    pub flash: Option<(
+        &'static str,
+        crate::backends::catalog::flashset::FlashStatus,
+    )>,
     /// CMAC integrity of the image bytes.
     pub cmac: CmacSummary,
 }
@@ -39,7 +42,7 @@ pub(crate) fn classify_file(image: &[u8]) -> FileClass {
         .map(|c| freemkv_chipset::capability_for(&c.model, c.family));
     // Both MT1959 and MT1939 are MediaTek silicon → the MediaTek recipe.
     let flash = chip.as_ref().map(|_| {
-        let set = crate::flashset::FlashInstructionSet::mt1959();
+        let set = crate::backends::catalog::flashset::FlashInstructionSet::mt1959();
         (set.name, set.status)
     });
     let cmac = match cmac::verify_detailed(image) {
@@ -147,7 +150,7 @@ pub(crate) fn describe(image: &[u8]) -> Option<anyhow::Result<()>> {
         }
         None => format!(
             "not flashable by this tool ({} brand recipes catalogued)",
-            crate::flashset::CATALOG.len()
+            crate::backends::catalog::flashset::CATALOG.len()
         ),
     };
     println!("{}", style::kv("flash", &flash));

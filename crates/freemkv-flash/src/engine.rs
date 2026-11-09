@@ -24,8 +24,6 @@ use crate::user_error::{explain, IssueCode};
 
 pub(crate) mod backup;
 pub mod gates;
-#[cfg(test)]
-use crate::backends::mtk::backup::BackupArtifact;
 use backup::save_backup;
 
 /// Run the `info` command: identify + classify (read-only). `drive` is the
@@ -245,57 +243,7 @@ fn inspect_file(path: &Path, require_recognized: bool) -> Result<()> {
             return report;
         }
     }
-    let identity = crate::imageid::identify(&image);
-    if require_recognized && identity.family == crate::imageid::ImageFamily::Unknown {
-        return Err(
-            anyhow::anyhow!("selected file has no recognized firmware format")
-                .context(IssueCode::FirmwareInvalid),
-        );
-    }
-    info_file_other(&identity)
-}
-
-/// Report a firmware FILE that is NOT MediaTek MT19xx: a non-MTK family found by
-/// the signature layer ([`crate::imageid`]), or an honest "unknown". Prints the
-/// family, any model/rev extracted from the image (never the filename), the
-/// honest flashability (offline planning is available for selected Pioneer
-/// updater paths), and states
-/// that these families carry no MT19xx-style signed CMAC table — so `info` never
-/// prints INVALID for an image that simply has no integrity table.
-fn info_file_other(id: &crate::imageid::ImageIdentity) -> Result<()> {
-    use crate::imageid::ImageFamily;
-    if id.family == ImageFamily::Unknown {
-        println!(
-            "{}",
-            style::kv(
-                "image",
-                &style::amber(
-                    "unrecognized — no known drive-family signature (truncated, packed, or an \
-                     unsupported family)"
-                )
-            )
-        );
-        return Ok(());
-    }
-    println!("{}", style::kv("family", id.family.label()));
-    let model = id.model.as_deref().unwrap_or("unknown (not in image)");
-    let rev = id.rev.as_deref().unwrap_or("unknown");
-    println!(
-        "{}",
-        style::kv("descriptor", &format!("model='{model}' rev='{rev}'"))
-    );
-    if let Some(note) = &id.note {
-        println!("{}", style::dim_line(&format!("          {note}")));
-    }
-    println!("{}", style::kv("flash", &id.family.flash_summary()));
-    println!(
-        "{}",
-        style::kv(
-            "integrity",
-            &style::amber("not applicable (this family has no MT19xx-style signed CMAC table)")
-        )
-    );
-    Ok(())
+    crate::backend::registry::describe_catalog_file(&image, require_recognized)
 }
 
 /// Capture a complete firmware and per-unit rollback artifact. Any unreadable

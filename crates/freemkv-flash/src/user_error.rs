@@ -359,10 +359,7 @@ impl UserError {
                 error.downcast_ref::<IssueCode>(),
                 Some(IssueCode::BackupFailed)
             ))
-            && matches!(
-                error.downcast_ref::<pioneer_optical::envelope::NormalLayoutError>(),
-                Some(pioneer_optical::envelope::NormalLayoutError::Unsupported)
-            )
+            && crate::backend::registry::unsupported_backup_layout(error)
         {
             "errors.backup_layout_unsupported"
         } else if let Some(code) = error.downcast_ref::<IssueCode>() {

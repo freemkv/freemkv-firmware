@@ -313,7 +313,7 @@ fn text_omits_the_family_line_mediatek_does_not_derive() {
 #[test]
 fn known_mtk_inspect_release_package_uses_final_firmware_and_archive_digest() {
     use crate::backend::InspectFacet;
-    use crate::mediatek_package::{digest, Component, Manifest, Package, Role, FORMAT};
+    use crate::backends::mtk::package::{digest, Component, Manifest, Package, Role, FORMAT};
     let image = stock();
     for paired in [false, true] {
         let mut members = std::collections::BTreeMap::from([("final.bin".into(), image.clone())]);

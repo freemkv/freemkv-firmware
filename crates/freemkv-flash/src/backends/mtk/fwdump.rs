@@ -17,8 +17,8 @@
 
 use anyhow::Result;
 
+use crate::backends::mtk::probe::FullImage;
 use crate::platform::ScsiDevice;
-use crate::probe::FullImage;
 use mediatek_optical::layout::IMAGE_SIZE;
 
 /// `READ BUFFER` opcode the injected handler hijacks (`abi::READ_BUFFER_OPCODE`).
@@ -87,7 +87,7 @@ const DEAD_WINDOWS: usize = 64;
 
 /// Read the full 2 MiB firmware image through the injected `DumpAll` command
 /// (flash is mapped at address 0). Returns the same `(image, readable, gaps)`
-/// shape as [`crate::probe::FullImage`] so the caller validates it
+/// shape as [`crate::backends::mtk::probe::FullImage`] so the caller validates it
 /// identically. Any 64-byte window the drive will not return is `0xFF`-filled
 /// and recorded as a gap. Read-only.
 pub(crate) fn capture_full_image(dev: &mut dyn ScsiDevice) -> Result<FullImage> {

@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use super::crossflash::ensure_image_matches_drive;
 use super::UserDump;
 use crate::backend::{Backend, BackupNotice, ReadDevice};
-use crate::cmac;
+use crate::backends::mtk::cmac;
 
 /// A 0.10.x MTK rollback archive (`backup.toml` + raw `firmware.bin` + per-unit
 /// files). Still accepted for restore; new backups are OEM-format images.

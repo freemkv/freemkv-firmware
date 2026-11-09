@@ -63,7 +63,7 @@ pub enum InspectionError {
     UnrecognizedFormat,
     /// Different provider formats cannot currently be compared.
     UnsupportedPair,
-    /// A Pioneer envelope must be supplied in its package.
+    /// The firmware component must be supplied in its complete package.
     PackageRequired,
     /// The caller cancelled.
     Cancelled,
@@ -94,9 +94,9 @@ impl std::fmt::Display for InspectionError {
             Self::UnsupportedPair => {
                 f.write_str("These firmware formats cannot currently be compared.")
             }
-            Self::PackageRequired => f.write_str(
-                "For Pioneer inspection, select the TAR package containing the firmware.",
-            ),
+            Self::PackageRequired => {
+                f.write_str("Select the complete update package containing this firmware.")
+            }
             Self::Cancelled => f.write_str("Firmware analysis cancelled."),
             Self::TwoDrives => {
                 f.write_str("Select two firmware files, or one firmware file and one drive.")
@@ -178,11 +178,9 @@ fn inspect_bytes(name: String, bytes: &[u8], control: &Control) -> Result<Inspec
         bytes.get(257..262) != Some(b"ustar"),
         "TAR archive is damaged or contains no supported firmware package"
     );
-    let identity = crate::imageid::identify(bytes);
-    Err(if identity.family == crate::imageid::ImageFamily::Unknown {
-        InspectionError::UnrecognizedFormat
-    } else {
-        InspectionError::UnsupportedFormat(identity.family.label().into())
+    Err(match registry::catalog_family(bytes) {
+        Some(family) => InspectionError::UnsupportedFormat(family.into()),
+        None => InspectionError::UnrecognizedFormat,
     }
     .into())
 }

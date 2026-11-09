@@ -1,104 +1,78 @@
-//! Package member selection for recovery front ends.
+//! Package operations dispatched through registered backend file facets.
 use anyhow::{Context, Result};
 
-/// Select exactly one MediaTek member; other backend packages remain intact.
+/// Select a recovery member according to the owning backend's package contract.
 pub fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<u8>> {
-    if input.get(257..262) != Some(b"ustar") {
-        anyhow::ensure!(
-            member.is_none(),
-            anyhow::anyhow!("--member requires a TAR package")
-                .context(crate::user_error::IssueCode::CommandOptions)
-        );
-        let (_, recognized) = crate::backend::registry::recognize(input)?
-            .context("unrecognized update input; select a MediaTek BIN or firmware TAR package")?;
-        recognized.format.ensure_update_input()?;
-        return Ok(input.to_vec());
-    }
-    // Recognize the manifest discriminator, without accepting malformed MTK
-    // packages as another backend's input.
-    let mut archive = tar::Archive::new(input);
-    let mut mediatek = false;
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        if entry.path()?.as_ref() == std::path::Path::new("manifest.json") {
-            use std::io::Read;
-            let mut data = Vec::new();
-            entry.by_ref().take(1024 * 1024).read_to_end(&mut data)?;
-            let manifest: serde_json::Value = serde_json::from_slice(&data)?;
-            mediatek = manifest["format"] == crate::mediatek_package::FORMAT;
+    for backend in crate::backend::registry::backends() {
+        if let Some(result) = backend
+            .files()
+            .and_then(|files| files.recovery_package(input, member))
+        {
+            return result;
         }
     }
-    if mediatek {
-        let package = crate::mediatek_package::Package::parse(input)?;
-        let components = &package.manifest.components;
-        let selected = match member {
-            Some(path) => components
-                .iter()
-                .position(|c| c.path == path)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("unknown recovery member {path}")
-                        .context(crate::user_error::IssueCode::CommandOptions)
-                })?,
-            None if components.len() == 1 => 0,
-            None => {
-                return Err(anyhow::anyhow!(
-                    "choose exactly one recovery member with --member: {}",
-                    components
-                        .iter()
-                        .map(|c| c.path.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-                .context(crate::user_error::IssueCode::CommandOptions))
-            }
-        };
-        return Ok(
-            if components[selected].role == crate::mediatek_package::Role::Intermediate {
-                package.intermediate().expect("validated intermediate")
-            } else {
-                package.firmware()
-            }
-            .to_vec(),
-        );
-    }
-    if member.is_some() {
-        return Err(
-            anyhow::anyhow!("--member is only supported for MediaTek release packages")
-                .context(crate::user_error::IssueCode::CommandOptions),
-        );
+    anyhow::ensure!(
+        member.is_none(),
+        anyhow::anyhow!("--member is not supported for this input")
+            .context(crate::user_error::IssueCode::CommandOptions)
+    );
+    if input.get(257..262) != Some(b"ustar") {
+        let (_, recognized) = crate::backend::registry::recognize(input)?
+            .context("unrecognized update input; select a supported firmware image or package")?;
+        recognized.format.ensure_update_input()?;
     }
     Ok(input.to_vec())
 }
 
 /// Selectable recovery members; non-selectable backend packages return none.
 pub fn recovery_members(input: &[u8]) -> Result<Vec<String>> {
-    if let Ok(package) = crate::mediatek_package::Package::parse(input) {
-        return Ok(package
-            .manifest
-            .components
-            .into_iter()
-            .map(|c| c.path)
-            .collect());
+    for backend in crate::backend::registry::backends() {
+        if let Some(members) = backend
+            .files()
+            .and_then(|files| files.recovery_members(input))
+        {
+            return members;
+        }
     }
     Ok(Vec::new())
 }
 
-/// Optionally wrap a standalone final image or saved BIN backup as a TAR.
-/// No intermediate relationship is invented by this conversion.
+/// Wrap a standalone image using its backend's release package contract.
 pub fn wrap_image(image: Vec<u8>) -> Result<Vec<u8>> {
-    use crate::mediatek_package::{digest, Component, Manifest, Package, Role, FORMAT};
-    use std::collections::BTreeMap;
-    crate::crossflash::admits(crate::crossflash::Platform::Mediatek, &image, &image)?;
-    let manifest = Manifest {
-        format: FORMAT.into(),
-        version: 1,
-        components: vec![Component {
-            path: "firmware.bin".into(),
-            sha256: digest(&image),
-            role: Role::Firmware,
-        }],
-        pairing: None,
-        metadata: BTreeMap::new(),
-    };
-    Package::from_parts(manifest, BTreeMap::from([("firmware.bin".into(), image)]))?.encode()
+    let (backend, _) =
+        crate::backend::registry::recognize(&image)?.context("unrecognized firmware image")?;
+    backend
+        .files()
+        .context("backend has no file support")?
+        .wrap_image(image)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn malformed_owned_package_retains_backend_validation_error() {
+        let manifest = br#"{"format":"freemkv-mediatek-package","version":99,"components":[]}"#;
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(manifest.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "manifest.json", &manifest[..])
+            .unwrap();
+        let bytes = builder.into_inner().unwrap();
+        assert_eq!(
+            recovery_target(&bytes, None).unwrap_err().to_string(),
+            "unsupported MediaTek release package"
+        );
+    }
+
+    #[test]
+    fn member_selection_cannot_be_applied_to_an_unowned_input() {
+        let error = recovery_target(&[0; 512], Some("firmware.bin")).unwrap_err();
+        assert!(error.is::<crate::user_error::IssueCode>());
+        assert!(recovery_members(&[0; 512]).unwrap().is_empty());
+    }
 }

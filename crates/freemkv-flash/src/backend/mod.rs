@@ -92,7 +92,7 @@ impl FileFormat {
         anyhow::ensure!(
             self.update_input,
             anyhow::anyhow!(
-                "{} is inspection-only; use a TAR package for Pioneer updates",
+                "{} is inspection-only; select a supported update package",
                 self.label
             )
             .context(crate::user_error::IssueCode::UnsupportedFirmware)
@@ -485,6 +485,19 @@ pub struct Recognized {
 
 /// File recognition and description.
 pub trait FileFacet {
+    /// Select a member if this backend owns the package, retaining parse errors.
+    fn recovery_package(&self, _bytes: &[u8], _member: Option<&str>) -> Option<Result<Vec<u8>>> {
+        None
+    }
+    /// Enumerate members of a selectable recovery package.
+    fn recovery_members(&self, _bytes: &[u8]) -> Option<Result<Vec<String>>> {
+        None
+    }
+    /// Convert a standalone image to this backend's release package.
+    fn wrap_image(&self, _image: Vec<u8>) -> Result<Vec<u8>> {
+        anyhow::bail!("this firmware format does not support image wrapping")
+    }
+
     /// Offline family evidence for an early refusal when Current is supplied.
     /// Missing evidence leaves the complete admission checks mandatory.
     fn family_evidence(&self, _bytes: &[u8]) -> Option<(String, String)> {

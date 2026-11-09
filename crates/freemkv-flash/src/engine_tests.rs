@@ -1,6 +1,7 @@
 //! Unit tests for [`super`] (the generic engine: flash flow + safety gate).
 
 use super::*;
+use crate::backends::mtk::backup::BackupArtifact;
 
 #[test]
 fn required_info_identity_failure_is_not_presented_as_an_unsupported_drive() {

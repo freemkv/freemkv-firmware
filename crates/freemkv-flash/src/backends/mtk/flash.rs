@@ -150,7 +150,7 @@ impl FlashFacet for Mtk {
         .map(|line| PlanLine::Detail(Box::new(line)))
         .collect();
         if req.current.is_some() {
-            block.push(PlanLine::Field("receiver code source", "Selected Current firmware; live identity and build metadata matched. Live receiver code was not compared.".into()));
+            block.push(PlanLine::Field("receiver code source", "Using your selected Current firmware to choose the transfer format. Its match to the installed firmware has not been verified.".into()));
         }
         if verdict == Verdict::Crossflash {
             block.extend(crossflash_lines(&live, &image)?);

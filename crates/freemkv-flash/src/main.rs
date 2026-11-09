@@ -56,13 +56,12 @@ enum Command {
         /// firmware image file. Omit to auto-pick the only connected drive.
         device: Option<String>,
     },
-    /// Capture firmware. Pioneer output is byte-exact OEM where recognized, else a
-    /// clearly-labeled non-OEM candidate (zeroed signature).
+    /// Capture supported firmware and report its origin and restore eligibility.
     Backup {
         /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`).
         /// Omit to auto-pick the only connected drive.
         device: Option<String>,
-        /// Output path (MediaTek `.bin`; Pioneer defaults to `<model>_<rev>.candidate.tar`).
+        /// Output path (otherwise chosen automatically for the supported format).
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
@@ -83,15 +82,7 @@ enum Command {
     Package { input: PathBuf, output: PathBuf },
     /// Flash firmware or roll back firmware from a supported backup (WRITE).
     Flash(FlashArgs),
-    /// Recover a Pioneer drive using Current firmware or an explicit drive read.
-    ///
-    /// EXPERIMENTAL: when the drive's installed Kernel is a different receiver
-    /// class than the target package (a drive stuck after a same-hardware
-    /// crossflash), recover re-encodes the target Normal into the installed
-    /// Kernel's receive transport so its loader decodes it to the identical,
-    /// byte-identical-OEM body. This is proven OFFLINE only; it is not yet
-    /// proven on hardware, stays recover-only for now, and is intended to move
-    /// into `flash` in a later release once proven on hardware.
+    /// Recover using supplied Current firmware or an explicit drive read where supported.
     Recover(RecoveryArgs),
 }
 
@@ -116,7 +107,7 @@ FLASH WORKFLOW:
 
 Do not power off or disconnect the drive during step 5.")]
 struct FlashArgs {
-    /// Installed MediaTek firmware, if automatic receiver detection is unavailable.
+    /// Select Current firmware when automatic receiver detection is unavailable.
     #[arg(long, conflicts_with = "read_from_drive")]
     current: Option<PathBuf>,
     /// Exact installed member of a paired Current TAR (e.g. firmware.bin).
@@ -128,8 +119,7 @@ struct FlashArgs {
     /// Drive name or id from `list` (e.g. `E:` or `\\.\CdRom1`).
     /// Omit to auto-pick the only connected drive.
     device: Option<String>,
-    /// Input: MediaTek BIN or TAR package/backup; Pioneer TAR package.
-    /// Pioneer inputs are dry-run by default; live writes need --execute --i-understand-risk and a pre-flash backup.
+    /// Firmware image, release package, or supported backup.
     #[arg(short, long)]
     input: PathBuf,
     /// Where to save the required pre-flash backup (otherwise chosen automatically).
@@ -145,12 +135,12 @@ struct FlashArgs {
 
 #[derive(clap::Args, Debug)]
 struct RecoveryArgs {
-    /// Exact member to flash from a paired MediaTek package.
+    /// Exact firmware member to recover from a paired package.
     #[arg(long)]
     member: Option<String>,
     /// Drive name or id from list; omitted when only one drive is connected.
     device: Option<String>,
-    /// Target MediaTek image or Pioneer package containing Kernel and Normal.
+    /// Target firmware image or update package.
     #[arg(short, long)]
     input: PathBuf,
     /// Copy of the firmware currently running on the drive.

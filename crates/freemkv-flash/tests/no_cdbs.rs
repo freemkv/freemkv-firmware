@@ -42,6 +42,7 @@ fn backend_sources(root: &Path) -> Vec<PathBuf> {
             if name.ends_with(".rs")
                 && !name.ends_with("_tests.rs")
                 && name != "fwdump.rs"
+                && !path.ends_with("src/backends/mtk/probe.rs")
                 && (name.starts_with("pioneer") || in_backend_dir || path.ends_with(ADAPTER))
             {
                 out.push(path);

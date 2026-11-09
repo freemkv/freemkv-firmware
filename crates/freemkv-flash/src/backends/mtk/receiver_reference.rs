@@ -1,4 +1,4 @@
-//! Explicit file-derived receiver evidence; transport always reads the drive.
+//! User-supplied receiver instructions; physical session evidence stays separate.
 #[cfg(test)]
 use anyhow::ensure;
 use anyhow::Result;
@@ -7,6 +7,21 @@ use mediatek_optical::drive::Transport;
 #[cfg(test)]
 use mediatek_optical::{cdb, layout};
 use mediatek_optical::{envelope::Envelope, receiver};
+
+pub(super) fn issue<E>(error: &receiver::reference::Error<E>) -> crate::user_error::IssueCode {
+    use mediatek_optical::CodedError;
+    match error {
+        receiver::reference::Error::Session(
+            receiver::Error::Changed | receiver::Error::InvalidIdentity,
+        ) => crate::user_error::IssueCode::DriveChanged,
+        _ => match error.kind() {
+            mediatek_optical::operation::IssueKind::InvalidFirmware => {
+                crate::user_error::IssueCode::CurrentInvalid
+            }
+            kind => crate::user_error::IssueCode::from(kind),
+        },
+    }
+}
 
 pub(super) fn detect(
     dev: &mut crate::backend::ReadDevice<'_>,
@@ -19,20 +34,15 @@ pub(super) fn detect(
     })?;
     let shared = crate::transport::SharedDevice::new(dev);
     let mut live = crate::transport::ScsiTransport::reads(&shared);
-    let receiver = receiver::reference::detect(&mut live, &envelope).map_err(|error| {
-        use mediatek_optical::CodedError;
-        let issue = match error.kind() {
-            mediatek_optical::operation::IssueKind::InvalidFirmware => {
-                crate::user_error::IssueCode::CurrentInvalid
-            }
-            kind => crate::user_error::IssueCode::from(kind),
-        };
-        anyhow::Error::new(error)
-            .context("Current image receiver analysis failed")
-            .context(issue)
-    })?;
+    let receiver =
+        receiver::reference::detect_user_supplied(&mut live, &envelope).map_err(|error| {
+            let issue = issue(&error);
+            anyhow::Error::new(error)
+                .context("Current image receiver analysis failed")
+                .context(issue)
+        })?;
     crate::diagnostics::record(format!(
-        "MediaTek receiver source: explicit Current image sha256={}; live identity and build metadata match; receiver code is file-derived",
+        "MediaTek receiver source: user-supplied Current image sha256={}; file-to-drive identity was not verified; physical session metadata captured independently",
         crate::mediatek_package::digest(envelope.image())
     ));
     Ok(receiver)
@@ -155,19 +165,29 @@ mod tests {
         assert!(reference.revalidate(&mut live).is_err());
         live.image[layout::DESCRIPTOR.start + 0x56] = 0xff;
         live.image[layout::DESCRIPTOR.start + 0x40] ^= 1;
-        assert!(detect_device(&mut live, &current).is_err());
+        assert!(reference.revalidate(&mut live).is_err());
+        detect_device(&mut live, &current).unwrap();
         assert_eq!(live.writes, 0);
     }
 
     #[test]
-    fn stale_current_reference_is_rejected_and_revalidated() {
+    fn user_reference_metadata_is_independent_of_the_strict_live_snapshot() {
         let image = image();
         let mut live = Restricted {
             image: image.clone(),
             writes: 0,
         };
-        let reference =
-            receiver::reference::detect(&mut live, &Envelope::load(&image).unwrap()).unwrap();
+        let descriptor = layout::DESCRIPTOR.start;
+        live.image[descriptor + 8..descriptor + 24].copy_from_slice(b"BD-RE BH16NS60  ");
+        live.image[descriptor + 24..descriptor + 28].copy_from_slice(b"1.01");
+        live.image[descriptor + 0x1c..descriptor + 0x24].copy_from_slice(b"N999999 ");
+        live.image[descriptor + 0x40] ^= 1;
+        let reference = detect_device(&mut live, &image).unwrap();
+        assert_eq!(
+            reference.provenance(),
+            receiver::reference::Provenance::UserSuppliedReference
+        );
+        reference.revalidate(&mut live).unwrap();
         live.image[layout::DESCRIPTOR.start + 24..layout::DESCRIPTOR.start + 28]
             .copy_from_slice(b"1.V1");
         assert!(reference
@@ -175,12 +195,21 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("changed"));
+        assert_eq!(live.writes, 0);
+    }
+    #[test]
+    fn user_reference_requires_a_live_application_without_claiming_a_file_mismatch() {
+        let image = image();
+        let mut live = Restricted {
+            image: image.clone(),
+            writes: 0,
+        };
+        live.image[layout::DESCRIPTOR.start + 24..layout::DESCRIPTOR.start + 28]
+            .copy_from_slice(b"BOOT");
         let error = detect_device(&mut live, &image).unwrap_err();
-        let error =
-            crate::user_error::explain(error, crate::user_error::IssueCode::FirmwareInvalid);
         assert_eq!(
             crate::workflow::user_error(&error).id,
-            "errors.current_mismatch"
+            "errors.drive_changed"
         );
         assert_eq!(live.writes, 0);
     }
@@ -226,7 +255,7 @@ mod tests {
         let receiver = detect_device(&mut live, &image).unwrap();
         assert_eq!(
             receiver.provenance(),
-            receiver::reference::Provenance::CurrentReference
+            receiver::reference::Provenance::UserSuppliedReference
         );
         let shared = crate::transport::SharedDevice::new(&mut live);
         let mut reads = crate::transport::ScsiTransport::reads(&shared);

@@ -319,7 +319,7 @@ pub(super) fn retain_handoff_bridges(plan: &PreparedUpdate) -> Result<()> {
         crate::diagnostics::record(format!(
             "Prepared bridge: stage={} package_sha256={}",
             index + 1,
-            crate::mediatek_package::digest(&bytes)
+            crate::backends::mtk::package::digest(&bytes)
         ));
     }
     Ok(())

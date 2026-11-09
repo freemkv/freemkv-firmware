@@ -763,6 +763,8 @@ fn read_grant_patterns_come_only_from_backends() {
 /// The SCSI device layer: the trait, its implementations and wrappers, and
 /// the transport bridge. Everything above it writes through a grant.
 const DEVICE_LAYER: &[&str] = &[
+    // Existing read/identity sequences moved out of the shared adapter.
+    "src/backends/pioneer/transport.rs",
     "src/platform/",
     "src/transport.rs",
     "src/backend/device.rs",
