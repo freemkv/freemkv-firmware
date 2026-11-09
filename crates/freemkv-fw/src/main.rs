@@ -827,9 +827,11 @@ fn cmd_create_configured(
         let outcome = api::create_with_defaults(&image, &settings.defaults)
             .context("building freemkv BASE firmware")?;
         let support = BootSupport::from_create(&outcome.report);
-        let report_json = settings
-            .defaults
-            .report_json(&support, &base_report_json(&outcome));
+        let report_json = settings.defaults.report_json(
+            &support,
+            freemkv_fw::qualification::uhd_for_image(outcome.image()),
+            &base_report_json(&outcome),
+        );
         diagnostics::record(&report_json);
         if !settings.dry_run {
             diagnostics::write(&out_path, &artifact.output(outcome.image().to_vec())?)
@@ -859,7 +861,11 @@ fn cmd_create_configured(
     ));
     let (report, support) = api::modify_with_defaults(&image, &settings.defaults)
         .context("building freemkv firmware")?;
-    let report_json = settings.defaults.report_json(&support, &report.to_json());
+    let report_json = settings.defaults.report_json(
+        &support,
+        freemkv_fw::qualification::uhd_for_image(&report.image),
+        &report.to_json(),
+    );
     diagnostics::record(&report_json);
 
     // Zero levers Applied: refuse and write nothing. `--json` still emits the

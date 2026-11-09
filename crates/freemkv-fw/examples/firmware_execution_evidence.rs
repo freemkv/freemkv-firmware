@@ -114,7 +114,11 @@ fn main() -> Result<()> {
         &report.image,
     )?;
     let mut serialized: Value =
-        serde_json::from_str(&defaults.report_json(&support, &report.to_json()))?;
+        serde_json::from_str(&defaults.report_json(
+            &support,
+            freemkv_fw::qualification::uhd_for_image(&report.image),
+            &report.to_json(),
+        ))?;
     let facts: std::collections::BTreeMap<_, _> = report
         .levers
         .iter()

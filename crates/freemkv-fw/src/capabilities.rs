@@ -33,22 +33,27 @@ pub fn report_json(image: &[u8]) -> String {
         Ok((report, support))
     });
     let (status, report, reason, detail, output) = match result {
-        Ok((report, support)) => (
-            if report.applied_count() > 0 {
-                "supported"
-            } else {
-                "unchanged"
-            },
-            defaults.report_json(&support, &report.to_json()),
-            "null".to_string(),
-            "null".to_string(),
-            jstr(
-                &Sha256::digest(&report.image)
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>(),
-            ),
-        ),
+        Ok((report, support)) => {
+            let output_sha = Sha256::digest(&report.image)
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>();
+            (
+                if report.applied_count() > 0 {
+                    "supported"
+                } else {
+                    "unchanged"
+                },
+                defaults.report_json(
+                    &support,
+                    crate::qualification::uhd_for(&output_sha),
+                    &report.to_json(),
+                ),
+                "null".to_string(),
+                "null".to_string(),
+                jstr(&output_sha),
+            )
+        }
         Err(error) => {
             let issue = freemkv_flash::workflow::user_error(&error);
             (
@@ -79,10 +84,12 @@ mod tests {
         );
         assert_eq!(result["status"], "supported");
         assert_eq!(result["identity"]["chip"], "MT1959");
-        assert_eq!(
-            result["report"]["boot_settings"]["unrestricted"]["choices"],
-            serde_json::json!(["oem", "on", "off"])
-        );
+        // UHD is not hardware-confirmed for this image, so the unlock is not
+        // advertised: no "on" choice, supported:false, qualification recorded.
+        let unrestricted = &result["report"]["boot_settings"]["unrestricted"];
+        assert_eq!(unrestricted["choices"], serde_json::json!(["oem", "off"]));
+        assert_eq!(unrestricted["supported"], false);
+        assert_eq!(unrestricted["qualification"], "applies-unproven");
         let raw = result["report"]["levers"]
             .as_array()
             .unwrap()

@@ -182,21 +182,49 @@ impl BootSettings {
         Ok(())
     }
     /// Add the full boot report to an existing JSON object.
-    pub fn report_json(&self, support: &BootSupport, report: &str) -> String {
+    ///
+    /// `uhd` is how sure we are the UHD unlock works on hardware. Applying the
+    /// patch is not proof, so `unrestricted` is advertised as supported (and
+    /// offers the "on" choice) only when it is hardware-confirmed; otherwise it
+    /// reports `supported:false` and carries a `qualification` field so a
+    /// consumer can surface it as experimental rather than as working UHD.
+    pub fn report_json(
+        &self,
+        support: &BootSupport,
+        uhd: crate::qualification::UhdQualification,
+        report: &str,
+    ) -> String {
+        use crate::qualification::UhdQualification;
         let fields = BootFeature::ALL
             .into_iter()
             .map(|f| {
+                // Only a hardware-confirmed UHD unlock is advertised as working.
+                let confirmed = uhd == UhdQualification::HardwareConfirmed;
+                let gated = f == BootFeature::Unrestricted && !confirmed;
+                let supported = support.supports(f) && !gated;
+                let choices = f
+                    .choices()
+                    .iter()
+                    .filter(|(_, _, v)| support.supports_value(f, *v))
+                    // Withhold the UHD-enabling "on" choice until it is proven.
+                    .filter(|(_, _, v)| !(gated && *v == 1))
+                    .map(|(key, _, _)| format!("\"{key}\""))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let qualification = if f == BootFeature::Unrestricted {
+                    let state = if !support.supports(f) {
+                        UhdQualification::Unavailable
+                    } else {
+                        uhd
+                    };
+                    format!(",\"qualification\":\"{}\"", state.label())
+                } else {
+                    String::new()
+                };
                 format!(
-                    "\"{}\":{{\"value\":\"{}\",\"supported\":{},\"choices\":[{}]}}",
+                    "\"{}\":{{\"value\":\"{}\",\"supported\":{supported},\"choices\":[{choices}]{qualification}}}",
                     f.key(),
                     self.value(f),
-                    support.supports(f),
-                    f.choices()
-                        .iter()
-                        .filter(|(_, _, v)| support.supports_value(f, *v))
-                        .map(|(key, _, _)| format!("\"{key}\""))
-                        .collect::<Vec<_>>()
-                        .join(",")
                 )
             })
             .collect::<Vec<_>>()

@@ -120,7 +120,11 @@ pub fn execute(job: &Job) -> Result<()> {
                         },
                     );
                 }
-                diagnostics::record(defaults.report_json(&support, &report.to_json()));
+                diagnostics::record(defaults.report_json(
+                    &support,
+                    freemkv_fw::qualification::uhd_for_image(&report.image),
+                    &report.to_json(),
+                ));
                 field(
                     "Verification",
                     message(

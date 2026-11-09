@@ -52,9 +52,15 @@ fn wh_auth_hook_exposes_and_roundtrips_all_three_proven_choices() {
             .value(BootFeature::Unrestricted),
         "oem"
     );
-    assert!(BootSettings::standard()
-        .report_json(&support, "{}")
-        .contains("\"choices\":[\"oem\",\"on\",\"off\"]"));
+    use crate::qualification::UhdQualification;
+    // Unproven UHD is not advertised: no "on" choice, supported:false, and an
+    // explicit qualification. A hardware-confirmed image offers the full set.
+    let unproven =
+        BootSettings::standard().report_json(&support, UhdQualification::AppliesUnproven, "{}");
+    assert!(unproven.contains("\"unrestricted\":{\"value\":\"on\",\"supported\":false,\"choices\":[\"oem\",\"off\"],\"qualification\":\"applies-unproven\"}"));
+    let confirmed =
+        BootSettings::standard().report_json(&support, UhdQualification::HardwareConfirmed, "{}");
+    assert!(confirmed.contains("\"unrestricted\":{\"value\":\"on\",\"supported\":true,\"choices\":[\"oem\",\"on\",\"off\"],\"qualification\":\"hardware-confirmed\"}"));
 }
 
 #[test]

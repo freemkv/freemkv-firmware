@@ -26,6 +26,7 @@ pub mod artifact;
 
 /// Shared boot settings for authoring and desktop controls.
 pub mod boot;
+pub mod qualification;
 
 #[cfg(test)]
 mod mt1939_modify_tests;
