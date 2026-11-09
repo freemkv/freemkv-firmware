@@ -26,10 +26,11 @@ const DE_OFF_IN_DESCRIPTOR: usize = 0x56;
 /// Classic-generation VID producer raw-read gate (`cmp auth_state,#6; bne <deny>`).
 ///
 /// Reversed from a classic image (`STOCK_LG_BH16NS40_1.01 @ 0x17f414`), masking the
-/// pc-relative `imm8`s and the `bne` displacement; the gate `cmp`/`bne` sit at
-/// `match+28`/`match+30`. **Proven UNIQUE on every classic image** (engine-scope
-/// report §3a). Captured here for the classic Identity-base wiring block; not yet
-/// used to emit (the classic detour needs the classic handler base first).
+/// pc-relative `imm8`s and the `bne` displacement; the gate
+/// load/`cmp`/`bne` sit at `match+28`/`+30`/`+32`. **Proven UNIQUE on every classic
+/// image** (engine-scope report §3a). The classic Gate-A detour overwrites the
+/// `cmp`/`bne` pair (`emit_rawread_classic`); `classic_rawread_anchors` reuses it
+/// for the degraded-path audit.
 pub(crate) const VID_GATE_SIG_CLASSIC: &[(u16, u16)] = &[
     (0x7AA8, 0xFFFF), // ldrb r0,[r5,#0xa]
     (0x4900, 0xFF00), // ldr  r1,[pc,#imm8]   (scratch/table base)
@@ -66,28 +67,23 @@ pub(crate) const AKE_GATE_SIG_CLASSIC: &[(u16, u16)] = &[
 /// Signature of the **classic**-generation flash-resident Host-Revocation-List
 /// (HRL) lookup routine — the classic-codegen analogue of [`super::core::HRL_LOOKUP_SIG`].
 ///
-/// The classic AACS cert path checks host revocation with the SAME algorithm as
-/// modern (range-lookup over 8-byte HRL records; returns `1`=host revoked,
-/// `2`=blank/`0xFFFF` sentinel, `0`=clean), and the routine's first **nine**
-/// halfwords are byte-identical to the modern body (`push {r0,r1,r4-r7,lr}; sub
-/// sp,#0xc; ldr r0,[sp,#0xc]; movs r4,r1; bl <count-reader>; movs r7,r0; movs
-/// r0,r4; bl <helper>; str r0,[sp,#8]`). It then DIVERGES: where modern does `adds
-/// r0,r4,#4; lsls r1,r0,#8; ldr r0,[pc,…]` the classic scheduler emits `ldr
-/// r1,[pc,…]; adds r0,r4,#4; ldr r2,[r1]; lsls r0,r0,#8; …` — a different
-/// flash-address-translate order — so [`super::core::HRL_LOOKUP_SIG`] (which pins
-/// modern's 10th halfword `1D20`) matches **0×** on every classic image. This
-/// signature carries the shared prologue plus that classic continuation through the
-/// BE-16 count read (`ldr r2,[r1]; lsls r0,r0,#8; lsrs r0,r0,#8; adds r0,r0,r2;
-/// ldrb r0,[r0]; mov r3,sp; strb r0,[r3,#5]`), masking only the two body `bl`
+/// Same algorithm as modern (range-lookup over 8-byte HRL records; returns
+/// `1`=host revoked, `2`=blank/`0xFFFF` sentinel, `0`=clean) and the first nine
+/// halfwords match the modern body (`push {r0,r1,r4-r7,lr}; sub sp,#0xc; ldr
+/// r0,[sp,#0xc]; movs r4,r1; bl <count-reader>; movs r7,r0; movs r0,r4; bl
+/// <helper>; str r0,[sp,#8]`). It then diverges: modern does `adds r0,r4,#4; lsls
+/// r1,r0,#8; ldr r0,[pc,…]`, classic does `ldr r1,[pc,…]; adds r0,r4,#4; ldr
+/// r2,[r1]; lsls r0,r0,#8; …` (different flash-address-translate order), so
+/// [`super::core::HRL_LOOKUP_SIG`] (pins modern's 10th halfword `1D20`) matches 0x
+/// on classic. This signature covers the shared prologue plus the classic
+/// continuation through the BE-16 count read, masking only the two body `bl`
 /// displacements and the `ldr r1,[pc]` `imm8`.
 ///
-/// **Proven UNIQUE (n==1) on every one of the 17 classic images** and **0× on all
-/// 98 non-classic corpus images** — reversed from `STOCK_LG_BH16NS40` and verified
-/// against the capstone traces of BE14NU40 1.00/1.01, BH14NS40, BH16NS40-NS50,
-/// BH40N and WH14/16NS40-NS50. The cert path calls it and tests `cmp r0,#0; bne
-/// <revoke>`; the classic revoke target carries the OEM 6F-deny head `ldrb
-/// r0,[r5,#2]; cmp r0,#0; bne …; movs r0,#0x6f` (register `r5`, i.e. `0x78A8` — the
-/// modern head is `r4`/`0x78A0`). Consumed by [`Mt1959Engine::emit_hrl_classic`].
+/// **Proven UNIQUE (n==1) on all 17 classic images** and 0x on all 98 non-classic
+/// corpus images; reversed from `STOCK_LG_BH16NS40`. The cert path calls it and
+/// tests `cmp r0,#0; bne <revoke>`; the classic revoke target carries the OEM
+/// 6F-deny head `ldrb r0,[r5,#2]; cmp r0,#0; bne …; movs r0,#0x6f` (`r5`/`0x78A8`;
+/// modern uses `r4`/`0x78A0`). Consumed by [`Mt1959Engine::emit_hrl_classic`].
 pub(crate) const HRL_LOOKUP_SIG_CLASSIC: &[(u16, u16)] = &[
     (0xB5F3, 0xFFFF), // push {r0,r1,r4,r5,r6,r7,lr}
     (0xB083, 0xFFFF), // sub  sp,#0xc
@@ -147,12 +143,10 @@ pub(crate) fn masked_matches(image: &[u8], sig: &[(u16, u16)], lo: usize, hi: us
     hits
 }
 
-/// Locate the classic-generation raw-read levers' anchors (VID gate + AKE gate),
-/// each required unique. Returns the two offsets when both are cleanly present.
-/// Full-image scan (de-hardcoded): the classic VID/AKE gates are unique image-wide
-/// on all 17 classic images, but a fixed 0x170000..0x180000 window missed the ones
-/// whose AACS block is relocated (BH16NS40 ~0x139k, BE14NU40 1.01 ~0x180640). The
-/// unique-match guard below keeps it safe.
+/// Locate the classic VID gate + AKE gate, each required unique; `None` otherwise.
+/// Scans the whole image: a fixed 0x170000..0x180000 window missed images whose
+/// AACS block is relocated (BH16NS40 ~0x139k, BE14NU40 1.01 ~0x180640), and the
+/// unique-match requirement keeps the wide scan safe.
 fn classic_rawread_anchors(image: &[u8]) -> Option<(u32, u32)> {
     let vid = masked_matches(image, VID_GATE_SIG_CLASSIC, 0, image.len());
     let ake = masked_matches(image, AKE_GATE_SIG_CLASSIC, 0, image.len());
@@ -172,15 +166,13 @@ impl Engine for Mt1939Engine {
     }
 
     fn create_with_defaults(&self, image: &[u8], defaults: &BootSettings) -> Result<CreateReport> {
-        // Classic-generation MT1939 ("MT1939 Boot Code") has its own base shape
-        // (dispatch-table window, SRAM flag base, inline sense). It builds through
-        // build_report_classic; the modern monolith below covers JB8/JBP6/JBC6.
+        // Classic has its own base shape (dispatch-table window, SRAM flag base,
+        // inline sense); JB8/JBP6/JBC6 build via the shared MT1959 machinery below.
         if is_classic(image) {
             return Mt1959Engine
                 .build_report_classic_with_defaults(image, defaults)
                 .map_err(|e| anyhow!("MT1939 classic create: {e:#}"));
         }
-        // JB8/MT1959-lineage images build via the shared modern machinery.
         Mt1959Engine
             .build_report_with_defaults(image, defaults)
             .map_err(|e| {
@@ -199,17 +191,12 @@ impl Engine for Mt1939Engine {
         let chip = family::detect_chip(image)?;
         let cap = family::capability_for(&chip.model, chip.family);
 
-        // JB8 / JBP6 / JBC6 (MT1959-lineage): the full MT1959 lever machinery
-        // applies verbatim — the base finders, VID/AKE/Speed/Region signatures and
-        // detours all transfer. Delegate and relabel the family. Any lever whose
-        // signature misses (e.g. a JB8-base image whose VID uses classic
-        // scheduling) is reported SignatureNotFound by the never-abort driver, so
-        // the image still partial-applies.
-
+        // JB8 / JBP6 / JBC6 (MT1959 lineage): MT1959 finders, signatures and
+        // detours transfer verbatim; delegate and relabel the engine. A lever whose
+        // signature misses (e.g. a JB8-base image with classic VID scheduling) is
+        // reported SignatureNotFound, so the image still partial-applies.
         // A failed base build degrades to the DE-only path below (never refuse).
         let base_err = if is_classic(image) {
-            // Classic generation uses its own source-qualified feature and
-            // conversion builders.
             match Mt1959Engine.build_modify_classic_with_defaults(image, &chip, &cap, defaults) {
                 Ok(report) => return Ok(report),
                 Err(error) => error,
@@ -225,8 +212,7 @@ impl Engine for Mt1939Engine {
         };
         let degraded = format!("base build failed: {base_err:#}; downgrade-enable only");
 
-        // Family-agnostic downgrade-enable remains available when the base fails.
-        // No absent feature hook becomes an advertised setting.
+        // Downgrade-enable is family-agnostic, so it survives a failed base build.
         let mut out = image.to_vec();
         let mut levers = Vec::new();
 
@@ -245,12 +231,10 @@ impl Engine for Mt1939Engine {
         };
         levers.push(de);
 
-        // In scope for these BD-writer parts, but the base build failed — report
-        // the real cause (never-abort partial).
+        // In scope for these parts; report the real base-build failure.
         levers.push(LeverReport::missed(LeverId::RegionFree, degraded.clone()));
-        // Raw read: the classic VID + AKE gates are reversed and proven-unique; when
-        // both are located we report their offsets so the image is auditably
-        // wireable; the detail carries the real base-build failure.
+        // Audit-only: located gate offsets are reported as facts, but no hook is
+        // installed, so the outcome stays SignatureNotFound (never advertised).
         levers.push(match classic_rawread_anchors(image) {
             Some((vid_gate, ake_gate)) => LeverReport {
                 id: LeverId::RawRead,

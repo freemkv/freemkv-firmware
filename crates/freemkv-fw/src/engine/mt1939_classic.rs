@@ -19,9 +19,8 @@ use crate::boot::BootSettings;
 use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
-// UH12NS30 JBC5 schedules the first state-pointer load through r7 before
-// adding the session offset. The resulting state byte and CMP/BNE contract
-// are identical to the classic r1-only producer, including their offsets.
+// UH12NS30 JBC5 variant of `VID_GATE_SIG_CLASSIC`: the first state-pointer load
+// goes through r7. State byte and CMP/BNE offsets are identical.
 const VID_GATE_SIG_CLASSIC_R7: &[(u16, u16)] = &[
     (0x7aa8, 0xffff),
     (0x4900, 0xff00),
@@ -253,21 +252,18 @@ impl Mt1959Engine {
         a.finish().map_err(anyhow::Error::from)
     }
 
-    /// MT1939-**classic** create (bare base): the modern [`Self::build_report`]
-    /// monolith is modern-shaped (modern table window, the `FLAG_TABLE_BASE`
-    /// constant, modern `emit_*` windows) and dies on classic at the flag-table
-    /// SRAM assert. This is its classic analogue — the same base every finder in
-    /// `mt1939-classic-identity-base.md` proves 17/17, mirroring the base tier of
-    /// [`Self::build_modify_classic`] but producing a [`CreateReport`].
+    /// MT1939-**classic** create: the classic analogue of [`Self::build_report`],
+    /// which assumes modern table windows and `FLAG_TABLE_BASE` and fails the
+    /// flag-table SRAM assert on classic. Uses the base finders proven 17/17 in
+    /// `mt1939-classic-identity-base.md` and mirrors the base tier of
+    /// [`Self::build_modify_classic`], producing a [`CreateReport`].
     ///
     /// Installs the command handler, repoints its record and re-signs CMAC.
-    /// The source-qualified boot hook initializes the requested settings before
-    /// feature hooks run. If boot initialization cannot be installed, the base
-    /// report contains no feature hooks.
+    /// The boot hook initializes the requested settings before feature hooks run;
+    /// if it cannot be installed, the report contains no feature hooks.
     ///
-    /// Feature availability follows the emitted hooks. Classic read speed uses
-    /// the native selector/RMAX contract, not the modern ramp gate. Region,
-    /// Encryption and HRL retain their own evidence. Media conversion requires
+    /// Feature availability follows the emitted hooks. Read speed uses the native
+    /// selector/RMAX contract, not the modern ramp gate. Media conversion requires
     /// the complete source-bound group; physical reading remains unqualified.
     pub fn build_report_classic(&self, image: &[u8]) -> Result<CreateReport> {
         self.build_report_classic_with_defaults(image, &BootSettings::standard())
@@ -291,18 +287,17 @@ impl Mt1959Engine {
         let scanner_entry = commands.scanner().entry() as u32;
         let cdb_base = commands.scanner().cdb();
         analysis.response().context("classic base: response I/O")?;
-        // sense_setter is a REPORT anchor only (build_handler never uses it); the
-        // classic scanner raises sense inline, so the modern shape legitimately
-        // misses. Best-effort (0 when absent) — never blocks the base.
+        // Report anchor only (build_handler never uses it); classic raises sense
+        // inline, so the modern shape legitimately misses. 0 when absent.
         let sense_setter = Self::sense_setter_at(image, commands.scanner().entry()).unwrap_or(0);
 
-        // Classic 0x3C dispatch table lives in its own window (~0x1a4000), NOT the
-        // modern find_live_record windows.
+        // Classic 0x3C dispatch table (~0x1a4000) is outside the modern
+        // find_live_record windows.
         let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)
             .context("classic base: live 0x3C dispatch record")?;
 
-        // Classic SRAM map differs from MT1959 — derive an unreferenced cell from
-        // THIS image (the modern FLAG_TABLE_BASE collides with classic live SRAM).
+        // Modern FLAG_TABLE_BASE collides with live classic SRAM; derive a free
+        // cell from this image.
         let ram = super::sram::SramPlacement::inspect(image);
         let flag_base = ram
             .candidate()
@@ -331,11 +326,9 @@ impl Mt1959Engine {
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
 
-        // ---- FEATURE emits — mirror the modern `build_report` structure (boot hook
-        //      FIRST, then the feature stubs), but with the CLASSIC emits. All fact
-        //      accumulators default to "unwired" (0 / empty), so a per-feature miss
-        //      simply leaves that feature off the advertised set — the base still
-        //      ships. Populated below only on the paths that verifiably resolve.
+        // ---- FEATURE emits: boot hook first, then classic feature stubs. Facts
+        //      default to unwired (0 / empty), so a miss leaves that feature off
+        //      the advertised set while the base still ships.
         let mut boot_init_site = 0u32;
         let mut boot_stub_va = 0u32;
         let mut region_emitter = 0u32;
@@ -356,14 +349,12 @@ impl Mt1959Engine {
         let mut hrl_stub_va = 0u32;
         let mut uhd_conversion_count = 0;
 
-        // SAFETY COUPLING (the whole point of the classic boot blessing): the
-        // always-on boot-init hook writes 0xFF into every flag byte at power-on,
-        // which is what makes the tri-state `0x00 == OFF` invariant every feature
-        // stub relies on hold on a freshly powered drive. Emit it FIRST; if it
-        // fails on some classic image, fall back to a BARE base (handler + record
-        // repoint + CMAC only) — never ship a feature stub without the 0xFF-fill,
-        // or the drive would boot every feature into its OFF state. Each feature
-        // emit inside the boot-success arm is otherwise best-effort.
+        // SAFETY COUPLING: the boot-init hook writes 0xFF into every flag byte at
+        // power-on, which makes the tri-state `0x00 == OFF` invariant the feature
+        // stubs rely on hold on a freshly powered drive. Emit it first; if it
+        // fails, ship a BARE base (handler + record repoint + CMAC) -- a feature
+        // stub without the 0xFF-fill would boot with every feature OFF. Feature
+        // emits inside the success arm are otherwise best-effort.
         if let Ok((site, va)) = self
             .resolve_boot_init_pair(image)
             .and_then(|pair| self.emit_boot_init(image, &mut out, flag_base, pair, defaults))
@@ -380,16 +371,14 @@ impl Mt1959Engine {
                 speed_stub_va = facts.iter().find(|(k, _)| *k == "speed_stub_va").unwrap().1;
             }
 
-            // Region-free — unique native REGION_EMIT_SIG (proven on classic, the
-            // same emit `build_modify_classic` ships).
+            // Region-free: same emit as `build_modify_classic`.
             if let Ok((emitter, va)) = self.emit_region_classic(&mut out, flag_base) {
                 region_emitter = emitter;
                 region_stub_va = va;
             }
 
-            // Raw read — classic Gate-A (`04 01`) + AKE accept (`04 02`); NO deny
-            // detour (the classic deny path stays byte-identical to OEM). Same emit
-            // `build_modify_classic` ships. Facts come back as a key/value list.
+            // Raw read: Gate-A (`04 01`) + AKE accept (`04 02`), no deny detour
+            // (deny stays OEM). Same emit as `build_modify_classic`.
             if let Ok(facts) = self.emit_rawread_classic(image, &mut out, flag_base) {
                 let fact = |k: &str| {
                     facts
@@ -406,15 +395,12 @@ impl Mt1959Engine {
                 vid_producer = fact("vid_producer");
             }
 
-            // UHD / BD / HRL — modern AACS detours, tried best-effort.
-            // Classic UHD recognition/read behavior remains unproven. No separate
-            // validated disc-mode/class REPORT-KEY
-            // accept gate; BD acceptance is purely AKE-gated, which freemkv already
-            // handles 17/17) were both disasm-proven genuinely absent — the classic
-            // refusal is generic auth-gated inline sense with no unique anchor, so there
-            // is nothing safe to detour. Each finder self-guards (unique match + landmark
-            // re-verify) and resolves 0× on all 17, so nothing is wired and there is zero
-            // wrong-detour risk.
+            // UHD / BD: modern AACS detours, best-effort. Classic has no
+            // disc-mode/class REPORT-KEY accept gate (BD acceptance is purely
+            // AKE-gated) and its refusal is generic auth-gated inline sense with no
+            // unique anchor, so both finders self-guard (unique match + landmark
+            // re-verify), resolve 0x on all 17 images and wire nothing. Classic UHD
+            // recognition/read behavior remains unproven.
             if let Ok((site, bytes)) = self.uhd_gate_detour(image, flag_base) {
                 if let Some(stub_va) = self.commit_classic_detour(&mut out, site, &bytes) {
                     uhd_classifier_site = site as u32;
@@ -427,13 +413,9 @@ impl Mt1959Engine {
                     bd_stub_va = stub_va;
                 }
             }
-            // HRL — the MODERN hrl_skip_detour misses on classic (the classic lookup
-            // body diverges at the 10th halfword). emit_hrl_classic locates the classic
-            // HRL lookup via HRL_LOOKUP_SIG_CLASSIC (unique 17/17), verifies every cert
-            // site's cmp/bne revoke shape + the classic OEM 6F-deny head, and reuses the
-            // shared build_hrl_skip_stub (flag[Hrl]==STATE_OFF -> force clean/accept
-            // revoked; ON/OEM -> replay OEM). Self-guarding; bails (unwired) on any
-            // mismatch.
+            // HRL: modern hrl_skip_detour misses (lookup body diverges at the 10th
+            // halfword); emit_hrl_classic finds it via HRL_LOOKUP_SIG_CLASSIC and
+            // bails (unwired) on any cert-site or 6F-deny-head mismatch.
             if let Ok((sites, stub_va)) = self.emit_hrl_classic(image, &mut out, flag_base) {
                 hrl_sites = sites;
                 hrl_stub_va = stub_va;
@@ -443,11 +425,9 @@ impl Mt1959Engine {
                 .1;
         }
 
-        // Downgrade-enable (DE) byte: a fixed base identity-page byte, NOT a
-        // tri-state feature flag, so it is always safe and does not depend on the
-        // boot 0xFF-fill (written regardless of the boot-hook outcome, exactly as
-        // the modern `build_report` does). Best-effort: an image whose identity page
-        // isn't located just doesn't get DE.
+        // DE is an identity-page byte, not a tri-state flag, so it does not depend
+        // on the boot 0xFF-fill and is written even on the bare-base path.
+        // Best-effort: no identity page, no DE.
         let de_off = self.find_de_byte(image).ok();
         if let Some(off) = de_off {
             out[off as usize] = 0xDE;
@@ -500,7 +480,6 @@ impl Mt1959Engine {
             uhd_stub_va,
             bd_gate_site,
             bd_stub_va,
-            // Experimental classic UHD conversion stays on the research branch.
             auth_cell_site: 0,
             auth_cell_stub_va: 0,
             auth_cell_refusal: false,
@@ -512,12 +491,9 @@ impl Mt1959Engine {
         })
     }
 
-    /// Commit a single modern-style best-effort detour onto the classic create
-    /// path: place `bytes` in CMAC-covered free space and write a `bl` to it at
-    /// `site` (replacing the OEM instruction there). Returns the stub VA on
-    /// success, or `None` if free space / `bl` range can't be satisfied (a miss —
-    /// the feature is left unwired, the base still ships). Mirrors the per-feature
-    /// commit block modern `emit_rawread` uses, but for the classic report path.
+    /// Place `bytes` in CMAC-covered free space and write a `bl` to it at `site`
+    /// (replacing the OEM instruction there). Returns the stub VA, or `None` if
+    /// free space or `bl` range fails (feature left unwired, base still ships).
     fn commit_classic_detour(&self, out: &mut [u8], site: usize, bytes: &[u8]) -> Option<u32> {
         self.commit_classic_detour_checked(out, site, bytes, thumb::decode_bl)
     }
@@ -544,25 +520,19 @@ impl Mt1959Engine {
         Some(stub_va)
     }
 
-    /// MT1939 classic-generation MODIFY (Identity + Region-free + DE).
+    /// MT1939 classic-generation MODIFY: Identity (+DumpAll), Speed, Region-free,
+    /// RawRead (Gate-A + AKE + HRL), media conversion and DE.
     ///
-    /// The classic generation keeps MT1959's `opcode@0/flags@1/handler@4` dispatch
-    /// record format and the same chip-agnostic response writer/commit routines
-    /// (all resolve on classic images), but in a different SRAM map + table window.
-    /// This wires the two levers whose emit is **structurally provable + self-
-    /// verifying** on classic — the Identity vendor handler (which also enables
-    /// DumpAll) and Region-free — plus the always-safe DE byte. RawRead and Speed
-    /// stay reported-only: the classic clear-VID scratch/deny path is INFERRED and
-    /// the classic ramp ceiling is unreversed, so they are NOT emitted.
+    /// Classic keeps MT1959's `opcode@0/flags@1/handler@4` dispatch record format
+    /// and chip-agnostic response writer/commit routines, but uses a different
+    /// SRAM map and table window. RawRead leaves the classic deny path
+    /// byte-identical to OEM: its clear-output shape is inferred, and a wrong
+    /// reply would desync the SCSI FIFO.
     ///
     /// Storage passes the static SRAM overlap checks and code is placed within
-    /// authenticated erased space. The image re-signs, self-verifies, and passes
-    /// the structural detour audit — so, being structurally valid, Identity +
-    /// Region-free + DE are produced unconditionally (no flag). What is not yet
-    /// proven is runtime behavior on a real classic drive; the whole report carries
-    /// the uniform `static-only` validation label for that. Classic Raw-read is the
-    /// one thing withheld here — not as "beta" but because it is structurally unsafe
-    /// (its clear-output/deny path is INFERRED; a wrong reply desyncs the SCSI FIFO).
+    /// authenticated erased space; the image re-signs and passes the structural
+    /// detour audit. Runtime behavior on a real classic drive is unproven, hence
+    /// the uniform `static-only` validation label.
     pub fn build_modify_classic(
         &self,
         image: &[u8],
@@ -585,10 +555,8 @@ impl Mt1959Engine {
             return Ok(self.already_present_report(image, chip, cap, "MT1939"));
         }
 
-        // Base prerequisites (classic): scanner + CDB base (r5) + the chip-agnostic
-        // response writer/commit that build_handler needs. If any is missing the
-        // vendor handler can't be built → this classic build can't run (the caller
-        // degrades to the DE-only path).
+        // Base prerequisites: scanner, CDB base (r5) and the response writer/commit
+        // build_handler needs. If any is missing the caller degrades to DE-only.
         let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
         let commands = analysis
             .commands()
@@ -599,9 +567,8 @@ impl Mt1959Engine {
         let record = Self::live_record_from(commands, abi::READ_BUFFER_OPCODE)
             .context("classic base: live 0x3C dispatch record")?;
 
-        // Statically unreferenced candidate for the freemkv flag table (classic SRAM map
-        // differs from MT1959, so we do not reuse the MT1959 FLAG_TABLE_BASE
-        // placeholder — we derive an unreferenced cell from THIS image).
+        // Derive an unreferenced cell from this image; MT1959's FLAG_TABLE_BASE
+        // does not fit the classic SRAM map.
         let ram = super::sram::SramPlacement::inspect(image);
         let flag_base = ram
             .candidate()
@@ -630,19 +597,16 @@ impl Mt1959Engine {
         let handler_va = self.free_space(&out, handler_bytes.len() + 16)?;
         thumb::write(&mut out, handler_va as usize, &handler_bytes);
 
-        // Use the existing classic caller-order contract. Report the installed
-        // boot hook so capability consumers can expose only its actual controls.
+        // Report the installed boot hook so consumers expose only its actual controls.
         let boot_init_pair = self.resolve_boot_init_pair(image)?;
         let (boot_init_site, boot_stub_va) =
             self.emit_boot_init(image, &mut out, flag_base, boot_init_pair, defaults)?;
 
         let mut levers: Vec<LeverReport> = Vec::new();
 
-        // Identity / vendor handler + DumpAll — structurally valid, self-verifies,
-        // passes the structural audit → produced unconditionally (static-only label).
-        // `boot_function_entry` is 0 on classic (Reboot arm emits inert — see
-        // build_handler); recorded here so the audit can skip the Reboot-literal
-        // check without special-casing classic.
+        // Identity / vendor handler + DumpAll. `boot_function_entry` is 0 on classic
+        // (Reboot arm is inert, see build_handler); recorded so the audit can skip
+        // the Reboot-literal check.
         levers.push(LeverReport::applied(
             LeverId::Identity,
             vec![
@@ -661,8 +625,6 @@ impl Mt1959Engine {
             Err(e) => LeverReport::missed(LeverId::Speed, format!("{e:#}")),
         });
 
-        // Region-free — REGION_EMIT_SIG transfers to classic in a higher window.
-        // Structurally valid + self-verifies → produced unconditionally.
         levers.push({
             match self.emit_region_classic(&mut out, flag_base) {
                 Ok((emitter, va)) => LeverReport::applied(
@@ -673,19 +635,15 @@ impl Mt1959Engine {
             }
         });
 
-        // Raw read — classic MT1939 `04 01` (Gate-A bare-read) + `04 02` (AKE
-        // accept). Both detours reuse the shared flag-gated stubs (the classic
-        // Gate-A stub is byte-for-byte the MT1959 one); the deny path is left
-        // byte-identical to OEM (no deny-reset detour). Structurally audited; the
-        // static-only label already carries the pending-hardware-KAT caveat.
+        // Raw read: `04 01` (Gate-A bare-read) + `04 02` (AKE accept) reuse the
+        // shared flag-gated stubs (Gate-A is byte-for-byte the MT1959 one); deny
+        // stays OEM.
         //
-        // HRL-skip is a separate, independently anchored classic detour. CREATE
-        // attempts it even when one of the RawRead helpers misses (for example,
-        // a relocated classic AACS block can lack the shared JB8 session-reset
-        // signature). MODIFY must do the same or it silently omits an otherwise
-        // valid HRL patch and diverges from CREATE. Both effects are represented
-        // by the composite RawRead lever; when only HRL resolves, its facts still
-        // make the applied detour visible to the structural auditor.
+        // HRL-skip is independently anchored and attempted even when a RawRead
+        // helper misses (a relocated classic AACS block can lack the shared JB8
+        // session-reset signature), matching CREATE. Both report through the
+        // composite RawRead lever; HRL-only facts keep the detour visible to the
+        // structural auditor.
         levers.push({
             let rawread = self.emit_rawread_classic(image, &mut out, flag_base);
             let hrl = self.emit_hrl_classic(image, &mut out, flag_base);
@@ -723,7 +681,6 @@ impl Mt1959Engine {
         let (conversion, count) = self.emit_media_conversion_classic(image, &mut out, flag_base);
         attach_classic_conversion(&mut levers, conversion, count);
 
-        // Downgrade-enable — proven/stable, any identity page.
         levers.push(self.lever_de(image, &mut out, chip));
 
         // Repoint the classic 0x3C record's handler; flags stay live.
@@ -780,17 +737,16 @@ impl Mt1959Engine {
         Ok((region_emitter, region_stub_va))
     }
 
-    /// Raw-read emission for the MT1939 **classic** window (mirrors
+    /// Raw-read emission for the MT1939 **classic** generation (mirrors
     /// [`Self::emit_rawread`]: validate read-only, then commit on a working copy).
-    /// Emits the Gate-A `04 01` bare-read detour (always) and the AKE `04 02`
-    /// accept detour, but NO deny-reset detour — the classic deny path is left
-    /// **byte-identical to OEM** (its clear-output shape is inferred, so touching
-    /// it risks a SCSI-FIFO desync). Returns the grounded facts.
+    /// Emits the Gate-A `04 01` bare-read and AKE `04 02` accept detours but NO
+    /// deny-reset detour: the classic deny path stays **byte-identical to OEM**
+    /// (its clear-output shape is inferred; touching it risks a SCSI-FIFO desync).
     ///
-    /// * Gate-A: the classic VID producer gate `cmp r0,#6; bne <deny>` sits at
-    ///   `VID_GATE_SIG_CLASSIC`'s `match+30`/`+32`; the detour reuses the shared
-    ///   [`Self::build_gatea_stub`] verbatim, with `agid_struct` from the CDB base
-    ///   ([`Self::find_vid_agid_struct_classic`] — the classic finder fix).
+    /// * Gate-A: the VID producer gate `cmp r0,#6; bne <deny>` sits at
+    ///   `VID_GATE_SIG_CLASSIC`'s `match+30`/`+32` and the `bl` overwrites both;
+    ///   reuses the shared [`Self::build_gatea_stub`] with `agid_struct` from the
+    ///   CDB base ([`Self::find_vid_agid_struct_classic`]).
     /// * AKE: the reject writer `lsrs; movs r1,#1` at `AKE_GATE_SIG_CLASSIC`'s
     ///   `match+6`, returning into the shared `bl set_agid_state` at `match+0xa`.
     pub(crate) fn emit_rawread_classic(
@@ -800,16 +756,12 @@ impl Mt1959Engine {
         flag_base: u32,
     ) -> Result<Vec<(&'static str, u32)>> {
         use super::mt1939::{masked_matches, AKE_GATE_SIG_CLASSIC, VID_GATE_SIG_CLASSIC};
-        // Full-image scan (de-hardcoded): the classic VID/AKE gates are unique
-        // image-wide on all 17 classic images, but a fixed 0x170000..0x180000 window
-        // missed the ones whose AACS block sits below/above it (e.g. BH16NS40 at
-        // ~0x139k, BE14NU40 1.01 at ~0x180640). The unique-match guard below keeps it
-        // safe. Same fix as the modern AACS finders.
+        // Whole-image scan: see `classic_rawread_anchors`; the unique-match
+        // checks below keep it safe.
         let lo = 0usize;
         let hi = image.len();
 
         // ---- validate (read-only) ----
-        // Classic VID producer Gate-A, required unique.
         let mut vid_gates = masked_matches(image, VID_GATE_SIG_CLASSIC, lo, hi);
         vid_gates.extend(masked_matches(image, VID_GATE_SIG_CLASSIC_R7, lo, hi));
         vid_gates.sort_unstable();
@@ -837,12 +789,11 @@ impl Mt1959Engine {
         }
         let gatea_deny = (gatea_bne as i32 + 4 + d * 2) as u32;
         let gatea_authed = (gatea_cmp + 4) as u32;
-        // Classic AGID struct = CDB base (the finder fix), NOT the r7 heuristic.
+        // AGID struct is the CDB base, not the modern r7 heuristic.
         let agid_struct = self.find_vid_agid_struct_classic(image)?;
-        // Same de-bus latch clear the modern path installs — see
-        // `build_gatea_stub`. Resolved here so the classic bare-read arm gets it
-        // too; a classic image that cannot resolve it refuses rather than
-        // shipping a Gate-A that forces auth without clearing the latch.
+        // De-bus latch clear, as on the modern path (see `build_gatea_stub`); an
+        // image that cannot resolve it refuses rather than ship a Gate-A that
+        // forces auth without clearing the latch.
         let classic_aacs_reset = self.find_aacs_session_reset(image)?;
         let gatea_bytes = self.build_gatea_stub(
             flag_base,
@@ -852,16 +803,14 @@ impl Mt1959Engine {
             classic_aacs_reset,
         )?;
 
-        // Scratch clear-VID buffer (audit-only: no stub consumes it — the producer
-        // stages the clear VID there itself; pinned unique for the audit).
-        // Audit-only (no stub consumes it), and it recurses through the MODERN
-        // find_vid_gate whose window can miss a classic image whose AACS block is
-        // relocated (e.g. BE14NU40 1.01 at ~0x180k). Best-effort: never fail the
-        // classic Raw-read/AKE emit on an audit anchor.
+        // Scratch clear-VID buffer: audit-only (no stub consumes it; the producer
+        // stages the VID itself). It goes through the MODERN find_vid_gate, whose
+        // window can miss a relocated AACS block (e.g. BE14NU40 1.01 ~0x180k), so
+        // it is best-effort and never fails the emit.
         let vid_output = self.find_vid_producer(image).ok();
 
-        // Classic AKE accept gate (04 02), required unique. The reject writer folds
-        // the `lsrs` (AGID compute) into the 4 replaced bytes.
+        // AKE accept gate (04 02), required unique. The reject writer folds the
+        // `lsrs` (AGID compute) into the 4 replaced bytes.
         let mut ake_gates: Vec<_> = masked_matches(image, AKE_GATE_SIG_CLASSIC, lo, hi)
             .into_iter()
             .map(|gate| (gate, gate + 6))
@@ -950,18 +899,17 @@ impl Mt1959Engine {
         Ok(facts)
     }
 
-    /// Host-Revocation-List skip emission for the MT1939 **classic** cert path — the
-    /// classic-codegen analogue of the modern [`Self::hrl_skip_detour`], reusing the
-    /// modern [`Self::build_hrl_skip_stub`] verbatim (the site contract is identical:
-    /// each detour `bl` replaces a `cmp r0,#0; bne <revoke>` so on entry `lr` is the
-    /// CLEAN fall-through and `r0` is the HRL result). Only the SITE FINDER is classic:
-    /// the modern one anchors on [`super::core::HRL_LOOKUP_SIG`] (matches 0× on
-    /// classic) and a `ldrb r0,[r4,#2]` (`0x78A0`) revoke head, whereas classic uses
-    /// [`super::mt1939::HRL_LOOKUP_SIG_CLASSIC`] and an `ldrb r0,[r5,#2]` (`0x78A8`)
-    /// head — and one classic layout reaches the check through a single unconditional
-    /// `b` after the `bl <hrl>` (`bl hrl; b <check>`), which this finder follows.
+    /// Host-Revocation-List skip for the MT1939 **classic** cert path: the analogue
+    /// of [`Self::hrl_skip_detour`], reusing [`Self::build_hrl_skip_stub`] (each
+    /// detour `bl` replaces a `cmp r0,#0; bne <revoke>`, so on entry `lr` is the
+    /// CLEAN fall-through and `r0` is the HRL result). Only the site finder
+    /// differs: modern anchors on [`super::core::HRL_LOOKUP_SIG`] and an
+    /// `ldrb r0,[r4,#2]` (`0x78A0`) revoke head; classic uses
+    /// [`super::mt1939::HRL_LOOKUP_SIG_CLASSIC`] and `ldrb r0,[r5,#2]` (`0x78A8`),
+    /// and one layout reaches the check via an unconditional `b` after the
+    /// `bl <hrl>`, which this finder follows.
     ///
-    /// Grounded, never hardcoded, and self-guarding — a resolve requires ALL of:
+    /// A resolve requires ALL of:
     ///   1. the classic HRL lookup routine present and UNIQUE image-wide;
     ///   2. every `bl <hrl>` followed (within a short budget, across at most one
     ///      unconditional `b`) by `cmp r0,#0; bne <T>`, ALL sites agreeing on one `T`;
@@ -969,9 +917,8 @@ impl Mt1959Engine {
     ///      `ldrb r0,[r5,#2]; cmp r0,#0; bne …` immediately followed (head+6) by the
     ///      6F copy-protection sense `movs r0,#0x6f`.
     ///
-    /// Any disagreement / missing landmark bails (HRL left unwired), so a mis-anchored
-    /// match refuses rather than corrupting the cert path. Commits on a working copy
-    /// (atomic): the stub lands in CMAC-covered free space and every `bl` is
+    /// Any disagreement or missing landmark bails (HRL unwired) rather than
+    /// corrupt the cert path. Commits on a working copy: every `bl` is
     /// range-checked before ANY is written. Returns `(cmp_site_offsets, stub_va)`.
     pub(crate) fn emit_hrl_classic(
         &self,
@@ -1000,9 +947,8 @@ impl Mt1959Engine {
             (o as i32 + 4 + d * 2) as u32
         };
 
-        // ---- cert-path check sites: `bl <hrl>` then `cmp r0,#0; bne <revoke>`,
-        //      following at most one unconditional T2 `b` (the classic `bl hrl; b
-        //      <check>` layout). ALL sites must agree on one revoke target. ----
+        // ---- check sites: `bl <hrl>` then `cmp r0,#0; bne <revoke>`, following at
+        //      most one unconditional `b`. ALL sites must agree on one target. ----
         let mut sites: Vec<usize> = Vec::new();
         let mut revoke: Option<u32> = None;
         let mut o = 0usize;
@@ -1051,7 +997,7 @@ impl Mt1959Engine {
             bail!("classic HRL lookup located but no cert-check site resolved");
         }
 
-        // ---- verify the shared revoke target's version-invariant classic OEM head:
+        // ---- verify the revoke target's OEM head:
         //      `ldrb r0,[r5,#2]; cmp r0,#0; bne …; movs r0,#0x6f` (the 6F deny). ----
         let t = revoke as usize;
         let head_ok = t + 8 <= image.len()
@@ -1065,11 +1011,10 @@ impl Mt1959Engine {
             bail!("classic HRL revoke target 0x{revoke:x} lacks the OEM 6F-deny head — refusing");
         }
 
-        // ---- build the shared skip stub (identical contract to modern) ----
         let bytes = self.build_hrl_skip_stub(flag_base, revoke)?;
 
-        // ---- commit on a working copy (atomic): range-check EVERY `bl` before any
-        //      is written — a partial write would be a wrong (cert-corrupting) detour.
+        // ---- commit on a working copy: range-check EVERY `bl` before any is
+        //      written; a partial write would corrupt the cert path.
         let mut w = out.clone();
         let stub_va = self.free_space(&w, bytes.len() + 16)?;
         for &s in &sites {
