@@ -51,6 +51,13 @@ impl RecoveryFacet for Mtk {
                     // prepare still checks target integrity and chip compatibility.
                     crate::diagnostics::record("MediaTek BOOT recovery: using live boot receiver evidence; Current application reference is not used for receiver binding");
                     recovery::Receiver::identify(&mut reads)
+                } else if matches!(recovery::Receiver::identify(&mut reads), Ok(Some(_))) {
+                    // Live receiver code is readable, so a selected Current can
+                    // and must be checked against it: never prepare against a
+                    // stale identity. The user-supplied path below is only for
+                    // restricted live code.
+                    crate::diagnostics::record("MediaTek recovery: live receiver code is readable; selected Current must match its identity and build");
+                    recovery::Receiver::identify_reference(&mut reads, &envelope).map(Some)
                 } else {
                     recovery::Receiver::identify_user_supplied_reference(&mut reads, &envelope)
                         .map(Some)
@@ -140,12 +147,14 @@ impl RecoveryFacet for Mtk {
         })?;
         crate::output::field(
             "Receiver code source",
-            if plan.plan().receiver().provenance()
-                == mediatek_optical::receiver::reference::Provenance::UserSuppliedReference
-            {
-                "User-supplied Current file; its match to the installed firmware has not been verified"
-            } else {
-                "Live drive reads"
+            match plan.plan().receiver().provenance() {
+                mediatek_optical::receiver::reference::Provenance::UserSuppliedReference => {
+                    "User-supplied Current file; its match to the installed firmware has not been verified"
+                }
+                mediatek_optical::receiver::reference::Provenance::CurrentReference => {
+                    "Selected Current file; live identity and build metadata matched"
+                }
+                _ => "Live drive reads",
             },
         );
         crate::output::field(

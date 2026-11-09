@@ -1866,26 +1866,22 @@ fn flash_and_recovery_preserve_normal_for_incoming_kernel() {
 #[test]
 fn cross_family_flash_has_actionable_models_and_retains_technical_diagnostics() {
     let installed = with_native_startup(fixture_pair(false, 1), 4);
-    let mut normal = installed.normal().image.clone();
-    normal[0x701] = 0x13; // matrix fixture: the IRQ variant field that distinguishes families
-    balance(&mut normal);
-    let mut scalar = [0; 20];
-    scalar[19] = 5;
-    let signer = SigningKey::from_bytes(scalar).unwrap();
-    let encoded = encode_encrypted_pair(
-        &BuildInputs {
-            kernel_image: &installed.kernel().image,
-            normal_image: &normal,
-            envelope_id: "PIONEER BDR-OTHER",
-            normal_revision: "1.01",
-            normal_date: "26/10/21",
-            kernel: KernelBuild::from_seed(7),
-            normal_key_seed: 11,
-        },
-        NormalSignature::Sign(&signer),
-    )
-    .unwrap();
-    let target = Update::load(&encoded.kernel, &encoded.normal).unwrap();
+    // The pair differs only in its broad hardware domain (SAT 8xxx vs SAT
+    // 1xxx): every native owner establishes and matches its contract, so the
+    // Recovery family override has exactly one gate to bypass. A differing
+    // native owner fact (for example the loading-input family byte) is an
+    // owner refusal that the override never waives.
+    let target = with_native_startup(
+        fixture_pair_class_with_model(
+            false,
+            1,
+            b"SAT 1600GENERAL 0000",
+            [0x100, 0x200],
+            "PIONEER BDR-OTHER",
+            |_| {},
+        ),
+        4,
+    );
     assert_ne!(installed.family(), target.family());
     let current = Current::load(&archive(&installed, false)).unwrap();
     let target_bytes = archive(&target, false);
