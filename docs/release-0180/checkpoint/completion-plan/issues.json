@@ -1,0 +1,695 @@
+[
+  {
+    "id": "BND",
+    "gates": [
+      8,
+      14,
+      20,
+      26,
+      32,
+      38,
+      44
+    ],
+    "title": "Freeze exact shared owner/import/resource contracts",
+    "evidence": "OWNER-DEFINITIONS.md",
+    "depends_on": [],
+    "status": "complete",
+    "closing_test": "Every changed physical effect has one owner; every shared import has a concrete closed predicate or remains an explicit blocking row.",
+    "conclusion": "Exact ownership and provider boundaries defined; all outstanding semantic/resource premises remain explicit blocking child issues.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse."
+  },
+  {
+    "id": "CT-CENSUS",
+    "gates": [
+      13
+    ],
+    "title": "Account for Controller on all frozen contexts",
+    "evidence": "controller-inventory/static-constructor-replay.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "complete",
+    "closing_test": "Map complete native forms or exact authority limitations to all533 Normals/534contexts;42structural layouts are not semantic classes.",
+    "conclusion": "All534 contexts accounted by actualnativeform or exactoriginalauthoritylimitation:SAT89 234expanded+38existinglocalform+62staticform+16authfail+111missingK=461;SAT1 73completeE4specimens with exactauthority labels. Runtime equivalence and feasibility remain open.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse."
+  },
+  {
+    "id": "PH-SUPPORT",
+    "gates": [
+      3
+    ],
+    "title": "Seal current same-interface assignment support",
+    "evidence": "phase-support/CONTRACT.md",
+    "depends_on": [],
+    "status": "complete",
+    "closing_test": "Bind implemented predicate/invariants and targeted evidence;6exact app witnesses are regressions, not the sole proof of a parametric domain.",
+    "conclusion": "Existing same-interface operand permutation sealed; not whole-route or cross-interface admission.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse."
+  },
+  {
+    "id": "PH-INTERFACE",
+    "gates": [
+      4
+    ],
+    "title": "Dispose every observed cross-output-interface case",
+    "evidence": "coverage.json",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Assign to full physical output owner and resolve its exact direction; no merge-benefit deferral becomes impossibility.",
+    "unresolved_reason": "Existing code correctly refuses byte-output\u2194split-word interfaces before assignment equality. A complete physical output adapter and its caller/data/timing relation has not been constructed for the observed63\u00d710 SAT1 interface directions; no observed byte-Swapped endpoint creates an independent same-interface benefit. This is not a proof of physical impossibility.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "ST-CASE",
+    "gates": [
+      9,
+      10
+    ],
+    "title": "Close capacity and SAT9 paired storage relations",
+    "evidence": "../packets/D-capacity.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Preserve full query/boot effects and component authority; explicit read-only prepared branch and transfer bounds; no prefix-only admission.",
+    "unresolved_reason": "Both exactSAT9 directions remain open after withdrawing unproved105352 indispensability. Complete local port set and21 equal packed arguments plus initialized cache relation now bound; preserved external interface/cache lifetime, complete owner/Startup and final application composition remain. S1 parsed six-region observation is independently dispatched, not a correction.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "historical_capacity_attempt": {
+      "started_utc": "2026-11-08T05:45:04Z",
+      "strategy": "Smallest matching-prefix capacity restoration, exact XD08 contexts441/444; full component difference inventory and two-bit physical opcode restoration.",
+      "completed": "Original/final paired authentication; exact capacity prefix and consumers; full difference set; bounded identity/credential consumers.",
+      "remaining": "Separate ID data block588156..588166 computed-reader ownership; final whole-owner and transfer/erase/data relation.",
+      "next_viable_alternative": "Stop repeating literal scans. Bind exact Kernel transfer footprint independently; trace actual metadata pointer/copy use boundaries and distinguish physical selectors from integrity/export. If no finite closure emerges, advance another ranked candidate while keeping this internal obligation explicit.",
+      "classification": "internal_native_proof_unfinished",
+      "reassess_utc": "2026-11-08T07:45:04Z",
+      "first_reassessment": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/REASSESSMENT-0645.md",
+      "status": "SelectedXD08 directions release-negative; historical internalmetadata cut notanactive restartqueue."
+    },
+    "active_attempt": {
+      "method": "Preserved native port interface with exact local state relation",
+      "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/RELATION.md",
+      "entry_state": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/entry-state/result.json",
+      "reader_packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/S1-READER-REGIONS.md",
+      "clock_reset": false,
+      "startup_packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/startup-packet/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
+      "startup_static_scope": "Connected declaration and612-instruction ownership check closed; runtime object/preservation andStartup acceptance not supplied. S2 isolated implementation pending.",
+      "next_complete_result": "Implement genericS2 and report actual original331 preparation; independently instantiate same-pairStorage and parameterizedphysical/state relation, then all-owner/final-Startup composition.",
+      "operating_status": "Retained after complete331 applicability join; S2 independently active. Further native work selected from baseline reconciliation.",
+      "storage_membership": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-storage-membership/result.json"
+    }
+  },
+  {
+    "id": "CT-PHYSICAL",
+    "gates": [
+      15,
+      16
+    ],
+    "title": "Close finite Controller runtime/dispatch/live-publication contract",
+    "evidence": "../host-geometry/controller-port-contract.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Bind the actual changed-owner boundary (33 original hunks, appended programs, relevant descriptor state and26 immediate foreign targets; revised publisher removes one edge), source authority, private flags, resource/lifetime and physical effects. Unchanged logical interfaces terminate traversal only with explicit relevant-state/API contracts. Broad graph now18971nodes/1779operand differences/254indirect sites; counts alone are neither scope nor acceptance.",
+    "unresolved_reason": "Source S\u2192selected A code/table join, bounded16B publisher, complete immediate-provider inventory and completed descriptor API composition now have explicit receipts. Remaining: copy-internal publication/serialization, source-only key domain, scratch/object/flag alias and lifetime, exact foreign physical-state/resource contracts and composed placement/timing. These are semantic premises, not more graph counts.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "CT-SAT1",
+    "gates": [
+      15,
+      16
+    ],
+    "title": "Close retained SAT1 physical Kernel and delay construction",
+    "evidence": "../sat1-controller-verdict/controller-contract.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Bind actual physical prefix/delay, imported read-only tables and resident/copy lifetimes; do not chase unchanged207E000roles as a separate project.",
+    "unresolved_reason": "Seven complete E4 effect families and two local bootstrap constructions are recorded. Remaining: full installed restart/Kernel recovery policy, native relocated-delay fetch/stack conditions, incoming copied-code/task-context/constructor import relation and exclusive final placement. The207 E000 role collection is not a mandate to expand unchanged logical interfaces.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "LY-FAULT",
+    "gates": [
+      21
+    ],
+    "title": "Prove revised468-byte extra-record fault wrapper",
+    "evidence": "ACCEPTED-CLOSURES.md",
+    "depends_on": [],
+    "status": "complete",
+    "closing_test": "Fresh native and original-codec evidence for pinned468B candidate, exact F5E4pending consumer,caller frame/returns; old400B receipts cannot satisfy this.",
+    "conclusion": "Parent accepted the exact native subcontract and its recorded scope; dependent whole-owner gates remain open.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse."
+  },
+  {
+    "id": "LY-RAM",
+    "gates": [
+      21
+    ],
+    "title": "Reserve real1024-byte SAT1 save workspace",
+    "evidence": "../layout-startup/sat1-extended-preserver-contract.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Complete allocator/alias/DMA/reset/save lifetime for selected RAM; lack of literal references or BSS extent is insufficient.",
+    "unresolved_reason": "Proposed805500..805900 is not yet exclusively owned. Static mapper and restored bank paths are collected, but physical aperture/alias rules, DMA/reset/save lifetime and two record streams with only a1FFFFFE count bound remain. Empty BSS tail is insufficient; failure of this location is not universal impossibility.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "LY-REVERSE",
+    "gates": [
+      22
+    ],
+    "title": "Decide modern-to-old history/log representation",
+    "evidence": "../old29-log-collection/collection-report.json",
+    "depends_on": [],
+    "status": "open",
+    "closing_test": "Meaning-preserving full representation or concrete retained-schema contradiction; no reverse inference from512\u2192545 theorem.",
+    "unresolved_reason": "Old API adds29 history words and64 fault-log words. Modern545-word schema has no proved equivalent durable representation for them; modern calibration/generic fields cannot be overwritten as spare bytes. Need an actual lossless representation or a simultaneous independent-state contradiction. Conditional638-word count is not a completed theorem.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "LY-COUNTER",
+    "gates": [
+      22
+    ],
+    "title": "Decide low/high-bank counter and HRL construction",
+    "evidence": "../layout-startup/sat1-counter-mode-census.json",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Preserve native journal scale/rollover/recovery and exact firmware placement; raw byte count alone is not a state theorem.",
+    "unresolved_reason": "Actual low/high getters, incrementers and eight journal aliases are identified. Remaining: native scale/truncation, exhaustion/rollover, power-recovery and exact firmware/data placement under one mapping. Preserve the observed FFFFFFFF versus0000FFFF sentinel behavior; do not normalize it away.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "active_attempt": {
+      "started_utc": "2026-11-08T18:06:00Z",
+      "proposition": "Exact context4 installed to344 incoming: whole counter state/value/fault/recovery mapping before HRL and placement; no source-context substitution.",
+      "contract": "../run-20261108/counter-state-relation/CONTRACT.md",
+      "current_state_relation": "../run-20261108/counter-state-relation/STATE-RELATION.md",
+      "membership": "../run-20261108/counter-context-membership/result.json",
+      "method": "Compare the complete already-held eight-role native owner; bounded prefix fills the prior interior scanner excerpt. Distinguish installed persistent semantics from incoming logical behavior. No opaque provider expansion or runtime identity table.",
+      "remaining": "Selected initialization execution boundary; then complete same-pair counter state/physical service/caller relation. Prior increment and diagnostic cuts are complete at their local scopes. No automatic provider graph or Kernel transplant.",
+      "next_strategy_reassessment_utc": "2026-11-08T19:07:00Z",
+      "current_decision": "Stop48B resource/alias expansion; preservedfive-role604/652Bphysicalowner cut. All executableinputsheld; nextpriorityresumedSAT9two-projectioncandidate.",
+      "exact_supplier_status": "Installedhigh program/erase bytes and directcontrolgraph are held in exactcopied652B; errorimports403CF6/598C32 also held. No missing-ROM predicate. Finite internal nextdependency: complete incoming604B copied-owner entry/ABI/ownership relation, with allread/program/erase/configuration roles preserved.",
+      "increment_evidence": "../run-20261108/counter-state-relation/increment-cut/REPORT.md",
+      "diagnostic_evidence": "../run-20261108/counter-state-relation/diagnostic-boundary/REPORT.md",
+      "candidate_decision": "../run-20261108/counter-state-relation/CANDIDATE-DECISION.md",
+      "initialization_evidence": "../run-20261108/counter-state-relation/initialization-entry-cut/REPORT.md",
+      "next_decisive_qualification": "Exact installedhigh physicalprogram0796/erase072A backing in652B Kernel\u2192RAMcopy; finite direct-control boundary with one named404610 leaf, before any capsule emission or RAM ownership work.",
+      "physical_supplier_decision": "../run-20261108/counter-state-relation/PHYSICAL-SUPPLIER-DECISION.md",
+      "status": "retained_open_after_complete_five_role_interface_cut; no missinginput or impossibilitydisposition"
+    }
+  },
+  {
+    "id": "SU-POLICY",
+    "gates": [
+      27
+    ],
+    "title": "Compose field codec with installed acceptance policy",
+    "evidence": "ACCEPTED-CLOSURES.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "complete",
+    "closing_test": "Preserve A accepted physical set exactly, with B logical/error API, for fixed/conditional directions; no OR widening or blanket incoming-gate preservation.",
+    "conclusion": "Parent accepted the exact native subcontract and its recorded scope; dependent whole-owner gates remain open.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse."
+  },
+  {
+    "id": "SU-BOUNDARY",
+    "gates": [
+      27,
+      28
+    ],
+    "title": "Finish enumerated native preservation profiles",
+    "evidence": "../boundary-closure/boundary-summary.json",
+    "depends_on": [],
+    "status": "open",
+    "closing_test": "Each frozen94class row has actual operational/preservation contract or exact limitation. Static code declarations stay separate from runtime identity and acceptance.",
+    "unresolved_reason": "Class77 actual paired sink recognition now passes with DeclaredCodeEntry authority and one explicit runtime import. Complete94-class operational/preservation and source-authority verdicts still missing; local byte ownership is not runtime preservation.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "release_partition_update": {
+      "certificate": "release-missing-provenance-domain",
+      "whole_startup_classes": 29,
+      "remaining_startup_classes": 65,
+      "whole_projected_cases_total": 92,
+      "new_classes": [
+        "STARTUP-80",
+        "STARTUP-81",
+        "STARTUP-84"
+      ],
+      "note": "The exact remaining classes/directions remain open; no whole Startup gate closed."
+    }
+  },
+  {
+    "id": "LD-TIMER",
+    "gates": [
+      33
+    ],
+    "title": "Emit and prove fixed private hold state with native budget",
+    "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-missing-input-partition/DISPOSITIONS.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "complete",
+    "closing_test": "Preserve full16-slot public queue,key/query/error/dispatch order;exact flags/deadlines and owned6Bstate;nonempty paths pay addedwork. Model-only pass is insufficient.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "active_attempt": {
+      "started_utc": "2026-11-08T15:15:00Z",
+      "status": "closed_by_release_negative_disposition",
+      "current_index": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/CURRENT.md",
+      "selected_proposition": "Exact native partition eligibility and same-tick public callback/physical expiry ordering for six-byte hold representation.",
+      "remaining": [
+        "Actual observer/history refinement or justified broader transformation resolving order conflict",
+        "Actual private state ownership/reset/IRQ context",
+        "Executable native construction with real stack/timing/placement",
+        "Whole exact-pair physical/logical imports and frozen domain"
+      ],
+      "reassessment_due_utc": "2026-11-08T16:15:00Z",
+      "local_results": [
+        "ORDERING.md: source-bound front/back MMIO interposition negative fixtures; whole firmware reachability not claimed",
+        "partition-projection.json: below-capacity native partition rotation model reverses projected public equal-deadline order when one private hold is inserted; source provider contracts explicit",
+        "partition-cut/REPORT.md: exact native count16 scratch alias; conditional loss trace and separate\u226415 no-lateness invariant, not a capacity restriction or application reachability proof",
+        "coexistence-cut/REPORT.md binds actualrequest6\u21927, but thatpath initializes1FB0=0; not aP30coexistencewitness. Mode/event and elapsedclock shortcuts do not supply a global exclusion.",
+        "order-union-check:10,565 sequential histories throughn3; final-clear3cycleP1\u2192H0\u2192P0\u2192P1. Mere interposition cannot meet unrestricted modeled orders. No application reachability/impossibility verdict."
+      ],
+      "current_decision": "Do not emit front/back or naive merged queue. Stop P30 caller expansion at the bound zero-argument exclusion. Test and prove the union of A-required hold/public-effect ordering with B public callback order, then bind online metadata and actual callback mutation/observer contracts.",
+      "evidence": [
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/CURRENT.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/ORDERING.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/ordering-negative.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/partition-projection.py",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/partition-projection.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/partition-cut/REPORT.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/partition-cut/result.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/coexistence-cut/REPORT.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/mode-hold-cut/REPORT.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/order-union-check/REPORT.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/order-union-check/result.json"
+      ],
+      "next_finite_proposition": "Exact native rotations with separate A/B queues: determine whether the physical/public order union is acyclic in the stated nonmutation domains; retain minimal conflicts or topological witnesses, then derive an online contract. Intermediate done-byte observers are separate from final physical clear.",
+      "ended_utc": "2026-11-08T16:10:00Z"
+    },
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "historical_unresolved_reason": "Accepted six-byte model covers isolated hold arithmetic only. Uniform pre/post public-dispatch placement has valid-queue/provider-input ordering counterexamples, and a naive virtual private-record merge changes native public callback order under partition. Exact native partition capacity/eligibility and actual observer/history restrictions are now the closing cut, before emission; ownedRAM/reset and whole resource/placement remain. These are internal construction limitations, not correction impossibility.",
+    "completion_kind": "release_negative_exact_selected_direction",
+    "conclusion": "Exact selected candidate is uncorrectable for0.18.0 due to its named missing required input; no qualified alternative. Native construction not claimed solved.",
+    "release_disposition_certificate": "release-missing-selected-service"
+  },
+  {
+    "id": "LD-CAL",
+    "gates": [
+      33
+    ],
+    "title": "Close exact seven-stage physical calibration provider",
+    "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-missing-input-partition/DISPOSITIONS.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "complete",
+    "closing_test": "Preserve source raw acquisition/scales/thresholds/live descriptor and source physical policy;retain incoming command0logical retry. Resolve actual CFG differences, do not classify physical constants as relocations.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "active_attempt": {
+      "started_utc": "2026-11-08T14:32:00Z",
+      "strategy": "Retain complete installed physical producer and virtual register/pointer context; redirect its31 native coefficient-word/three-array/adjacent-scalar memory operations intoBrecordrepresentation without addedstack/RAM.",
+      "completed": "31 exact operation spans accepted:638B, zero added stack/RAM/calls; paired full-register/CCR and memory relation, local CFG joins and four negative fixtures. Count-writer/table and live-versus-cache relations retained.",
+      "remaining": "Whole producer/request-retry induction: source address/index authority at two1058A6 calls, complete field/copy/pointer lifetime and provider state relation, seven-stage physical and incomingcommand0/request2 composition, placement/timing.",
+      "next_viable_alternative": "Reuse held command/measurement/record graphs for one exact request-retry join; do not emit another local bridge or reopen existing scalar conversion proofs.",
+      "classification": "finite_memory_operation_relation_accepted_whole_producer_join_open",
+      "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/CURRENT.md",
+      "latest_result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/BRIDGE-ADOPTION.md",
+      "status": "closed_by_release_negative_disposition"
+    },
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "historical_unresolved_reason": "Seven-stage provider contains actual count/threshold/CFG changes. Keep installed raw acquisition, signed/wrapping arithmetic, scales, live descriptor and validity chronology; retain incoming command0 retry interface. A complete composed native recipe is still missing.",
+    "completion_kind": "release_negative_exact_selected_direction",
+    "conclusion": "Exact selected candidate is uncorrectable for0.18.0 due to its named missing required input; no qualified alternative. Native construction not claimed solved.",
+    "release_disposition_certificate": "release-missing-selected-service"
+  },
+  {
+    "id": "LD-ABI",
+    "gates": [
+      33,
+      34
+    ],
+    "title": "Discharge remaining named resident/indirect boundaries",
+    "evidence": "../loading-inputs/211m-kernel-ABI-proof.json",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Use exact installed resident state/call relation or bound saves; no inherited generic callee-save axiom. Cover remaining observed native domains explicitly.",
+    "unresolved_reason": "IncomingB preservation constructs and1292B joined bundle have targeted native/structural receipts. OriginalA resident/callback authority remains explicit: a protected A reference does not prove unmodified source behavior. The36 selected joined paths are complete. Actual owner-root routing, broader physical composition,20B cold-event/12B callback stack ownership, placement/timing, other Loading forms and full physical imports remain open.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "active_attempt": {
+      "started_utc": "2026-11-08T13:15:00Z",
+      "strategy": "Join existing exact remaining resident/indirect inventory to observed state domains; choose bounded saves or installed-state relation without generic ABI assumptions.",
+      "classification": "joined_B_bundle_emitted_original_A_authority_and_resources_open",
+      "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/LOCAL-CLOSURES.json",
+      "latest_results": [
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/LOCAL-CLOSURES.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/bundle-native/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/generic-cancel-native/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/ORIGINAL-A-AUTHORITY.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/caller-selection-frontier.json"
+      ],
+      "remaining": "IncomingB preservation constructs and1292B joined bundle have targeted native/structural receipts. OriginalA resident/callback authority remains explicit: a protected A reference does not prove unmodified source behavior. The36 selected joined paths are complete. Actual owner-root routing, broader physical composition,20B cold-event/12B callback stack ownership, placement/timing, other Loading forms and full physical imports remain open.",
+      "next_viable_alternative": "Retain completed fixed bundle and36 selected joined paths. Actual caller/current-task frame ownership and external originalA authority remain explicit; main effort moved to LD-CAL without redoing completed native execution.",
+      "reassessment": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/reassessment-1415.md"
+    },
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "IN-EPOCH",
+    "gates": [
+      39
+    ],
+    "title": "Close timed logical-request publication, retirement and native lifetime",
+    "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-missing-input-partition/DISPOSITIONS.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "complete",
+    "closing_test": "Complete actual request-path admission, semantic owner/completion/cancel/destructor/reset retirement, exact public/private conditional-record algebra and native resource budget; preserve failed-start/queued-activation continuations and all real physical results. Revised architecture needs no resident Kernel hook.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "active_attempt": {
+      "started_utc": "2026-11-08T07:10:00Z",
+      "strategy": "Actual public request-path admission preserving native E/D writes; semantic retirement without resident Kernel hook; private five-record pool for all installed Inputs physical callbacks and original public service for foreign users.",
+      "established": "Task16 state/owner equality is not generation identity: exact same-owner mode7 restart; the existing mode3 guard excludes that interval. Original incoming timed pending/duration are written before start and raw start failure is not consumed by request.",
+      "rejected_strategy": "Two-field task-state/current-owner generation certificate; raw-start-success-only epoch publication is not assumed to be an incoming-interface requirement.",
+      "remaining": "Selected native primitives are fixed:740B private pool,658B Inputs-only timer splice including52B helpers,24B logger and46B public retirement wrapper. Scoped emission/interfaces pass targeted checks; no complete correction. Shared-owner Query/conditional-Term design covers skipped-Term without speculative extra Term but is not emitted. Known additions plus544B observers exceed retired-core headroom388B; explicit Normal append arena selected with exact UD03 resident107C00/107C32 write-contract input. 18-entry physical boundary, private resource refinement, whole placement/timing/stack and actual callback lifetime remain open.",
+      "classification": "internal_construction_unfinished",
+      "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/JOINT-CONSTRUCTION.md",
+      "latest_local_results": [
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-physical-fallback/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-epoch-guarded-hook/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/recovery-write-order.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-epoch-kernel-tail/receiver-guard-domain-read.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/overlay-ownership.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/monitor-registration-trace.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/waiter-and-removal-boundary.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/poll-context.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/observer-arm-provider.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/INTEGRATED-RECIPE.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-encoding.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-snapshot-check.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/opcode-0c-callback.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/worker-retirement-cut.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-diagnostic-closure.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-local-services/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/kind1-callback-entry.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/INPUTS-TIMER-SPLICE.md",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-atomic-retire-term/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/receipt.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/shared-owner-retirement.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/normal-append-placement.json",
+        "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/result.json"
+      ],
+      "counterexample_and_repair": "Unwired ordinary fragment falsely returned0 when inactive/nonmode3 despite existing physical record. Source mode4 native true path supplies counterexample; same-size4B tail jump to relocatedA predicate repairs routing. Observer-only remains separate; no full registration claim.",
+      "candidate_pending_state": "No global pending-admission token or packed/reread payload.1937 reserved; specialized actual public request call path identifies commit.",
+      "resident_hook": "Not part of revised architecture; historical52/82B proofs retained without reopening or feasibility credit.",
+      "reassessment_1015": {
+        "decision": "keep selected architecture; stop alternative queue/timer representation exploration; switch work product from more broad extraction to integrated native transition recipe with explicit remaining supplier contracts",
+        "reason": "Several hours of diagnosis removed concrete wrong premises but no complete correction. Further isolated helper proofs cannot substitute for complete construction. Other inspected candidate cuts (JM54/67call reset; SAT1wholeoutput; LoadingopaqueABI) are not presently smaller complete obligations.",
+        "no_verdict_credit": true,
+        "next_complete_cut": "Actual public request admission through owner publication, private Q/M registration, deadline arm, semantic retirement and cancel worker exactly once; paired final native placement/resources and18-entry imports remain separate required closure."
+      },
+      "native_prototype": "Unplaced740B H8 snapshot metadata service;763 actual-byte cases pass under ER0..6/CCR-clobbering opaque calls; ordinary40B/scripted64B stack, physical callout cost excluded; no production/native feasibility admission.",
+      "reassessment_1215": {
+        "decision": "keep request-lifetime architecture; narrow timer construction to exact Inputs-specific stronger service and preserve foreign original paths",
+        "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/reassessment-1215.md",
+        "no_verdict_credit": true
+      },
+      "placement_decision": "Explicit append arena5C6F00..<5D0000; concrete2012B known additions exceed1624B retired-tail headroom388B. No universal size impossibility or physical write authority inferred.",
+      "priority": "retained_unadmitted_construction; foreground work moved to LD-ABI",
+      "reassessment_1315": {
+        "decision": "change main priority to existing LD-ABI finite contract cut; retain Inputs construction and proofs without verdict credit",
+        "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/reassessment-1315.md",
+        "no_verdict_credit": true,
+        "reason": "Physical resource refinement, foreign-owner effects and18-entry mapping remain a conjunction; another isolated provider extraction would not finish it."
+      },
+      "status": "closed_by_release_negative_disposition"
+    },
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "historical_unresolved_reason": "Selected native primitives are fixed:740B private pool,658B Inputs-only timer splice including52B helpers,24B logger and46B public retirement wrapper. Scoped emission/interfaces pass targeted checks; no complete correction. Shared-owner Query/conditional-Term design covers skipped-Term without speculative extra Term but is not emitted. Known additions plus544B observers exceed retired-core headroom388B; explicit Normal append arena selected with exact UD03 resident107C00/107C32 write-contract input. 18-entry physical boundary, private resource refinement, whole placement/timing/stack and actual callback lifetime remain open.",
+    "completion_kind": "release_negative_exact_selected_direction",
+    "conclusion": "Exact selected candidate is uncorrectable for0.18.0 due to its named missing required input; no qualified alternative. Native construction not claimed solved.",
+    "release_disposition_certificate": "release-missing-selected-service"
+  },
+  {
+    "id": "IN-RESET",
+    "gates": [
+      39
+    ],
+    "title": "Close exact JM physical reset service boundary",
+    "evidence": "../inputs-verdict/jm-reset-root-manifest.json",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Bind actual selector/caller effects and resources; motion188Bproof is not entire reset proof.",
+    "unresolved_reason": "JM188-byte motion leaf,28-byte guard and112-byte writer are local closures. Full reset has54 installed/67 incoming calls and different selector population0,2,3 versus0,2. Need a bounded physical reset provider relation at its actual caller interface; whole reset transplant is not authorized by motion proof.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "IN-FAMILIES",
+    "gates": [
+      40
+    ],
+    "title": "Close already-collected legacy/XU detected domains",
+    "evidence": "../inputs-verdict/xu-four-native/report.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Explicit native predicates and directions across frozen Inputs memberships; no new broad census.",
+    "unresolved_reason": "Existing finite legacy/XU specimens are collected. Their real sensor/actuation/request interfaces, four clocks/bit roles and resource lifetimes need complete directional recipes or concrete limitations. Do not start another census or infer semantics from a matching projected bit.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "HO-RESOURCES",
+    "gates": [
+      45
+    ],
+    "title": "Prove actual per-request allocation and stack lifetimes",
+    "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-missing-input-partition/DISPOSITIONS.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "complete",
+    "closing_test": "For each valid allocation state, prove a first-fit block of aligned request size after preceding allocations; induct over frees/coalescence, failures, deletion/recreate and warm reset. Task20:64-byte TCB then420-byte stack. Include task2 actual deltas and pool backing. A first-boot bounded allocation proof is allowed; finite cumulative-ever allocation is not required.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "active_attempt": {
+      "started_utc": "2026-11-08T16:10:00Z",
+      "status": "closed_by_release_negative_disposition",
+      "current_index": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/HOST-DECISION.md",
+      "candidate_normal_sha256": "80c2472e3fac2ee0a7efdf831ef9f0d4653f2b5671681b53dab8511311d48700",
+      "candidate_kernel_sha256": "b752c30e1872ea453b557f221120f4bbb4d890b0d3a1ee79312c03c054720915",
+      "next_finite_proposition": "Can the selected H1 block invariant import sufficient resource-effect authority from held exact-context contracts without new unbounded supplier/entry analysis?",
+      "not_adopted": [
+        "task20resize420",
+        "historicalfifthSPhandler",
+        "cumulative-ever allocation ceiling"
+      ],
+      "reassessment_due_utc": "immediate owner reassessment completed; former17:10 superseded",
+      "latest_local_results": [
+        "Exact startup-context-cut binds successful current26/dispatch-lock scheduling gates and actual5CC500 bridge, without assuming publicR0 proves initialization success.",
+        "status-values:26 explicit base+5 byte-store value domains excludeC0; four saved-frame reloads are proven constant10 and event mode provenance corrected. Whole-TCB alias/entry coverage remains open.",
+        "Phase exact original pair/current candidate native four-operand recipe join complete at incoming SAT8231 context; final SAT8511 identity remains B2b obligation.",
+        "small-object-producer-cut:15 guarded event/timer routes plus one stack main3 route, and extra capacity2 caller; conditional producer/entry facts only."
+      ],
+      "next_finite_cut": "No automatic graph extension. Current proof requires qualifiedresourceauthority at1055AE andtheexact107C72 boundary,oraseparatelyjustifiedfiniteargument avoidingthosepremises.",
+      "unselected_alternatives": [
+        "External supplied stack: no certified420B owned extent in existing retired-Host RAM relation.",
+        "Shadow allocator: capacity arithmetic removes fragmentation mechanism but retainsC0/TCB ownership and adds69-role pointer/query/failure/concurrency/timing proof; not selected or emitted."
+      ],
+      "decision_manifest": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/HOST-DECISION.json",
+      "supplier_qualification": {
+        "result": "C_INTERNAL_SUPPLIER_PREMISE_UNPROVED",
+        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/SUPPLIER-QUALIFICATION.md",
+        "next_action": "No automatic continuation; a finite source/authority method for the exact missing supplier premise has not been established."
+      },
+      "supplier_source_qualification": {
+        "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/SUPPLIER-SOURCE-LOOKUP.md",
+        "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/supplier-source-lookup.json",
+        "resource_input": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/H1-1055AE-INPUT.md",
+        "finding": "0005FA origin is currentNormal57C2BE under exactcopymapping;1055AE is absentfromtheexactpackagedmappedN/Kset. Its restrictedH1effectcontract is requiredinput,notwholeHostnecessity.",
+        "next_cut": "Only already-dispatched0005FA localcopied-region effectcut; no externalprovider expansion",
+        "original_obligation_started_utc": "2026-11-08T16:10:00Z",
+        "reassessment_due_utc": "2026-11-08T17:10:00Z"
+      },
+      "reassessment_1710": {
+        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/H1-REASSESSMENT-1710.md",
+        "result": "stop_automatic_provider_graph_extension; currentproofneedsqualifiedsupplierauthority; wholeHostresearchopen"
+      }
+    },
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "historical_unresolved_reason": "Complete H1-H5 chain is in HOST-DECISION.md. All selected small-object arguments are now bound; guard/entry/provider preservation, actual per-allocation block, task20 proposed420B and task2 caller resource/lifetime, failure/free/recreate/reset remain open. No global cumulative-ever requirement; no external-only Host block established.",
+    "completion_kind": "release_negative_exact_selected_direction",
+    "conclusion": "Exact selected candidate is uncorrectable for0.18.0 due to its named missing required input; no qualified alternative. Native construction not claimed solved.",
+    "release_disposition_certificate": "release-missing-selected-service"
+  },
+  {
+    "id": "HO-CALLERS",
+    "gates": [
+      45
+    ],
+    "title": "Close exact Host exported caller/IRQ boundary",
+    "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-missing-input-partition/DISPOSITIONS.md",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "complete",
+    "closing_test": "Use current candidate and latest caller packets, not historical incomplete contract as a positive;preserve incoming preflight/error semantics.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "historical_unresolved_reason": "Use current80c2472e\u2026/b752c30\u2026 capsule. Remaining exported strategies and actual caller/IRQ stack/live-state boundaries must bind the complete driver. Preserve incoming read-only preflight and native errors. Earlier root/caller subsets are not a universal ABI certificate.",
+    "completion_kind": "release_negative_exact_selected_direction",
+    "conclusion": "Exact selected candidate is uncorrectable for0.18.0 due to its named missing required input; no qualified alternative. Native construction not claimed solved.",
+    "release_disposition_certificate": "release-missing-selected-service"
+  },
+  {
+    "id": "HO-SAT1",
+    "gates": [
+      46
+    ],
+    "title": "Close exact SAT1 Host/reset/Kernel directions",
+    "evidence": "../host-parent/driver-closure/current-contract-index.json",
+    "depends_on": [
+      "BND"
+    ],
+    "status": "open",
+    "closing_test": "Bind complete FE94/FE95/FEAB/FF6C/mode/reset policies; matching projected bit never sufficient.",
+    "unresolved_reason": "Near TS02\u2194TD02RS recipes retain incoming object, preserve installed FE94/runtime AN/FF6C policies and have original-codec receipts. Remaining material physical timing/composition and Loading policy relation prevent full admission; other modern/legacy Host domains need their own exact contracts.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md"
+  },
+  {
+    "id": "HANDOFF",
+    "gates": [
+      5,
+      6,
+      11,
+      12,
+      17,
+      18,
+      23,
+      24,
+      29,
+      30,
+      35,
+      36,
+      41,
+      42,
+      47,
+      48
+    ],
+    "title": "Write benefit ranking and implementation packets per completed verdict",
+    "evidence": "../packets",
+    "depends_on": [
+      "BND",
+      "CT-CENSUS",
+      "PH-SUPPORT",
+      "PH-INTERFACE",
+      "ST-CASE",
+      "CT-PHYSICAL",
+      "CT-SAT1",
+      "LY-FAULT",
+      "LY-RAM",
+      "LY-REVERSE",
+      "LY-COUNTER",
+      "SU-POLICY",
+      "SU-BOUNDARY",
+      "LD-TIMER",
+      "LD-CAL",
+      "LD-ABI",
+      "IN-EPOCH",
+      "IN-RESET",
+      "IN-FAMILIES",
+      "HO-RESOURCES",
+      "HO-CALLERS",
+      "HO-SAT1"
+    ],
+    "status": "open",
+    "closing_test": "Every accepted subset has exact dependencies/files/recipe/tests/app acceptance;candidate benefits use distinct units;no fundamental analysis assigned to SOL.",
+    "unresolved_reason": "All eight Benefit gates and existing Phase worker packet are accepted. Seven new-owner packets still contain central semantic/resource decisions and cannot be dispatched as routine SOL coding. Definitions/component scaffolding may not widen routes. Complete verdicts, final dependencies and acceptance manifests are required.",
+    "dependency_scope": "depends_on lists specification prerequisites only. Exact candidate/service imports in current-state.json control physical proof reuse.",
+    "release_disposition_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "active_attempt": {
+      "issue": "HANDOFF",
+      "objective": "Validate exact0.17.3 retained/lost route correctness first, then unexamined frozen domain toward48/48.",
+      "method": "Existing comparison plus exact context/owner/Startup/application proof join, not count matching or new census.",
+      "current_result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
+      "next_result": "Adopt exact retained/lost witness proof scopes and select one justified restoration dependency.",
+      "clock_reset": false,
+      "in_flight": {
+        "S2": "closed_dispatched",
+        "context331_storage_join": "complete_retained_no_expansion"
+      },
+      "route_reporting": {
+        "authority": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
+        "inputs": [
+          {
+            "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/comparison-0173.json",
+            "sha256": "f039780ceebb8b1fe179fff7a32fc8f41baf2c8502114d87633e510c32dd6d51"
+          },
+          {
+            "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/baseline-comparison-index.json",
+            "sha256": "11258375f5bc16d7db93c65266940100ba50d2faf7283ecb848f1f7d94d0225a"
+          },
+          {
+            "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/routes-final.json",
+            "sha256": "c41f23e8d0a55cc016ba901248a0ad30a4e77229e0a4816f1b198ad7a5eb95dc"
+          },
+          {
+            "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/benchmark-view.json",
+            "sha256": "207c03d29021a09dba45e66f5121c3bb5d80da91b8c171ee6a5200012c9a7a33"
+          },
+          {
+            "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/source-manifest.json",
+            "sha256": "5b0b04b9fb1bbb3f84dfa3b133cf0b8329c5b724284e1b335e7d1354fd89b345"
+          },
+          {
+            "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/ANALYSIS-SUMMARY.json",
+            "sha256": "bb34a6e255042ffbe394aaef97dbd25c826a774123e3b075301e43a91c47ac13"
+          }
+        ],
+        "historical_identity_admission": {
+          "baseline": 2800,
+          "retained_current": 87,
+          "lost": 2713,
+          "gained": 0
+        },
+        "historical_package_admission": {
+          "baseline": 21485,
+          "retained_current": 1848,
+          "lost": 19637,
+          "gained": 0
+        },
+        "freshness": "2026-11-07 frozen export; not post-isolated replay",
+        "whole_route_proof_classification": "Pending exact witness/proof join; no validated totals inferred",
+        "no_new_native_branch_before_join": true,
+        "full48_frozen_scope_preserved": true
+      }
+    }
+  }
+]

@@ -1,0 +1,145 @@
+{
+  "saved_utc": "2026-11-09T00:32:19.031125+00:00",
+  "files": [
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/PLAN.md",
+      "snapshot": "checkpoint/completion-plan/PLAN.md",
+      "sha256": "3d8c55e7470f6359744dfa21aed57d81a08261685f283b7233051b85208c7462"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/NEXT-CLOSURES.md",
+      "snapshot": "checkpoint/completion-plan/NEXT-CLOSURES.md",
+      "sha256": "98442143a76d99498da2e6e066fac677d6e6b95cc236c73db0c7f82a57204a7f"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.md",
+      "snapshot": "checkpoint/completion-plan/FAMILY-TRANSITION-MATRIX.md",
+      "sha256": "22628a6b6e977c1340bf39bda4ea9361e8c9af9f379e22ea2137acfc135e3396"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.json",
+      "snapshot": "checkpoint/completion-plan/FAMILY-TRANSITION-MATRIX.json",
+      "sha256": "d26abeb2e34895d43819f5b9cc520fe019aed671ecf6aeb86633d4b2c017e14a"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
+      "snapshot": "checkpoint/completion-plan/BASELINE-FIRST-PLAN.md",
+      "sha256": "67e9ab22253796f04e445437d04c9d09e5081a2f9773919189cf25f432dd9245"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RESTART-SEMANTIC-CHECKPOINT.md",
+      "snapshot": "checkpoint/completion-plan/RESTART-SEMANTIC-CHECKPOINT.md",
+      "sha256": "4de6f526577442cb5070f411dffaf3e8f2b4901042dfb7d30cb2d05f755fa7ab"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RESTART-SEMANTIC-CHECKPOINT.json",
+      "snapshot": "checkpoint/completion-plan/RESTART-SEMANTIC-CHECKPOINT.json",
+      "sha256": "173c9e2bd50a34d923f516a2a93e85f6e07da7f0861ddb2f2e2e7ba8fc60a570"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/ACCEPTED-CLOSURES.md",
+      "snapshot": "checkpoint/completion-plan/ACCEPTED-CLOSURES.md",
+      "sha256": "c8e129419dc31391b72df727887aab5e02604d9daa63f1fb108fc4914663439e"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+      "snapshot": "checkpoint/completion-plan/RELEASE-CLOSURE-POLICY.md",
+      "sha256": "e1d4e337a0d2c70bc26be8413e8a0c339dfac1f06195508546a4811f81246938"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+      "snapshot": "checkpoint/completion-plan/OWNER-DEFINITIONS.md",
+      "sha256": "1230f8a9b68b1a718d3024e8cd6884f4299d8b8942695652f589fcb5d1b8a98d"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/current-state.json",
+      "snapshot": "checkpoint/completion-plan/current-state.json",
+      "sha256": "f3912f94576728c915ed53af2e4aaa6e822485fe50d579530b7c92c521288077"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/tracker.json",
+      "snapshot": "checkpoint/completion-plan/tracker.json",
+      "sha256": "d03841e99919ae22f21070054f328aa7713cdaffe3b8d98af9fcf26aeef265a0"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/issues.json",
+      "snapshot": "checkpoint/completion-plan/issues.json",
+      "sha256": "036bb3f3784cd9b0d4f02ec001e641458b97e1ca96bc423a65fed250d236df13"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/READINESS.json",
+      "snapshot": "checkpoint/completion-plan/READINESS.json",
+      "sha256": "74685eaf766f97f4a6a3d50363c8d783a0ccf8773c73ce7049647fe061bfff24"
+    },
+    {
+      "source": "/Users/matthew/.local/state/release-0180/progress.json",
+      "snapshot": "checkpoint/progress.json",
+      "sha256": "59ecad292ea4d3978923d14df01af32b19382073116adc9fd56dff72847e2122"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/implementation.json",
+      "snapshot": "checkpoint/implementation.json",
+      "sha256": "ce6d7ec9dd463e0aee4283ef594837bb95d51c387f198cbe62e9be21577fd2a9"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/DESIGN-AUDIT.md",
+      "snapshot": "checkpoint/DESIGN-AUDIT.md",
+      "sha256": "891233ac1387e66971f6e1ed8ae2e6329eb8c04512163ab8624baaf031dbaccb"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/implementation-schedule.md",
+      "snapshot": "checkpoint/implementation-schedule.md",
+      "sha256": "e42c3ae0f2e4f1fc601a524b26ac44df346c81bc0d65ff00282d9f6d7154c04c"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/handoff-api-map/API-MAP.md",
+      "snapshot": "checkpoint/API-MAP.md",
+      "sha256": "fc710ee60e96f7c4065601cb7ea0e9ebfcb812a1f2e8e0a66ff0a7ffb9a6fcd6"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/C0-exact-memory-read.md",
+      "snapshot": "closed-packets/C0-exact-memory-read.md",
+      "sha256": "2510b385d1450a04a2ae8c765809f74250f5cf642fcc8122ddbcc1f99c54fd87"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B0-component-composition-core.md",
+      "snapshot": "closed-packets/B0-component-composition-core.md",
+      "sha256": "ea55564a30c4eef2590df48dcecdc9af67a7b3a32f3a6abad6bbc3a879e6a2ab"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B1-same-length-pair-runner.md",
+      "snapshot": "closed-packets/B1-same-length-pair-runner.md",
+      "sha256": "528e16f9cda366135c02fbb03ef0dfc9105ffd2aa0fcf3c7b76b708bc9f99c47"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B2a-compatibility-pair-handoff.md",
+      "snapshot": "closed-packets/B2a-compatibility-pair-handoff.md",
+      "sha256": "e055eaf529527d4537eb9031be17bd671b583ad2562cd0579f6ab1af2cc71687"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B2b0-owned-extension-core.md",
+      "snapshot": "closed-packets/B2b0-owned-extension-core.md",
+      "sha256": "6b697fa5aacfeba4145a4e8f0a230dde3f4fa13a96f550c870969069f07f5772"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/R1A-GENERIC-FILTER-ADMISSION.md",
+      "snapshot": "closed-packets/R1A-GENERIC-FILTER-ADMISSION.md",
+      "sha256": "2c0b8352424f42b5c7d1600c270554b0fc2bbddc12305d38b652dd97cde29798"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/S1-READER-REGIONS.md",
+      "snapshot": "closed-packets/S1-READER-REGIONS.md",
+      "sha256": "59b6b3ee023671283dfc39952a03db04b5684bfb833f20d6421f340174959afb"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/startup-packet/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
+      "snapshot": "closed-packets/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
+      "sha256": "e0aa7b4f05b61a9b3f5a941d3be400c641e19ed1f06770cb82664ab030ddd762"
+    },
+    {
+      "source": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/implementation/FLASHER-CLEANUP.md",
+      "snapshot": "FLASHER-CLEANUP.md",
+      "sha256": "24d0dff172e9ab93a6cd4feaefad65a1af0115d168fc3b6edc9f14631a7b59fd"
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "status": "Owner cleared old goal; restart kickoff prepared. No new investigation or design completion.",
+  "artifacts": [
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.md",
+      "sha256": "22628a6b6e977c1340bf39bda4ea9361e8c9af9f379e22ea2137acfc135e3396"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.json",
+      "sha256": "d26abeb2e34895d43819f5b9cc520fe019aed671ecf6aeb86633d4b2c017e14a"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/NATIVE-EQUALITY-ADOPTION.md",
+      "sha256": "926e5313e79ca3740f196469f2d53faf79084450489def7b92e89d46f170e84c"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/NATIVE-EQUALITY-ADOPTION.json",
+      "sha256": "d853f3c4e2db5a5908c3cc3141669bae460b6393f2ef8b74f5995f4603660b06"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/RETAINED-SCOPE.md",
+      "sha256": "fb0022a8a3d11573f260fa3ee18609800ff31a0ce1f318ae63083fa3cd1e5fc6"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/RETAINED-SCOPE.json",
+      "sha256": "ba078d0f756ee8235dd5d0fa95f55400e4ad6b44210f6eab348499298fe87114"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-conditional-contract-membership/REPORT.md",
+      "sha256": "921e3939fc305d021244ee4fbe6a6fb1805f32afa327000da9b7516a3bd18109"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-conditional-contract-membership/result.json",
+      "sha256": "b33cf951bcb4220c5ebbd8462aa261e15ef170586cf6a679bccb3e228b5e4df2"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-conditional-contract-membership/extract.py",
+      "sha256": "fff0daedfd7453a7e3ef4702a3e10da45c3e7e1d0fc69090065c06731f47ab69"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-conditional-contract-membership/artifact-index.json",
+      "sha256": "7979f3c3a296f8261f18de78f3288289202acb08785eb18105420020d440206a"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-dispositions/result.json",
+      "sha256": "9a423d8ac3597d021e72c7225e04262d4af172265efe141ea33e2ce6b309644a"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/startup-packet/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
+      "sha256": "e0aa7b4f05b61a9b3f5a941d3be400c641e19ed1f06770cb82664ab030ddd762"
+    },
+    {
+      "path": "/Users/matthew/Developer/tmp/filter-implementation-0180/s2-evidence/receipt.json",
+      "sha256": "2897742458f3045e82c88a2f5df98f5741454d3472e73d2587502b2f0e235711"
+    }
+  ],
+  "counts": {
+    "accepted_gates": 26,
+    "total_gates": 48,
+    "closed_issues": 10,
+    "total_issues": 23,
+    "projected_dispositions": 92,
+    "total_projected": 417,
+    "startup_classes_closed": 29,
+    "startup_classes": 94,
+    "baseline_release_negative": 1115,
+    "baseline_whole_route_unresolved": 21627,
+    "native_zero_transfer_branches": 8,
+    "implemented_no_transfer": 0,
+    "new_restorations": 0
+  },
+  "active_implementation": "None; S2 completed, final receipt in /Users/matthew/Developer/tmp/filter-implementation-0180/s2-evidence/receipt.json",
+  "stopped_workers": [
+    "startup_contracts: gpt-6.1-sol, exact JSON membership extraction complete and interrupted",
+    "capacity_candidate: gpt-6.1-sol, earlier bounded native/static receipts complete and stopped"
+  ],
+  "native_identity_decision": "8 exact directions adopt full decoded program identity theorem. Native zero-action behavior closes conditionally on current complete device identity; actual explicit result/executor boundary is unimplemented. Current prepare(None) is no correction, current empty PreparedUpdate is rejected. Preserve original/incoming metadata; do not claim envelope/destination was installed.",
+  "conditional_batch_decision": "1984 rows,60 endpoints,5 Startup classes;36 endpoints with both named R1 receipts,2 with both R0,22 without complete named role annotation. Mechanical exact metadata grouping has1984 groups because addresses/identities differ; restart must apply shared semantic contracts, not repeat1984 investigations. Missing annotation is not authority absence.",
+  "unconditional_scope": "Six native-equal directions plus six W1/W4/W6. Actual software/stage and local Startup receipts retained; W4 full Phase proof retained. Complete other-owner/physical/input and delivery relation open, no provider graph commissioned.",
+  "matrix_decision": "20420 baseline rows lie within one candidate family each;2320 cross one candidate-family pair;2 have unassigned group endpoints. Prioritize same-family preservation before unproven new family edges.21 groups cover530 of533 Normal identities;contexts5/18/19 remain explicitly unassigned.",
+  "next_after_restart": "Use FAMILY-TRANSITION-MATRIX, select one shared native-reader/unchanged-interface contract for the largest retained/lost same-family batch, state exact membership/remainder and actual introduced obligations. Eight no-transfer application handoffs are a bounded separate opportunity only after current identity/result contract is closed.",
+  "forbidden": [
+    "No specimen/model/hash/version runtime allow/deny tables",
+    "No count-matching or revival of withdrawn197/212 ROM negatives",
+    "No provider/native graph expansion during restart preparation",
+    "No production edits except already dispatched closed isolated packet",
+    "No local full suites; CI full suites",
+    "No native commits/push/devices/publication; separate root publication task retains its own authority"
+  ],
+  "kickoff": "/Users/matthew/.local/state/release-0180/RESTART-KICKOFF.md"
+}
