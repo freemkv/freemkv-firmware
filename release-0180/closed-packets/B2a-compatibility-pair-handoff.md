@@ -1,6 +1,6 @@
 # B2a: preserve complete decoded pairs through compatibility planning
 
-Status: implemented and targeted-tested in isolated po-components; root inspected the final diff and exact patch/source hashes. Scope is decoded compatibility handoff only. No new codec, native correction, receiver stage or route. Frozen source remains untouched. Receipt: `/Users/matthew/Developer/tmp/filter-implementation-0180/b2a-evidence/receipt.json`. Delta SHA256 `e0d76fe988cd95e5350907ce65e512039a8bf5d823a1fbbf741855252e8ec327`; combined B0/B1/B2a `0175ebac1bfc7564816fbade415227d401b6b7296048baf27fad9df035c71c4e`.
+Status: implemented and targeted-tested in isolated po-components; root inspected the final diff and exact patch/source hashes. Scope is decoded compatibility handoff only. No new codec, native correction, receiver stage or route. Frozen source remains untouched. Receipt: `${EVIDENCE_ROOT}/filter-implementation-0180/b2a-evidence/receipt.json`. Delta SHA256 `e0d76fe988cd95e5350907ce65e512039a8bf5d823a1fbbf741855252e8ec327`; combined B0/B1/B2a `0175ebac1bfc7564816fbade415227d401b6b7296048baf27fad9df035c71c4e`.
 
 Own only `src/compatibility.rs` and a dedicated narrow compatibility test module if useful. Do not edit B0/B1, native owners, representation.rs, receiver or firmware application. Baseline is frozen f16f0e9 plus inspected combined B0-B1 patch cda212c2dd844b41fe64d92a921f27bdf22fb72679afd833cdd108db4b2b874c.
 

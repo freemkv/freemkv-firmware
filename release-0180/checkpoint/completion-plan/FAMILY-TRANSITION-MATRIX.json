@@ -2,39 +2,39 @@
   "scope": "Restart index over existing candidate families, saved baseline rows and adopted exact exceptions. No new native proof, census, source authentication, runtime policy or application execution.",
   "inputs": {
     "ledger": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
       "sha256": "2520c96097c6baca5995425b9862a9e58f993b322f2252e636a61ddb9487847d"
     },
     "coverage": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/coverage.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/coverage.json",
       "sha256": "20af692021106469cd74ca3dc5274c511183af78992fc0bd3778e57754011505"
     },
     "contexts": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json",
       "sha256": "d1f374af8f57e891eff1aa7654af6842780b35798700e3410ab2691e1d7355ff"
     },
     "routes": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/package-directions.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/package-directions.json",
       "sha256": "1c99875a3e8323e7175c980914af76c6253748c50dd8256c4fb0106d934580ea"
     },
     "endpoints": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/endpoints.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/endpoints.json",
       "sha256": "e1254cef66ce52ff24d5d2b8c0fefc65b9d2846406b87c2faeab21838dea109d"
     },
     "negative_adoption": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-dispositions/result.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-dispositions/result.json",
       "sha256": "9a423d8ac3597d021e72c7225e04262d4af172265efe141ea33e2ce6b309644a"
     },
     "native_equality": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/NATIVE-EQUALITY-ADOPTION.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/NATIVE-EQUALITY-ADOPTION.json",
       "sha256": "d853f3c4e2db5a5908c3cc3141669bae460b6393f2ef8b74f5995f4603660b06"
     },
     "conditional_membership": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-conditional-contract-membership/result.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-conditional-contract-membership/result.json",
       "sha256": "b33cf951bcb4220c5ebbd8462aa261e15ef170586cf6a679bccb3e228b5e4df2"
     },
     "retained_scope": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/RETAINED-SCOPE.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/RETAINED-SCOPE.json",
       "sha256": "ba078d0f756ee8235dd5d0fa95f55400e4ad6b44210f6eab348499298fe87114"
     }
   },

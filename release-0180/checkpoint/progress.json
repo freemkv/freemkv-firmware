@@ -2,7 +2,7 @@
   "updated_utc": "2026-11-09T00:32:19.031125+00:00",
   "status": "completed_code_integrated_for_dev_pioneer_restart_ready",
   "active_goal": null,
-  "kickoff_prompt": "/Users/matthew/.local/state/release-0180/RESTART-KICKOFF.md",
+  "kickoff_prompt": "${RELEASE_STATE}/RESTART-KICKOFF.md",
   "accepted_gates": 26,
   "total_gates": 48,
   "open_gate_ids": [
@@ -50,19 +50,19 @@
   "new_complete_corrections": 0,
   "new_merges": 0,
   "dev_green_claimed": false,
-  "canonical": "/Users/matthew/Developer/freemkv/freemkv-firmware/filters.md",
-  "authority": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/current-state.json",
-  "audit": "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/DESIGN-AUDIT.md",
-  "plan": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/PLAN.md",
-  "next_closures": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/NEXT-CLOSURES.md",
-  "readiness": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/READINESS.json",
+  "canonical": "${APP_ROOT}/filters.md",
+  "authority": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/current-state.json",
+  "audit": "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/DESIGN-AUDIT.md",
+  "plan": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/PLAN.md",
+  "next_closures": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/NEXT-CLOSURES.md",
+  "readiness": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/READINESS.json",
   "source_pins": {
     "pioneer": {
-      "path": "/Users/matthew/Developer/tmp/filter-execution-0180/po-integrate",
+      "path": "${EVIDENCE_ROOT}/filter-execution-0180/po-integrate",
       "revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b"
     },
     "firmware": {
-      "path": "/Users/matthew/Developer/tmp/filter-execution-0180/fw-integrate",
+      "path": "${EVIDENCE_ROOT}/filter-execution-0180/fw-integrate",
       "revision": "4e80beb252125f9a4606bc4804cc945a1c817d9c"
     }
   },
@@ -90,7 +90,7 @@
     "active": false
   },
   "cleanup": {
-    "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/cleanup.json",
+    "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/cleanup.json",
     "deleted_worktrees": 5,
     "deleted_local_branches": 23,
     "deleted_build_trees": 12,
@@ -174,15 +174,15 @@
     "active_local_packet": "S2",
     "evidence": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/REPORT.md",
         "sha256": "6448b2321ff52d80b0cbaed3042d4a23d21d8bfd5354d711884cff8bfec7ec61"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/receipt.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/receipt.json",
         "sha256": "f99946992f2d123da46de09a44e5ef506df9f90c0255aa364cca0047d96f59ee"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/summary.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/summary.json",
         "sha256": "d6dd5464f60fa53800ab8d5f86bc1f9e982dc8d5ed06fe9b497ee633002c9503"
       }
     ],
@@ -204,7 +204,7 @@
     "current_priority": "Reconcile exact saved0.17.3 baseline routes first; establish retained correctness and dispose lost baseline routes before additions; then finish every remaining frozen-domain filter decision and executable handoff.",
     "route_first_owner_approval_utc": "2026-11-08T21:08:33.995860+00:00"
   },
-  "incremental_implementation_index": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/implementation.json",
+  "incremental_implementation_index": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/implementation.json",
   "implemented_packets": [
     "C0",
     "B0",
@@ -248,9 +248,9 @@
     "status": "checkpointed_for_owner_restart",
     "coordinator": "fresh gpt-6-astra session when owner launches kickoff",
     "model": "gpt-6-astra",
-    "priority_plan": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
-    "operating_reassessment": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/EXPECTATIONS-REASSESSMENT.md",
-    "exact_baseline_receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/receipt.json",
+    "priority_plan": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
+    "operating_reassessment": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/EXPECTATIONS-REASSESSMENT.md",
+    "exact_baseline_receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/receipt.json",
     "next_decision": "Close shared native reader/field relation for retained conditional batch using existing R1/R0 contracts and exact membership.",
     "current_semantic_expansion": "No further197/212 or331 addition work; retain accepted results.",
     "reassessment_due_utc": "2026-11-08T22:07:00Z",
@@ -273,7 +273,7 @@
       "package_sha256": "c0f1e774a72907f52ca1a72d727ffd3b4271d1d2224ebcf8746a47f494d20b92"
     },
     "inventory": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/211m-import-frontiers/state19-native-ABI-residuals.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/211m-import-frontiers/state19-native-ABI-residuals.json",
       "sha256": "ed985cc03e26b390f46d99673326301c83796cf0a79518c2a861d7ab16bbc5ad"
     },
     "finite_cut": {
@@ -293,7 +293,7 @@
     "next_action": "Retain the fixed ABI bundle and exact resource/source-authority frontiers. Coordinator transitions to the independent collected calibration interface rather than expanding27 caller trees. No new native production packet or admission.",
     "scope_limit": "This finite pair-specific contract cut is not the full LD-ABI issue or all frozen Loading forms. No Inputs proof is transported by owner name or shared address.",
     "priority_association": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/loading-priority-association.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/loading-priority-association.json",
       "sha256": "d3793578df8984e30060942f43a66b7a380dc75b3a22860234379752d17c6247",
       "edge_number": 1,
       "unordered_distinct_normal_pairs_ceiling": 13189,
@@ -302,13 +302,13 @@
     },
     "active_bounded_tasks": [],
     "event_create_liveness": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/event-create-liveness.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/event-create-liveness.md",
       "sha256": "060543943d7f56514eee95f508ca44b2e897c17d2543b8865cbfa85d39f41160",
       "root_hash_entries_matched": 33,
       "status": "bounded extraction accepted as evidence; remaining40B9D8 and caller-continuation premises are explicit"
     },
     "local_schedule_result": {
-      "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/schedule-native/receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/schedule-native/receipt.json",
       "receipt_sha256": "931cbf3e2613cbf2871a05d01407ee8ea28e7d85cf3f5e7620a6b60032388f15",
       "artifact_index_sha256": "d20bd3022ed16af3b25101cced324df5deb9daa8bdea8ae65f0d8a253357f2a6",
       "root_hash_entries_matched": 37,
@@ -325,7 +325,7 @@
       ]
     },
     "ROM_preservation": {
-      "specification": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/ROM-PRESERVATION.md",
+      "specification": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/ROM-PRESERVATION.md",
       "specification_sha256": "ec443f885606e2e612ccade9c6dea3d7a744305d1c63a40a30b19762c4624bd7",
       "helper_bytes": 24,
       "added_stack_bytes": 20,
@@ -333,7 +333,7 @@
       "logger_liveness_root_entries_matched": 169,
       "event_continuation_root_entries_matched": 14,
       "scope": "Retains original resident operation and outputs ER0/ER1/CCR; restores ER2..ER6 under an opaque balanced-return/private-frame contract. No global shared-site patch.",
-      "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/rom-save-native/receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/rom-save-native/receipt.json",
       "receipt_sha256": "b312f964b42086434521ccb609f5f3f3ce948912d981a95d1f1fadadb505cd4e",
       "artifact_index_sha256": "0445ad19a6f96f55341ee10d82e55ae1f5229915c8a1efc0bd62cf7783e22891",
       "root_hash_entries_matched": 52,
@@ -345,14 +345,14 @@
       "owned_target_removed": true
     },
     "local_dispositions": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/LOCAL-CLOSURES.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/LOCAL-CLOSURES.json",
       "sha256": "99a0c3c5cb749d778dac4d29aa5105e758fe832932fddae13cb8e598c4ff540b",
       "original_inventory_keys_matched": 43,
       "limit": "Local construction/exclusion ledger; originalA service behavior and whole LD-ABI remain open."
     },
     "original_reference_boundary": "A protected templates are reference-interface diagnostics, not evidence for unmodified installedA. Only incomingB components enter the selected1292B bundle; originalA resident1058DC authority is separately required.",
     "generic_cancel_result": {
-      "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/generic-cancel-native/receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/generic-cancel-native/receipt.json",
       "sha256": "3c695910af47b49e787e55460f4187413b2d0d7e33d20b92604c5275bab3a9a0",
       "dispatcher_bytes": 46,
       "added_callback_stack_bytes": 12,
@@ -363,7 +363,7 @@
       "status": "Accepted specified local mechanics; actual callback effects and frame capacity remain required."
     },
     "B_bundle": {
-      "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/bundle-native/receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/bundle-native/receipt.json",
       "sha256": "4fc1fed821d825b66fb5f2ea6a54ee4c334103aabc4b3eafb312a9d27a6568f6",
       "components": 10,
       "bytes": 1292,
@@ -375,7 +375,7 @@
       "native_placement_proved": false,
       "status": "Accepted exact composition and selected conditional joined execution; native placement/resource/physical admission open.",
       "joined_execution": {
-        "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/bundle-execution/receipt.json",
+        "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/bundle-execution/receipt.json",
         "sha256": "127e2711c3e56d355d08d9ca7936a0a9386fb62579d8d9c561c7e5bf40f501ba",
         "paired_selected_paths": 36,
         "all_ten_private_components_execute": true,
@@ -390,7 +390,7 @@
     },
     "selected_external_contract": "LD-ABI-211M-8800-original-resident-1058DC",
     "caller_frame_evidence": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-abi-cut/caller-task-frame-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-abi-cut/caller-task-frame-cut/REPORT.md",
       "report_sha256": "dc19b02bc5f45584c09917aa18207b44366d24d39066f38bffe061e465680817",
       "index_sha256": "cc8b2990ff0e2c7b6728f6a49affa7bb30cc884a16665a6512aec18d722107ba",
       "root_artifact_source_hashes_matched": 11,
@@ -412,7 +412,7 @@
     "total": 7,
     "selected": 6,
     "historical_unselected": 1,
-    "index": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/native-service-inputs.json",
+    "index": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/native-service-inputs.json",
     "index_sha256": "d8cac54af1b168c93ac84aa2975fea26f016a8618ddeb14f39a56111061a2c21",
     "whole_goal_impasse": false,
     "latest": "Separate1055AE/107C72 currentH1proof inputs; not wholeHost necessity."
@@ -431,7 +431,7 @@
       "package_sha256": "c0f1e774a72907f52ca1a72d727ffd3b4271d1d2224ebcf8746a47f494d20b92"
     },
     "priority_association": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/loading-priority-association.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/loading-priority-association.json",
       "sha256": "d3793578df8984e30060942f43a66b7a380dc75b3a22860234379752d17c6247",
       "edge_number": 1,
       "unordered_distinct_normal_pairs_ceiling": 13189,
@@ -443,11 +443,11 @@
     "status": "Retained concrete LD-CAL construction with fixed command boundary, adopted31-site bridge and exact word-read subcontract; full native feasibility and other forms remain open.",
     "baseline_evidence": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/runtime-records/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/runtime-records/REPORT.md",
         "sha256": "1389c76381d709cfc0976c5c81111efd1f2ae7eda3113072fe22edf20a43ef57"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/runtime-records/runtime-record-evidence.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/runtime-records/runtime-record-evidence.json",
         "sha256": "14035d3e61e7e7577c25ffade5c037b35b25134138bb05d6a8223104a6b0e126"
       }
     ],
@@ -467,13 +467,13 @@
     "active_bounded_tasks": [],
     "scope_limit": "Same exact installed/incoming Normal/Kernel pair only. Existing ABI bundle remains retained and unadmitted; other Loading forms, full physical composition and48-gate outcome remain open.",
     "count_contract": {
-      "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/count-contract/receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/count-contract/receipt.json",
       "sha256": "7b0d723a3afcfb9c8adabf30f140128f6a462e7055c61b8c30d5c8147388b5f3",
       "root_bindings_matched": 29,
       "scope": "Local matched producer formula1..4 and constructor literal1; no all-runtime/cache equality."
     },
     "table_contract": {
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/table-contract/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/table-contract/result.json",
       "sha256": "4cf3cbc246ba2247214ca65db63748244883487d27e429f7d7b06744bf0d4719",
       "root_artifact_source_hashes_matched": 9,
       "complete_native_table_hashes_matched": 2,
@@ -498,7 +498,7 @@
       "status": "31-site diagnostic complete:21 helpers/638B and10 direct operands; zero added stack/RAM/calls. Central finite adoption and whole-provider induction remain separate."
     },
     "native_bridge_result": {
-      "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/bridge-native/receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/bridge-native/receipt.json",
       "receipt_sha256": "9fd71a9c35a2579f707034dae1f30e0352b461fc989a5d4f42c52c2d9042c464",
       "report_sha256": "c53ed3b48004138ee91d32956becf5b63d0228b2ded091cb8d153b07d3b9fcbe",
       "helpers_sha256": "c3244b57f13d8fb858572e0ca260e55e66fed4cbc536c363bd90f6ab8caa72ad",
@@ -518,12 +518,12 @@
       "target_removed": true,
       "scope": "Finite source-operation relation under typed index/address assumptions, not resident arithmetic authority, whole producer execution, lifecycle, final placement/timing or a feasibility verdict.",
       "status": "Coordinator adopted finite31-site operation relation; no full LD-CAL or gate credit.",
-      "adoption": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/BRIDGE-ADOPTION.md",
+      "adoption": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/BRIDGE-ADOPTION.md",
       "adoption_sha256": "e071c90933909752fa60b96def3b16ba493528813764cdb62e68ceb531854de3"
     },
     "selected_external_index_contract": {
       "id": "LD-CAL-211M-8800-source-index-resident-1058A6",
-      "source": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/SOURCE-INDEX-AUTHORITY.json",
+      "source": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/SOURCE-INDEX-AUTHORITY.json",
       "source_sha256": "2c5cd630e01de54aa312481a44fe57f09ce8a361739feb13f8835026fba26c9a",
       "calls": [
         "4E178A",
@@ -540,7 +540,7 @@
     "descriptor_meaning": "Native kind discriminator derived from header bits and used as a bounded loop count; no physical media cardinality inferred.",
     "retry_join_observation": "Mapped scalarA0237A toB A02384 is the exact runtimeword read by incoming retry guard. Source physical operation already admits request[2] boolean through its diagnostic caller; full ordered/state relation remains central work.",
     "measurement_word_read_contract": {
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/word-read-contract/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/word-read-contract/result.json",
       "sha256": "a15a2b3283cf104cdf3d86bd19c7363c017e4a5aa14fdc9380c2e19b251a7563",
       "report_sha256": "bd46ba305f33ae34a7459f7c114ebb4d6820c8f46245bc769057bf238251ae22",
       "entries": [
@@ -559,7 +559,7 @@
     "planned_next_priority": {
       "issue": "LD-TIMER",
       "trigger": "After the one in-flight calclass boundary contract is fixed.",
-      "decision": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/REASSESSMENT-1515.md",
+      "decision": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/REASSESSMENT-1515.md",
       "constraints": "Same exact Loading pair; no Inputs proof reuse or further calibration helper/provider expansion."
     },
     "command_boundary_corrections": [
@@ -568,7 +568,7 @@
       "Five operation-body scalar writes must map to B A02384 in addition to three accepted factor-selection scalar accesses."
     ],
     "command_boundary": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/COMMAND-BOUNDARY.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/COMMAND-BOUNDARY.md",
       "sha256": "8eb46202d5cbeeb760873b130027b63f3f78215c1ad7b26ac95dbef7411cbbc1",
       "status": "Finite composition boundary fixed; full physical operation and native admission remain open.",
       "selected_behavior": "Keep incoming request builders/controller/worker/rebuild/retry/error behavior unchanged; substitute source3414B physical calclass operation through exact C/Q/P interface and typed state/provider mappings.",
@@ -586,7 +586,7 @@
       "scope_limit": "No caller task headroom, complete alias/lifetime/provider mapping, relocation/placement/timing or route admission."
     },
     "request_retry_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/request-retry-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/request-retry-cut/REPORT.md",
       "report_sha256": "c2ad3ab368460c5757bc229f22a7517f29f4b34921cbd58af2863150b9930adf",
       "result_sha256": "56a0319b3b412bf17fc88595e1794bceb5f08b9709b81e8b71bbd3183b6629f9",
       "index_sha256": "070354d4b691eff6c08b5778ee7783a173618108e887b9dcbe81ff785be0f53d",
@@ -618,7 +618,7 @@
       "package_sha256": "c0f1e774a72907f52ca1a72d727ffd3b4271d1d2224ebcf8746a47f494d20b92"
     },
     "priority_association": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/loading-priority-association.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/loading-priority-association.json",
       "sha256": "d3793578df8984e30060942f43a66b7a380dc75b3a22860234379752d17c6247",
       "edge_number": 1,
       "unordered_distinct_normal_pairs_ceiling": 13189,
@@ -629,16 +629,16 @@
     "started_utc": "2026-11-08T15:19:09.736133+00:00",
     "status": "Retained scoped evidence for the selected release-negative 8800\u21928801 direction; not an active investigation.",
     "baseline_model": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/loading-inputs/211m-private-hold-model-proof.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/loading-inputs/211m-private-hold-model-proof.json",
       "sha256": "aaaa446bb04073e3a557ca4ebc44ae6e16d90ad873e39dd05417b5b287c006b9",
       "scope": "Finite representation/transition proof only; not emitted machine code, public-callback commutation, timing or RAM ownership."
     },
     "next_action": "Determine whether incoming B public callback order admits online interposition of the source A required private physical/observer effects under exact native partition and callback mutation semantics. Retain minimal conflicting edges if cyclic; do not continue P30 caller expansion.",
     "active_bounded_tasks": [],
-    "reassessment": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-calibration-imports/REASSESSMENT-1515.md",
+    "reassessment": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-calibration-imports/REASSESSMENT-1515.md",
     "scope_limit": "Same installed12183/437f\u2192incoming769a/f4dc pair only. The UD03/P212 Inputs timer receipt is not a supplier proof. No new production native packet or complete correction.",
     "current_index": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/CURRENT.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-private-hold/CURRENT.md",
       "sha256": "e67a314f038b544fe0e50e6abe6ef4406dbd6f435f0c1ceb13bc0f7798e100f5"
     },
     "ordering_frontier": {
@@ -648,7 +648,7 @@
       "candidate_alternative_limit": "A virtual18-entry representation may preserve total order while changing projected public order under native partition swaps; it is not automatically compatible with unchanged public16 policy.",
       "source_context_limit": "Existing cyclic/task proof excludes known physical API execution during Normal IRQ dispatch subject to explicit foreign/computed-provider premises.",
       "front_back_negative": {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/ordering-negative.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-private-hold/ordering-negative.json",
         "sha256": "ea211462a8f392822299d47733ccd638d30427b8add795d33446566248db569a",
         "report_sha256": "43f51292f11c220b64f58381593f1ec0cf6037079920b67f961fba0f5004634a",
         "root_bindings_matched": 61,
@@ -656,7 +656,7 @@
         "scope": "Valid due queue/provider-input counterexamples with permanently busyFF94. Actual whole-application history/rearm reachability and original cancellation-provider contract remain separate."
       },
       "partition_projection_negative": {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/partition-projection.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-private-hold/partition-projection.json",
         "sha256": "632729f5244cbcc3318c521eda2debcda68faf95c8b312c96db84665783aa748",
         "script_sha256": "32c811c1c9a9aaec0ba441e240de93b19dbdbdd4d17d9e39ce926051e84abb15",
         "root_source_script_span_bindings_matched": 5,
@@ -674,7 +674,7 @@
       "full_count_partition_boundary": "Finite cut adopted at explicit scope; stable tick-entry count16 history loses fresh target under named transfer contracts. Cancel-last transient and count-only clear remain lifecycle premises; no fake private failure or public-capacity reduction."
     },
     "native_partition_cut": {
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/partition-cut/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-private-hold/partition-cut/result.json",
       "sha256": "39fbc902a6570fb1e227ef43761880780da2b81071ab09c40a606d6bbea16e88",
       "report_sha256": "66b4636737047535e48566bbfbba01468f559f083116ea9c8ca5c967c650801c",
       "artifact_index_sha256": "252f3817dd9851140284638cbed34793b091e59e3af4be5ab054b7fcad577597",
@@ -695,7 +695,7 @@
       "count15_result_is_capacity_restriction": false
     },
     "mode_hold_cut": {
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/mode-hold-cut/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-private-hold/mode-hold-cut/result.json",
       "sha256": "fc3bd6bb0dd264237991ce5b1cc40623c38f15ebfa1f0138f9d2915521bc7cfa",
       "report_sha256": "f379c4427a622cb10ea59e2c7e910ebdbf014e68de1284a5784249c5c864e34f",
       "root_source_artifact_hashes_matched": 3,
@@ -705,7 +705,7 @@
       "worker_status": "Completed and stopped; gpt-6.1-sol; no builds or production edits."
     },
     "coexistence_cut": {
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/loading-private-hold/coexistence-cut/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/loading-private-hold/coexistence-cut/result.json",
       "sha256": "3550a0460747af71c964d3709a38ced63fff3cde81297405da763202744c0524",
       "root_source_decoder_hashes_matched": 2,
       "root_whole_native_spans_matched": 13,
@@ -752,13 +752,13 @@
     "status": "implemented_and_targeted_checks_passed",
     "specification_status": "closed",
     "feasibility_gate_effect": "none; static byteownership only",
-    "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/startup-packet/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
+    "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/startup-packet/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
     "packet_sha256": "e0aa7b4f05b61a9b3f5a941d3be400c641e19ed1f06770cb82664ab030ddd762",
     "worker": "/root/b0_component_composition",
     "model": "gpt-6.1-sol",
     "reason": "Closed private declaration binder and targeted mutation/realAPI tests; central design remains Astra",
-    "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
-    "evidence_directory": "/Users/matthew/Developer/tmp/filter-implementation-0180/s2-evidence",
+    "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
+    "evidence_directory": "${EVIDENCE_ROOT}/filter-implementation-0180/s2-evidence",
     "dispatch_recorded_utc": "2026-11-08T21:08:33.995860+00:00",
     "estimate_minutes": [
       30,
@@ -795,7 +795,7 @@
       "scope_expansion": false
     },
     "completed_utc": "2026-11-08T21:45:04.000596+00:00",
-    "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/s2-evidence/receipt.json",
+    "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/s2-evidence/receipt.json",
     "receipt_sha256": "2897742458f3045e82c88a2f5df98f5741454d3472e73d2587502b2f0e235711",
     "source_hashes": {
       "src/startup/coverage.rs": "6d60157f8d4865e0a36eea74631879d7a8ec5b08bfbad550c851acc3b4e6c659",
@@ -824,7 +824,7 @@
     "owner_agreed": true
   },
   "expectations_reassessment": {
-    "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/EXPECTATIONS-REASSESSMENT.md",
+    "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/EXPECTATIONS-REASSESSMENT.md",
     "timestamp_utc": "2026-11-08T21:16:46.980292+00:00",
     "original_goal_retained": true,
     "full_completion_estimate": null,
@@ -835,8 +835,8 @@
   "full_handoff_block": {
     "status": "not_ready_internal_semantic_work_continues",
     "historical_external_block_superseded": true,
-    "current_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
-    "current_priority": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
+    "current_policy": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+    "current_priority": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
     "no_whole_goal_impasse": true,
     "full_completion_estimate": null
   },
@@ -914,21 +914,21 @@
     "started_utc": "2026-11-08T16:09:52.947111+00:00",
     "status": "Resumed: apply owner-authorized missing-input release negatives to exactdirections/memberships, then continue remainingdesignproofs.",
     "current_index": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/host-parent/driver-closure/current-contract-index.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/host-parent/driver-closure/current-contract-index.json",
       "sha256": "d0840132e5d5c8043284769c13e9d96d049eea0821f489287142e9d5447ecb9a"
     },
     "constructed_inputs": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/host-parent/driver-closure/composed-host-candidate.normal.bin",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/host-parent/driver-closure/composed-host-candidate.normal.bin",
         "decoded_sha256": "80c2472e3fac2ee0a7efdf831ef9f0d4653f2b5671681b53dab8511311d48700"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/host-parent/driver-closure/installed-kernel-adapted-boot-descriptor.bin",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/host-parent/driver-closure/installed-kernel-adapted-boot-descriptor.bin",
         "decoded_sha256": "b752c30e1872ea453b557f221120f4bbb4d890b0d3a1ee79312c03c054720915"
       }
     ],
     "priority_association": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/host-priority-association.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/host-priority-association.json",
       "sha256": "45d9285d6f4758b35fa524d1245d6a95c8a772cfccef7b5af481f347381cd3c9",
       "edge_number": 5,
       "unordered_distinct_normal_pairs_ceiling": 496,
@@ -940,7 +940,7 @@
     "active_bounded_tasks": [],
     "scope_limit": "ExactoriginalUD03\u2192XD05andcurrentconstructedoutputs only. Not UD03\u2192P212 Inputs or8800\u21928801 Loading. No wholeHostdomain verdict or correction/merge.",
     "retained_pool_boundary": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-pool-backing/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-pool-backing/REPORT.md",
       "report_sha256": "7c79fe8e46b8df039bf4fa91d2df56962e42cb5268ad7544abd221bbccef155b",
       "facts_sha256": "2334a9a586d149c25e8c5496a7e446a579d6dcd236c485ceb2cf49c83cc9b391",
       "manifest_sha256": "fc789c4562611506c73b22b620875d13b819b55392ef9de2c05f9a77eac47ce9",
@@ -967,7 +967,7 @@
       "native_api_boundary": "Centralreports descriptor+10nonzero skipsstackallocationandtaskdeletestackfree under existinghost-arena-clients receipt; no placement/lifetimeadoption."
     },
     "startup_context_cut": {
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/startup-context-cut/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/startup-context-cut/result.json",
       "sha256": "2d0e69610a20233ece40a195e604db9593a0867ebef79048c25e70b7dcfdbd4d",
       "report_sha256": "5d87612f06e1273e468522c106109ef50e10edb3a4dcfb54b9ea331ff2b1ffb3",
       "artifact_index_sha256": "45dfd07f7a78e56303b2647c659c531e77a1040d15a285d634892db8e7179b92",
@@ -991,15 +991,15 @@
       "scope": "ImplementedB0/B1/B2a localinterface boundary; not nativefeasibility or a defect in their deliberatelysame-length scope.",
       "source_files": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components/src/filters.rs",
+          "path": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components/src/filters.rs",
           "sha256": "dd0c7fc0818f98b69eb7f5deb1a73c366641a5fab01cfb00b680f92036ff8034"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components/src/filters/runner.rs",
+          "path": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components/src/filters/runner.rs",
           "sha256": "75d488774b9f7aa3a4fd4c12c3f3c04f17a52c4970e6ff5519a1a4106e43aaa4"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components/src/filters/phase.rs",
+          "path": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components/src/filters/phase.rs",
           "sha256": "647aa7eb71b70660ce18c806616323e5a42d06df140faa579bedb8d9eddd0094"
         }
       ],
@@ -1016,7 +1016,7 @@
     },
     "phase_native_join": {
       "status": "closed_at_exact_native_recipe_scope",
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/phase-join-cut/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/phase-join-cut/result.json",
       "sha256": "d2537ba14dcfee8b8674721f3d7ab4b162506a8cab6afd78a552e8ee9aea8b09",
       "report_sha256": "1d438d9edd92e4ab40084f97d449739775a8ad0fde7743eca80925675a7bd712",
       "artifact_index_sha256": "cf86dea5fcd6c8a06c4fde4171c517f3ea1f163ee290f4ab25a7312725db118f",
@@ -1076,7 +1076,7 @@
       "worker_status": "Completed/stopped;gpt-6.1-sol;fmt/build/clippy andtargetedreplay passed; disposableCargotargetremoved, replayexecutable/sourcekept."
     },
     "status_value_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/status-values.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/status-values.md",
       "report_sha256": "1978971d9ef24886d6d44944fe1bd5372dc9a2e40edf29d35250ff2e80b474d6",
       "result_sha256": "dcde1067fa1b9174724f9e05439f5250fd83ce1b5e6e81582a48aeff83f505da",
       "script_sha256": "c0b9e83b1caa62da7db0a70eb8db0afaacb199fba5c81e4162f1f51a1b291d27",
@@ -1092,9 +1092,9 @@
       "emitter_or_implementation_authorized": false
     },
     "small_object_producer_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/small-object-producer-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/small-object-producer-cut/REPORT.md",
       "report_sha256": "5ab2275830372ccb1dcaba6afb056e110b18d161be7026fe3510605f788e6ba1",
-      "result": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/small-object-producer-cut/result.json",
+      "result": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/small-object-producer-cut/result.json",
       "result_sha256": "6410c9f921d0c6737c08ae8bb25942da6e22367201898b6a7affcbdb5a9a5fde",
       "artifact_index_sha256": "c4153bbb9667a8435ea4e8bb6aee227156da1e76b8fef6a310f33d798feffb39",
       "root_unique_files_matched": 32,
@@ -1105,7 +1105,7 @@
     },
     "admission_decision": {
       "delivered_utc": "2026-11-08T16:58:07.336035+00:00",
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/HOST-DECISION.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/HOST-DECISION.md",
       "report_sha256": "a9c28034cf3d59bbf4f16a03380b9b3673168aa44c47f641e97cb7b07e055366",
       "json_sha256": "c5def885fbffae23b6cccaf196c94f412b3e3617b7e3c5d67d1b1b2af9b824e7",
       "decision": "NO-GO / research-open",
@@ -1114,7 +1114,7 @@
       "next_obligation_reassessment_utc": "2026-11-08T17:10:00Z"
     },
     "supplier_qualification": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/SUPPLIER-QUALIFICATION.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/SUPPLIER-QUALIFICATION.md",
       "report_sha256": "995a9904f6d0008e059ad6c7a156be22d54a1e2905ccd5cc7fc118b7c520ca0f",
       "json_sha256": "b28fe313e4e91daaac99a7d3a8dc283454c1ba6bf44953c2332184581555c6b1",
       "outcome": "c: internal supplier premise unproved",
@@ -1123,7 +1123,7 @@
       "new_external_request": false
     },
     "supplier_source_lookup": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/SUPPLIER-SOURCE-LOOKUP.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/SUPPLIER-SOURCE-LOOKUP.md",
       "report_sha256": "051cd60a59768493173d7f274f30814bd1e3431193a92e3813a0d203a75eab25",
       "json_sha256": "8ae5491c0e53f86a3ea13ec0b85a7edb06979d8234037279e9612088e5d42da1",
       "package_inventory_sha256": "fa185ce7d40f5bfcc11432e737a0e7bc0818819ff130ef185debc15144f9a75a",
@@ -1133,17 +1133,17 @@
       "result": "0005FA maps to currentNormal57C2BE under copied788B lifetime premise.1055AE absent from exact packaged mappedNormal/Kernel source set; no globalabsenceclaim."
     },
     "low_driver_first_supplier_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/low-driver-5fa-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/low-driver-5fa-cut/REPORT.md",
       "report_sha256": "ec6e598602e02014eefb057e1bd4d8edbdb0711589a332d2f58094ccfbb37dbe",
       "result_sha256": "bcb0f3104d75e949d33cd6f19886e6e5188f7dc5f2720d4d154b9bd938be4ba0",
       "root_exact_instruction_preimages_matched": 37,
       "result": "37 entry-qualified instructions:8Brootlocals, one localcallee,16Bprefixstackpeak; six exactMMIOwrites; firstexternal107C72 at00060A/source57C2CE. No postcall/providertraversal or resourceadmission.",
       "worker_status": "Completed/stopped;gpt-6.1-sol;no build/test or disposableoutputs."
     },
-    "reassessment_1710": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/host-reassessment-1710.json",
+    "reassessment_1710": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/host-reassessment-1710.json",
     "h1_required_inputs": [
-      "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/H1-1055AE-INPUT.md",
-      "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/host-resource-closure/H1-107C72-INPUT.md"
+      "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/H1-1055AE-INPUT.md",
+      "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/host-resource-closure/H1-107C72-INPUT.md"
     ],
     "independent_choice_assessment": "ExactHostH2 maps bothcontexts352/399 toSTARTUP-09/projected07-17 withreader/consumer/pointer/getter/queue/runtimepremises open. LY-COUNTER,LY-REVERSE andmodernR0Startup also retainmaterialsemanticrelations. No newnativepacket dispatched."
   },
@@ -1154,19 +1154,19 @@
     "status": "Bounded cut adopted; no further provider chain or coding packet",
     "coordinator": "/root/design_coordinator",
     "model": "gpt-6-astra",
-    "contract": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/GENERIC-FILTER-ADMISSION-CONTRACT.md",
+    "contract": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/GENERIC-FILTER-ADMISSION-CONTRACT.md",
     "question": "Derive complete unchanged-owner or supported correction predicate for Controller; partial ED/GPIO equality cannot authorize compatibility. Rooted GPIO mismatch cut is a bounded input, not whole owner proof.",
     "remaining_regression_gap": "Four XD08 lower-compatibility direction/policy cases are permissive. Ordinary Receiver preparation now tested: allfourrefuse withStartup(CapacityRelationUnproved). MissingController owner remainsa design/coveragegap, not anobserved prepared-updateescape.",
     "next_native_followup": "LY-COUNTER exact state/ABI relation; held evidence only until dispatched.",
-    "stopping_decision": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/controller-gpio-contract/ADOPTION.md",
+    "stopping_decision": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/controller-gpio-contract/ADOPTION.md",
     "stopped_utc": "2026-11-08T18:07:50.069696+00:00",
     "still_open": "Complete Controller predicate and four XD08 enforcement cases; internal design, not missing input",
     "receiver_receipt": {
       "status": "accepted_at_exact_receiver_preparation_scope",
       "accepted_utc": "2026-11-08T18:34:34.236576+00:00",
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/REPORT.md",
       "report_sha256": "07082315463dbd1ac8dea48efe8e5fb795f24f6770607e61568ef83dbeec04bb",
-      "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/receipt.json",
       "receipt_sha256": "bcc746434efbbdb1bc5d6da2d720669fa2880d570e35a26d096fcf6808572e4c",
       "results_sha256": "8fae8f82997c2454c2730d7c4ba901627f01fbfbcbcfddc82eb969417aac22e4",
       "source_sha256": "0df30fae021600f4c9d249d2ebc84c5b2e6fe7b4609d2112aa128fc272ee071c",
@@ -1200,9 +1200,9 @@
   "last_completed_targeted_diagnostic": {
     "status": "accepted_at_exact_receiver_preparation_scope",
     "accepted_utc": "2026-11-08T18:34:34.236576+00:00",
-    "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/REPORT.md",
+    "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/REPORT.md",
     "report_sha256": "07082315463dbd1ac8dea48efe8e5fb795f24f6770607e61568ef83dbeec04bb",
-    "receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/receipt.json",
+    "receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/xd08-receiver-preparation-check/receipt.json",
     "receipt_sha256": "bcc746434efbbdb1bc5d6da2d720669fa2880d570e35a26d096fcf6808572e4c",
     "results_sha256": "8fae8f82997c2454c2730d7c4ba901627f01fbfbcbcfddc82eb969417aac22e4",
     "source_sha256": "0df30fae021600f4c9d249d2ebc84c5b2e6fe7b4609d2112aa128fc272ee071c",
@@ -1249,23 +1249,23 @@
     ],
     "evidence": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/receipt.json",
+        "path": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/receipt.json",
         "sha256": "b33dc943c573691ce841670b7ee0919577a8d19a19af5507a7afa3fbd0c847f9"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/s12u-owner-dump/105352-interface-cut/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/s12u-owner-dump/105352-interface-cut/REPORT.md",
         "sha256": "bb36cce348c12327812ae14a1c2e5b36c63d23cceee640b3ff12aab4aad3916f"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-port-eligibility/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-port-eligibility/REPORT.md",
         "sha256": "2e35a136413ea1d535db30ef1dd884976b90abd5ac3c11a14b63706ccd0d91df"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/REPORT.md",
         "sha256": "35975667e02129ca75dcd755406de1cc56dcad9b5e9e2ee8f7264c899599e6c8"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/typed-slot-cut/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/typed-slot-cut/REPORT.md",
         "sha256": "59b1221ee3e785bbe42b6f7f6199d5fbf3abeadf4d0a3d2a570e3dc6f8f84fb5"
       }
     ],
@@ -1299,7 +1299,7 @@
     "unaffected_cases": 82,
     "no_runtime_pair_policy": true,
     "authority": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-provenance-partition/DISPOSITIONS.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/release-provenance-partition/DISPOSITIONS.md",
       "sha256": "28a9697f058a20b4e2de162620a2d905f9eb04c137c9e9004bb83d0ce0184d4d",
       "json_sha256": "f15c7078d31e477e51bce54213814ddbd8dba2552f247f5d1c512c150fd821d2",
       "result_sha256": "2807520aef84399d44edf799e677c57b653982612e69b68084239f0654a28594"
@@ -1338,7 +1338,7 @@
     }
   },
   "latest_authentication_extraction": {
-    "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/auth-other-five/REPORT.md",
+    "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/auth-other-five/REPORT.md",
     "report_sha256": "96c26ad1d5261259f48f4ab2223f777af2990791bc3028fac19a5ee8050b68b7",
     "result_sha256": "56a305ddf099b25fd786a70d95a9ec4dec513678e295aec64c7188a64333f546",
     "artifact_index_sha256": "8f4a3eab54cf10dfa459b26cc02457182514e0d1d681a3b013b01622e983b6c2",
@@ -1357,7 +1357,7 @@
     "model": "gpt-6.1-sol",
     "status": "completed_and_stopped",
     "source_origin_followup": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/auth-other-five/source-origins/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/auth-other-five/source-origins/REPORT.md",
       "report_sha256": "1a3ea1cbf7f6bff6f147eb3ddb010160e4f54fb134fce8d1eb864ba296b621ce",
       "result_sha256": "5af8c15658742c00c07cd328b7bda3ec38e254fb59bc7db58f4f14a929bd0541",
       "root_artifact_hashes_matched": 3,
@@ -1374,12 +1374,12 @@
     "reassessment_due_utc": null,
     "coordinator": "/root/design_coordinator",
     "model": "gpt-6-astra",
-    "decision_contract": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-missing-input-partition/NEXT-NATIVE-CUT.md",
+    "decision_contract": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/release-missing-input-partition/NEXT-NATIVE-CUT.md",
     "question": "Can incoming logical selector/value/error calls use the installed eight physical journal roles while preserving scale, truncation, sentinels, rollover/reclamation and reboot interpretation?",
     "limits": "HRL selection, placement and other-owner composition remain separately required; no new census and no helper-only feasibility credit.",
     "active_bounded_tasks": [],
     "completed_membership_receipt": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-context-membership/REPORT.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-context-membership/REPORT.md",
       "report_sha256": "8d07d446596df6d971b1f7d6118073f46d40e26fcc6f1bba2a05e8109f1b7270",
       "result_sha256": "a1d4e6ea4cea9be99e527045db0bd06e6b2742386c03f06fb39cde5e648af65c",
       "script_sha256": "b9c2d822cc2656979496bd17bcc97db5db6242b602ae1292523f7d0783091e5e",
@@ -1401,14 +1401,14 @@
       },
       "scope": "Mechanical existing evidence membership; no new native/caller/placement proof or runtime policy table."
     },
-    "contract": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-state-relation/CONTRACT.md",
+    "contract": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-state-relation/CONTRACT.md",
     "latest_native_finding": {
       "source": "Central ongoing STATE-RELATION.md; not a gate credit",
       "finding": "Both scanners have same adjacent-word rule. Low getter and high getter have different sentinel domains; low/high already-exhausted and last-bit diagnostic/log behaviors differ. Offset/window substitution alone is insufficient.",
       "next_decision": "Separate installed persistent-state preservation from incoming logical error reporting and derive complete relation; retain exact imports and caller resources."
     },
     "increment_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-state-relation/increment-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-state-relation/increment-cut/REPORT.md",
       "report_sha256": "c40f9bf150ff2a407c8eeb2cb559d769e68853d140305af86e75d86521cd273a",
       "result_sha256": "bc5bbcf53148da837213392615cbe629165d3e36ebed93f06aa458bd6fa86cf1",
       "script_sha256": "5860a89703c487f9c24bf904897014ccf919a93743f18aea254104164a0c465e",
@@ -1443,7 +1443,7 @@
       "reason": "Do not turn an unnecessarily stronger private logging contract into an impossibility or unbounded RAM investigation."
     },
     "latest_candidate_decision": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-state-relation/CANDIDATE-DECISION.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-state-relation/CANDIDATE-DECISION.md",
       "direction": "installed344 -> incoming4",
       "reason": "Incoming low Normal ends5C0000 inside installed high Normal5FF000 extent; only footprint advantage. Actual initializer410156 ->40628E is reached after held boot acceptance path.",
       "required_next_decision": "Same-pair physical bank service, state and resource relation; classify exact absent external prerequisites before further construction.",
@@ -1451,7 +1451,7 @@
       "original_reassessment_due_utc": "2026-11-08T19:07:00Z"
     },
     "initialization_entry_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-state-relation/initialization-entry-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-state-relation/initialization-entry-cut/REPORT.md",
       "report_sha256": "c0f4b421ad1e4baabe896cabfc5db239b2190bc652eb9b51c719d98bf4ea8949",
       "result_sha256": "17bc80c5be9012c8e4b6c11b6638a6852fac9b7ab591e8b9315db28267e3ed92",
       "root_artifact_hashes_matched": 3,
@@ -1467,7 +1467,7 @@
       "reassessment_due_utc": "2026-11-08T19:07:00Z"
     },
     "physical_provider_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-state-relation/physical-provider-source-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-state-relation/physical-provider-source-cut/REPORT.md",
       "report_sha256": "4f786737964b0c8945651a2e522a4c681bf8626261ce815eaa40a5fbde50a872",
       "result_sha256": "bdc1e47b938d910c10c215653f6d1c27e3d510c636a6bfcbd7eaa6ebe4e925af",
       "root_artifact_hashes_matched": 3,
@@ -1486,13 +1486,13 @@
         "why": "Sourceprogram/eraseandnamedread/errorentries areheld exactcomponents; no missinginputnegative. ReverseincomingNormalhasfootprintadvantagebutnotplacementproof. Existing604BRAMowneravoidsnewgap/allocatorsearch.",
         "outcome_so_far": "No complete correction, gateincrement or newmerge. Both counterbehaviorandproviderboundaryfacts are retained as localproofs.",
         "required_next_result": "Every incoming read/erase/program/configuration entry, ABI, state/alias/lifetime and errors preserved by selected sourcephysicalimplementation, or exact unmatchedconstraint. No460Bsuffix-onlyfitclaim.",
-        "document": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-state-relation/PHYSICAL-SUPPLIER-DECISION.md",
+        "document": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-state-relation/PHYSICAL-SUPPLIER-DECISION.md",
         "document_sha256": "b5724ef5951e1874b16c7596d8f89f19e1f7ac4a67002617cda7f015385bd673",
         "next_reassessment_due_utc": "2026-11-08T20:07:00Z"
       }
     ],
     "copied_owner_interface_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-state-relation/copied-owner-interface-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-state-relation/copied-owner-interface-cut/REPORT.md",
       "report_sha256": "15cda5fd35a1cea79959aa9550e01075597a62bccef5a646bccd514e1ebdfa4b",
       "result_sha256": "ab95592cc4b1b1ffef9ef56e63327303700248ca19df6db367d9e8f6bff08393",
       "root_artifact_hashes_matched": 3,
@@ -1503,7 +1503,7 @@
       "scope": "Complete five localroles, not completecallerreachability, ownership/lifetime or physicalequivalence; all materializedinteriorreferences remainqualified."
     },
     "priority_reassessment": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/counter-priority-screen/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/counter-priority-screen/REPORT.md",
       "report_sha256": "ea81f2340aa28532d31da164271dee5ea0981b3c19f2e334d2a276135a6b6532",
       "result_sha256": "9bf747b33acb36b3a34195deba649aa690ce9c19852327ee0e9b6c6ee02ea905",
       "source_sha256": "49c6aa73b127b5b31160bec2d5ecc45fe8340b4f32e9473f0387614c0f4b0b62",
@@ -1521,17 +1521,17 @@
   },
   "owner_supplied_dump": {
     "received_utc": "2026-11-08T20:03:10.443413+00:00",
-    "path": "/Users/matthew/Downloads/BD-RW___BDR-S12U_1.02.dump.bin",
+    "path": "${USER_HOME}/Downloads/BD-RW___BDR-S12U_1.02.dump.bin",
     "bytes": 17269225,
     "sha256": "32ee55f824fafadefc79be0ba03d31f396b6ecddfbfab52af769533bf22dfe9b",
     "owner_context": "Should show212banks.",
     "status": "Capture, banks and bounded resident helper qualified for exact context331; local port grammar bound; Startup ownership eligibility remains under central decision.",
     "worker": "/root/handoff_api_map",
     "model": "gpt-6.1-sol",
-    "evidence_directory": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/s12u-owner-dump",
+    "evidence_directory": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/s12u-owner-dump",
     "limits": "Filename/model does not establish mapping, exact197/212 identity, residentprovider coverage or complete safety. No device operations or input mutation.",
     "frozen_membership": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/s12u-context-membership.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/s12u-context-membership.json",
       "sha256": "90c7b75353a3c023dba30955bc8c307b79004de5327300e64472e3e845892026",
       "context": 331,
       "same_seven_owner_vector_as_197": true,
@@ -1539,7 +1539,7 @@
       "scope": "Mechanical frozen context331 membership vs197/212; capture identity is supplied by separate source-qualified dump receipt. No native equivalence, provider transport, candidate switch or restoration claim."
     },
     "root_receipt": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/s12u-owner-dump/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/s12u-owner-dump/REPORT.md",
       "report_sha256": "f216dffb3917fef4f539ad5edc75a0845d4043bcb42e0d3d4541290f02d37ebd",
       "result_sha256": "26d329db9207ec2b6d17bc2f6d448c65ab147ce753d99b9784673b43bf389cc8",
       "root_input_hashes_matched": 9,
@@ -1566,9 +1566,9 @@
       "worker": "/root/handoff_api_map",
       "model": "gpt-6.1-sol",
       "scope": "105352only; stop at first outgoingcall/indirect/nonlocaldata orphysicalaccess. No providertransport to197/212.",
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/s12u-owner-dump/105352-interface-cut",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/s12u-owner-dump/105352-interface-cut",
       "status": "Completed and source-bound; centralqualified onlycontext331",
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/s12u-owner-dump/105352-interface-cut/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/s12u-owner-dump/105352-interface-cut/REPORT.md",
       "report_sha256": "bb36cce348c12327812ae14a1c2e5b36c63d23cceee640b3ff12aab4aad3916f",
       "result_sha256": "b532d179051bc34ccf6301c234c1c3b8781dc567ac564a9360077d6d4ddba59f",
       "root_input_hashes_matched": 9,
@@ -1581,13 +1581,13 @@
       "checked_utc": "2026-11-08T20:34:52.071039+00:00",
       "receipts": {
         "context331-port-eligibility": {
-          "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-port-eligibility/REPORT.md",
+          "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-port-eligibility/REPORT.md",
           "report_sha256": "2e35a136413ea1d535db30ef1dd884976b90abd5ac3c11a14b63706ccd0d91df",
           "result_sha256": "d44dd4bc1e2665c7c67ac91fc88fcbf97e47f9c2823a80a14129802fc7df5fd0",
           "artifact_index_sha256": "cf9f70c3c91814898fc1499622a5da2fdd2b17a4ee24ac13dedc203c493e17f7"
         },
         "context331-startup-eligibility": {
-          "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/REPORT.md",
+          "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/REPORT.md",
           "report_sha256": "35975667e02129ca75dcd755406de1cc56dcad9b5e9e2ee8f7264c899599e6c8",
           "result_sha256": "12ac8ee64f41a7fe431ffc0e1674ba60cdf9ff7fcaff52907c41abfd1b3b3087",
           "artifact_index_sha256": "b3d532eba20ae3d041f1fbba13d687411217115edea66a0552a88dd7843b2714"
@@ -1601,7 +1601,7 @@
       "finding": "Eight local port bodies/299instructions/752bytes match typed grammar. Startup candidate window spans ADD.W immediate and LDM. Complete532instructionowner,80instructioncaller,37instructionconstructor bound. Subsequent actual method+10 invocation is centrally reported positive; root has not yet checked that new receipt.",
       "limits": "No route admission, provider transport to197/212, whole Startup declaration or allocation/liveness claim.",
       "typed_slot_cut": {
-        "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/typed-slot-cut/REPORT.md",
+        "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/typed-slot-cut/REPORT.md",
         "report_sha256": "59b1221ee3e785bbe42b6f7f6199d5fbf3abeadf4d0a3d2a570e3dc6f8f84fb5",
         "result_sha256": "b6e5ca4fe9eb98bca016ac95e89f31c785713fcad7c768e0abdab85ce9f95166",
         "root_artifact_hashes_matched": 3,
@@ -1610,7 +1610,7 @@
         "finding": "One44B actual typed parent+20/object+0C/table+10 dispatch; second60B candidate stops at opaque call. Shared static parent declaration remains central, so no type inferred from matching offsets."
       },
       "shared_parent_cut": {
-        "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/shared-parent-cut/REPORT.md",
+        "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/shared-parent-cut/REPORT.md",
         "report_sha256": "1168ee20cf80f85551ef388c78861f132e16ea458ad47c0938db6020c1afd898",
         "result_sha256": "457de991d749d240df48e698a47ea2ca7fabc210c007a35e1318a366aaa4fabe",
         "root_artifact_hashes_matched": 3,
@@ -1621,7 +1621,7 @@
     }
   },
   "latest_baseline_comparison": {
-    "source": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/ANALYSIS-SUMMARY.json",
+    "source": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/ANALYSIS-SUMMARY.json",
     "sha256": "bb34a6e255042ffbe394aaef97dbd25c826a774123e3b075301e43a91c47ac13",
     "version": "0.17.3",
     "available_directed_hardware_destination_identities": {
@@ -1645,9 +1645,9 @@
     "worker": "/root/report_cc04fd55",
     "model": "gpt-6.1-sol",
     "reason": "Owner-requested bounded report/log/firmware metadata diagnosis",
-    "source": "/Users/matthew/Downloads/freemkv-report-cc04fd55-be25-4b0c-8bce-9c3f8097610e.zip",
+    "source": "${USER_HOME}/Downloads/freemkv-report-cc04fd55-be25-4b0c-8bce-9c3f8097610e.zip",
     "source_sha256": "4f47f001071de2ed755e2caa4c1c92c4b09cc887fb4b3783363fe05008b499e5",
-    "output": "/Users/matthew/Developer/tmp/freemkv-report-cc04fd55-analysis/",
+    "output": "${EVIDENCE_ROOT}/freemkv-report-cc04fd55-analysis/",
     "started_utc": "2026-11-08T20:23:26.646854+00:00",
     "scope": "Independent read-onlyMediaTekreportdiagnosis; mainPioneerfeasibilitycontinues. No productionfix/deviceactions authorized.",
     "completed_utc": "2026-11-08T20:28:20.447211+00:00",
@@ -1655,7 +1655,7 @@
       "original_zip_hash_matched": true,
       "zip_members_matched": 11,
       "exact_git_source_snapshots_matched": 11,
-      "report": "/Users/matthew/Developer/tmp/freemkv-report-cc04fd55-analysis/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/freemkv-report-cc04fd55-analysis/REPORT.md",
       "report_sha256": "0465c439aba62b51e8a37127da530e3eebcdf627027fa293d191fba343430659",
       "evidence_sha256": "4507514851d69155851e9d58d393214e473969186cf98f48c352a3975dff0576",
       "finding": "BundledCurrentBH16NS58 1.02N002101 UNIQUE1901041359 mismatchesliveN002202 UNIQUE1902230935. ThreeplansblockedPreflight withzeroacceptedbytes; eventualtargetcompatibilitynotestablished.",
@@ -1664,9 +1664,9 @@
     "retained": "440KBreport, originaltext, derivedmetadata andpinnedsource; nofirmwarebinarycopies orbuilds.",
     "recovery_followup": {
       "status": "source-diagnosis complete; no device attempt or production fix",
-      "report": "/Users/matthew/Developer/tmp/freemkv-report-cc04fd55-analysis/recovery-followup/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/freemkv-report-cc04fd55-analysis/recovery-followup/REPORT.md",
       "report_sha256": "43682b092f34f3efb41bb6499d03c818b3a0aa8cc1e37ef15a8b8c326917c496",
-      "evidence": "/Users/matthew/Developer/tmp/freemkv-report-cc04fd55-analysis/recovery-followup/evidence.json",
+      "evidence": "${EVIDENCE_ROOT}/freemkv-report-cc04fd55-analysis/recovery-followup/evidence.json",
       "finding": "Recovery with Current retains strict build binding. Complete-backup support and limited receiver reads are distinct.0.17.3GUI uses can_read=false to hide/disable both live identification paths; CLI can attempt no-Current read-only plan. Report never attempted it. ExactN002202 reference remains required if live receiver identification fails.",
       "scope": "Additional owner question and screenshot; main48gate mission continues."
     },
@@ -1675,7 +1675,7 @@
       "worker": "/root/report_cc04fd55",
       "model": "gpt-6.1-sol",
       "reason": "Bounded existing catalog search and one candidate inspection",
-      "report": "/Users/matthew/Developer/tmp/freemkv-report-cc04fd55-analysis/recovery-followup/reference-search/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/freemkv-report-cc04fd55-analysis/recovery-followup/reference-search/REPORT.md",
       "report_sha256": "8a4fe2065fbb577e7e99acebe7a392600ea5b3d5cdcb57bdb2868c74ebfd56d9",
       "candidate_sha256": "d308d8c30d77247010965b52c2443803c5fa7358bd22e991b36676aa9b1147da",
       "root_metadata_scope_hashes_matched": 13,
@@ -1688,25 +1688,25 @@
     "worker": "/root/firmware_publication",
     "model": "gpt-6.1-sol",
     "reason": "Specified ingestion and established publication workflow, with generic website label/search requirement.",
-    "scratch": "/Users/matthew/Developer/tmp/firmware-import-20261108-pr1-asus",
+    "scratch": "${EVIDENCE_ROOT}/firmware-import-20261108-pr1-asus",
     "inputs": [
-      "/Users/matthew/Downloads/BD-RW_BD-RW_BDX-PR1ZL_1.07_8801_ID84.tar",
-      "/Users/matthew/Downloads/BW-16D1H-U_8F00_E115.candidate.tar",
-      "/Users/matthew/Downloads/BW-16D1H-U_8F00_E116.candidate.tar"
+      "${USER_HOME}/Downloads/BD-RW_BD-RW_BDX-PR1ZL_1.07_8801_ID84.tar",
+      "${USER_HOME}/Downloads/BW-16D1H-U_8F00_E115.candidate.tar",
+      "${USER_HOME}/Downloads/BW-16D1H-U_8F00_E116.candidate.tar"
     ],
     "authorization": "Owner explicitly requested hoard import, commit and website publication if new. Scope limited to this side task; no main0.18 shipping or device operations.",
     "labels": "Website tracks/shows/searches all evidenced retail/inquiry and internal firmware names with roles, compactly and generically. No desktop naming redesign or compatibility implication.",
     "preservation": "Main hoard evidence, existing dirty work and frozen release0.18 domain unchanged.",
     "approval_recovery": {
       "baseline_sha256": "3441373dee13664a6b35e21f970c103fa5139cce7540d42e38a3805ddf1c3d39",
-      "receipt": "/Users/matthew/Developer/tmp/firmware-import-20261108-pr1-asus/approval-recovery-receipt.json",
+      "receipt": "${EVIDENCE_ROOT}/firmware-import-20261108-pr1-asus/approval-recovery-receipt.json",
       "root_verified_prior_rows": 62,
       "task_rows_added": 5,
       "publication_before_restoration": false
     },
     "website_commit": "754b3cb2e966eb500a51799c27988e5d061d328d",
     "extractor_commit": "7a6f292fb21c12382642326e7001661a2b495705",
-    "live_checkpoint": "/Users/matthew/Developer/tmp/firmware-import-20261108-pr1-asus/publication-status.json"
+    "live_checkpoint": "${EVIDENCE_ROOT}/firmware-import-20261108-pr1-asus/publication-status.json"
   },
   "route_first_plan": {
     "objective": "Complete all48 filter feasibility requirements and executable implementation handoff across the frozen domain, prioritizing exact0.17.3 baseline route preservation/correction/refutation, with no hidden unresolved remainder or reduced correctness standard.",
@@ -1721,7 +1721,7 @@
       "next_blocking_decision"
     ],
     "saved_admission_baseline": {
-      "source": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/ANALYSIS-SUMMARY.json",
+      "source": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/ANALYSIS-SUMMARY.json",
       "sha256": "bb34a6e255042ffbe394aaef97dbd25c826a774123e3b075301e43a91c47ac13",
       "version": "0.17.3",
       "available_directed_hardware_destination_identities": {
@@ -1749,15 +1749,15 @@
       "status": "saved_rows_reconciled_proof_classification_active",
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/REPORT.md",
           "sha256": "6448b2321ff52d80b0cbaed3042d4a23d21d8bfd5354d711884cff8bfec7ec61"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/receipt.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/receipt.json",
           "sha256": "f99946992f2d123da46de09a44e5ef506df9f90c0255aa364cca0047d96f59ee"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/summary.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-reconciliation/summary.json",
           "sha256": "d6dd5464f60fa53800ab8d5f86bc1f9e982dc8d5ed06fe9b497ee633002c9503"
         }
       ],
@@ -1776,15 +1776,15 @@
       "proof_reconciliation_remainder": 21627,
       "central_membership_receipt": {
         "REPORT.md": {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-dispositions/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-dispositions/REPORT.md",
           "sha256": "3c4ff6567bd8b1ec2aaa55a9af3bf1b40e0d1ee1fdbe5e62fdcf227e3aadde8d"
         },
         "result.json": {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-dispositions/result.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-dispositions/result.json",
           "sha256": "9a423d8ac3597d021e72c7225e04262d4af172265efe141ea33e2ce6b309644a"
         },
         "artifact-index.json": {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-route-dispositions/artifact-index.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-route-dispositions/artifact-index.json",
           "sha256": "86127b79ee7ea8608a35e522dad4695f3fed2a37682c4cbe8f7b04fafc280f49"
         }
       },
@@ -1822,7 +1822,7 @@
     "resumed_utc": "2026-11-08T19:17:04.895109+00:00",
     "original_obligation_clock": "Existing obligation predates this resumption. Its clock is not restarted; the priority/approach was reassessed before further extraction. Exact original wall-clock start is not asserted here.",
     "reassessment_due_utc": "2026-11-08T22:07:00Z",
-    "contract": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/CONTRACT.md",
+    "contract": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/CONTRACT.md",
     "contract_sha256": "81d57c99b067f9a7588fd51a70ccc08a6bac212d66a9020b0c18cd200d65825c",
     "candidate_contexts": [
       197,
@@ -1839,7 +1839,7 @@
       "No complete correction or new merge admitted."
     ],
     "held_program_correspondence": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/held-program-correspondence/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/held-program-correspondence/REPORT.md",
       "report_sha256": "7b9e7ef23752efff4184987440b20fc2d6e232801a53e91f78448f1f3b44e522",
       "result_sha256": "491d3ec4b9a0ec709d92d101d8e17f57dbf96f190b11dcd4e903367a22e32346",
       "script_sha256": "f2912897da46d8866a7a92a1b054c4ed4a8f0f18cb46dba2e8e77d7dab5bd927",
@@ -1864,7 +1864,7 @@
       "next_frontier": "Prove actual relevant state/interface preservation; do not assume that generic opaque-global or return-frame independence is required."
     },
     "rom_call_domain_cut": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/rom-call-domains/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/rom-call-domains/REPORT.md",
       "report_sha256": "874a1b3fe7a209a0043820d07a57271b368ca5068f420071a2d59e8bfe5e84ec",
       "result_sha256": "f511d15de37d640f00ccd5d747e3df347c6e6e88f9f14cdd089f7dd52823b10b",
       "root_artifact_hashes_matched": 3,
@@ -1881,7 +1881,7 @@
       "central_frontier": "Preserved installed helper interface under selected changes. The previous essential missing-input inference was withdrawn."
     },
     "context_membership": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context-membership/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context-membership/REPORT.md",
       "report_sha256": "566cb776a35104df9012d8c4e9537c3975c1a85d37937058c5fc248a3459b928",
       "result_sha256": "1e834745b509538e2c003d88237095cb4681416fff3eff56dd1e64222c54bf5e",
       "root_artifact_hashes_matched": 3,
@@ -1894,7 +1894,7 @@
       "scope": "All seven projected cohort slots match the edge; source197 is left and incoming212 is right. Reverse comparison is same unordered edge R\u2192L. No restored direction or broad construction membership claim."
     },
     "indispensability_reassessment": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/INDISPENSABILITY-REASSESSMENT.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/INDISPENSABILITY-REASSESSMENT.md",
       "sha256": "772457cfac13ad891d9d34abb9122823be27783ff4986f326cf3220e7a60b63a",
       "directions": [
         [
@@ -1912,7 +1912,7 @@
       "root_service_ledger_rows_added": false
     },
     "port_entry_relation": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/REPORT.md",
       "report_sha256": "778188b6cef4403ade63ee60f84103693558608feea1c518ef38ca61d511c8c7",
       "result_sha256": "c01a2338a84e1165aa9ce313c2b51a27be47246fc04d9a75eda94723a67d295e",
       "script_sha256": "dbfac1a064bf5e86e821fdd9c63bc666fbb55924b65b9e43a07336f10b1aa435",
@@ -1923,7 +1923,7 @@
       "call_target_differences": 15,
       "scope": "Two complete held local bodies only. Matching local frames and operations do not prove imported callee behavior, entry-state relation or whole-route admission.",
       "leaf_boundary": {
-        "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/leaf-boundary/REPORT.md",
+        "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/leaf-boundary/REPORT.md",
         "report_sha256": "582b3d2a993fd1c74f4de81f92593965bd060b3777a6d2c80e64931b6d55a27f",
         "result_sha256": "6767ff240816943d0a869a2b1e39f34eb407bc920adcde4caf9972d1965f1607",
         "script_sha256": "7f5d796c4fdc3702a2799fc39f7079c4718715a0f06e8b71cb1050576d7bc6d5",
@@ -1936,7 +1936,7 @@
         "scope": "Six local bodies with only two internal call relocations and one cache read/write address pair differing. Conditional local relation only; no cache-lifetime, entry-state, MMIO termination or whole-route proof."
       },
       "entry_state": {
-        "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/entry-state/REPORT.md",
+        "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/port-entry-relation/entry-state/REPORT.md",
         "report_sha256": "8fdfd86fd6fde909d487cad6d17d7b84d7e41d734f95bb42dba7359a2086df35",
         "result_sha256": "150ad695a3e2b46fcdbf79d14ce5a1f91b2f105bcb768ec955a15612cf136900",
         "script_sha256": "d58b25be80d02fa2fffcf30b73443e6215d563bf8c8fda41ae7581746df4158c",
@@ -1953,11 +1953,11 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": "none; complete native reader observation only, no correction/admission",
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/S1-READER-REGIONS.md",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/S1-READER-REGIONS.md",
       "packet_sha256": "31d339a1761bb260d68f5b93277e4bb8914ac2e32a42d2aecfcccedc83ed8cd1",
-      "roles": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/roles.json",
+      "roles": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/roles.json",
       "roles_sha256": "572d4e12f7c572ca60c1bda95b3fcc2771a7d5f464695e92849a28b4c2266b4a",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
       "base_revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b",
       "worker": "/root/b0_component_composition",
       "model": "gpt-6.1-sol",
@@ -1972,7 +1972,7 @@
         30
       ],
       "estimate_scope": "Implementation, narrowchecks andreceipts only; no full-route forecast.",
-      "evidence_directory": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence",
+      "evidence_directory": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence",
       "commit_push_merge_authorized": false,
       "device_operations_authorized": false,
       "desktop_publication_authorized": false,
@@ -1983,10 +1983,10 @@
         "Other six acceptedpacket files must remain unchanged."
       ],
       "completed_utc": "2026-11-08T20:16:58.833637+00:00",
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/receipt.json",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/receipt.json",
       "receipt_sha256": "b33dc943c573691ce841670b7ee0919577a8d19a19af5507a7afa3fbd0c847f9",
-      "patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/S1.patch",
-      "combined_patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/B0-B1-B2a-B2b0-R1A-S1.patch",
+      "patch": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/S1.patch",
+      "combined_patch": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/B0-B1-B2a-B2b0-R1A-S1.patch",
       "patch_sha256": {
         "S1.patch": "0db9a58e95cbe83772e95a42723404c012ef6109f162cafb9584ea997f5437e4",
         "B0-B1-B2a-B2b0-R1A-S1.patch": "8ca5d8b64caf9e33b8d183de0fc62451505305d344704bb6f29b5005daba428f"
@@ -2038,7 +2038,7 @@
         "original_obligation_clock_preserved": true,
         "decision": "Continue finite SAT9 preserved-interface proof and independently dispatched S1; no reintroduction of missing-helper exclusions or broad provider graph.",
         "evidence": {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/REASSESSMENT-2007.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/REASSESSMENT-2007.md",
           "sha256": "0c9114017f5c6e474319e0d7868413139482ad2457c5b926d82daf6bdcfe7fb2"
         },
         "finding": "Actual21packedER0 inputs match;299local instructions match modulocode/cache relocation; exactinitialcache bytes match under inheritedcopy/order premises. DynamicR1, partialregister/interface andforeignstate remain explicit.",
@@ -2052,7 +2052,7 @@
         "completed_utc": "2026-11-08T21:08:33.995860+00:00",
         "original_obligation_clock_preserved": true,
         "decision": "Reconcile exact saved0.17.3 baseline routes first; establish retained correctness and dispose lost baseline routes before additions; then finish every remaining frozen-domain filter decision and executable handoff.",
-        "evidence": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/EXPECTATIONS-REASSESSMENT.md",
+        "evidence": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/EXPECTATIONS-REASSESSMENT.md",
         "new_gates": 0,
         "new_complete_corrections": 0,
         "next_reassessment_due_utc": "2026-11-08T22:07:00Z"
@@ -2062,11 +2062,11 @@
       "status": "accepted_byte_ownership_only",
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/STATIC-DECLARATION-DECISION.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-startup-eligibility/STATIC-DECLARATION-DECISION.md",
           "sha256": "0b5aa1b13656d43691a3c13b61162c38833bb4e4f346ac6effc9ec5bdd390c6f"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/CAPTURE-USE-AND-ROUTE.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/CAPTURE-USE-AND-ROUTE.md",
           "sha256": "3edd8b1ca277fad7f4fbf968e9d0e491766b3317e49f9932ddc8709ea1664cb4"
         }
       ],
@@ -2075,14 +2075,14 @@
     },
     "startup_packet_status": "S2 closed and dispatched; implementation active",
     "storage_membership_retained": {
-      "report": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-storage-membership/REPORT.md",
+      "report": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/context331-storage-membership/REPORT.md",
       "sha256": "596f93dbb8459839a82f03f7e33b97bbc730b2b9e070162d163debcce6ac9433",
       "root_bindings_matched": 16,
       "finding": "36rowsfrom12acceptedreceipts;331Layoutmatches197 butphysical-prefixportclassdiffers. Noinstantiationandnofurtherexpansion;potentialadditionnotbaseline route."
     }
   },
   "retained_input_epoch_work": {
-    "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/JOINT-CONSTRUCTION.md",
+    "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/JOINT-CONSTRUCTION.md",
     "sha256": "59fafff7d0d01901cfb6a879ec1b22ad14a1cfa1170c330d47613483736c22f5",
     "status": "Retained evidence for the selected release-negative UD03/P212 direction; current work is only in main_design_focus.",
     "chosen_architecture": "Request-path admission preserving original E/D writes; noKernelhook/globaltoken/payloadtransport. Privatefive-live Q/M resource with stable snapshot identities plus unchangedpublicpool. Per-ID cleanup is an explicit behavior refinement requiring proof.",
@@ -2102,24 +2102,24 @@
     "next_result": "Historical construction only. Do not resume this selected direction without a changed premise or newly qualified alternative.",
     "new_bounded_evidence": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/overlay-ownership.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/overlay-ownership.md",
         "sha256": "da14f724b33aef95243207696dc8fda614285badb5e94a8e80649aa5d38c9757"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/overlay-ownership.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/overlay-ownership.json",
         "sha256": "761589f947abd2dd64726e4337da27db8322a8484e610790121edbaf3606deaf"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/monitor-registration-trace.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/monitor-registration-trace.md",
         "sha256": "8e430ce7daaedb625739d0a8847010e6d70c48a9e27db3ab51c5a2828cc831f4"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/monitor-registration-trace.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/monitor-registration-trace.json",
         "sha256": "bdb8eb84ecdac8758040727ce9db2ecee3e831c09939f24ae5815fd397eebfa6"
       }
     ],
     "latest_targeted_check": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/queue-public-projection.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/queue-public-projection.json",
       "sha256": "41a0a527142bfa9d88812b02d5056eef4a46ab0b982e84dbe61d348b7ab89f27",
       "kind": "bounded abstract cursor algebra pinned to actual decoded native bodies",
       "public_cleanup_cases": 20096,
@@ -2142,61 +2142,61 @@
     },
     "latest_provider_evidence": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/poll-context.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/poll-context.md",
         "sha256": "de427a03de82146b58d4939882c670478027de199adbfae36c40dd6724665958"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/poll-context.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/poll-context.json",
         "sha256": "39f6e5085c67b9299c3b262025a01c6f16245abbe5924f52b75d524481aef8ea"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/observer-arm-provider.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/observer-arm-provider.md",
         "sha256": "f8970d5440bcc3068d5afd84422cab800ffe8c433af8cdae74de976800a11edd"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/observer-arm-provider.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/observer-arm-provider.json",
         "sha256": "e136ade5de7d9e9e41646a3307b996e1d7eeb7e5dcb507885ffef3e77f907a76"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/logger-call-boundary.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/logger-call-boundary.md",
         "sha256": "84e285dcae94338ca8d4504bc042f97328265af73950d87cd77dc8974f548e47"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/logger-call-boundary.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/logger-call-boundary.json",
         "sha256": "6646a051b22cda39ea71e214d86958e1317ad0b37f5a6a1eabb13a08b05ffacb"
       }
     ],
     "latest_callback_reentry_cut": {
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/opcode-0c-callback.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/opcode-0c-callback.md",
           "sha256": "aee8e1efe5ac1854f278d095a1d0b58366bfa54153522068dcd4059631425d0f"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/opcode-0c-callback.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/opcode-0c-callback.json",
           "sha256": "b31cec9ebe71525dcd7de93fc354b952abdb65393e4ac792a6a42198eb9e1a3f"
         }
       ],
       "result": "InstalledA Q mode2 publishes opcode0C to task15 but can invoke40ECB6 indefinite wait before publication and40EB18 after. Mode2 returns50A43C\u219250A44A;50A43E/446\u219250A29C is another callback branch. Actual selected task15 handler resolves5188BC and reaches first physical provider528E7C. No transitive no-cancel or non-suspension verdict.",
       "worker": "gpt-6.1-sol handoff_api_map; bounded exact extraction, completed and stopped"
     },
-    "resident_supplier_input_ledger": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/native-service-inputs.json",
+    "resident_supplier_input_ledger": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/native-service-inputs.json",
     "integrated_recipe_and_model": {
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/INTEGRATED-RECIPE.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/INTEGRATED-RECIPE.md",
           "sha256": "00e87d723a24e5f3fbd2e43861500643dbc404ed57134bfd3b8fb5d9d75a2dfa"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-snapshot-check.py",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-snapshot-check.py",
           "sha256": "dcad3ea91e5e40e6904e45eb39f000877740e6933bc1c512d98d03c826c61d07"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-snapshot-check.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-snapshot-check.md",
           "sha256": "011efe826a77b4fb384ea64ca889f4f8dde4bd26d480347f2c4d89a8ca3aabd4"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-snapshot-check.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/private-pool-snapshot-check.json",
           "sha256": "22b6644a730fca83d0a19c8f0783248692d9398c7c1bff180fb6dbc648cae0d4"
         }
       ],
@@ -2225,31 +2225,31 @@
       "limits": "No actual physical Q/M behavior, timing/cycles, callback stack, RAM aliases, object lifetime, whole placement or admission proof. Case numbers do not close the parent issue.",
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/REPORT.md",
           "sha256": "815a1ec39dfd1b32a1881a272972167a158bcd295813a882a39af50fcc5b5a18"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/receipt.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/receipt.json",
           "sha256": "01a75e99481ecfe8762f627579ae153b5265b97076f0d6b45028108605bd932f"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/manifest.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/manifest.json",
           "sha256": "4a461bc8f643d92ef5e2084b7201c17e7808ae9a7ad6b6b966b1ce6851819ed9"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/service.bin",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/service.bin",
           "sha256": "b612b607630c8482a2313e365ea9370d6817eec2d01afb42da7b8d49cd0868f7"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/emit.py",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/emit.py",
           "sha256": "83c2de8e4ec558dd04cb617c9c1550e906c42f30401a6efa4ad4fdcf6b885779"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/prechange-all-register-clobber-negative.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/prechange-all-register-clobber-negative.json",
           "sha256": "9aced54abdd77b605b1a892be2d4a4143648097e4754c240d345dbc08ed631d0"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/pre-callout-stack-fix/receipt.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/pre-callout-stack-fix/receipt.json",
           "sha256": "d3f89995d421ae428113a7fe9d8dfd5f97e8b1e74527f5ae044267b0a2d12864"
         }
       ]
@@ -2257,27 +2257,27 @@
     "retirement_frontier": {
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-cut.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-cut.md",
           "sha256": "1f7e8e357c848a3a1e86a60f56f9063efe918e3d9fba0e40df925d28ae030921"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-cut.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-cut.json",
           "sha256": "b470d851d85cdbe5218298b0b5b05b785b6f8a97cd8fc9b6839527a741894046"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-physical-frontier.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-physical-frontier.md",
           "sha256": "a7117facdf1d131ee8b86d04201b2fc4478ccc9fc6671f1b75ac40bf6fab3530"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-physical-frontier.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/stop-provider-physical-frontier.json",
           "sha256": "1c1e093ce23fd2cc90c8dfbb4843d9ff15f9d1bde5047cd44811356943b826c8"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/worker-retirement-cut.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/worker-retirement-cut.md",
           "sha256": "9469379826ac360c05fa4cdf0db04895c613635b48a50fe3d14659beccccbcb3"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/worker-retirement-cut.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/worker-retirement-cut.json",
           "sha256": "86fb753e4d2b74c7407b8af19a2129b111f92b926cc59b08f39abeac40db1c00"
         }
       ],
@@ -2293,19 +2293,19 @@
         "extra_own_stack_bytes": 2,
         "evidence": [
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-atomic-retire-term/REPORT.md",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-atomic-retire-term/REPORT.md",
             "sha256": "ba25282698cd6d05a1603d7a893bd0aa6944b6d09607f62b8c01dde2791073d0"
           },
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-atomic-retire-term/receipt.json",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-atomic-retire-term/receipt.json",
             "sha256": "3df9a9773250c700a67aabb3566dab2fbf54266596de66fc1ce724fcda88c22f"
           },
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-atomic-retire-term/results.json",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-atomic-retire-term/results.json",
             "sha256": "77d01d859bf698d04d5bceb470d660b0741ec008d39a5136cdfae8b63eae7c00"
           },
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-atomic-retire-term/wrapper.bin",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-atomic-retire-term/wrapper.bin",
             "sha256": "95e9598d75b050457326e96c4f6219a800efcbb17d7e657ae42e758c81b7a450"
           }
         ]
@@ -2314,39 +2314,39 @@
     "fixed_prefix_and_timer_checks": {
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/REPORT.md",
           "sha256": "84e8cf87f14246cbd0f61677fc3ea180196a1ceea4af03a4978d88f725a828fb"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/native-bindings.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/native-bindings.json",
           "sha256": "293df16dc3668b552ce84ad87be67c6c797cc9b80102429338c79ef4a6ba6eb7"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/execution.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/execution.json",
           "sha256": "a23cd7e03628f1a5a50bd2118abcf6ab04c73012fd9b47927892ca95f44eb74d"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/artifact-index.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/fixed-logger-prefix/artifact-index.json",
           "sha256": "8d98ac802108ad8a9680f1cbaa7f1410ee35f25e0b7493d0454e0e42ca3d41a8"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/REPORT.md",
           "sha256": "815a1ec39dfd1b32a1881a272972167a158bcd295813a882a39af50fcc5b5a18"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-private-pool-native/receipt.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-private-pool-native/receipt.json",
           "sha256": "01a75e99481ecfe8762f627579ae153b5265b97076f0d6b45028108605bd932f"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-local-services/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-local-services/REPORT.md",
           "sha256": "745c53ea54d02722cd06c88866a90eceae707b1fbe923e81e2e0068d37fc82d7"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-local-services/receipt.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-local-services/receipt.json",
           "sha256": "9afca72a582bd0250c8d233f44649676057272a68530e2a4b7d7f1c0dcaac853"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-local-services/manifest.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-local-services/manifest.json",
           "sha256": "979a141115fcc3d18c7c2a9de56818b570a8e75563d258d8dc13f46ff85d3e9f"
         }
       ],
@@ -2359,11 +2359,11 @@
         "bounded_providers": 39,
         "evidence": [
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/kind1-callback-entry.md",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/kind1-callback-entry.md",
             "sha256": "6877c23c29af2db46b73dd7f6d5a7f56fe28106b7734b2d872bd98a71b0a8396"
           },
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/kind1-callback-entry.json",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/kind1-callback-entry.json",
             "sha256": "6c1adb63d307f817fec313e0716fc8521f9210d11700565661d90df9eeb489eb"
           }
         ],
@@ -2378,15 +2378,15 @@
         "unbound_receiver_sites": 54,
         "evidence": [
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-local-services/kind0-callback-liveness/REPORT.md",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-local-services/kind0-callback-liveness/REPORT.md",
             "sha256": "0693f739a8c091fef2caddcee7f7115783d35e925578d536cb94d1cd331f0c88"
           },
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-local-services/kind0-callback-liveness/result.json",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-local-services/kind0-callback-liveness/result.json",
             "sha256": "897cc6a54976bf18c1cdb925cf244247f4c89bfb64d4bc16b8af12b42d81c7af"
           },
           {
-            "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-local-services/kind0-callback-liveness/artifact-index.json",
+            "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-local-services/kind0-callback-liveness/artifact-index.json",
             "sha256": "bb03acc06a9b5fcc3f7d094e63d06743b6d52c9c5fcb7c134dff5f0498142a9d"
           }
         ],
@@ -2397,7 +2397,7 @@
     },
     "frozen_benefit_reference": {
       "source": {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/coverage.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/coverage.json",
         "sha256": "20af692021106469cd74ca3dc5274c511183af78992fc0bd3778e57754011505",
         "json_pointer": "/priority_edges/2"
       },
@@ -2416,7 +2416,7 @@
       "interpretation": "Existing frozen inventory mapping only, not a supported predicate, feasibility proof, expected actual restoration or new census."
     },
     "scoped_timer_packet": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/INPUTS-TIMER-SPLICE.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/INPUTS-TIMER-SPLICE.md",
       "sha256": "e34f0dec444bbcd018840630be57112073659da962b301020babf09e04347f74",
       "status": "specified native construction/interface accepted locally; not route admission",
       "classifier_seam": "54D0CA, before eligibility read; save CCR in existing frame byte SP+5, not live arraybase SP+0..3",
@@ -2428,31 +2428,31 @@
       "model": "gpt-6.1-sol",
       "final_evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-scoped/REPORT.md",
           "sha256": "032b50f4a545bb64025e4b9d4302331522e92880689d8a07696e9e698befce9f"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/receipt.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-scoped/receipt.json",
           "sha256": "8c554126cb0140a3f976e5deb94f4218888b3afe0815702937ebced35795fa6c"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/artifact-index.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-scoped/artifact-index.json",
           "sha256": "8dec0a00ecf0d420306fcda5d0a2a9fa53b55899da134e7ac43b0cb477d6a327"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/results.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-scoped/results.json",
           "sha256": "d07d9c139f658ad646a365f42575a7b2497d16a413825c047e2afcc734940091"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/frame-access.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-scoped/frame-access.json",
           "sha256": "5c9564abb85089a62f7ff7dc4bf3bdbcd3be3efe5d96867c9db2522c435feb69"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/bounds.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-scoped/bounds.json",
           "sha256": "9420cde57f1eef83bba04bddc8f55a5c5b85a6003b2f51f192b87908d1ec733e"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-timer-scoped/ORC-authority.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-timer-scoped/ORC-authority.json",
           "sha256": "53f97e9f0f5f3bd3c53b475bc3379e2e426a9a455edbefd8f0efbcf1bbd19b60"
         }
       ],
@@ -2475,11 +2475,11 @@
       "status": "selected_strategy_not_admitted",
       "evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/normal-append-placement.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/normal-append-placement.json",
           "sha256": "20d975ce6a87e5a7f6b6c69edd31dd38b8980f1b8771b2cfbdf8298ad529d807"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/normal-append-placement.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/normal-append-placement.md",
           "sha256": "d57d5f4625f8abbfac927014b65b63de7c8c534651a0bcdafa3e8aa6433a03e8"
         }
       ],
@@ -2506,29 +2506,29 @@
     "reset_boundaries": {
       "destructor_evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/REPORT.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/REPORT.md",
           "sha256": "a5d565f805165f875fdc517825a163cb8146ab318bc79a6d6a83e29b1dfc0449"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/result.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/result.json",
           "sha256": "c0bf4e239c6faeafc6007202200617a8beb616847e16311ceab36c3ad3d25df3"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/artifact-index.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/artifact-index.json",
           "sha256": "bbde20630063f738acd02036a137e9233f56d83f86a144215f30c998a850223c"
         }
       ],
       "initializer_evidence": [
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/kernel-reset-initializer/kernel-reset-initializer.md",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/kernel-reset-initializer/kernel-reset-initializer.md",
           "sha256": "1b328c09b8b56f7496ab29cfa7abdd556df113558692ec9654172ac6d72a7cdb"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/kernel-reset-initializer/kernel-reset-initializer.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/kernel-reset-initializer/kernel-reset-initializer.json",
           "sha256": "e120fb62873c076aa7f1832156ea95b26d5498bb0f3eab2c42a79aa477b117b3"
         },
         {
-          "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/kernel-reset-initializer/artifact-index.json",
+          "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/destructor-invocation-cut/kernel-reset-initializer/artifact-index.json",
           "sha256": "2a6047c8e2262d818c636687a0f650ed4f90639ea6f5ea5809d58e6d1cfc991c"
         }
       ],
@@ -2537,39 +2537,39 @@
     "work_priority": "retained, no current emission or helper variant",
     "latest_lifetime_evidence": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/masked-wait-boundary.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/masked-wait-boundary.json",
         "sha256": "8880e7ca77fd9ba0164b693a35b5295566fd5b94f0b3def6265b9c4f1ac62167"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/kernel-init-leaf.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/kernel-init-leaf.json",
         "sha256": "d642823c57b242efb028e5d0d0ca64fe9669935fc9aa4991b5a54ad2e79e4aa3"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/reassessment-1315.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/reassessment-1315.md",
         "sha256": "f7307869c935180c7df67280d607521b2149d651ae5cbfe17505eb512027a0c3"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/foreground-task-binding/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/foreground-task-binding/REPORT.md",
         "sha256": "9fd4782a3432a9852e2a436ed1e680e65d1640388f5f32d6b182bca3acbb0cf1"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/foreground-task-binding/result.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/foreground-task-binding/result.json",
         "sha256": "e43a5ef39fcaf3fa04c4d522707bb678d701ee71943d50a3616637c4bf09628e"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/foreground-task-binding/artifact-index.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/foreground-task-binding/artifact-index.json",
         "sha256": "502a938da9cce16914bf324d7f647ea9cd4470b5db892ad3e8281d1e73beb1b4"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/task15-completion-order/REPORT.md",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/task15-completion-order/REPORT.md",
         "sha256": "15f51077d1479c31c9c63bcd3eef13f3c1d9c06c9e7427bac25498d129a672d7"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/task15-completion-order/result.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/task15-completion-order/result.json",
         "sha256": "0cca24e7bc0b5fc53230ed5e94b3a8f22436a27660cf10027d73add5b7b1c763"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/input-request-lifetime/task15-completion-order/artifact-index.json",
+        "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/input-request-lifetime/task15-completion-order/artifact-index.json",
         "sha256": "279389a720f16e83e7e08ac28cb56eece341882f37f37bb046575c5ffb9e2d27"
       }
     ]
@@ -2578,8 +2578,8 @@
     "status": "completed_and_centrally_adopted_at_exact_scope",
     "worker": "/root/design_coordinator/startup_contracts",
     "model": "gpt-6.1-sol",
-    "predicate": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-provenance-partition/ADOPTION.md",
-    "input_receipt": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/auth-provenance-partition/REPORT.md",
+    "predicate": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/release-provenance-partition/ADOPTION.md",
+    "input_receipt": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/auth-provenance-partition/REPORT.md",
     "input_report_sha256": "ddf8b1a23ea89d96e5a8963cc8c597f6ad446f5a4c51fe772fa890661b3fc333",
     "input_result_sha256": "f6c9a8dccc38c0706c2f278088a0748ecae49dab08c1cc8f67b103a87029aab0",
     "predicate_contexts": [
@@ -2605,7 +2605,7 @@
       350,
       506
     ],
-    "output": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-provenance-partition",
+    "output": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/release-provenance-partition",
     "counts_unchanged_until_central_membership_adoption": false,
     "runtime_rule": "Required original authority; no endpoint-ID/model/version/digest pair table",
     "receipt": {
@@ -2620,7 +2620,7 @@
     },
     "adopted_utc": "2026-11-08T18:50:18.421338+00:00",
     "dispositions": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-provenance-partition/DISPOSITIONS.md",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/release-provenance-partition/DISPOSITIONS.md",
       "sha256": "28a9697f058a20b4e2de162620a2d905f9eb04c137c9e9004bb83d0ce0184d4d",
       "json_sha256": "f15c7078d31e477e51bce54213814ddbd8dba2552f247f5d1c512c150fd821d2",
       "result_sha256": "2807520aef84399d44edf799e677c57b653982612e69b68084239f0654a28594"
@@ -2630,31 +2630,31 @@
   "restart_objective": "Complete all 48 filter feasibility gates across the frozen domain and executable coding handoff, using shared contracts and exact family membership; validate retained/lost 0.17.3 routes before additions.",
   "restart_handoff": {
     "prepared_utc": "2026-11-09T00:32:19.031125+00:00",
-    "kickoff": "/Users/matthew/.local/state/release-0180/RESTART-KICKOFF.md",
-    "kickoff_sha256": "3e42290160c2ad9c69978e7a844c5ad15196849a64fb4ba69c8795eaace43f9e",
+    "kickoff": "${RELEASE_STATE}/RESTART-KICKOFF.md",
+    "kickoff_sha256": "5fc630d13f0ecc3ec57fe3b22d1cbe06f773adfc238e85b70921f3d9be941988",
     "coordinator_model": "gpt-6-astra",
     "worker_model": "gpt-6.1-sol",
     "maximum_workers": 2,
-    "family_matrix": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.md",
-    "semantic_checkpoint": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RESTART-SEMANTIC-CHECKPOINT.md",
+    "family_matrix": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.md",
+    "semantic_checkpoint": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/RESTART-SEMANTIC-CHECKPOINT.md",
     "accepted_gates": 26,
     "total_gates": 48,
     "no_goal_started": true,
-    "s2_checkpoint": "/Users/matthew/Developer/tmp/filter-implementation-0180/s2-evidence/STATUS.json",
-    "publication_checkpoint": "/Users/matthew/Developer/tmp/firmware-import-20261108-pr1-asus/publication-status.json",
+    "s2_checkpoint": "${EVIDENCE_ROOT}/filter-implementation-0180/s2-evidence/STATUS.json",
+    "publication_checkpoint": "${EVIDENCE_ROOT}/firmware-import-20261108-pr1-asus/publication-status.json",
     "refresh_pending_after": null,
-    "completed_prerequisites": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/implementation/STATUS.json",
-    "dev_delivery": "/Users/matthew/Developer/freemkv/freemkv-firmware/docs/release-0180/DELIVERY.json"
+    "completed_prerequisites": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/implementation/STATUS.json",
+    "dev_delivery": "${APP_ROOT}/release-0180/DELIVERY.json"
   },
   "separate_mediatek_design": {
     "status": "integrated_for_dev_delivery",
-    "checkpoint": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/STATUS.json",
+    "checkpoint": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/STATUS.json",
     "does_not_expand_frozen_domain": true,
-    "design": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/cross-op/DESIGN.md",
-    "command1_packet": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/command1-implementation/STATUS.json",
-    "implementation": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/implementation",
+    "design": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/cross-op/DESIGN.md",
+    "command1_packet": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/command1-implementation/STATUS.json",
+    "implementation": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/implementation",
     "no_current_negotiation": "Not shipping: existing read/specify flow retained; selected valid Current supplies recipe, actual drive bound independently.",
-    "implementation_receipt": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/implementation/STATUS.json"
+    "implementation_receipt": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/implementation/STATUS.json"
   },
   "generic_flasher_cleanup": {
     "status": "integrated_for_dev_delivery",
@@ -2662,9 +2662,9 @@
     "required_for_release": "0.18.0",
     "counts_as_filter_gate": false,
     "requirement": "Shared flasher GUI/CLI/workflow/engine speaks only generic facets of Pioneer and MediaTek backends. Vendor file parsing, compatibility, receiver, transfer and recovery policy stays in backends/protocol libraries. Standard SCSI and generic consent/backup persistence stay shared. Thin public API compatibility reexports are permitted; no vendor runtime decisions in shared workflow.",
-    "checkpoint": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/implementation/FLASHER-CLEANUP.md",
+    "checkpoint": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/implementation/FLASHER-CLEANUP.md",
     "validation": "fmt/clippy/build and directly relevant tests; CI full suites; no device operations",
-    "completion": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/implementation/STATUS.json",
+    "completion": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/implementation/STATUS.json",
     "completed_utc": "2026-11-08T23:59:34.232373+00:00"
   },
   "dev_delivery": {
@@ -2735,7 +2735,7 @@
       "new_merges": 0,
       "complete": false
     },
-    "evidence_directory": "/Users/matthew/Developer/tmp/release-0180-dev-publish",
+    "evidence_directory": "${EVIDENCE_ROOT}/release-0180-dev-publish",
     "frozen_proof_pins_unchanged": true
   }
 }

@@ -6,8 +6,8 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": null,
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/C0-exact-memory-read.md",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/fw-read-contract",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/closed-packets/C0-exact-memory-read.md",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/fw-read-contract",
       "base_revision": "4e80beb252125f9a4606bc4804cc945a1c817d9c",
       "worker": "/root/c0_read_contract",
       "model": "gpt-6.1-sol",
@@ -31,8 +31,8 @@
         "library_build": "pass",
         "diff_check": "pass"
       },
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/c0-evidence/results.txt",
-      "patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/c0-evidence/C0.patch",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/c0-evidence/results.txt",
+      "patch": "${EVIDENCE_ROOT}/filter-implementation-0180/c0-evidence/C0.patch",
       "patch_sha256": "3097df958a37bfbe055dfc230c2c2e6d557c694c50ce308d41776602c4f748f0",
       "source_hashes": {
         "crates/freemkv-flash/src/transport.rs": "e3d7c548685a8c9701ad72ae9e3b39bf0e7a79823ae69bd16b105b593dd0d727",
@@ -49,8 +49,8 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": null,
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B0-component-composition-core.md",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/closed-packets/B0-component-composition-core.md",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
       "base_revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b",
       "worker": "/root/b0_component_composition",
       "model": "gpt-6.1-sol",
@@ -74,8 +74,8 @@
         "narrow_image_feature_check": "pass",
         "diff_check": "pass"
       },
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/b0-evidence/receipt.json",
-      "patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b0-evidence/B0.patch",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/b0-evidence/receipt.json",
+      "patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b0-evidence/B0.patch",
       "patch_sha256": "17185317cd49755943e2ad66974135d053458bf8f959582ee70bf290c5944ed6",
       "source_hashes": {
         "src/filters.rs": "f544d9812728f634528e6734949875c278e8ef2705034ad2d5f5ca5c38cac797",
@@ -98,8 +98,8 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": null,
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B1-same-length-pair-runner.md",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/closed-packets/B1-same-length-pair-runner.md",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
       "base_revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b",
       "prerequisite_patch_sha256": "17185317cd49755943e2ad66974135d053458bf8f959582ee70bf290c5944ed6",
       "worker": "/root/b0_component_composition",
@@ -123,9 +123,9 @@
         "clippy": "pass",
         "narrow_image_feature_check": "pass"
       },
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/b1-evidence/receipt.json",
-      "patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b1-evidence/B1.patch",
-      "combined_patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b1-evidence/B0-B1.patch",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/b1-evidence/receipt.json",
+      "patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b1-evidence/B1.patch",
+      "combined_patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b1-evidence/B0-B1.patch",
       "patch_sha256": {
         "B1.patch": "b890fb27d3dfb10b31ee948868a5613d2bb9a1d97b0652e0aadc6eb46e229cc4",
         "B0-B1.patch": "cda212c2dd844b41fe64d92a921f27bdf22fb72679afd833cdd108db4b2b874c"
@@ -152,8 +152,8 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": null,
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B2a-compatibility-pair-handoff.md",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/closed-packets/B2a-compatibility-pair-handoff.md",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
       "base_revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b",
       "prerequisite_patch_sha256": "cda212c2dd844b41fe64d92a921f27bdf22fb72679afd833cdd108db4b2b874c",
       "worker": "/root/b0_component_composition",
@@ -178,9 +178,9 @@
         "image_check": "pass",
         "diff_check": "pass"
       },
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2a-evidence/receipt.json",
-      "patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2a-evidence/B2a.patch",
-      "combined_patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2a-evidence/B0-B1-B2a.patch",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/b2a-evidence/receipt.json",
+      "patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b2a-evidence/B2a.patch",
+      "combined_patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b2a-evidence/B0-B1-B2a.patch",
       "patch_sha256": {
         "B2a.patch": "e0d76fe988cd95e5350907ce65e512039a8bf5d823a1fbbf741855252e8ec327",
         "B0-B1-B2a.patch": "0175ebac1bfc7564816fbade415227d401b6b7296048baf27fad9df035c71c4e"
@@ -210,11 +210,11 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": "none; pure mechanism prerequisite, no native growth/route/admission",
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/B2b0-owned-extension-core.md",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/closed-packets/B2b0-owned-extension-core.md",
       "packet_sha256": "a147134f01c223578cc6965ab862297ca05f80ed2a83cbe4580ca170fe1cf536",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
       "base_revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b",
-      "prerequisite_combined_patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2a-evidence/B0-B1-B2a.patch",
+      "prerequisite_combined_patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b2a-evidence/B0-B1-B2a.patch",
       "worker": "/root/b0_component_composition",
       "model": "gpt-6.1-sol",
       "reason": "Precisely specified single-file composition primitive and focused acceptance; Astra retains native/identity/codec decisions.",
@@ -231,7 +231,7 @@
         20
       ],
       "estimate_scope": "bounded implementation/checks/receipt only, not fullB2b or feasibility",
-      "evidence_directory": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2b0-evidence",
+      "evidence_directory": "${EVIDENCE_ROOT}/filter-implementation-0180/b2b0-evidence",
       "limitations": [
         "Original same-length wrapper remains only production caller.",
         "No runner/trait/owner/identity/receiver changes; no native extension certificate.",
@@ -256,10 +256,10 @@
         "clippy_envelope_drive_lib_Dwarnings": "pass",
         "check_image_lib": "pass"
       },
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2b0-evidence/receipt.json",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/b2b0-evidence/receipt.json",
       "receipt_sha256": "ac78424f43c521fb0313ce0ef8bf961e94db6bcb1bf40bc8f3946470afe22780",
-      "patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2b0-evidence/B2b0.patch",
-      "combined_patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/b2b0-evidence/B0-B1-B2a-B2b0.patch",
+      "patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b2b0-evidence/B2b0.patch",
+      "combined_patch": "${EVIDENCE_ROOT}/filter-implementation-0180/b2b0-evidence/B0-B1-B2a-B2b0.patch",
       "patch_sha256": {
         "B2b0.patch": "03d75ecb5a6bb4e0ffdf1a000612e0e0fe669aa8b6938efd4b1b032e5c1b0819",
         "B0-B1-B2a-B2b0.patch": "c1bcdac081f7f676311c7973243958613b0f8a2502c99baeff3f81782c1c4e9c"
@@ -284,8 +284,8 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": "none; generic enforcement defect only",
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/closed-packets/R1A-GENERIC-FILTER-ADMISSION.md",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/closed-packets/R1A-GENERIC-FILTER-ADMISSION.md",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
       "base_revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b",
       "worker": "/root/b0_component_composition",
       "model": "gpt-6.1-sol",
@@ -295,7 +295,7 @@
       "production_files_changed": [
         "src/filters/runner.rs"
       ],
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/r1a-evidence/receipt.json",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/r1a-evidence/receipt.json",
       "receipt_sha256": "ddaea225bc012cff6f935327f9c92cb7d854d86a483d0ca1c20ae9d877c4e62c",
       "source_hashes": {
         "src/filters.rs": "dd0c7fc0818f98b69eb7f5deb1a73c366641a5fab01cfb00b680f92036ff8034",
@@ -319,7 +319,7 @@
         "all_original_authentication_pass": 7,
         "all_originals_preserved": true,
         "red_evidence_tree_unchanged": true,
-        "post_results": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/release-negative-refusal-check-r1a/results.json",
+        "post_results": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/release-negative-refusal-check-r1a/results.json",
         "post_results_sha256": "68d1857a881b7f6a8d04d4ef7fa110ff4a48fc7b092aed9c8c58f3c9cd191663",
         "post_bindings_sha256": "d6896ad94cfae89f119418e73a0b827b228cf092082df9eec1e0b202f37cd00e",
         "byte_identical_harness_and_lock": true
@@ -345,11 +345,11 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": "none; complete native reader observation only, no correction/admission",
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/S1-READER-REGIONS.md",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/S1-READER-REGIONS.md",
       "packet_sha256": "31d339a1761bb260d68f5b93277e4bb8914ac2e32a42d2aecfcccedc83ed8cd1",
-      "roles": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/roles.json",
+      "roles": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/reader-packet/roles.json",
       "roles_sha256": "572d4e12f7c572ca60c1bda95b3fcc2771a7d5f464695e92849a28b4c2266b4a",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
       "base_revision": "f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b",
       "worker": "/root/b0_component_composition",
       "model": "gpt-6.1-sol",
@@ -364,7 +364,7 @@
         30
       ],
       "estimate_scope": "Implementation, narrowchecks andreceipts only; no full-route forecast.",
-      "evidence_directory": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence",
+      "evidence_directory": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence",
       "commit_push_merge_authorized": true,
       "device_operations_authorized": false,
       "desktop_publication_authorized": false,
@@ -375,10 +375,10 @@
         "Other six acceptedpacket files must remain unchanged."
       ],
       "completed_utc": "2026-11-08T20:16:58.833637+00:00",
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/receipt.json",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/receipt.json",
       "receipt_sha256": "b33dc943c573691ce841670b7ee0919577a8d19a19af5507a7afa3fbd0c847f9",
-      "patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/S1.patch",
-      "combined_patch": "/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/B0-B1-B2a-B2b0-R1A-S1.patch",
+      "patch": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/S1.patch",
+      "combined_patch": "${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/B0-B1-B2a-B2b0-R1A-S1.patch",
       "patch_sha256": {
         "S1.patch": "0db9a58e95cbe83772e95a42723404c012ef6109f162cafb9584ea997f5437e4",
         "B0-B1-B2a-B2b0-R1A-S1.patch": "8ca5d8b64caf9e33b8d183de0fc62451505305d344704bb6f29b5005daba428f"
@@ -430,13 +430,13 @@
       "status": "implemented_and_targeted_checks_passed",
       "specification_status": "closed",
       "feasibility_gate_effect": "none; static byteownership only",
-      "packet": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/sat9-owner-join/startup-packet/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
+      "packet": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/sat9-owner-join/startup-packet/S2-DECLARED-INSTRUCTION-OWNERSHIP.md",
       "packet_sha256": "e0aa7b4f05b61a9b3f5a941d3be400c641e19ed1f06770cb82664ab030ddd762",
       "worker": "/root/b0_component_composition",
       "model": "gpt-6.1-sol",
       "reason": "Closed private declaration binder and targeted mutation/realAPI tests; central design remains Astra",
-      "worktree": "/Users/matthew/Developer/tmp/filter-implementation-0180/po-components",
-      "evidence_directory": "/Users/matthew/Developer/tmp/filter-implementation-0180/s2-evidence",
+      "worktree": "${EVIDENCE_ROOT}/filter-implementation-0180/po-components",
+      "evidence_directory": "${EVIDENCE_ROOT}/filter-implementation-0180/s2-evidence",
       "dispatch_recorded_utc": "2026-11-08T21:08:33.995860+00:00",
       "estimate_minutes": [
         30,
@@ -473,7 +473,7 @@
         "scope_expansion": false
       },
       "completed_utc": "2026-11-08T21:45:04.000596+00:00",
-      "evidence": "/Users/matthew/Developer/tmp/filter-implementation-0180/s2-evidence/receipt.json",
+      "evidence": "${EVIDENCE_ROOT}/filter-implementation-0180/s2-evidence/receipt.json",
       "receipt_sha256": "2897742458f3045e82c88a2f5df98f5741454d3472e73d2587502b2f0e235711",
       "source_hashes": {
         "src/startup/coverage.rs": "6d60157f8d4865e0a36eea74631879d7a8ec5b08bfbad550c851acc3b4e6c659",
@@ -498,7 +498,7 @@
       "retained_reason": "Historical frozen source, exact patches and receipts preserve original proof provenance; current integration is committed."
     }
   ],
-  "execution_schedule": "/Users/matthew/Developer/tmp/filter-verdicts-0180/planning-20261108/implementation-schedule.md",
+  "execution_schedule": "${EVIDENCE_ROOT}/filter-verdicts-0180/planning-20261108/implementation-schedule.md",
   "schedule_status": "Restart prepared; eight local packets complete, full 48/48 design not ready.",
   "current_priority": "Use restart kickoff and existing family matrix; shared conditional reader/field contracts first, then baseline restorations and remaining full domain.",
   "dev_delivery": {
@@ -569,7 +569,7 @@
       "new_merges": 0,
       "complete": false
     },
-    "evidence_directory": "/Users/matthew/Developer/tmp/release-0180-dev-publish",
+    "evidence_directory": "${EVIDENCE_ROOT}/release-0180-dev-publish",
     "frozen_proof_pins_unchanged": true
   }
 }

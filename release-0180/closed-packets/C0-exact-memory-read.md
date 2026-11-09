@@ -2,7 +2,7 @@
 
 Status: IMPLEMENTED AND TARGETED-TESTED in isolated local checkout; root inspected the patch. This component supplies future live-condition consumers; it does not close a whole filter gate or admit a correction.
 
-Baseline: firmware 4e80beb252125f9a4606bc4804cc945a1c817d9c; Pioneer f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b. Root creates a separate implementation checkout under /Users/matthew/Developer/tmp/. Never edit frozen fw-integrate/po-integrate or proof inputs. Preserve other work.
+Baseline: firmware 4e80beb252125f9a4606bc4804cc945a1c817d9c; Pioneer f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b. Root creates a separate implementation checkout under ${EVIDENCE_ROOT}/. Never edit frozen fw-integrate/po-integrate or proof inputs. Preserve other work.
 
 ## Problem and invariant
 
@@ -35,4 +35,4 @@ Run fmt/clippy + directly targeted tests only; CI runs full suites. Set CARGO_TA
 
 Report source revision, patch/diff, exact test results and any baseline dependency constraint. No commit, push, merge, physical device operation or Desktop publication. Retain only source patch and necessary targeted results; clean disposable build output after use. Estimate 20–40 minutes including compilation, one worker. Root owns checkout and integration decision. This packet can run concurrently with all native feasibility analysis because it touches no frozen input or semantic proof record.
 
-Implementation receipt: `/Users/matthew/Developer/tmp/filter-implementation-0180/c0-evidence/C0.patch`, SHA256 `3097df958a37bfbe055dfc230c2c2e6d557c694c50ce308d41776602c4f748f0`. Source checkout `fw-read-contract` retains uncommitted changes in transport.rs, transport_tests.rs and backup.rs. Eight transport tests plus the existing probe regression pass; fmt, clippy, library build and diff check pass. Build target removed. No gate credit or route change. Warm compilation made the original 20–40 minute estimate conservative; actual root-reported coding/test interval was approximately three minutes before final checks.
+Implementation receipt: `${EVIDENCE_ROOT}/filter-implementation-0180/c0-evidence/C0.patch`, SHA256 `3097df958a37bfbe055dfc230c2c2e6d557c694c50ce308d41776602c4f748f0`. Source checkout `fw-read-contract` retains uncommitted changes in transport.rs, transport_tests.rs and backup.rs. Eight transport tests plus the existing probe regression pass; fmt, clippy, library build and diff check pass. Build target removed. No gate credit or route change. Warm compilation made the original 20–40 minute estimate conservative; actual root-reported coding/test interval was approximately three minutes before final checks.

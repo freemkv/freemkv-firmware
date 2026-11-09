@@ -28,7 +28,8 @@
     "app_targeted_ignored": 1,
     "full_suites": "CI only",
     "device_operations": false,
-    "app_targeted_scope": "93 app tests passed before dependency CI fixes; dependency fixes have their own 4 and 27 focused tests"
+    "app_targeted_scope": "93 app tests passed before dependency CI fixes; dependency fixes have their own 4 and 27 focused tests",
+    "public_handoff_guards": "comment-guard and leak-guard passed locally after public path normalization; shared CI guard definitions unchanged"
   },
   "ci": {
     "mediatek": {
@@ -55,7 +56,13 @@
       "doc_links": "in_progress_at_check",
       "leak_guard": "in_progress_at_check"
     },
-    "policy": "CI runs full suites; no waiting or polling as a release gate."
+    "policy": "CI runs full suites; no waiting or polling as a release gate.",
+    "handoff_guards": {
+      "initial_comment_guard_run": 42540800062,
+      "initial_leak_guard_run": 42540800051,
+      "initial_result": "rejected root docs directory and absolute personal paths",
+      "fix": "explicit release handoff under release-0180 with named roots and separate source/snapshot hashes"
+    }
   },
   "feasibility": {
     "accepted_gates": 26,
@@ -66,6 +73,6 @@
     "new_merges": 0,
     "complete": false
   },
-  "evidence_directory": "/Users/matthew/Developer/tmp/release-0180-dev-publish",
+  "evidence_directory": "${EVIDENCE_ROOT}/release-0180-dev-publish",
   "frozen_proof_pins_unchanged": true
 }

@@ -4,8 +4,8 @@ Extraction only, 2026-11-08 UTC. No implementation, physical-recipe or feasibili
 
 ## Source authority
 
-- PO root `/Users/matthew/Developer/tmp/filter-execution-0180/po-integrate`, HEAD `f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b`, clean.
-- FW root `/Users/matthew/Developer/tmp/filter-execution-0180/fw-integrate`, HEAD `4e80beb252125f9a4606bc4804cc945a1c817d9c`; pre-existing ` M CHANGELOG.md`, `?? filters.md`, untouched. All 45 bound source/test/manifest files match their HEAD bytes.
+- PO root `${EVIDENCE_ROOT}/filter-execution-0180/po-integrate`, HEAD `f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b`, clean.
+- FW root `${EVIDENCE_ROOT}/filter-execution-0180/fw-integrate`, HEAD `4e80beb252125f9a4606bc4804cc945a1c817d9c`; pre-existing ` M CHANGELOG.md`, `?? filters.md`, untouched. All 45 bound source/test/manifest files match their HEAD bytes.
 - Global `~/.claude/CLAUDE.md` read. No local AGENTS.md/CLAUDE.md in frozen trees or checked tmp/Developer ancestry. Hindsight searched first; all findings below independently extracted from current sources, not historical claims.
 - `source-bindings.json` records absolute paths, SHA256, HEAD-byte comparison, line counts and exact declaration source/line locations (including full type/trait declarations). `input_bindings` pins both filters.md copies, A/B/C/H/I packets and existing report scripts. No missing requested files. The main checkout filters.md is current planning authority; the scratch copy differs only in its first status paragraph (main says planning active and states the November 8 evidence/work deadlines).
 - Paths below are relative to PO unless prefixed FW. The binding JSON is the exact signature inventory; line references below locate the important contract boundaries.
@@ -126,7 +126,7 @@ These are interface descriptions, not commands executed or an authorization to r
 
 ## Focused commands for later implementation (not run)
 
-Set PO/FW to the roots above and CARGO_TARGET_DIR to a named scratch directory under `/Users/matthew/Developer/tmp/`. Use only relevant rows after a change; CI runs full suites. Exact test names are present in bound sources.
+Set PO/FW to the roots above and CARGO_TARGET_DIR to a named scratch directory under `${EVIDENCE_ROOT}/`. Use only relevant rows after a change; CI runs full suites. Exact test names are present in bound sources.
 
 ```sh
 cargo fmt --manifest-path "$PO/Cargo.toml" --check

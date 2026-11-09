@@ -1,6 +1,6 @@
 # R1A — generic filter feasibility survives family override
 
-Status: IMPLEMENTED, targeted-tested and root-accepted. Receipt: /Users/matthew/Developer/tmp/filter-implementation-0180/r1a-evidence/receipt.json. All six non-XD08 directional-policy cases now refuse; control passes; four XD08 cases remain explicitly open. No directed membership table. This is the first enforcement slice. It fixes the three permissive FamilyOverride mismatch cases; it does not close the separate missing Controller observation that permits XD08 under both policies.
+Status: IMPLEMENTED, targeted-tested and root-accepted. Receipt: ${EVIDENCE_ROOT}/filter-implementation-0180/r1a-evidence/receipt.json. All six non-XD08 directional-policy cases now refuse; control passes; four XD08 cases remain explicitly open. No directed membership table. This is the first enforcement slice. It fixes the three permissive FamilyOverride mismatch cases; it does not close the separate missing Controller observation that permits XD08 under both policies.
 
 ## Owner instruction and behavior
 
@@ -26,4 +26,4 @@ Replace the old test that expected an uncorrectable Hardware waiver with refusal
 
 Do not weaken a failing test's requirement merely because it previously encoded the superseded owner-waiver behavior; rewrite that exact policy assertion to the new contract and preserve unrelated verification coverage. In the former extra-write test, keep the mutation/postcondition rejection using an actually admitted registry (for example the untouched other owner matches), not a now-forbidden uncorrectable transition.
 
-Explicit gpt-6.1-sol; fmt/clippy/build plus targeted tests only, CI full suites. Scratch/targets under /Users/matthew/Developer/tmp/. No commits/push/devices. Preserve original source snapshot and emit delta plus combined baseline patch with receipts. Expected10–20minutes including original-fixture replay. Root owns dispatch. Stop on an actual semantic contradiction; do not add a pair-specific exception.
+Explicit gpt-6.1-sol; fmt/clippy/build plus targeted tests only, CI full suites. Scratch/targets under ${EVIDENCE_ROOT}/. No commits/push/devices. Preserve original source snapshot and emit delta plus combined baseline patch with receipts. Expected10–20minutes including original-fixture replay. Root owns dispatch. Stop on an actual semantic contradiction; do not add a pair-specific exception.

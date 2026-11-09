@@ -12,9 +12,9 @@
       "acceptance": "Every detected SAT8/9/native REC and SAT1 cohort is listed with exact authority, missing-input cases and denominator.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "PH-1",
       "completed_by": "completion_plan_audit"
@@ -26,9 +26,9 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "PH-2",
       "completed_by": "completion_plan_audit"
@@ -40,10 +40,10 @@
       "acceptance": "Every proposed supported domain has a complete source-A-physical/incoming-B-logical construction, with error, data, resource and composition obligations discharged or linked to another completed item.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/CONTRACT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/decision-tree.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/validation.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/current-three/INDEX.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/CONTRACT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/decision-tree.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/validation.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/current-three/INDEX.json"
       ],
       "issue": "PH-3",
       "completed_by": "parent",
@@ -66,9 +66,9 @@
       "acceptance": "Exact candidate witnesses, other required owners and benefit units are stated; candidates are not counted as delivered merges.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/CONTRACT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/decision-tree.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/validation.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/CONTRACT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/decision-tree.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/validation.json"
       ],
       "issue": "PH-5",
       "completed_by": "parent",
@@ -81,9 +81,9 @@
       "acceptance": "Files/APIs, fixed native recipe, dependencies, targeted positive and mutation checks, actual application/codec acceptance and stop conditions are written; no central design question is delegated.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/CONTRACT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/decision-tree.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/phase-support/validation.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/CONTRACT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/decision-tree.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/phase-support/validation.json"
       ],
       "issue": "PH-6",
       "completed_by": "parent",
@@ -96,9 +96,9 @@
       "acceptance": "Every detected SAT8/9/native REC and SAT1 cohort is listed with exact authority, missing-input cases and denominator.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "ST-1",
       "completed_by": "completion_plan_audit"
@@ -110,8 +110,8 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
       ],
       "issue": "ST-2",
       "completed_by": "parent",
@@ -144,8 +144,8 @@
       "acceptance": "Exact candidate witnesses, other required owners and benefit units are stated; candidates are not counted as delivered merges.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/ledger.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/ledger.json"
       ],
       "issue": "ST-5",
       "completed_by": "parent",
@@ -182,8 +182,8 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
       ],
       "issue": "CT-2",
       "completed_by": "parent",
@@ -239,9 +239,9 @@
       "acceptance": "Every detected SAT8/9/native REC and SAT1 cohort is listed with exact authority, missing-input cases and denominator.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "LY-1",
       "completed_by": "completion_plan_audit"
@@ -253,8 +253,8 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
       ],
       "issue": "LY-2",
       "completed_by": "parent",
@@ -287,8 +287,8 @@
       "acceptance": "Exact candidate witnesses, other required owners and benefit units are stated; candidates are not counted as delivered merges.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/ledger.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/ledger.json"
       ],
       "issue": "LY-5",
       "completed_by": "parent",
@@ -311,9 +311,9 @@
       "acceptance": "Every detected SAT8/9/native REC and SAT1 cohort is listed with exact authority, missing-input cases and denominator.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "SU-1",
       "completed_by": "completion_plan_audit"
@@ -325,8 +325,8 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
       ],
       "issue": "SU-2",
       "completed_by": "parent",
@@ -382,9 +382,9 @@
       "acceptance": "Every detected SAT8/9/native REC and SAT1 cohort is listed with exact authority, missing-input cases and denominator.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "LD-1",
       "completed_by": "completion_plan_audit"
@@ -396,8 +396,8 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
       ],
       "issue": "LD-2",
       "completed_by": "parent",
@@ -430,8 +430,8 @@
       "acceptance": "Exact candidate witnesses, other required owners and benefit units are stated; candidates are not counted as delivered merges.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/ledger.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/ledger.json"
       ],
       "issue": "LD-5",
       "completed_by": "parent",
@@ -454,9 +454,9 @@
       "acceptance": "Every detected SAT8/9/native REC and SAT1 cohort is listed with exact authority, missing-input cases and denominator.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "IN-1",
       "completed_by": "completion_plan_audit"
@@ -468,8 +468,8 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
       ],
       "issue": "IN-2",
       "completed_by": "parent",
@@ -502,8 +502,8 @@
       "acceptance": "Exact candidate witnesses, other required owners and benefit units are stated; candidates are not counted as delivered merges.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/ledger.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/ledger.json"
       ],
       "issue": "IN-5",
       "completed_by": "parent",
@@ -526,9 +526,9 @@
       "acceptance": "Every detected SAT8/9/native REC and SAT1 cohort is listed with exact authority, missing-input cases and denominator.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/ledger.json",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/inventory/contexts.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/ledger.json",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/inventory/contexts.json"
       ],
       "issue": "HO-1",
       "completed_by": "completion_plan_audit"
@@ -540,8 +540,8 @@
       "acceptance": "Observed field and full owned behavior are distinguished; code, state, physical effects and foreign interfaces have precise boundaries.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/OWNER-DEFINITIONS.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/JOINT-CONTRACT.md"
       ],
       "issue": "HO-2",
       "completed_by": "parent",
@@ -574,8 +574,8 @@
       "acceptance": "Exact candidate witnesses, other required owners and benefit units are stated; candidates are not counted as delivered merges.",
       "status": "complete",
       "evidence": [
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
-        "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/benefit/ledger.json"
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/BENEFIT.md",
+        "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/benefit/ledger.json"
       ],
       "issue": "HO-5",
       "completed_by": "parent",
@@ -599,10 +599,10 @@
     "No blocked item or partial prototype counts complete.",
     "Each completed item links immutable evidence and a concrete reviewed conclusion."
   ],
-  "audit": "/Users/matthew/Developer/tmp/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
+  "audit": "${EVIDENCE_ROOT}/filter-verdicts-0180/design-review-20261108/accepted-gates-audit.md",
   "updated_utc": "2026-11-08T21:45:04.000596+00:00",
   "current_item": "HANDOFF",
-  "release_closure_policy": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
+  "release_closure_policy": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/RELEASE-CLOSURE-POLICY.md",
   "release_closure_summary": {
     "missing_contexts_without_conditional_receiver": 122,
     "conditional_contexts_preserved": 4,
@@ -623,33 +623,33 @@
     "missing_original_origin_contexts": 6,
     "union_missing_authority_endpoints": 128
   },
-  "current_item_contract": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
+  "current_item_contract": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
   "current_operating_priority": "Validate exact0.17.3 retained/lost route correctness first, then unexamined frozen domain toward48/48.",
   "route_reporting": {
-    "authority": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
+    "authority": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/BASELINE-FIRST-PLAN.md",
     "inputs": [
       {
-        "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/comparison-0173.json",
+        "path": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/comparison-0173.json",
         "sha256": "f039780ceebb8b1fe179fff7a32fc8f41baf2c8502114d87633e510c32dd6d51"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/baseline-comparison-index.json",
+        "path": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/baseline-comparison-index.json",
         "sha256": "11258375f5bc16d7db93c65266940100ba50d2faf7283ecb848f1f7d94d0225a"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/routes-final.json",
+        "path": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/routes-final.json",
         "sha256": "c41f23e8d0a55cc016ba901248a0ad30a4e77229e0a4816f1b198ad7a5eb95dc"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/benchmark-view.json",
+        "path": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/benchmark-view.json",
         "sha256": "207c03d29021a09dba45e66f5121c3bb5d80da91b8c171ee6a5200012c9a7a33"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/source-manifest.json",
+        "path": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/source-manifest.json",
         "sha256": "5b0b04b9fb1bbb3f84dfa3b133cf0b8329c5b724284e1b335e7d1354fd89b345"
       },
       {
-        "path": "/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/ANALYSIS-SUMMARY.json",
+        "path": "${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/ANALYSIS-SUMMARY.json",
         "sha256": "bb34a6e255042ffbe394aaef97dbd25c826a774123e3b075301e43a91c47ac13"
       }
     ],
@@ -670,7 +670,7 @@
     "no_new_native_branch_before_join": true,
     "full48_frozen_scope_preserved": true,
     "native_equality_branch_adoption": {
-      "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/NATIVE-EQUALITY-ADOPTION.json",
+      "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/run-20261108/baseline-retained-native-identity/NATIVE-EQUALITY-ADOPTION.json",
       "sha256": "d853f3c4e2db5a5908c3cc3141669bae460b6393f2ef8b74f5995f4603660b06",
       "directions": 8,
       "implemented": 0,
@@ -697,17 +697,17 @@
     }
   },
   "restart_checkpoint": {
-    "path": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/RESTART-SEMANTIC-CHECKPOINT.json",
+    "path": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/RESTART-SEMANTIC-CHECKPOINT.json",
     "sha256": "941cce3094351a34b8a4e6d205a453398ab62c1a5fd471e165194635946b4619",
-    "family_matrix": "/Users/matthew/Developer/tmp/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.json",
+    "family_matrix": "${EVIDENCE_ROOT}/filter-verdicts-0180/completion-plan/FAMILY-TRANSITION-MATRIX.json",
     "family_matrix_sha256": "d26abeb2e34895d43819f5b9cc520fe019aed671ecf6aeb86633d4b2c017e14a"
   },
   "restart_handoff": {
     "status": "refreshed_after_mediatek_and_generic_flasher_delivery_for_owner_launch",
-    "kickoff": "/Users/matthew/.local/state/release-0180/RESTART-KICKOFF.md",
+    "kickoff": "${RELEASE_STATE}/RESTART-KICKOFF.md",
     "semantic_counts_unchanged": true,
     "updated_utc": "2026-11-08T23:59:34.232373+00:00",
     "kickoff_sha256": "bd1753bdd6f718e185701cb2e4cfbd155365aa2280d7a43af40ad756ded3e273",
-    "completed_app_prerequisites": "/Users/matthew/Developer/tmp/mediatek-current-resolution-20261108/implementation/STATUS.json"
+    "completed_app_prerequisites": "${EVIDENCE_ROOT}/mediatek-current-resolution-20261108/implementation/STATUS.json"
   }
 }

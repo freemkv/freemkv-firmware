@@ -2,7 +2,7 @@
 
 The owner changed the work order, not the correctness standard or full48/48 goal. First reconcile exact0.17.3→0.18 routes on their identical evaluated package inventory, validate retained routes, and disposition lost baseline routes as supported, release-negative or unresolved. Then close unexamined frozen-domain directions. Never restore unsafe legacy admission merely to match a count.
 
-The held comparison is `/Users/matthew/Developer/tmp/filter-execution-0180/w5-hardened/cmp-guard/final/comparison-0173.json`. Its842 packages comprise724 Pioneer and118 MediaTek. Pioneer available hardware/destination identities:2800 baseline,87 retained/current,2713 lost,0 gained. Package directions:21485 baseline,1848 retained/current,19637 lost,0 gained. These are separate units.
+The held comparison is `${EVIDENCE_ROOT}/filter-execution-0180/w5-hardened/cmp-guard/final/comparison-0173.json`. Its842 packages comprise724 Pioneer and118 MediaTek. Pioneer available hardware/destination identities:2800 baseline,87 retained/current,2713 lost,0 gained. Package directions:21485 baseline,1848 retained/current,19637 lost,0 gained. These are separate units.
 
 The current export completed2026-11-07T20:14:45.688984+00:00 at frozen PO f16f0e9e381df138aa8d6f3ab97b9ee42b58a73b/FW4e80beb252125f9a4606bc4804cc945a1c817d9c; export SHA c41f23e8d0a55cc016ba901248a0ad30a4e77229e0a4816f1b198ad7a5eb95dc. It measures exact-package software admission and explicitly needs separate OEM/physical proof. It is not a replay of isolated changes. Whole-route correctness classification is pending, not presumed positive or negative.
 

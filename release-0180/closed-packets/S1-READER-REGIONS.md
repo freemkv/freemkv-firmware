@@ -1,6 +1,6 @@
 # S1: complete the recognized modern read-region observation
 
-Status: implemented and targeted-tested in the isolated PO tree; root accepted20:16:58UTC. Receipt: `/Users/matthew/Developer/tmp/filter-implementation-0180/s1-evidence/receipt.json` (SHA256b33dc943c573691ce841670b7ee0919577a8d19a19af5507a7afa3fbd0c847f9).16targetedtests, real197/212 read/schema/refusal checks, fmt/clippy/build passed. This is not a Storage correction, a whole-route certificate or a new feasibility disposition.
+Status: implemented and targeted-tested in the isolated PO tree; root accepted20:16:58UTC. Receipt: `${EVIDENCE_ROOT}/filter-implementation-0180/s1-evidence/receipt.json` (SHA256b33dc943c573691ce841670b7ee0919577a8d19a19af5507a7afa3fbd0c847f9).16targetedtests, real197/212 read/schema/refusal checks, fmt/clippy/build passed. This is not a Storage correction, a whole-route certificate or a new feasibility disposition.
 
 The current complete nine-function modern reader recognizer returns only its primary 320-byte region and logical indices000..09F. Its already matched resolver and size functions also identify five other record regions. This loses actual native facts before LayoutFilter compares old/new inputs. S1 exposes those six regions through the existing ParameterLayout, so the existing owner compares the complete recognized read schema. All existing refusal and downstream owner requirements remain mandatory.
 
