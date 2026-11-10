@@ -348,7 +348,7 @@ fn create_reproduces_hand_built_kat_byte_for_byte() {
     // cell. Neither the candidate nor a zero-valued capture proves all runtime
     // workloads leave the storage unused.
     assert_eq!(
-        report.free_sram_cell, 0x0200_145c,
+        report.free_sram_cell, 0x0200_1f08,
         "guarded statically unreferenced SRAM candidate (not runtime ownership)"
     );
     assert_eq!(report.flag_base, 0x0200_0e40, "modern flag-table base");

@@ -14,10 +14,10 @@ impl SramPlacement {
             references: RamReferences::inspect(image),
         }
     }
-    /// Reject overlap with observed static references, including a four-byte
-    /// guard on each side, and reject storage beyond the conservative RAM ceiling.
-    /// Passing this check does not establish runtime ownership or cover arbitrary
-    /// indirect code. The modern fixed cell also has model-specific capture evidence.
+    /// Reject overlap with observed static references or detected fill
+    /// destinations, including a four-byte guard on each side, and reject
+    /// storage beyond the SRAM placement ceiling. Passing this check does not
+    /// establish runtime ownership or cover arbitrary indirect code.
     pub(super) fn assert_free(&self, base: u32, len: u32, what: &str) -> Result<()> {
         let lo = base
             .checked_sub(4)
@@ -34,7 +34,7 @@ impl SramPlacement {
             )
             .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
         }
-        let used = self.references.bytes();
+        let used = self.used_bytes();
         for a in lo..hi {
             if used.contains(&a) {
                 return Err(anyhow!(
@@ -48,29 +48,40 @@ impl SramPlacement {
         Ok(())
     }
 
-    /// Select a statically unreferenced candidate within the conservative RAM
-    /// ceiling, reserving guards and the complete flag/scratch footprint.
-    /// This is a placement candidate, not proof of runtime memory ownership.
+    /// Select the highest statically unreferenced gap that fits the flag/scratch
+    /// footprint. Higher addresses are furthest from the OEM working-data region
+    /// and least likely to collide with runtime fills the scanner cannot detect.
     pub(super) fn candidate(&self) -> Result<u32> {
-        let used = self.references.bytes();
+        let used = self.used_bytes();
         let footprint = (FLASHWRITE_SCRATCH_OFF + 1).max(u32::from(NUM_FEATURES) + 1);
-        let mut best: Option<(u32, u32)> = None;
+        let mut best: Option<u32> = None;
         let mut start = SRAM_LO;
         for end in (SRAM_LO..=SRAM_END).filter(|a| *a == SRAM_END || used.contains(a)) {
-            let candidate = (start + 4 + 3) & !3; // leading guard, then word alignment
+            let candidate = (start + 4 + 3) & !3;
             if candidate + footprint + 4 <= end {
-                let usable = end - candidate - 4;
-                if best.is_none_or(|(_, previous)| usable > previous) {
-                    best = Some((candidate, usable));
-                }
+                best = Some(candidate);
             }
             start = end + 1;
         }
-        best.map(|(base, _)| base).ok_or_else(|| {
+        best.ok_or_else(|| {
             anyhow!(
                 "no statically unreferenced SRAM candidate fits the complete {footprint}-byte \
              flag/scratch footprint and guards below {SRAM_END:#010x}"
             )
         })
+    }
+
+    fn used_bytes(&self) -> std::collections::BTreeSet<u32> {
+        let mut used = self.references.bytes().clone();
+        for &(_, addr, len, private) in self.references.fills() {
+            if len > 0 && !private {
+                for a in addr..addr.saturating_add(len) {
+                    if (SRAM_LO..SRAM_END).contains(&a) {
+                        used.insert(a);
+                    }
+                }
+            }
+        }
+        used
     }
 }

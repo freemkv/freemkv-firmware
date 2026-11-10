@@ -66,11 +66,13 @@ pub(crate) const NUM_FEATURES: u8 = 6;
 /// and holding every runtime flag/scratch cell.
 pub(crate) const SRAM_LO: u32 = 0x0200_0000;
 
-/// Conservative SRAM placement ceiling inferred from the owned MT1959 capture
-/// and write-persistence observations. This is not a documented memory map or
-/// evidence that every MT1939/MT1959 model has the same runtime layout.
-/// Static placement checks stay below this ceiling on both paths.
-pub(crate) const SRAM_END: u32 = 0x0200_1a00;
+/// SRAM placement ceiling matching the scanner's analysis window (0x02002000).
+/// The previous value (0x02001a00) was too conservative for classic MT1939
+/// firmware: OEM runtime fills occupy 0x02001000–0x020019ff through indirect
+/// writes the scanner cannot detect, leaving no usable gap below the old
+/// ceiling. Raising this to the full scanner window lets the placement
+/// algorithm reach genuinely free SRAM above the OEM fill zone.
+pub(crate) const SRAM_END: u32 = 0x0200_2000;
 
 /// Modern flag-table location supported by the owned BU40N runtime capture.
 /// The captured gap was `0x02000e3c..0x02000f08`; each image is additionally
@@ -1675,7 +1677,7 @@ impl Mt1959Engine {
         // requires this same contract in both raw-read emission paths.
         let transition_setter = self.find_transition_state_setter(image).ok();
 
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let tail = a.label();
         let knock_ok = a.label();
         let not_set = a.label();
@@ -2180,7 +2182,7 @@ impl Mt1959Engine {
         // cap 0 = the floor (slowest / riplock fully engaged) — the genuine OFF,
         // reached through the same cap path. The boot hook guarantees `0xFF` at
         // power-on, so a gate never sees the `0x00` cap unless the host set it.
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let patched = a.label();
         let oem = a.label();
         let decide = a.label();
@@ -2268,7 +2270,7 @@ impl Mt1959Engine {
         // BD region A/B/C placeholder masks.
         const BD_MASKS: [u8; 3] = [0x01, 0x02, 0x04];
 
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let region_free = a.label();
         let region_lock = a.label();
         let dvd_force = a.label();
@@ -2363,7 +2365,7 @@ impl Mt1959Engine {
     /// state 6 instead, so the AKE completes and a bus-key `0xAD` read yields the
     /// VID. `04 01` does NOT act here (that mode is the bare-read Gate-A path).
     pub(crate) fn build_ake_stub(&self, flag_base: u32, back: u32, reset: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let accept = a.label();
         let done = a.label();
         a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32); // r2 = &flag[Encryption]
@@ -2433,7 +2435,7 @@ impl Mt1959Engine {
         back: u32,
         reset: u32,
     ) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let force = a.label();
         let keep = a.label();
         a.ldr_lit(2, flag_base + abi::Feature::Encryption as u32); // r2 = &flag[Encryption]
@@ -2496,7 +2498,7 @@ impl Mt1959Engine {
     ///     NOT taken and control falls into the OEM deny block, which raises the
     ///     drive's own `6F` refusal sense — the drive REFUSES the BD disc.
     pub(crate) fn build_bd_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let refuse = a.label();
         a.ldrb_imm(0, 2, 7); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
         a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // shared runtime setting
@@ -2538,7 +2540,7 @@ impl Mt1959Engine {
     ///     taken and control jumps into the OEM `6F/05` deny block — the drive REFUSES
     ///     the UHD disc, symmetric with the BD arm.
     pub(crate) fn build_uhd_gate_stub(&self, flag_base: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let refuse = a.label();
         a.ldrb_imm(0, 2, 7); // replay: ldrb r0,[r2,#7]  (r0 = disc class; r2 unchanged by the bl)
         a.ldr_lit(3, flag_base + abi::Feature::Unrestricted as u32); // r3 = &flag[Unrestricted]
@@ -2630,7 +2632,7 @@ impl Mt1959Engine {
             minimum_class.is_some() == scoped_refusal.is_some(),
             "incomplete scoped auth refusal contract"
         );
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let widen = a.label();
         let original_comparison = a.label();
         let force_refusal = a.label();
@@ -2692,7 +2694,7 @@ impl Mt1959Engine {
             contract.variant() == AuthCellVariant::R0StateR1Alternate,
             "unsupported refusal contract"
         );
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let original = a.label();
         let deny = a.label();
         a.push(0x0008);
@@ -2857,7 +2859,7 @@ impl Mt1959Engine {
     /// crypto verify (`bl <ca7e4>`) and the success writer are on other paths and
     /// are left intact.
     pub(crate) fn build_hrl_skip_stub(&self, flag_base: u32, revoke: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let clean = a.label();
         a.push(0x0008); // push {r3}   (r3 scratch; no inner call → SP alignment moot)
         a.ldr_lit(3, flag_base + abi::Feature::Hrl as u32); // r3 = &flag[Hrl]
@@ -3078,7 +3080,7 @@ impl Mt1959Engine {
         deny: u32,
         reset: u32,
     ) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let rearm = a.label();
         let authed_direct = a.label();
         // The native continuation passes R1/R2 to the response writer. They
@@ -3133,7 +3135,7 @@ impl Mt1959Engine {
     /// r0-r3 and preserves r4-r7; the deny continuation re-establishes r0 (=5)
     /// itself, and r2/r1 are replayed here, so nothing needs saving except lr.
     pub(crate) fn build_deny_reset_stub(&self, reset: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         a.push(0x0110); // push {r4, lr}  (r4 only to keep SP 8-byte aligned)
         a.ldr_lit(2, reset | 1); // r2 = &aacs_session_reset (thumb)
         a.blx(2); // aacs_session_reset()  (idle the engine)
@@ -3197,7 +3199,7 @@ impl Mt1959Engine {
                 "private UHD identity overlaps flags or scratch"
             );
         }
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         // Preserve all four native arguments and the caller's r4. Keep two
         // words on the stack across the call so its entry remains 8-byte aligned.
         a.push(0x011F); // push {r0-r4, lr}       6 words → sp 8-aligned
