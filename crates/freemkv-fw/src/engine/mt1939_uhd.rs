@@ -160,6 +160,7 @@ impl UhdConversionPlan {
         if geometry.is_ok() || self.classic_application && !self.stack_di {
             patches.extend(geometry?.prepared_patches(image, flags)?);
         }
+
         patches.sort_by_key(|c| c.site);
         for pair in patches.windows(2) {
             ensure!(
@@ -570,7 +571,7 @@ impl UhdConversionPlan {
         );
         let contract =
             mediatek_optical::image::analysis::ClassicReadPosition::detect(image, self.state)?;
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let oem = a.label();
         let reject = a.label();
         a.push(8);
@@ -580,10 +581,11 @@ impl UhdConversionPlan {
         a.bne(oem);
         a.ldr_lit(3, self.state);
         a.ldrb_imm(3, 3, 0);
-        a.cmp_imm(3, 0xc7);
-        a.bne(oem);
+        a.subs_imm(3, 0xc7);
+        a.cmp_imm(3, 1);
+        a.bhi(oem);
         a.pop(8);
-        // Native UHD admits C7 to the complete high-layer decoder. Its layer
+        // Native UHD admits C7/C8 to the complete high-layer decoder. Its layer
         // 0/1/2/3 cases own their position transforms, cache writes and flags.
         tail(&mut a, contract.decode.accept());
         a.bind(oem);
@@ -646,10 +648,12 @@ impl UhdConversionPlan {
         );
         let contract =
             mediatek_optical::image::analysis::ClassicCalibration::detect(image, self.state)?;
-        let Some(coefficients) = contract.c7_coefficients else {
+        // EXPERIMENT (grafted high-layer): the calibration detour exists only for
+        // images whose getter exposes a C7 coefficient table.
+        let Some(_coefficients) = contract.c7_coefficients else {
             return Ok(None);
         };
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let oem = a.label();
         a.push(0x0a);
         a.ldr_lit(3, flag_address(flags)?);
@@ -658,8 +662,9 @@ impl UhdConversionPlan {
         a.bne(oem);
         a.ldr_lit(3, self.state);
         a.ldrb_imm(3, 3, 0);
-        a.cmp_imm(3, 0xc7);
-        a.bne(oem);
+        a.subs_imm(3, 0xc7);
+        a.cmp_imm(3, 1);
+        a.bhi(oem);
         a.pop(0x0a);
         a.ldr_lit(0, contract.original_base);
         if contract.base_adjustment >= 0 {
@@ -667,7 +672,10 @@ impl UhdConversionPlan {
         } else {
             a.subs_imm(0, u8::try_from(-contract.base_adjustment)?);
         }
-        a.ldr_lit(0, coefficients);
+        // EXPERIMENT: read the OEM C7 high-layer table (original_base+adjust)
+        // instead of overriding r0 with the shared C8/BD table. We graft a
+        // multi-layer (BDXL) calibration donor into that OEM-C7 slot so the UHD
+        // high layer calibrates against real high-layer coefficients, not BD's.
         a.ldrh_reg(0, 0, 6);
         tail(&mut a, contract.site + 6);
         a.bind(oem);
@@ -870,8 +878,9 @@ fn selection_case(
     a.bne(oem);
     a.ldr_lit(3, state);
     a.ldrb_imm(3, 3, 0);
-    a.cmp_imm(3, 0xc7);
-    a.bne(oem);
+    a.subs_imm(3, 0xc7);
+    a.cmp_imm(3, 1);
+    a.bhi(oem);
     restore_cv(a, cv);
     a.pop(8);
     let replay_bytes = replay
@@ -924,7 +933,7 @@ pub(super) fn emit_c7_selection_relocated(
     reject: usize,
     relocated_load: Option<(u8, u32)>,
 ) -> Result<Vec<u8>> {
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     let flag = flag_address(flags)?;
     let replay_bytes: Vec<_> = replay.iter().flat_map(|word| word.to_le_bytes()).collect();
     if thumb_asm::isa::decode_at(&replay_bytes, 0)
@@ -993,7 +1002,7 @@ pub(super) fn emit_c7_selection_relocated(
 /// Pure DI extension helper: r0=identifier, r1=format, r2=layer field; r0 returns
 /// C7/C8 or zero (defer to OEM). r1-r3 and LR survive. Only STATE_ON adds behavior.
 pub fn emit_di_recognition(flags: u32) -> Result<Vec<u8>> {
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     let no = a.label();
     let two = a.label();
     let done = a.label();
@@ -1023,9 +1032,9 @@ pub fn emit_di_recognition(flags: u32) -> Result<Vec<u8>> {
     a.finish().map_err(Into::into)
 }
 /// New layer normalization helper: r0=state, r1=layer field, returns state in r0.
-/// Preserves C7 only for layer 2 with STATE_ON. All other inputs use native math.
+/// Preserves C7/C8 with STATE_ON. All other inputs use native math.
 pub fn emit_di_layers(flags: u32) -> Result<Vec<u8>> {
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     let oem = a.label();
     let done = a.label();
     a.push(0x0e);
@@ -1034,8 +1043,8 @@ pub fn emit_di_layers(flags: u32) -> Result<Vec<u8>> {
     a.cmp_imm(3, crate::abi::STATE_ON);
     a.bne(oem);
     a.cmp_imm(0, 0xc7);
-    a.bne(oem);
-    a.cmp_imm(1, 2);
+    a.beq(done);
+    a.cmp_imm(0, 0xc8);
     a.beq(done);
     a.bind(oem);
     a.cmp_imm(1, 1);
@@ -1086,7 +1095,7 @@ mod tests {
     }
     #[test]
     fn conditional_continuations_require_the_taken_condition_and_refuse_cycles() {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let destination = a.label();
         a.bne(destination);
         a.bind(destination);
@@ -1100,7 +1109,7 @@ mod tests {
             taken_conditional_continuation(&bytes, 0, thumb_asm::Cond::Eq).unwrap(),
             0
         );
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let cycle = a.label();
         a.bind(cycle);
         a.bne(cycle);
@@ -1323,7 +1332,7 @@ fn build_di_prevalidation_candidate(
         "DI caller frame disagrees"
     );
     let original = image[contract.prevalidation..contract.replay_continuation].to_vec();
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     let v1 = a.label();
     let inspect = a.label();
     let oem = a.label();
