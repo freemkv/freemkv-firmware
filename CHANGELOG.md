@@ -34,8 +34,6 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 - Updated to pioneer-optical 1.6.0 and mediatek-optical 1.3.0, with old and replaced interfaces removed.
 - The shared flasher uses Pioneer and MediaTek backend interfaces for vendor policy; file selection, discovery, integrity, route classification and receiver details stay backend-owned.
 - Integrate the completed component-composition, paired-component, native-reader and static instruction-ownership packets. These establish bounded implementation contracts, not complete new crossflash corrections or family merges.
-- The frozen November 7 comparison against 0.17.3 records 2,800 → 87 available Pioneer directed hardware/destination identities and 21,485 → 1,848 cross-identity package directions on the same inputs. These are historical software-admission results before the current isolated packets, not a measurement of this commit or physical incompatibility. No new full-corpus result is claimed here.
-- Full Pioneer feasibility remains open at 26/48 analysis gates. Required behavior and remaining obligations are recorded in `filters.md`; no incomplete candidate is enabled merely by this integration.
 - A full code audit; every high and medium issue it found has been fixed.
 
 ## [0.17.3] - 2026-11-02
