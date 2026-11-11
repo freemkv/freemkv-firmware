@@ -378,6 +378,12 @@ fn modify_once(
         &support,
     )?;
     if support.has_boot() {
+        // Store OEM for any default whose hooks did not install.
+        if defaults.applicable(&support) != *defaults {
+            if let Some((output, _)) = crate::boot::update(&report.image, defaults)? {
+                report.image = output;
+            }
+        }
         report.levers.push(engine::lever::LeverReport::applied(
             engine::lever::LeverId::BootSettings,
             vec![],

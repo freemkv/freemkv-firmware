@@ -6,8 +6,13 @@ use sha2::{Digest, Sha256};
 fn checked_modify(image: &[u8], settings: &BootSettings) -> engine::ModifyReport {
     let (report, support) = crate::api::modify_with_defaults(image, settings).unwrap();
     let (stored, stored_support) = crate::boot::inspect(&report.image).unwrap().unwrap();
+    // A default this image cannot apply is stored as OEM.
+    let applicable = settings.applicable(&support);
     for feature in BootFeature::ALL {
-        assert_eq!(stored.value(feature), settings.value(feature));
+        assert_eq!(stored.value(feature), applicable.value(feature));
+        if !support.supports(feature) {
+            assert_eq!(stored.value(feature), "oem");
+        }
         assert_eq!(stored_support.supports(feature), support.supports(feature));
     }
     // Reconfigure the already-built image through the same API used by the app.

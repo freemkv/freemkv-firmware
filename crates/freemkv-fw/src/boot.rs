@@ -166,6 +166,19 @@ impl BootSettings {
             self.values[2],
         ]
     }
+    /// The settings this image actually stores: a default the image cannot
+    /// apply becomes OEM, so its bytes never claim an unapplied feature.
+    /// Explicit choices are left for `validate` to refuse.
+    pub fn applicable(&self, support: &BootSupport) -> Self {
+        let mut settings = self.clone();
+        for feature in BootFeature::ALL {
+            let i = feature.index();
+            if self.explicit & (1 << i) == 0 && !support.supports_value(feature, self.values[i]) {
+                settings.values[i] = 255;
+            }
+        }
+        settings
+    }
     /// Reject explicit choices which cannot be honored by this image.
     pub fn validate(&self, support: &BootSupport) -> Result<()> {
         for feature in BootFeature::ALL {
@@ -195,6 +208,7 @@ impl BootSettings {
         report: &str,
     ) -> String {
         use crate::qualification::UhdQualification;
+        let stored = self.applicable(support);
         let fields = BootFeature::ALL
             .into_iter()
             .map(|f| {
@@ -219,7 +233,7 @@ impl BootSettings {
                 format!(
                     "\"{}\":{{\"value\":\"{}\",\"supported\":{supported},\"choices\":[{choices}]{qualification}}}",
                     f.key(),
-                    self.value(f),
+                    stored.value(f),
                 )
             })
             .collect::<Vec<_>>()
@@ -468,6 +482,7 @@ pub(crate) fn update(
     };
     verify(image)?;
     defaults.validate(&record.support)?;
+    let defaults = &defaults.applicable(&record.support);
     let mut output = image.to_vec();
     for (i, site) in record.sites.iter().enumerate() {
         if record.shared_reset && i == 2 {
