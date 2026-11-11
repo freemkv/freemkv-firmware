@@ -9,9 +9,23 @@ fn known_bd_model_resolves_from_table() {
 
 #[test]
 fn unknown_model_falls_back_to_bd_uhd_default() {
-    let cap = capability_for("SOME-FUTURE-DRIVE", ChipFamily::Mt1939);
+    let cap = capability_for("SOME-FUTURE-DRIVE", ChipFamily::Mt1959);
     assert_eq!(cap.media_class, MediaClass::UhdBd);
     assert!(cap.bd_aacs && cap.region_lockable);
+}
+
+#[test]
+fn mt1939_is_never_labelled_uhd() {
+    for model in ["BH16NS40", "BH16NS48", "BU40N", "SOME-FUTURE-DRIVE"] {
+        let cap = capability_for(model, ChipFamily::Mt1939);
+        assert_eq!(cap.media_class, MediaClass::Bd, "{model}");
+        assert_eq!(cap.media_class.label(), "BD", "{model}");
+        assert!(cap.bd_aacs && cap.region_lockable, "{model}");
+    }
+    assert_eq!(
+        capability_for("BH16NS40", ChipFamily::Mt1959).media_class,
+        MediaClass::UhdBd
+    );
 }
 
 #[test]

@@ -307,7 +307,7 @@ pub fn audit_image(original: &[u8], report: &ModifyReport) -> AuditResult {
                 if let (Some(site), Some(stub)) =
                     (fact(l, "speed_tail_site"), fact(l, "speed_stub_va"))
                 {
-                    let mut entry = thumb::Asm::new();
+                    let mut entry = thumb::Asm::with_target(thumb_asm::isa::Target::Thumb1);
                     entry.push(0x100);
                     let entry = entry.finish().expect("PUSH LR is encodable");
                     checks.push(AuditCheck {

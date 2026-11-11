@@ -112,6 +112,7 @@ pub(super) fn execute_with_sleep(
         device: &shared,
         sleep,
     };
+    let kernel_expected = matches!(&plan, PreparedFlash::Complete(_));
     let bridge_required =
         matches!(plan, PreparedFlash::Complete(p) if p.final_stage_kernel_transfer().is_some());
     match plan {
@@ -140,10 +141,12 @@ pub(super) fn execute_with_sleep(
     })?;
     println!("{}", super::post_flash_line(&outcome.identity));
     let mut verified_regions = Vec::new();
+    let mut unverified_regions = Vec::new();
     if outcome.kernel_verified {
         verified_regions.push("Kernel".to_string());
+    } else if kernel_expected {
+        unverified_regions.push("Kernel".to_string());
     }
-    let mut unverified_regions = Vec::new();
     if outcome.normal_verified {
         verified_regions.push("Normal".to_string());
     } else {

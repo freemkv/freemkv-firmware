@@ -130,3 +130,25 @@ fn family_override_is_only_a_recovery_cli_option() {
     ])
     .is_err());
 }
+
+#[test]
+fn flash_no_backup_is_opt_in_and_excludes_an_explicit_backup_path() {
+    let parse = |extra: &[&str]| {
+        Cli::try_parse_from(
+            ["freemkv-flash", "flash", "-i", "fw.bin"]
+                .into_iter()
+                .chain(extra.iter().copied()),
+        )
+    };
+    let Some(Command::Flash(args)) = parse(&[]).unwrap().command else {
+        panic!("flash");
+    };
+    assert!(!args.no_backup);
+    for flag in ["--no-backup", "--fast"] {
+        let Some(Command::Flash(args)) = parse(&[flag]).unwrap().command else {
+            panic!("flash");
+        };
+        assert!(args.no_backup);
+    }
+    assert!(parse(&["--no-backup", "--backup", "b.bin"]).is_err());
+}

@@ -47,7 +47,7 @@ pub(super) fn density_stub(b: &DensityBindings) -> Result<Vec<u8>> {
         },
         "unproven displaced instruction flags"
     );
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     let table = a.data_blob(
         SLIM_UHD_DENSITY_TARGETS
             .into_iter()

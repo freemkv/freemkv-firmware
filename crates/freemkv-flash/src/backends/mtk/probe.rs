@@ -435,7 +435,7 @@ pub fn read_probe(dev: &mut dyn ScsiDevice, out: Option<&Path>) -> Result<()> {
         "==> sweeping 0x0..0x200000 on {} (chunk {chunk} B)...",
         ch.label
     );
-    let sweep = chunk.min(CHUNK.max(chunk));
+    let sweep = chunk.min(CHUNK);
     let mut image = Vec::with_capacity(IMAGE_SIZE);
     let mut offset = 0usize;
     while offset < IMAGE_SIZE {

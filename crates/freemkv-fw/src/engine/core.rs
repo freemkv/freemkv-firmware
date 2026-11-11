@@ -66,13 +66,16 @@ pub(crate) const NUM_FEATURES: u8 = 6;
 /// and holding every runtime flag/scratch cell.
 pub(crate) const SRAM_LO: u32 = 0x0200_0000;
 
-/// SRAM placement ceiling matching the scanner's analysis window (0x02002000).
-/// The previous value (0x02001a00) was too conservative for classic MT1939
-/// firmware: OEM runtime fills occupy 0x02001000–0x020019ff through indirect
-/// writes the scanner cannot detect, leaving no usable gap below the old
-/// ceiling. Raising this to the full scanner window lets the placement
-/// algorithm reach genuinely free SRAM above the OEM fill zone.
+/// SRAM placement ceiling matching the scanner's full analysis window.
+/// MT1959 has 8 KiB of writable SRAM here; classic MT1939 has only 4 KiB
+/// (hardware-verified: poke/peek confirms writes above 0x02001000 do not
+/// stick on BH16NS48). Use [`SRAM_CLASSIC_END`] for classic placement.
 pub(crate) const SRAM_END: u32 = 0x0200_2000;
+
+/// Classic MT1939 SRAM ceiling. Hardware testing confirms the chip has 4 KiB
+/// of writable SRAM (0x02000000..0x02001000); addresses at 0x02001000+ read
+/// back a fixed pattern and do not retain writes.
+pub(crate) const SRAM_CLASSIC_END: u32 = 0x0200_1000;
 
 /// Modern flag-table location supported by the owned BU40N runtime capture.
 /// The captured gap was `0x02000e3c..0x02000f08`; each image is additionally
@@ -3203,26 +3206,23 @@ impl Mt1959Engine {
         // Preserve all four native arguments and the caller's r4. Keep two
         // words on the stack across the call so its entry remains 8-byte aligned.
         a.push(0x011F); // push {r0-r4, lr}       6 words → sp 8-aligned
-                        // Initialize every flag, including the otherwise-unused saved marker.
-        a.ldr_lit(0, flag_base); // r0 = &flag table (SRAM)
+        a.ldr_lit(4, orig_init | 1);
+        a.mov_reg(12, 4);
+        a.pop(0x000F); // pop {r0-r3} — native call arguments
+        a.mov_reg(4, 13);
+        a.ldr_imm(4, 4, 0); // restore caller r4 without changing flags
+        a.blx(12); // call orig_init; on classic this includes SRAM clear
+                   // Write defaults AFTER the call so they survive any SRAM clear the
+                   // OEM init performs (classic detours before clear, modern after).
+        a.ldr_lit(2, flag_base); // r2 = &flag table (r0 holds native return value)
         for (off, &val) in defaults.flags().iter().enumerate() {
-            a.movs_imm(1, val); // selected boot value
-            a.strb_imm(1, 0, off as u16); // flag[off] = default
+            a.movs_imm(1, val);
+            a.strb_imm(1, 2, off as u16);
         }
         if identity.is_some() {
             a.movs_imm(1, 0);
-            a.strb_imm(1, 0, UHD_IDENTITY_OFF as u16);
+            a.strb_imm(1, 2, UHD_IDENTITY_OFF as u16);
         }
-        // Boot choices are authoritative. Saved runtime settings are loaded only
-        // by an explicit RESET_TO_FLASH, never implicitly during startup.
-        // R12 is call-clobbered, unlike the four restored argument registers.
-        // Load its target through the saved r4, then restore r4 before entry.
-        a.ldr_lit(4, orig_init | 1);
-        a.mov_reg(12, 4);
-        a.pop(0x000F); // r0-r3 are exactly the native call's arguments
-        a.mov_reg(4, 13);
-        a.ldr_imm(4, 4, 0); // saved caller r4, without changing flags
-        a.blx(12); // call at sp=S-8; retain the native result and return flags
         a.pop(0x0110); // pop {r4, pc}   restore r4 pad + return to conv+4
         a.finish().map_err(anyhow::Error::from)
     }

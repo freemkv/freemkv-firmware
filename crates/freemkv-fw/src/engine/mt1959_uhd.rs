@@ -484,7 +484,7 @@ fn selection_stub(
     reject: usize,
     c7: usize,
 ) -> Result<Vec<u8>> {
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     // CMP overwrites C/V; BICS preserves them. Save C/V through native branches
     // before inspecting the feature byte, without Thumb-2 MRS/MSR.
     let bic =
@@ -546,8 +546,9 @@ fn selection_case(
     a.bne(original);
     a.ldr_lit(3, state);
     a.ldrb_imm(3, 3, 0);
-    a.cmp_imm(3, 0xc7);
-    a.bne(original);
+    a.subs_imm(3, 0xc7);
+    a.cmp_imm(3, 1);
+    a.bhi(original);
     restore_cv(a, cv);
     a.pop(8);
     a.replay(
@@ -605,7 +606,7 @@ pub(crate) fn di_candidates(
 ) -> Result<Vec<Candidate>> {
     let mut result = Vec::new();
     for layers in [false, true] {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let v = a.label();
         let inspect = a.label();
         let original = a.label();
@@ -748,11 +749,11 @@ mod tests {
     #[test]
     fn thumb1_guard_rejects_narrow_thumb2_and_wide_prefixes() {
         for halfword in [0xb100, 0xbf08, 0xba00, 0xb200, 0xe800, 0xf000] {
-            let mut a = Asm::new();
+            let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
             a.raw16(halfword);
             assert!(finish_t1(a).is_err(), "{halfword:#x}");
         }
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         a.bx(14);
         assert!(finish_t1(a).is_ok());
     }

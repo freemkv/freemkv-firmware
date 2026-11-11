@@ -633,22 +633,21 @@ fn refed_classic_image_keeps_the_mt1939_engine_label() {
 }
 
 #[test]
-fn conversion_only_rawread_lever_passes_the_audit() {
+fn classic_modify_without_conversion_passes_the_audit() {
     let image = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
-    let mut report = Mt1939Engine.modify(image).expect("classic modify");
+    let report = Mt1939Engine.modify(image).expect("classic modify");
     let rawread = report
         .levers
-        .iter_mut()
+        .iter()
         .find(|l| l.id == LeverId::RawRead)
         .expect("RawRead lever");
     assert!(
-        rawread
+        !rawread
             .facts
             .iter()
             .any(|(k, v)| *k == "uhd_conversion_count" && *v > 0),
-        "fixture must apply the classic conversion"
+        "classic UHD conversion is paused — count must be 0"
     );
-    rawread.facts.retain(|(k, _)| *k == "uhd_conversion_count");
     let audit = crate::engine::audit::audit_image(image, &report);
     assert!(
         audit.ok(),

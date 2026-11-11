@@ -33,8 +33,8 @@ freemkv-chipset = { path = "../freemkv-chipset" }
 # `assert_b_wide_install`) that adapt `thumb_asm`'s decoders to this crate's
 # `anyhow::Result` error type live in `src/install_guard.rs`; every actual
 # encode/decode/find primitive lives in the upstream crate.
-thumb-asm = { version = "=0.14.1", git = "https://github.com/MattJackson/thumb-asm", rev = "0d9b37aa76c964949256146ce9be0cfbe4f823a0" }
-mediatek-optical = { version = "=1.3.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "cdea021bf93454d63a82fbd37425e3a4098f06a3", features = ["image", "analysis"] }
+thumb-asm = "=0.15.0"
+mediatek-optical = { version = "=1.3.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "babf15064ae2b7253741f26bf9b1d1552fbe469b", features = ["image", "analysis"] }
 
 sha2 = "0.10"
 tempfile = "3"

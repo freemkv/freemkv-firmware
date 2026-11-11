@@ -37,7 +37,7 @@ pub(super) fn reverse_stub(b: &ReverseBindings) -> Result<Vec<u8>> {
             .is_some(),
         "flags address overflow"
     );
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     // BICS preserves C/V; select one of four copies before the comparisons.
     let v = a.label();
     let c = a.label();
@@ -87,8 +87,9 @@ fn emit_case(a: &mut Asm, b: &ReverseBindings, cv: u32) {
     a.bne(native);
     a.ldr_lit(3, b.state);
     a.ldrb_imm(3, 3, 0);
-    a.cmp_imm(3, 0xc7);
-    a.bne(native);
+    a.subs_imm(3, 0xc7);
+    a.cmp_imm(3, 1);
+    a.bhi(native);
     // Replay the gate for R2, then choose the existing source-bound mode.
     a.ldr_lit(3, cv);
     a.adds_reg(3, 3, 3);

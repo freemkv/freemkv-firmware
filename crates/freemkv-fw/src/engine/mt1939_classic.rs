@@ -19,6 +19,128 @@ use crate::boot::BootSettings;
 use crate::family::{Capability, ChipInfo};
 use thumb_asm::{self as thumb, Asm, CommandTable};
 
+/// Patch the classic scanner's inline 0x3C mode whitelist to also accept
+/// [`abi::KNOCK_MODE`] (0x0E). The OEM scanner checks cdb\[1\] against a
+/// hard-coded set {0x06,0x07,0x0A,0x0B,0x0C} before dispatching to the
+/// table handler — any unlisted mode is rejected before our trampoline fires.
+///
+/// The OEM whitelist repeats a redundant `ldrb r2,[r5,#1]` before every
+/// `cmp; beq` pair after the first. Compressing out those reloads frees
+/// enough space for one extra `cmp; beq` pair for our knock mode.
+fn patch_scanner_mode_whitelist(out: &mut [u8], scanner_entry: usize) -> Result<bool> {
+    let handler_call: u16 = 0x6860; // ldr r0, [r4, #4] — the handler-call halfword
+    let ldrb_mode: u16 = 0x786A; // ldrb r2, [r5, #1]
+    let cmp_3c: u16 = 0x2A3C; // cmp r2, #0x3C
+
+    // Walk the scanner to find `cmp r2, #0x3C` preceded by mode checks.
+    let scan_end = (scanner_entry + 0x200).min(out.len().saturating_sub(2));
+    let mut whitelist_start = None;
+    for pc in (scanner_entry..scan_end).step_by(2) {
+        let hw = u16::from_le_bytes([out[pc], out[pc + 1]]);
+        if hw == cmp_3c {
+            // The ldrb+cmp+beq block starts at the next instruction after the
+            // bne that follows this cmp. Locate the first ldrb r2,[r5,#1].
+            let bne_pc = pc + 2;
+            let bne_hw = u16::from_le_bytes([out[bne_pc], out[bne_pc + 1]]);
+            if bne_hw >> 8 != 0xD1 {
+                continue;
+            }
+            let first_ldrb = bne_pc + 2;
+            let hw_first = u16::from_le_bytes([out[first_ldrb], out[first_ldrb + 1]]);
+            if hw_first == ldrb_mode {
+                whitelist_start = Some(first_ldrb);
+                break;
+            }
+        }
+    }
+    let Some(start) = whitelist_start else {
+        return Ok(false);
+    };
+
+    // Collect existing whitelisted modes.
+    let mut modes: Vec<u8> = Vec::new();
+    let mut handler_target: Option<usize> = None;
+    let mut pos = start;
+    loop {
+        if pos + 3 >= out.len() {
+            break;
+        }
+        let hw = u16::from_le_bytes([out[pos], out[pos + 1]]);
+        if hw == ldrb_mode {
+            pos += 2;
+            continue;
+        }
+        if hw >> 8 == 0x2A {
+            let mode = (hw & 0xFF) as u8;
+            let beq_hw = u16::from_le_bytes([out[pos + 2], out[pos + 3]]);
+            if beq_hw >> 8 != 0xD0 {
+                break;
+            }
+            // Recover the absolute target from the beq offset.
+            let beq_pc = pos + 2;
+            let mut off = (beq_hw & 0xFF) as i32;
+            if off >= 0x80 {
+                off -= 0x100;
+            }
+            let abs_target = (beq_pc as i32 + 4 + off * 2) as usize;
+            if let Some(prev) = handler_target {
+                if prev != abs_target {
+                    break;
+                }
+            }
+            handler_target = Some(abs_target);
+            modes.push(mode);
+            pos += 4;
+            continue;
+        }
+        break;
+    }
+    let end = pos;
+    let handler_target =
+        handler_target.ok_or_else(|| anyhow!("classic scanner: no mode checks found"))?;
+
+    // Already has our knock mode?
+    if modes.contains(&abi::KNOCK_MODE) {
+        return Ok(true);
+    }
+    modes.push(abi::KNOCK_MODE);
+
+    // Build the compressed replacement: one ldrb + N×(cmp+beq) + NOP padding.
+    let needed = 2 + modes.len() * 4; // ldrb + N*(cmp+beq)
+    let available = end - start;
+    anyhow::ensure!(
+        needed <= available,
+        "classic scanner: not enough space for {} modes ({needed} > {available})",
+        modes.len()
+    );
+    let mut patch = Vec::with_capacity(available);
+    patch.extend_from_slice(&ldrb_mode.to_le_bytes());
+    for &mode in &modes {
+        let cmp_hw: u16 = 0x2A00 | u16::from(mode);
+        let beq_pc = start + patch.len() + 2;
+        let offset = (handler_target as i32 - beq_pc as i32 - 4) / 2;
+        anyhow::ensure!(
+            (-128..=127).contains(&offset),
+            "classic scanner: beq offset {offset} out of 8-bit signed range for mode 0x{mode:02x}"
+        );
+        let beq_hw: u16 = 0xD000 | ((offset as u16) & 0xFF);
+        patch.extend_from_slice(&cmp_hw.to_le_bytes());
+        patch.extend_from_slice(&beq_hw.to_le_bytes());
+    }
+    while patch.len() < available {
+        patch.extend_from_slice(&0x46C0u16.to_le_bytes()); // NOP
+    }
+    out[start..start + patch.len()].copy_from_slice(&patch);
+
+    // Verify: the handler-call halfword must still be reachable.
+    let hc = u16::from_le_bytes([out[handler_target], out[handler_target + 1]]);
+    anyhow::ensure!(
+        hc == handler_call,
+        "classic scanner: handler-call site 0x{hc:04x} != expected 0x{handler_call:04x}",
+    );
+    Ok(true)
+}
+
 // UH12NS30 JBC5 variant of `VID_GATE_SIG_CLASSIC`: the first state-pointer load
 // goes through r7. State byte and CMP/BNE offsets are identical.
 const VID_GATE_SIG_CLASSIC_R7: &[(u16, u16)] = &[
@@ -100,6 +222,7 @@ const AKE_GATE_SIG_CLASSIC_SPLIT: &[(u16, u16)] = &[
 
 /// Attach the conversion hook to RawRead; an applied conversion makes the
 /// lever Applied so the auditor checks its atomic group.
+#[cfg(test)]
 fn attach_classic_conversion(levers: &mut [LeverReport], conversion: HookReport, count: u32) {
     if let Some(raw_read) = levers.iter_mut().find(|l| l.id == LeverId::RawRead) {
         raw_read.hooks.push(conversion);
@@ -116,6 +239,7 @@ fn attach_classic_conversion(levers: &mut [LeverReport], conversion: HookReport,
 }
 
 impl Mt1959Engine {
+    #[allow(dead_code)] // paused; preserved on 1939uhd branch
     pub(super) fn emit_media_conversion_classic(
         &self,
         source: &[u8],
@@ -145,7 +269,7 @@ impl Mt1959Engine {
     /// its native setter and the selector consumer to OPTM. No write speed or
     /// hardware/media maximum initializer is changed.
     pub fn build_speed_stub_classic(&self, flag_base: u32, maximum_cell: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let oem = a.label();
         // The Thumb-1 entry saves the native LR before BL overwrites it.
         a.push(8);
@@ -186,7 +310,7 @@ impl Mt1959Engine {
         let va = self.free_space(out, bytes.len())?;
         let branch = thumb::encode_bl(role.site() + 2, va)
             .ok_or_else(|| anyhow!("classic Speed tail branch out of range"))?;
-        let mut entry = Asm::new();
+        let mut entry = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         entry.push(0x100);
         let mut entry = entry.finish()?;
         entry.truncate(2); // finish pads the instruction-only fragment to four bytes.
@@ -234,7 +358,7 @@ impl Mt1959Engine {
     /// store happens through the OEM primitive unchanged. `r2` scratch; `r0`=AGID
     /// preserved. `04 01` does NOT act here (that is the Gate-A bare-read path).
     pub(crate) fn build_ake_stub_classic(&self, flag_base: u32, back: u32) -> Result<Vec<u8>> {
-        let mut a = Asm::new();
+        let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let accept = a.label();
         let done = a.label();
         a.lsrs_imm(0, 0, 6); // replay the overwritten `lsrs r0,r0,#6` (r0 = AGID)
@@ -298,7 +422,8 @@ impl Mt1959Engine {
 
         // Modern FLAG_TABLE_BASE collides with live classic SRAM; derive a free
         // cell from this image.
-        let ram = super::sram::SramPlacement::inspect(image);
+        let ram =
+            super::sram::SramPlacement::inspect(image).with_ceiling(super::core::SRAM_CLASSIC_END);
         let flag_base = ram
             .candidate()
             .context("classic base: free SRAM cell for the flag table")?;
@@ -347,7 +472,7 @@ impl Mt1959Engine {
         let mut speed_stub_va = 0;
         let mut hrl_sites: Vec<u32> = Vec::new();
         let mut hrl_stub_va = 0u32;
-        let mut uhd_conversion_count = 0;
+        let uhd_conversion_count = 0;
 
         // SAFETY COUPLING: the boot-init hook writes 0xFF into every flag byte at
         // power-on, which makes the tri-state `0x00 == OFF` invariant the feature
@@ -420,9 +545,7 @@ impl Mt1959Engine {
                 hrl_sites = sites;
                 hrl_stub_va = stub_va;
             }
-            uhd_conversion_count = self
-                .emit_media_conversion_classic(image, &mut out, flag_base)
-                .1;
+            // MT1939 UHD media conversion paused — no hardware-confirmed reading.
         }
 
         // DE is an identity-page byte, not a tri-state flag, so it does not depend
@@ -445,6 +568,7 @@ impl Mt1959Engine {
         };
         table.replace(&mut out, &record, handler_va | 1, None);
         debug_assert_eq!(out[record.off + 1], LIVE_FLAGS, "flags must remain live");
+        let _scanner_patched = patch_scanner_mode_whitelist(&mut out, scanner_entry as usize)?;
 
         let signed = cmac::resign(&out).map_err(|e| anyhow!("re-sign failed: {e}"))?;
 
@@ -569,7 +693,8 @@ impl Mt1959Engine {
 
         // Derive an unreferenced cell from this image; MT1959's FLAG_TABLE_BASE
         // does not fit the classic SRAM map.
-        let ram = super::sram::SramPlacement::inspect(image);
+        let ram =
+            super::sram::SramPlacement::inspect(image).with_ceiling(super::core::SRAM_CLASSIC_END);
         let flag_base = ram
             .candidate()
             .context("classic base: free SRAM cell for the flag table")?;
@@ -678,8 +803,7 @@ impl Mt1959Engine {
             }
         });
 
-        let (conversion, count) = self.emit_media_conversion_classic(image, &mut out, flag_base);
-        attach_classic_conversion(&mut levers, conversion, count);
+        // MT1939 UHD media conversion paused — no hardware-confirmed reading.
 
         levers.push(self.lever_de(image, &mut out, chip));
 
@@ -695,6 +819,7 @@ impl Mt1959Engine {
         };
         table.replace(&mut out, &record, handler_va | 1, None);
         debug_assert_eq!(out[record.off + 1], LIVE_FLAGS, "flags must remain live");
+        let _scanner_patched = patch_scanner_mode_whitelist(&mut out, commands.scanner().entry())?;
 
         if !levers.iter().any(|l| l.outcome.is_effective()) {
             bail!("nothing modifiable on this classic MT1939 image");
@@ -725,15 +850,23 @@ impl Mt1959Engine {
         let region_stub_va = self.free_space(out, region_bytes.len() + 16)?;
         let bl = thumb::encode_bl(region_site, region_stub_va)
             .ok_or_else(|| anyhow!("classic Region detour `bl` out of range"))?;
+        let saved_stub =
+            out[region_stub_va as usize..region_stub_va as usize + region_bytes.len()].to_vec();
+        let saved_site = out[region_site..region_site + bl.len()].to_vec();
         thumb::write(out, region_stub_va as usize, &region_bytes);
         thumb::write(out, region_site, &bl);
-        crate::install_guard::verify_branch(
+        if let Err(e) = crate::install_guard::verify_branch(
             out,
             region_site,
             thumb::BranchKind::Bl,
             region_stub_va,
             "classic Region",
-        )?;
+        ) {
+            out[region_stub_va as usize..region_stub_va as usize + saved_stub.len()]
+                .copy_from_slice(&saved_stub);
+            out[region_site..region_site + saved_site.len()].copy_from_slice(&saved_site);
+            return Err(e);
+        }
         Ok((region_emitter, region_stub_va))
     }
 

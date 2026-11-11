@@ -186,7 +186,7 @@ fn guard(a: &mut Asm, c: &GeometryOperands, flags: u32, source: bool, no: u16) {
 }
 
 pub fn emit_record_copy(c: &GeometryOperands, flags: u32) -> Result<Vec<u8>> {
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     let done = a.label();
     let three = a.label();
     a.push(0x14f); // R0..R3,R6,LR: aligned through the native copy call.
@@ -233,7 +233,7 @@ fn read_word(a: &mut Asm, c: &GeometryOperands, offset: u8) {
 }
 
 pub fn emit_initializer(c: &GeometryOperands, flags: u32) -> Result<Vec<u8>> {
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     let done = a.label();
     a.push(6); // Preserve the caller-clobbered R1/R2 too; native frame owns R3..R7.
     capture_cv(&mut a, 7);

@@ -161,26 +161,26 @@ const BD_UHD_UNLOCK: &[(&str, MediaClass, bool)] = {
 /// hypothetical `BW-16`). A hit gives the mapped media class + AACS/region
 /// scope. A miss falls back to the family default: every `MTEKMT19xx` part is a
 /// BD/UHD writer, so both levers are in scope (the levers still self-gate on
-/// their own signatures, so an over-broad default cannot mis-patch).
+/// their own signatures, so an over-broad default cannot mis-patch). MT1939 is
+/// capped at BD in either case.
 pub fn capability_for(model: &str, family: ChipFamily) -> Capability {
     let up = model.to_ascii_uppercase();
     let hit = BD_UHD_UNLOCK
         .iter()
         .filter(|(token, _, _)| up.contains(token))
         .max_by_key(|(token, _, _)| token.len());
-    match hit {
-        Some(&(_, media_class, region_lockable)) => Capability {
-            family,
-            media_class,
-            bd_aacs: true,
-            region_lockable,
+    let (media_class, region_lockable) = hit
+        .map(|&(_, media_class, region_lockable)| (media_class, region_lockable))
+        .unwrap_or((MediaClass::UhdBd, true));
+    Capability {
+        family,
+        // No MT1939 UHD modification exists, so its scope stops at BD.
+        media_class: match family {
+            ChipFamily::Mt1939 => media_class.min(MediaClass::Bd),
+            ChipFamily::Mt1959 => media_class,
         },
-        None => Capability {
-            family,
-            media_class: MediaClass::UhdBd,
-            bd_aacs: true,
-            region_lockable: true,
-        },
+        bd_aacs: true,
+        region_lockable,
     }
 }
 

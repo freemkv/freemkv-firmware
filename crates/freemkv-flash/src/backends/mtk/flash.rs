@@ -414,7 +414,9 @@ pub(super) fn failure_phase(
 
 /// Publish the post-flash INQUIRY vendor/product/revision and return it.
 fn publish_running_identity(inquiry: &[u8]) -> String {
-    let identity = crate::style::printable(String::from_utf8_lossy(&inquiry[8..36]).trim());
+    let end = inquiry.len().min(36);
+    let start = 8.min(end);
+    let identity = crate::style::printable(String::from_utf8_lossy(&inquiry[start..end]).trim());
     crate::output::field("Firmware running", crate::report::Value::text(&identity));
     identity
 }

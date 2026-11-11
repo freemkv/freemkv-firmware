@@ -131,6 +131,17 @@ struct FlashArgs {
     /// Acknowledge that flashing can permanently disable the drive.
     #[arg(long)]
     i_understand_risk: bool,
+    /// FAST dev loop: skip the pre-flash backup (a full 2 MiB read at 64 bytes
+    /// per round-trip on MediaTek, minutes). No rollback file is saved and
+    /// gates that need installed-firmware evidence (crossflash) refuse.
+    #[arg(long, alias = "fast", conflicts_with = "backup")]
+    no_backup: bool,
+    /// RECOVERY override: treat a falsely-reported loaded disc as an empty tray.
+    /// Only for a physically empty tray whose firmware is wedged reporting a disc
+    /// (e.g. an instrumented image stuck in acquisition). The tray-open refusal
+    /// still applies. Verify the tray is empty before using this.
+    #[arg(long)]
+    force_empty_tray: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -213,6 +224,8 @@ fn main() -> ExitCode {
             freemkv_flash::workflow::package_image(&input, &output)
         }
         Some(Command::Flash(args)) => {
+            freemkv_flash::engine::set_skip_preflash_backup(args.no_backup);
+            freemkv_flash::engine::set_ignore_disc_present(args.force_empty_tray);
             freemkv_flash::workflow::flash(args.into(), &mut freemkv_flash::output::TerminalConfirm)
                 .and_then(|outcome| report_update("Flash", outcome))
         }

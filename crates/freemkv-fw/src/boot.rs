@@ -404,7 +404,14 @@ fn read_record(image: &[u8]) -> Result<Option<Record>> {
             );
             continue;
         }
-        let expected = stores(&flags, if i == 2 { 6 } else { 0 });
+        let expected = stores(
+            &flags,
+            match i {
+                0 => 2, // boot stub uses r2 (r0 preserves the native return value)
+                1 => 0, // handler RESET_TO_DEFAULTS uses r0
+                _ => 6, // handler RESET_TO_FLASH uses r6
+            },
+        );
         ensure!(
             *site % 2 == 0
                 && image.get(*site..site.saturating_add(expected.len()))
@@ -471,7 +478,14 @@ pub(crate) fn update(
         if record.shared_reset && i == 2 {
             continue;
         }
-        let bytes = stores(&defaults.flags(), if i == 2 { 6 } else { 0 });
+        let bytes = stores(
+            &defaults.flags(),
+            match i {
+                0 => 2,
+                1 => 0,
+                _ => 6,
+            },
+        );
         output[*site..*site + bytes.len()].copy_from_slice(&bytes);
     }
     output[record.offset + 16..record.offset + 23].copy_from_slice(&defaults.flags());
@@ -511,7 +525,7 @@ pub(crate) fn attach(
         );
         Ok(hits[0])
     };
-    let boot_site = find(boot, boot + 64, 0)?;
+    let boot_site = find(boot, boot + 64, 2)?;
     let defaults_site = find(handler, handler.saturating_add(handler_len), 0)?;
     let handler_end = handler
         .checked_add(handler_len)

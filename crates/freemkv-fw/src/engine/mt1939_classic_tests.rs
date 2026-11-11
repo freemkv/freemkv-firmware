@@ -1348,3 +1348,136 @@ fn applied_conversion_promotes_a_missed_rawread_lever() {
         LeverOutcome::SignatureNotFound { .. }
     ));
 }
+
+// ---------------------------------------------------------------------------
+// patch_scanner_mode_whitelist
+// ---------------------------------------------------------------------------
+
+/// Build a synthetic OEM-style scanner body: `cmp r2, #0x3C; bne <skip>;`
+/// followed by `[ldrb r2,[r5,#1]; cmp r2, #mode; beq <handler>] × N`, then
+/// the handler-call halfword 0x6860 at `handler`. Returns the scanner entry
+/// offset so `patch_scanner_mode_whitelist` can find the pattern.
+fn plant_scanner_whitelist(buf: &mut [u8], base: usize, modes: &[u8]) -> usize {
+    let handler_off = base + 4 + modes.len() * 6 + 4;
+    put_hw(buf, base, &[0x2A3C]); // cmp r2, #0x3C
+    put_hw(buf, base + 2, &[0xD100 | 0x7F]); // bne <far away>
+    let mut p = base + 4;
+    for &m in modes {
+        put_hw(buf, p, &[0x786A]); // ldrb r2, [r5, #1]
+        put_hw(buf, p + 2, &[0x2A00 | u16::from(m)]); // cmp r2, #mode
+        let beq_addr = p + 4; // beq is the third halfword
+        let off = ((handler_off as i32) - (beq_addr as i32) - 4) / 2;
+        put_hw(buf, p + 4, &[0xD000 | ((off as u16) & 0xFF)]); // beq <handler>
+        p += 6;
+    }
+    put_hw(buf, handler_off, &[0x6860]); // ldr r0, [r4, #4]
+    base
+}
+
+#[test]
+fn scanner_whitelist_patch_adds_knock_mode_and_preserves_all_oem_modes() {
+    let mut buf = vec![0u8; 0x400];
+    let oem_modes: Vec<u8> = vec![0x06, 0x07, 0x0A, 0x0B, 0x0C];
+    let entry = plant_scanner_whitelist(&mut buf, 0x100, &oem_modes);
+    let before = buf.clone();
+
+    super::patch_scanner_mode_whitelist(&mut buf, entry).unwrap();
+
+    // Collect all cmp r2, #imm8 instructions after the ldrb in the patched area.
+    let mut found_modes: Vec<u8> = Vec::new();
+    let scan_start = 0x100 + 4; // after cmp+bne header
+    let mut p = scan_start;
+    while p < scan_start + 0x100 {
+        let hw = u16::from_le_bytes([buf[p], buf[p + 1]]);
+        if hw == 0x46C0 {
+            break; // NOP padding
+        }
+        if hw == 0x786A {
+            p += 2;
+            continue; // skip ldrb
+        }
+        if hw >> 8 == 0x2A {
+            found_modes.push((hw & 0xFF) as u8);
+            p += 4; // skip cmp+beq pair
+            continue;
+        }
+        p += 2;
+    }
+
+    for &m in &oem_modes {
+        assert!(
+            found_modes.contains(&m),
+            "OEM mode 0x{m:02x} must be preserved in the patched whitelist"
+        );
+    }
+    assert!(
+        found_modes.contains(&crate::abi::KNOCK_MODE),
+        "KNOCK_MODE 0x{:02x} must be added to the whitelist",
+        crate::abi::KNOCK_MODE
+    );
+    assert_eq!(
+        found_modes.len(),
+        oem_modes.len() + 1,
+        "exactly one mode added"
+    );
+
+    // Handler-call halfword still intact.
+    let handler_area = &buf[scan_start..scan_start + 0x100];
+    assert!(
+        handler_area
+            .windows(2)
+            .any(|w| u16::from_le_bytes([w[0], w[1]]) == 0x6860),
+        "handler-call halfword 0x6860 must survive the patch"
+    );
+
+    // Bytes outside the patch region unchanged.
+    assert_eq!(
+        buf[..0x100],
+        before[..0x100],
+        "bytes before the scanner must be untouched"
+    );
+}
+
+#[test]
+fn scanner_whitelist_patch_is_idempotent() {
+    let mut buf = vec![0u8; 0x400];
+    let oem_modes: Vec<u8> = vec![0x06, 0x07, 0x0A, 0x0B, 0x0C];
+    let entry = plant_scanner_whitelist(&mut buf, 0x100, &oem_modes);
+
+    super::patch_scanner_mode_whitelist(&mut buf, entry).unwrap();
+    let after_first = buf.clone();
+    super::patch_scanner_mode_whitelist(&mut buf, entry).unwrap();
+    assert_eq!(
+        buf, after_first,
+        "running the patch twice must produce identical output"
+    );
+}
+
+#[test]
+fn scanner_whitelist_patch_returns_ok_when_pattern_not_found() {
+    let mut buf = vec![0u8; 0x400];
+    // No cmp r2, #0x3C anywhere
+    super::patch_scanner_mode_whitelist(&mut buf, 0x100).unwrap();
+}
+
+#[test]
+fn scanner_whitelist_patch_emits_only_one_ldrb() {
+    let mut buf = vec![0u8; 0x400];
+    let oem_modes: Vec<u8> = vec![0x06, 0x07, 0x0A, 0x0B, 0x0C];
+    let entry = plant_scanner_whitelist(&mut buf, 0x100, &oem_modes);
+
+    super::patch_scanner_mode_whitelist(&mut buf, entry).unwrap();
+
+    // Count ldrb r2,[r5,#1] (0x786A) in the patched block.
+    let block_start = 0x100 + 4;
+    let mut ldrb_count = 0;
+    for p in (block_start..block_start + 0x80).step_by(2) {
+        if u16::from_le_bytes([buf[p], buf[p + 1]]) == 0x786A {
+            ldrb_count += 1;
+        }
+    }
+    assert_eq!(
+        ldrb_count, 1,
+        "the compressed whitelist must have exactly one ldrb (OEM repeats one per mode)"
+    );
+}

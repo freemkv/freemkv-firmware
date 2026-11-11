@@ -11,9 +11,10 @@ fn classic_emitted_boot_and_region_hrl_controls_are_reported() {
     assert!(support.supports(BootFeature::Region));
     assert!(support.supports(BootFeature::Hrl));
     assert!(support.supports(BootFeature::Speed));
-    assert!(support.supports_value(BootFeature::Unrestricted, 1));
-    assert!(support.supports_value(BootFeature::Unrestricted, 255));
-    assert!(!support.supports_value(BootFeature::Unrestricted, 0));
+    assert!(
+        !support.supports(BootFeature::Unrestricted),
+        "classic MT1939 UHD is paused — Unrestricted must not be supported"
+    );
 }
 
 #[test]
@@ -113,10 +114,11 @@ fn editable_settings_do_not_require_boot_to_follow_the_handler() {
     let defaults = BootSettings::standard();
     let boot = 0x1000;
     let handler = 0x2000;
+    let boot_stores = stores(&defaults.flags(), 2);
     let reset = stores(&defaults.flags(), 0);
     let fallback = stores(&defaults.flags(), 6);
     image[boot..boot + 64].fill(0);
-    image[boot..boot + reset.len()].copy_from_slice(&reset);
+    image[boot..boot + boot_stores.len()].copy_from_slice(&boot_stores);
     image[handler..handler + reset.len()].copy_from_slice(&reset);
     image[handler + reset.len()..handler + reset.len() + fallback.len()].copy_from_slice(&fallback);
     attach(
@@ -204,7 +206,14 @@ fn saved_settings_cannot_override_boot_but_runtime_reset_uses_same_defaults() {
         }
         assert_eq!(
             &report.image[*site..*site + 28],
-            stores(&defaults.flags(), if i == 2 { 6 } else { 0 })
+            stores(
+                &defaults.flags(),
+                match i {
+                    0 => 2,
+                    1 => 0,
+                    _ => 6,
+                }
+            )
         );
     }
     assert!(engine::audit::audit_image(&fixture(), &report).ok());
@@ -360,13 +369,24 @@ fn execute_boot_prefix(bytes: &[u8], base: u32, ram: &mut [u8]) {
         let ins = thumb_asm::isa::decode_at(bytes, pc).expect("decoded boot instruction");
         match ins.mnemonic {
             "push" => {}
-            "pop" => break, // argument restore ends the initialization prefix
+            "pop" => {
+                if ins
+                    .operands
+                    .as_slice()
+                    .any(|op| matches!(op, Operand::RegList(bits) if bits & (1 << 15) != 0))
+                {
+                    break; // pop {.., pc} — return from stub
+                }
+            }
             "ldr" => {
                 let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
                     panic!("LDR destination");
                 };
-                regs[usize::from(dest.num())] = thumb_asm::analysis::literal_value(bytes, pc)
-                    .expect("initialization prefix loads only literals");
+                if let Some(value) = thumb_asm::analysis::literal_value(bytes, pc) {
+                    regs[usize::from(dest.num())] = value;
+                }
+                // Non-literal loads (e.g. saved-register restore from sp) are
+                // skipped — they set up call-site registers we don't track.
             }
             "mov" => {
                 let Some(Operand::Reg(dest)) = ins.operands.get(0) else {
@@ -388,6 +408,7 @@ fn execute_boot_prefix(bytes: &[u8], base: u32, ram: &mut [u8]) {
                 let address = regs[usize::from(memory.base.num())] + memory.offset;
                 ram[(address - base) as usize] = regs[usize::from(source.num())] as u8;
             }
+            "blx" => {} // orig_init call — skipped in emulation
             _ => panic!("unexpected boot instruction {ins:?}; review startup behavior"),
         }
     }
@@ -474,11 +495,23 @@ fn older_conversion_normal_apis_clear_private_identity_before_native_boot() {
             .step_by(2)
             .find(|&at| bytes[at..at + 2] == 0xbc0fu16.to_le_bytes())
             .unwrap();
-        let tail: Vec<u8> = [0xbc0fu16, 0x466c, 0x6824, 0x47e0, 0xbd10]
+        let call_seq: Vec<u8> = [0xbc0fu16, 0x466c, 0x6824, 0x47e0]
             .into_iter()
             .flat_map(u16::to_le_bytes)
             .collect();
-        assert_eq!(&bytes[restore..restore + tail.len()], tail);
+        assert_eq!(
+            &bytes[restore..restore + call_seq.len()],
+            call_seq,
+            "call setup: pop args, restore r4, blx orig_init"
+        );
+        let ret_at = (restore + call_seq.len()..bytes.len() - 1)
+            .step_by(2)
+            .find(|&at| bytes[at..at + 2] == 0xbd10u16.to_le_bytes())
+            .expect("pop {{r4, pc}} return after flag writes");
+        assert!(
+            ret_at > restore + call_seq.len(),
+            "flag writes between call and return"
+        );
         assert_eq!(
             thumb_asm::analysis::literal_value(bytes, restore - 4),
             Some(native | 1)

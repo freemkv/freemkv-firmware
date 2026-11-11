@@ -1,7 +1,9 @@
 use mediatek_optical::image::analysis::RamReferences;
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: sram_diag <firmware.bin>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: sram_diag <firmware.bin>");
     let image = std::fs::read(&path).expect("read firmware");
     let refs = RamReferences::inspect(&image);
 
@@ -22,7 +24,10 @@ fn main() {
         }
     }
 
-    println!("\n=== incomplete seeds: {} total ===", refs.incomplete().len());
+    println!(
+        "\n=== incomplete seeds: {} total ===",
+        refs.incomplete().len()
+    );
 
     println!("\n=== bytes() contiguous ranges ===");
     let all: Vec<_> = refs.bytes().iter().copied().collect();

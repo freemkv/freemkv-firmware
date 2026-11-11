@@ -6,13 +6,20 @@ use mediatek_optical::image::analysis::RamReferences;
 
 pub(super) struct SramPlacement {
     references: RamReferences,
+    ceiling: u32,
 }
 
 impl SramPlacement {
     pub(super) fn inspect(image: &[u8]) -> Self {
         Self {
             references: RamReferences::inspect(image),
+            ceiling: SRAM_END,
         }
+    }
+
+    pub(super) fn with_ceiling(mut self, ceiling: u32) -> Self {
+        self.ceiling = ceiling;
+        self
     }
     /// Reject overlap with observed static references or detected fill
     /// destinations, including a four-byte guard on each side, and reject
@@ -26,10 +33,11 @@ impl SramPlacement {
             .checked_add(len)
             .and_then(|end| end.checked_add(4))
             .ok_or_else(|| anyhow!("{what}: SRAM upper guard overflows"))?;
-        if lo < SRAM_LO || hi > SRAM_END {
+        let ceiling = self.ceiling;
+        if lo < SRAM_LO || hi > ceiling {
             return Err(anyhow!(
                 "{what} cell {base:#010x}..{:#010x} is outside the supported SRAM placement range \
-                 [{SRAM_LO:#010x}, {SRAM_END:#010x})",
+                 [{SRAM_LO:#010x}, {ceiling:#010x})",
                 base + len
             )
             .context(freemkv_flash::user_error::IssueCode::UnsupportedFirmware));
@@ -55,8 +63,9 @@ impl SramPlacement {
         let used = self.used_bytes();
         let footprint = (FLASHWRITE_SCRATCH_OFF + 1).max(u32::from(NUM_FEATURES) + 1);
         let mut best: Option<u32> = None;
+        let ceiling = self.ceiling;
         let mut start = SRAM_LO;
-        for end in (SRAM_LO..=SRAM_END).filter(|a| *a == SRAM_END || used.contains(a)) {
+        for end in (SRAM_LO..=ceiling).filter(|a| *a == ceiling || used.contains(a)) {
             let candidate = (start + 4 + 3) & !3;
             if candidate + footprint + 4 <= end {
                 best = Some(candidate);
@@ -66,7 +75,7 @@ impl SramPlacement {
         best.ok_or_else(|| {
             anyhow!(
                 "no statically unreferenced SRAM candidate fits the complete {footprint}-byte \
-             flag/scratch footprint and guards below {SRAM_END:#010x}"
+             flag/scratch footprint and guards below {ceiling:#010x}"
             )
         })
     }
@@ -75,10 +84,10 @@ impl SramPlacement {
         let mut used = self.references.bytes().clone();
         for &(_, addr, len, private) in self.references.fills() {
             if len > 0 && !private {
-                for a in addr..addr.saturating_add(len) {
-                    if (SRAM_LO..SRAM_END).contains(&a) {
-                        used.insert(a);
-                    }
+                let lo = addr.max(SRAM_LO);
+                let hi = addr.saturating_add(len).min(self.ceiling);
+                for a in lo..hi {
+                    used.insert(a);
                 }
             }
         }

@@ -1283,6 +1283,63 @@ mod tests {
             assert!(emit_di_layers(value).is_err());
         }
     }
+    #[test]
+    fn di_layers_emits_beq_done_for_both_c7_and_c8_states() {
+        let bytes = emit_di_layers(0x0200_f000).unwrap();
+        let cmp_c7: [u8; 2] = 0x28C7u16.to_le_bytes();
+        let cmp_c8: [u8; 2] = 0x28C8u16.to_le_bytes();
+        let has = |needle: &[u8; 2]| bytes.windows(2).any(|w| w == needle);
+        assert!(has(&cmp_c7), "emit_di_layers must contain cmp r0, #0xC7");
+        assert!(has(&cmp_c8), "emit_di_layers must contain cmp r0, #0xC8");
+        let c7_pos = bytes.windows(2).position(|w| w == cmp_c7).unwrap();
+        let c8_pos = bytes.windows(2).position(|w| w == cmp_c8).unwrap();
+        let beq_after_c7 = u16::from_le_bytes([bytes[c7_pos + 2], bytes[c7_pos + 3]]);
+        let beq_after_c8 = u16::from_le_bytes([bytes[c8_pos + 2], bytes[c8_pos + 3]]);
+        assert_eq!(
+            beq_after_c7 >> 8,
+            0xD0,
+            "cmp C7 must be followed by beq, got 0x{beq_after_c7:04x}"
+        );
+        assert_eq!(
+            beq_after_c8 >> 8,
+            0xD0,
+            "cmp C8 must be followed by beq, got 0x{beq_after_c8:04x}"
+        );
+        let done_from_c7 = (c7_pos + 2) as i32 + 4 + ((beq_after_c7 & 0xFF) as i8 as i32) * 2;
+        let done_from_c8 = (c8_pos + 2) as i32 + 4 + ((beq_after_c8 & 0xFF) as i8 as i32) * 2;
+        assert_eq!(
+            done_from_c7, done_from_c8,
+            "both C7 and C8 beq must target the same done label"
+        );
+    }
+    #[test]
+    fn selection_case_accepts_c7_c8_rejects_others() {
+        let bytes = emit_c7_selection(
+            0x01FF_9DD3,
+            0x0200_f000,
+            &[0x46C0],
+            0x0010_0000,
+            0x0010_0100,
+        )
+        .unwrap();
+        let subs_c7: [u8; 2] = 0x3BC7u16.to_le_bytes();
+        let has = |needle: &[u8; 2]| bytes.windows(2).any(|w| w == needle);
+        assert!(has(&subs_c7), "selection_case must emit subs r3, #0xC7");
+        let subs_pos = bytes.windows(2).position(|w| w == subs_c7).unwrap();
+        // cmp r3, #1 immediately after subs r3, #0xC7
+        let cmp_hw = u16::from_le_bytes([bytes[subs_pos + 2], bytes[subs_pos + 3]]);
+        assert_eq!(
+            cmp_hw, 0x2B01,
+            "cmp r3, #1 must immediately follow subs r3, #0xC7, got 0x{cmp_hw:04x}"
+        );
+        // bhi (unsigned > 1 rejects non-C7/C8)
+        let bhi_hw = u16::from_le_bytes([bytes[subs_pos + 4], bytes[subs_pos + 5]]);
+        assert_eq!(
+            bhi_hw >> 8,
+            0xD8,
+            "the range check must be bhi (0xD8xx), got 0x{bhi_hw:04x}"
+        );
+    }
 }
 
 /// Candidate DI entry detour; kept separate from ordinary Modify installation.

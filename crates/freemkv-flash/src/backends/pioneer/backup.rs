@@ -433,7 +433,7 @@ pub fn capture_signed_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
 
 /// Retrying capture: a failing chunk is retried before giving up, and a chunk
 /// that never reads fails its region (same Kernel-only partial rule as
-/// [`capture`]). No command uses it yet; `recover` uses the strict capture.
+/// [`capture_signed_candidate`]). No command uses it yet; `recover` uses the strict capture.
 /// Issues no flash commands.
 pub fn capture_recover_candidate(dev: &mut dyn ScsiDevice) -> Result<Vec<u8>> {
     capture(dev, true)

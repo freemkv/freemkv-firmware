@@ -65,48 +65,14 @@ fn normal_classic_modify_installs_complete_group_and_reports_supported_settings(
     let original = include_bytes!("../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
     let report = checked_modify(original, &BootSettings::standard());
     let support = crate::boot::BootSupport::from_modify(&report);
-    assert!(support.supports_value(BootFeature::Unrestricted, 1));
-    assert!(support.supports_value(BootFeature::Unrestricted, 255));
-    assert!(!support.supports_value(BootFeature::Unrestricted, 0));
-    assert!(report
-        .levers
-        .iter()
-        .flat_map(|l| &l.hooks)
-        .any(|h| h.id == "uhd-conversion" && h.variant.is_some()));
-    let flags = report
-        .levers
-        .iter()
-        .flat_map(|l| &l.facts)
-        .find(|(k, _)| *k == "flag_base")
-        .unwrap()
-        .1;
-    let plan = engine::mt1939_uhd::UhdConversionPlan::inspect(original).unwrap();
-    plan.verify(original, &report.image, flags).unwrap();
-    let patches = plan.prepared_patches(original, flags).unwrap();
-    let di = mediatek_optical::image::analysis::ClassicDi::detect(original).unwrap();
-    for (at, &original_byte) in original
-        .iter()
-        .enumerate()
-        .take(di.layer_store + 2)
-        .skip(di.prevalidation)
-    {
-        if !patches
-            .iter()
-            .any(|p| (p.site..p.site + p.original.len()).contains(&at))
-        {
-            assert_eq!(
-                report.image[at], original_byte,
-                "unplanned parser edit at {at:#x}"
-            );
-        }
-    }
-    for (setting, value) in [("on", 1), ("oem", 255)] {
-        let settings = BootSettings::parse(&[format!("unrestricted={setting}")]).unwrap();
-        let (_, support) = crate::api::modify_with_defaults(original, &settings).unwrap();
-        assert!(support.supports_value(BootFeature::Unrestricted, value));
-    }
-    let off = BootSettings::parse(&["unrestricted=off".to_string()]).unwrap();
-    assert!(crate::api::modify_with_defaults(original, &off).is_err());
+    assert!(
+        !support.supports(BootFeature::Unrestricted),
+        "classic MT1939 UHD is paused — Unrestricted must not be supported"
+    );
+    assert!(support.supports(BootFeature::Speed));
+    assert!(support.supports(BootFeature::Region));
+    assert!(support.supports(BootFeature::Hrl));
+    assert!(support.has_boot());
 }
 
 #[test]

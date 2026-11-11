@@ -167,6 +167,7 @@ fn build(
 }
 
 #[test]
+#[ignore = "MT1939 UHD conversion paused — preserved on 1939uhd branch"]
 fn mode_comparison_keeps_read_and_acquisition_components_native() {
     build(
         include_bytes!("../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin"),

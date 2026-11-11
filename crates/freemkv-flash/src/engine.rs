@@ -486,6 +486,38 @@ pub fn recover_identified(
     }
 }
 
+static SKIP_PREFLASH_BACKUP: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Opt in to skipping the pre-flash backup capture (dev loop only).
+///
+/// On MediaTek the capture is a full 2 MiB read through the 64-byte `DumpAll`
+/// peek (32768 serial SCSI round-trips). Skipping it also skips the rollback
+/// evidence, so gates that need an installed-firmware backup (crossflash) refuse.
+pub fn set_skip_preflash_backup(skip: bool) {
+    SKIP_PREFLASH_BACKUP.store(skip, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn skip_preflash_backup() -> bool {
+    SKIP_PREFLASH_BACKUP.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+static IGNORE_DISC_PRESENT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Opt in to treating a `DiscPresent` medium status as a warning instead of a
+/// refusal (recovery only). Use when the drive's firmware falsely reports a disc
+/// on a physically empty tray (e.g. an instrumented image wedged in acquisition)
+/// and will not clear it, so the only way to reflash is to override the check.
+/// The `TrayOpen` refusal is unaffected — an open tray still aborts.
+pub fn set_ignore_disc_present(ignore: bool) {
+    IGNORE_DISC_PRESENT.store(ignore, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn ignore_disc_present() -> bool {
+    IGNORE_DISC_PRESENT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Run the `flash` command in two read-only stages around the backup:
 ///
 /// * dry run: tray warning, `plan`, the plan, the backend's preflight;
@@ -501,7 +533,7 @@ pub fn flash(
 ) -> Result<crate::backend::UpdateOutcome> {
     let facet = flash_facet(drive)
         .map_err(|error| crate::backend::UpdateFailure::before_write("capability checks", error))?;
-    if req.execute {
+    if req.execute && !skip_preflash_backup() {
         required_backup_path(req).map_err(|error| {
             crate::backend::UpdateFailure::before_write("backup destination", error)
         })?;
@@ -524,13 +556,19 @@ pub fn flash(
                 explain(error, IssueCode::Connection),
             )
         })?;
-    let saved =
+    let saved = if skip_preflash_backup() {
+        crate::diagnostics::record(
+            "pre-flash backup skipped at the operator's request (--no-backup)",
+        );
+        None
+    } else {
         capture_required_backup(dev, drive, facet, &plan, req, confirm).map_err(|error| {
             crate::backend::UpdateFailure::before_write(
                 "backup",
                 explain(error, IssueCode::BackupFailed),
             )
-        })?;
+        })?
+    };
     let backup_line = match &saved {
         Some(s) => s.summary().to_string(),
         None => crate::localization::english("confirm.no_backup"),
@@ -812,6 +850,15 @@ pub(crate) fn guard_no_medium(dev: &mut dyn ScsiDevice, execute: bool) -> Result
         ),
         MediumStatus::TrayOpen => ("the tray is OPEN", "Close the empty tray and retry."),
     };
+    if ignore_disc_present() && status == MediumStatus::DiscPresent {
+        let msg = format!(
+            "{condition}, but the empty-tray override is active: proceeding. \
+             Ensure no disc is on the tray."
+        );
+        crate::diagnostics::record(&msg);
+        println!("{}", style::amber(&format!("WARNING: {msg}")));
+        return Ok(());
+    }
     if execute {
         return Err(anyhow::anyhow!(
             "{condition} — refusing to flash. {action} This update pass has not started."

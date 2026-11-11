@@ -872,12 +872,14 @@ impl Mt1959Engine {
         // G01-G06 matches establish the agreed media definition, not a hardware test.
         let classic_application = super::mt1939_uhd::UhdConversionPlan::inspect(image)
             .is_ok_and(|p| p.uses_classic_application());
-        let mut uhd_conversion_count = 0;
+        let uhd_conversion_count = 0;
         let mut boot_identity = None;
         if classic_application {
-            let (hook, count) = self.emit_media_conversion_classic(image, &mut w, flag_base);
-            hooks.push(hook);
-            uhd_conversion_count = count;
+            // MT1939 UHD media conversion paused — no hardware-confirmed reading.
+            hooks.push(HookReport::unavailable(
+                "uhd-conversion",
+                "classic UHD conversion paused (no hardware confirmation)".to_string(),
+            ));
         } else {
             let conversion = super::mt1959_uhd::Plan::inspect(image, flag_base);
             hooks.push(match conversion {

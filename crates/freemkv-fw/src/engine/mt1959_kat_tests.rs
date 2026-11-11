@@ -64,8 +64,8 @@ const EXPECT_HANDLER_HEX: &str = "b64b58780e280dd19878c02803d1d878de2800d12ce098
 // setters, and shifted literal/stub placement. Independent execution covers
 // 21,648 settings cases over 123 inputs; 12 broken-code mutations are rejected.
 // PROGRAM completion remains outside those execution checks.
-const EXPECT_CMAC_1: &str = "06db4da6c329bfc693f9017b439a0f2c";
-const EXPECT_CMAC_15: &str = "adbafbc21c3374e983bce1bdc52981fa";
+const EXPECT_CMAC_1: &str = "c5b50825ccf21ad19a582c595085d0ca";
+const EXPECT_CMAC_15: &str = "56c3e5ad27bc2e17606fa2b3210398c8";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -1469,9 +1469,10 @@ fn build_boot_init_fills_defaults_without_saved_overlay_and_tail_calls_orig() {
             .all(|&b| b != crate::abi::STATE_OFF),
         "no default may be 0x00 (would make a fresh drive boot a feature OFF)"
     );
-    // Seven `strb r1,[r0,#off]` (0x7001 | off<<6) — off 0..=6 (slot 0 marker + all 6 flags).
+    // Seven `strb r1,[r2,#off]` (0x7011 | off<<6) — off 0..=6 (slot 0 marker + all 6 flags).
+    // r2 holds flag_base (r0 preserves the native return value across the call).
     for off in 0u16..=6 {
-        assert!(has16(0x7001 | (off << 6)), "boot stub writes flag[{off}]");
+        assert!(has16(0x7011 | (off << 6)), "boot stub writes flag[{off}]");
     }
     assert!(
         !has32(super::SAVE_HOME),

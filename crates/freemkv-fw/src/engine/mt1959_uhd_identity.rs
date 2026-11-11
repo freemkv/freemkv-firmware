@@ -64,7 +64,7 @@ pub fn reset_stub(image: &[u8], flags: u32, reset: &LegacyIdentityReset) -> Resu
         bound.continuation & 1 == 0 && u32::try_from(bound.continuation).is_ok(),
         "invalid identity continuation"
     );
-    let mut a = Asm::new();
+    let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     // All instructions preserve NZCV. Source R1=0 eliminates a MOVS, and the
     // relocated mode LDR leaves R0 with precisely the original native value.
     a.ldr_lit(0, marker);
