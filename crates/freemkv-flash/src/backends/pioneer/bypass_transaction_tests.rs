@@ -184,28 +184,45 @@ fn execute_mode(
 }
 
 #[test]
-fn startup_comparison_rewrites_are_refused_before_firmware_io() {
+fn differing_startup_words_are_set_by_the_flash_transaction() {
     use crate::backend::{FlashFacet, ReadDevice, RecoveryFacet, RecoveryTarget};
     use crate::crossflash::{CompatibilityStatus, Platform, RouteStatus};
     use crate::platform::MockScsiDevice;
+    use pioneer_optical::settings::update::Effect;
     for (source_value, target_value) in [(ORIGINAL, TARGET), (TARGET, ORIGINAL)] {
         let installed = archive(&startup_pair(source_value), false);
         let target_update = startup_pair(target_value);
         let target = archive(&target_update, false);
 
+        // Preparation performs no device I/O and plans the target's own word.
         let mut flash = MockScsiDevice::new();
         let plan = FlashPlan::new(execute_plan(&target).unwrap());
         let saved = crate::engine::gates::saved_for_tests(installed.clone());
-        let error = Pioneer::new()
+        Pioneer::new()
             .authorize(
                 &mut ReadDevice::without_unlocks(&mut flash),
                 plan,
                 Some(&saved),
             )
-            .err()
-            .expect("unproved comparison rewrite must refuse Flash preparation");
-        assert_unsupported_startup(&error);
+            .expect("a differing fixed startup word is corrected on the drive");
         assert!(flash.reads.is_empty() && flash.writes.is_empty());
+        let authorized = authorize_installed(
+            FlashPlan::new(execute_plan(&target).unwrap()),
+            Some(&installed),
+        )
+        .unwrap();
+        let prepared: &Prepared = authorized.state().unwrap();
+        let settings = match (&prepared.complete, &prepared.normal) {
+            (Some(complete), None) => complete.stages()[0].settings(),
+            (None, Some(normal)) => normal.settings(),
+            _ => panic!("incomplete plan"),
+        };
+        assert!(settings.entries().iter().any(|entry| entry.effect()
+            == Effect::ParameterWord {
+                parameter: 0x9f,
+                value: target_value,
+                explicit: true,
+            }));
 
         for bypass in [false, true] {
             let mut recovery = MockScsiDevice::new();
@@ -213,7 +230,7 @@ fn startup_comparison_rewrites_are_refused_before_firmware_io() {
                 "test".into(),
                 Some(recovery::Current::load(&installed).unwrap()),
             );
-            let error = Pioneer::new()
+            Pioneer::new()
                 .prepare(
                     &mut ReadDevice::without_unlocks(&mut recovery),
                     &current,
@@ -221,43 +238,21 @@ fn startup_comparison_rewrites_are_refused_before_firmware_io() {
                     &target,
                     bypass,
                 )
-                .err()
-                .expect("family override cannot authorize unproved writer lifecycle");
-            assert_unsupported_startup(&error);
+                .expect("Recovery plans the same word write");
             assert!(recovery.reads.is_empty() && recovery.writes.is_empty());
         }
 
         for normal_only in [false, true] {
             let target = archive(&target_update, normal_only);
             let decision = crate::crossflash::decide(Platform::Pioneer, &installed, &target);
-            assert!(
-                matches!(
-                    decision.status,
-                    CompatibilityStatus::HardNo | CompatibilityStatus::SoftNo
-                ),
-                "{decision:?}"
-            );
+            assert_eq!(decision.status, CompatibilityStatus::Yes, "{decision:?}");
             assert!(decision
                 .routes
                 .iter()
-                .all(|route| route.status == RouteStatus::Future));
-            assert!(crate::crossflash::admits(Platform::Pioneer, &installed, &target).is_err());
+                .all(|route| route.status == RouteStatus::Allowed));
+            crate::crossflash::admits(Platform::Pioneer, &installed, &target).unwrap();
         }
     }
-}
-
-fn assert_unsupported_startup(error: &anyhow::Error) {
-    assert!(
-        error.chain().any(|cause| matches!(
-            cause.downcast_ref::<pioneer_optical::receiver::PreparationError>(),
-            Some(
-                pioneer_optical::receiver::PreparationError::PhaseCorrection(
-                    pioneer_optical::compatibility::Error::Unsupported
-                )
-            )
-        )),
-        "{error:#}"
-    );
 }
 
 #[test]
