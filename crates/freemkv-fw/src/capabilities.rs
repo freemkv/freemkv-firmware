@@ -84,11 +84,11 @@ mod tests {
         );
         assert_eq!(result["status"], "supported");
         assert_eq!(result["identity"]["chip"], "MT1959");
-        // UHD is not hardware-confirmed for this image, so the unlock is not
-        // advertised: no "on" choice, supported:false, qualification recorded.
+        // Unrestricted applies and is on by default; UHD reading is not
+        // hardware-confirmed for this image, so the qualification says so.
         let unrestricted = &result["report"]["boot_settings"]["unrestricted"];
-        assert_eq!(unrestricted["choices"], serde_json::json!(["oem", "off"]));
-        assert_eq!(unrestricted["supported"], false);
+        assert_eq!(unrestricted["value"], "on");
+        assert_eq!(unrestricted["supported"], true);
         assert_eq!(unrestricted["qualification"], "applies-unproven");
         let raw = result["report"]["levers"]
             .as_array()

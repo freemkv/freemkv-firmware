@@ -183,11 +183,11 @@ impl BootSettings {
     }
     /// Add the full boot report to an existing JSON object.
     ///
-    /// `uhd` is how sure we are the UHD unlock works on hardware. Applying the
-    /// patch is not proof, so `unrestricted` is advertised as supported (and
-    /// offers the "on" choice) only when it is hardware-confirmed; otherwise it
-    /// reports `supported:false` and carries a `qualification` field so a
-    /// consumer can surface it as experimental rather than as working UHD.
+    /// `supported` and `choices` describe what the image applies: Unrestricted
+    /// is on by default wherever its hooks install. `uhd` says how sure we are
+    /// that the unlock reads UHD on hardware; applying the patch is not proof,
+    /// so Unrestricted also carries a `qualification` a consumer must show
+    /// instead of claiming working UHD.
     pub fn report_json(
         &self,
         support: &BootSupport,
@@ -198,16 +198,11 @@ impl BootSettings {
         let fields = BootFeature::ALL
             .into_iter()
             .map(|f| {
-                // Only a hardware-confirmed UHD unlock is advertised as working.
-                let confirmed = uhd == UhdQualification::HardwareConfirmed;
-                let gated = f == BootFeature::Unrestricted && !confirmed;
-                let supported = support.supports(f) && !gated;
+                let supported = support.supports(f);
                 let choices = f
                     .choices()
                     .iter()
                     .filter(|(_, _, v)| support.supports_value(f, *v))
-                    // Wire value 1 is "on"; withhold it until UHD is hardware-confirmed.
-                    .filter(|(_, _, v)| !(gated && *v == 1))
                     .map(|(key, _, _)| format!("\"{key}\""))
                     .collect::<Vec<_>>()
                     .join(",");
