@@ -13,6 +13,9 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 - Use Command 1 for recognized MediaTek receiver entries while preserving existing native entry guards.
 - Firmware reads that require an exact length now reject short responses; the discovery probe retains its bounded partial-read retries.
 - Pioneer cross-flash planning now checks each hardware contract and admits differences only when a proven firmware correction covers them. Supported corrections preserve the other filters and require any existing calibration or startup values to match; they do not write persistent settings.
+- Pioneer cross-flashes between builds that check flash capacity the same way are no longer refused as an unproven capacity relation when only their code layout differs.
+- Compared with 0.17.3 on the same 842 firmware packages, Pioneer offers 21,435 cross-flash directions against 23,299 (17,652 direct, 3,783 after a read-only drive check) and 2,842 hardware/destination identity directions against 2,926. The 2,824 directions no longer offered either cross to a different controller board whose sensor inputs are wired differently (2,320) or need a different persistent startup word than the drive holds, which 0.18.0 does not rewrite (504). 960 directions are new. MediaTek is unchanged at 3,166 directions, all within one chip and hardware family.
+- `flash --no-backup` skips the pre-flash backup; no rollback file is saved and cross-flashes that need it refuse. `--force-empty-tray` proceeds when a drive falsely reports a disc; an open tray still refuses.
 - Native phase corrections change the incoming firmware's output assignment while preserving its DSP program, waveform tables, calibration and motion behavior. Architecture and output interface must agree; unsupported directions remain unavailable. Other hardware and startup requirements still apply.
 - Recognise the native hardware contracts of BDR-L12SH and BDR-L13SH firmware carrying REC tags, so their families and supported destinations appear correctly. Keep the original REC tags and show any direction-specific requirements.
 - Refreshing the drive list no longer freezes the window while a slow drive is scanned, and no longer replaces the log of an operation you just ran.
@@ -23,6 +26,9 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 
 ### freemkv Modify
 
+- MT1939 firmware never offers Unrestricted, and MT1939 drives are labelled BD rather than BD/UHD.
+- Unrestricted is on by default wherever it applies (MT1959) and reports say so; it stays `applies-unproven` until a drive confirms it reads Ultra HD Blu-ray.
+- Boot settings are written after the drive's own initialization, so the MT1939 SRAM clear no longer resets them, and MT1939 settings stay within its 4 KiB of SRAM. MT1959 builds use the same ordering.
 - `info --full` no longer saves empty capture files or reports success when a memory region could not be read.
 - `verify` on a drive reports "NOT DETERMINED" once, with the reason, when the drive does not answer.
 - Firmware is never overwritten by accident through a different spelling of the same path.
@@ -34,7 +40,7 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 - Updated to pioneer-optical 1.6.0 and mediatek-optical 1.3.0, with old and replaced interfaces removed.
 - The shared flasher uses Pioneer and MediaTek backend interfaces for vendor policy; file selection, discovery, integrity, route classification and receiver details stay backend-owned.
 - Integrate the completed component-composition, paired-component, native-reader and static instruction-ownership packets. These establish bounded implementation contracts, not complete new crossflash corrections or family merges.
-- A full code audit; every high and medium issue it found has been fixed.
+- A full code audit of freemkv-firmware, mediatek-optical and pioneer-optical; every issue it found has been fixed.
 
 ## [0.17.3] - 2026-11-02
 
