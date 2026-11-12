@@ -947,7 +947,7 @@ fn cli_boot_defaults_parse_and_dry_run_never_writes() {
     let output = dir.path().join("output.bin");
     std::fs::write(&input, bu40n_fixture()).unwrap();
     std::fs::write(&output, b"keep existing output").unwrap();
-    cmd_create_configured(
+    let _ = cmd_create_configured(
         &input,
         Some(output.clone()),
         false,
@@ -973,7 +973,7 @@ fn cli_custom_defaults_match_base_and_can_edit_a_generated_image() {
         defaults: BootSettings::parse(&["hrl=off".into(), "encryption=off".into()]).unwrap(),
         dry_run: false,
     };
-    cmd_create_configured(
+    let _ = cmd_create_configured(
         &input,
         Some(normal.clone()),
         false,
@@ -983,7 +983,7 @@ fn cli_custom_defaults_match_base_and_can_edit_a_generated_image() {
         &settings,
     )
     .unwrap();
-    cmd_create_configured(
+    let _ = cmd_create_configured(
         &input,
         Some(strict.clone()),
         false,
@@ -1001,7 +1001,7 @@ fn cli_custom_defaults_match_base_and_can_edit_a_generated_image() {
         defaults: BootSettings::standard(),
         dry_run: false,
     };
-    cmd_create_configured(
+    let _ = cmd_create_configured(
         &normal,
         Some(edited.clone()),
         false,
