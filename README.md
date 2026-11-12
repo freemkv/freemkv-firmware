@@ -345,7 +345,7 @@ choices; applications can still change settings during a session.
 
 Modify signs and verifies its output automatically; there is no separate Sign
 action. The CLI uses `modify INPUT [OUTPUT]` with repeatable
-`--default FEATURE=VALUE` options (`create` remains a compatibility alias):
+`--default FEATURE=VALUE` options:
 
 ```sh
 freemkv-fw modify original.bin custom.bin --default hrl=off --default encryption=off
@@ -354,8 +354,7 @@ freemkv-fw modify original.bin custom.bin --default region=free --dry-run
 
 Supported values are `unrestricted`, `hrl`, and `encryption` = `on|off|oem`,
 `speed=oem|uncapped`, and `region=oem|free`. HRL Off skips checking; Encryption
-Off selects bypass. `enc` aliases `encryption`, and `passthrough` aliases `oem`.
-Omitted settings use shipping defaults. Duplicate assignments, invalid values,
+Off selects bypass. Omitted settings use shipping defaults. Duplicate assignments, invalid values,
 and explicit settings unavailable on the selected firmware are errors.
 `--dry-run` validates and reports the build without writing the output;
 `--json` includes resolved boot settings and availability.

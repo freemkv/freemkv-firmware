@@ -96,7 +96,10 @@ pub fn detect_lineage(image: &[u8]) -> Lineage {
                 Lineage::Mt1939Modern
             }
         }
-        Err(_) => Lineage::Mt1959,
+        // An unidentifiable or unrecognized family defaults to the MT1959/modern
+        // profile, the historical behaviour (its windows are the primary path),
+        // never a wrong-guess refusal here.
+        Ok(_) | Err(_) => Lineage::Mt1959,
     }
 }
 

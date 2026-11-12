@@ -169,7 +169,7 @@ fn unsupported_and_malformed_files_have_specific_safe_guidance() {
             "errors.firmware_invalid",
         ),
         (
-            vec!["create", image_arg.as_str(), "--dry-run"],
+            vec!["modify", image_arg.as_str(), "--dry-run"],
             "errors.unsupported_firmware",
         ),
     ] {
@@ -229,7 +229,7 @@ fn create_with_audit_prints_the_audit_the_lever_facts_and_where_it_wrote() {
     let output = dir.join("out.bin");
     std::fs::write(&input, fixture()).unwrap();
 
-    let out = run(&["create", &path_str(&input), &path_str(&output), "--audit"]);
+    let out = run(&["modify", &path_str(&input), &path_str(&output), "--audit"]);
     let stdout = stdout_of(&out);
 
     assert!(
@@ -272,7 +272,7 @@ fn create_with_json_emits_only_machine_readable_output() {
     std::fs::write(&input, fixture()).unwrap();
 
     let out = run(&[
-        "create",
+        "modify",
         &path_str(&input),
         &path_str(&output),
         "--audit",
@@ -305,7 +305,7 @@ fn create_base_prints_the_strict_summary_and_per_feature_availability() {
     let output = dir.join("base.bin");
     std::fs::write(&input, fixture()).unwrap();
 
-    let out = run(&["create", &path_str(&input), &path_str(&output), "--base"]);
+    let out = run(&["modify", &path_str(&input), &path_str(&output), "--base"]);
     let stdout = stdout_of(&out);
 
     assert!(
@@ -343,11 +343,11 @@ fn create_can_edit_boot_settings_in_a_newly_generated_image() {
     let first = dir.join("first.bin");
     let second = dir.join("second.bin");
     std::fs::write(&input, fixture()).unwrap();
-    assert!(run(&["create", &path_str(&input), &path_str(&first)])
+    assert!(run(&["modify", &path_str(&input), &path_str(&first)])
         .status
         .success());
     let out = run(&[
-        "create",
+        "modify",
         &path_str(&first),
         &path_str(&second),
         "--default",
@@ -380,7 +380,7 @@ fn legacy_modified_image_requires_original_oem_and_writes_nothing() {
         .unwrap();
     std::fs::write(&input, legacy.image).unwrap();
     let out = run(&[
-        "create",
+        "modify",
         &path_str(&input),
         &path_str(&output),
         "--default",

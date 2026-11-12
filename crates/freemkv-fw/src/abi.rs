@@ -299,16 +299,10 @@ pub enum Feature {
     /// Newly generated native BD, UHD and auth hooks all read this slot.
     /// Older generated firmware can still read the historical BD slot.
     Unrestricted = 0x03,
-    /// **Deprecated in 0.9.2.** Blu-ray (AACS 1.0) capability gate. Was folded
-    /// into [`Feature::Unrestricted`] semantically in 0.9.2. `SET`/`GET` on `Bd`
-    /// still round-trip via this NV slot for wire-ABI compatibility, and the
-    /// BD-refuse detours in older firmware still read this slot. Newly generated
-    /// hooks use Unrestricted; this slot retains storage compatibility only.
-    #[deprecated(
-        since = "0.9.2",
-        note = "`Bd` was folded into `Unrestricted` in 0.9.2. Set/Get on `Bd` still round-trip via a spare NV slot but the semantic gate is `Unrestricted`."
-    )]
-    Bd = 0x04,
+    // 0x04 is the reserved legacy BD slot. `Bd` was folded into `Unrestricted`
+    // in 0.9.2 and has no `Feature` variant anymore; the NV slot stays reserved
+    // (`DEFAULT_FLAGS[0x04]`, written at boot) for wire-ABI compatibility with
+    // older firmware that still reads it. No host-facing feature targets it.
     /// Host Revocation List handling on the cert path. [`STATE_PASSTHROUGH`]
     /// (`0xFF`) = OEM enforce; [`STATE_OFF`] (`0x00`) = off (ignore the native
     /// HRL lookup's rejection result without changing the list). The lookup

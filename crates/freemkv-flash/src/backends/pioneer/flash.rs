@@ -363,6 +363,9 @@ fn execution_error(
                                     }
                                 }
                                 Rollback::Unchanged | Rollback::UnsafeAfterFirmwareWrite => None,
+                                // A future rollback outcome we do not recognize
+                                // must not be reported as a clean restore.
+                                _ => Some(IssueCode::StartupSettingUncertain),
                             }
                         }
                         guidance(rollback)

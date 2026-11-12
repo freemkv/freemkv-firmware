@@ -6,7 +6,7 @@
 
 use super::*;
 use fixture::{catalog_builds, stand_ins};
-use mediatek_optical::update::{InstalledFirmware, PrepareError, PreparedUpdate};
+use mediatek_optical::update::{InstalledFirmware, PreparationError, ValidatedUpdate};
 
 #[test]
 fn every_catalog_build_reflashes_verbatim_in_the_oem_session() {
@@ -52,12 +52,12 @@ fn every_cross_family_pair_of_catalog_builds_is_refused() {
     let (mut refused, mut allowed) = (0, 0);
     for (on, drive) in installed.iter().enumerate() {
         for (target, (build, image)) in builds.iter().enumerate() {
-            let result = PreparedUpdate::prepare(image, drive);
+            let result = ValidatedUpdate::prepare(image, drive);
             let same = builds[on].0.family == build.family;
             match (same, result) {
                 (true, Ok(_)) => allowed += 1,
-                (false, Err(PrepareError::FamilyMismatch { .. }))
-                | (false, Err(PrepareError::ChipMismatch { .. })) => refused += 1,
+                (false, Err(PreparationError::FamilyMismatch { .. }))
+                | (false, Err(PreparationError::ChipMismatch { .. })) => refused += 1,
                 (_, other) => panic!(
                     "{} onto {}: {:?}",
                     build.model,

@@ -728,7 +728,7 @@ fn sign_image_refuses_an_image_with_no_active_regions() {
 #[test]
 fn modify_is_canonical_create_is_compatible_and_sign_is_removed() {
     assert!(Cli::try_parse_from(["freemkv-fw", "modify", "input.bin"]).is_ok());
-    assert!(Cli::try_parse_from(["freemkv-fw", "create", "input.bin"]).is_ok());
+    assert!(Cli::try_parse_from(["freemkv-fw", "modify", "input.bin"]).is_ok());
     assert!(Cli::try_parse_from(["freemkv-fw", "sign", "input.bin"]).is_err());
 }
 
@@ -922,13 +922,13 @@ fn partial_note_is_absent_when_all_applied_or_none_applied() {
 fn cli_boot_defaults_parse_and_dry_run_never_writes() {
     let args = Cli::try_parse_from([
         "freemkv-fw",
-        "create",
+        "modify",
         "in.bin",
         "out.bin",
         "--default",
         "hrl=off",
         "--default",
-        "enc=off",
+        "encryption=off",
         "--dry-run",
     ])
     .unwrap();
@@ -936,7 +936,7 @@ fn cli_boot_defaults_parse_and_dry_run_never_writes() {
         defaults, dry_run, ..
     } = args.command
     else {
-        panic!("create")
+        panic!("modify")
     };
     let settings = CreateSettings {
         defaults: BootSettings::parse(&defaults).unwrap(),
@@ -970,7 +970,7 @@ fn cli_custom_defaults_match_base_and_can_edit_a_generated_image() {
     let edited = dir.path().join("edited.bin");
     std::fs::write(&input, bu40n_fixture()).unwrap();
     let settings = CreateSettings {
-        defaults: BootSettings::parse(&["hrl=off".into(), "enc=off".into()]).unwrap(),
+        defaults: BootSettings::parse(&["hrl=off".into(), "encryption=off".into()]).unwrap(),
         dry_run: false,
     };
     cmd_create_configured(
@@ -1082,7 +1082,7 @@ fn mem_read_reports_failed_windows() {
 
 #[test]
 fn audit_conflicts_with_the_strict_base_build() {
-    let err = Cli::try_parse_from(["freemkv-fw", "create", "--base", "--audit", "in.bin"])
+    let err = Cli::try_parse_from(["freemkv-fw", "modify", "--base", "--audit", "in.bin"])
         .expect_err("--base with --audit must be rejected");
     assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
 }

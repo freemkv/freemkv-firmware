@@ -104,8 +104,8 @@ fn receiver_from_components(kernel: Option<&[u8]>, normal: Option<&[u8]>) -> Res
     }
     .context("installed Normal cannot be decoded for receiver control")?;
     match kernel.as_ref() {
-        Some(kernel) => Receiver::detect_with_kernel(&normal, kernel),
-        None => Receiver::detect(&normal),
+        Some(kernel) => Receiver::from_firmware_with_kernel(&normal, kernel),
+        None => Receiver::from_firmware(&normal),
     }
     .context("cannot establish installed receiver entry requirements")
 }
@@ -398,6 +398,9 @@ fn bridge_warnings(plan: &pioneer_optical::receiver::PreparedUpdate) -> Vec<Stri
             Some(BridgeKind::ReceiverMarker) if plan.stages().len() == 2 => DOWNGRADE_WARNING,
             Some(BridgeKind::ReceiverMarker) => "The update includes a temporary accepted Kernel marker. The final stage restores the requested Kernel and verifies its bytes. Keep the backup and diagnostic log until all stages complete.",
             Some(BridgeKind::KernelHandoff) => "This update installs a temporary firmware bridge before the requested target. Each stage must start and pass verification before the next begins. This bridge requires hardware qualification; keep the backup and diagnostic log.",
+            // An unrecognized future bridge kind still warrants the generic
+            // temporary-bridge caution rather than silent omission.
+            Some(_) => "This update includes a temporary firmware bridge stage. Each stage must start and pass verification before the next begins; keep the backup and diagnostic log until all stages complete.",
             None => continue,
         };
         if !warnings.iter().any(|existing| existing == warning) {

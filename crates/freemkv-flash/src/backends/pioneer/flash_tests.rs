@@ -239,7 +239,8 @@ fn pr1ame_1_05_real_kernel_passes_flash_entry_preflight() {
     .unwrap();
     let normal = Envelope::load_with_kernel(&normal_bytes, &installed).unwrap();
     let receiver =
-        pioneer_optical::receiver::Receiver::detect_with_kernel(&normal, &installed).unwrap();
+        pioneer_optical::receiver::Receiver::from_firmware_with_kernel(&normal, &installed)
+            .unwrap();
     let plan = receiver
         .prepare_normal_without_family_check(&normal_bytes)
         .unwrap();
@@ -423,13 +424,19 @@ fn loaded_disc_guard_applies_to_flash_but_not_recovery_passes() {
             };
             let result = runtime.check_stage(stage);
             match mode {
+                ExecutionMode::Recovery => assert!(
+                    result.is_ok(),
+                    "Recovery must not apply the Flash-only tray check for {stage:?}"
+                ),
+                // Flash, and conservatively any future mode, must enforce the
+                // loaded-disc safety guard until a mode is known to be exempt.
                 ExecutionMode::Flash => assert!(
                     result.unwrap_err().to_string().contains("disc"),
                     "Flash must reject loaded media for {stage:?}"
                 ),
-                ExecutionMode::Recovery => assert!(
-                    result.is_ok(),
-                    "Recovery must not apply the Flash-only tray check for {stage:?}"
+                _ => assert!(
+                    result.unwrap_err().to_string().contains("disc"),
+                    "an unrecognized execution mode must still reject loaded media for {stage:?}"
                 ),
             }
         }

@@ -1456,12 +1456,12 @@ fn build_boot_init_fills_defaults_without_saved_overlay_and_tail_calls_orig() {
         crate::abi::STATE_ON,
         "UHD default is ON"
     );
-    #[allow(deprecated)]
-    let bd_idx = crate::abi::Feature::Bd as usize;
+    // 0x04 is the reserved legacy BD slot (no `Feature` variant); its baked
+    // default stays ON for wire-ABI compatibility.
     assert_eq!(
-        super::DEFAULT_FLAGS[bd_idx],
+        super::DEFAULT_FLAGS[0x04],
         crate::abi::STATE_ON,
-        "BD default is ON"
+        "reserved BD slot default is ON"
     );
     assert!(
         super::DEFAULT_FLAGS

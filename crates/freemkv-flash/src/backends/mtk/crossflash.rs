@@ -9,7 +9,7 @@
 
 use anyhow::{bail, Context, Result};
 use mediatek_optical::image::Family;
-use mediatek_optical::update::PrepareError;
+use mediatek_optical::update::PreparationError;
 use mediatek_optical::{layout, Identity};
 
 /// Length of the boot banner at `0x3000` that a crossflash must keep.
@@ -161,7 +161,7 @@ fn banner_text(banner: &[u8; BANNER_LEN]) -> String {
 }
 
 /// The unknown-family refusals, worded like the engine's `family_gate`.
-fn unknown_family(error: PrepareError) -> String {
+fn unknown_family(error: PreparationError) -> String {
     super::flash::family_gate(&error).unwrap_or_else(|| {
         "could not determine the firmware family; flashing requires a known family".to_string()
     })
@@ -172,7 +172,7 @@ fn unknown_family(error: PrepareError) -> String {
 /// family is known (a backup or a fixture built it) on family equality, and at
 /// the plan — where the drive is only its descriptor — on the family fields the
 /// descriptor carries (platform and boot banner; the chip is already matched by
-/// `PreparedUpdate::check`). The full family is re-checked once the backup is
+/// `ValidatedUpdate::check`). The full family is re-checked once the backup is
 /// read. An unknown drive model, an inconsistent identity, an identity-less
 /// image, an unknown or different family is refused. An INTM (interim OEM)
 /// build on either side is gated like any other build.
@@ -203,7 +203,7 @@ pub(crate) fn decide_plan(drive_product: &str, live: &Build, target: &Build) -> 
     }
     // The image's family must be known: a crossflash fails closed otherwise.
     let Some(image_family) = target.family else {
-        bail!("{}", unknown_family(PrepareError::UnknownTargetFamily));
+        bail!("{}", unknown_family(PreparationError::UnknownTargetFamily));
     };
     match live.family {
         // The drive's full family is known (a backup, or a fixture): the exact
@@ -247,8 +247,11 @@ pub(crate) fn decide_authorized(
         return Ok(verdict);
     }
     match (installed.family, target.family) {
-        (None, _) => bail!("{}", unknown_family(PrepareError::UnknownInstalledFamily)),
-        (_, None) => bail!("{}", unknown_family(PrepareError::UnknownTargetFamily)),
+        (None, _) => bail!(
+            "{}",
+            unknown_family(PreparationError::UnknownInstalledFamily)
+        ),
+        (_, None) => bail!("{}", unknown_family(PreparationError::UnknownTargetFamily)),
         (Some(installed), Some(target)) if installed != target => {
             bail!("{}", different_family(installed, target))
         }

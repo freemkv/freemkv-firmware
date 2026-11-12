@@ -5,7 +5,7 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
-## [0.18.0] - Unreleased
+## [0.18.0] - 2026-11-12
 
 ### freemkv Flash
 
@@ -14,7 +14,7 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 - Firmware reads that require an exact length now reject short responses; the discovery probe retains its bounded partial-read retries.
 - Pioneer cross-flash planning now checks each hardware contract and admits differences only when a proven firmware correction covers them. Supported corrections preserve the other filters and require any existing calibration or startup values to match; they do not write persistent settings.
 - Pioneer cross-flashes between builds that check flash capacity the same way are no longer refused as an unproven capacity relation when only their code layout differs.
-- Compared with 0.17.3 on the same 842 firmware packages, Pioneer offers 21,435 cross-flash directions against 23,299 (17,652 direct, 3,783 after a read-only drive check) and 2,842 hardware/destination identity directions against 2,926. The 2,824 directions no longer offered either cross to a different controller board whose sensor inputs are wired differently (2,320) or need a different persistent startup word than the drive holds, which 0.18.0 does not rewrite (504). 960 directions are new. MediaTek is unchanged at 3,166 directions, all within one chip and hardware family.
+- Compared with 0.17.3 over the same firmware corpus, Pioneer offers 21,938 cross-flash directions against 23,298 (18,155 direct, 3,783 after a read-only drive check) and 2,982 hardware/destination identity directions against 2,926. The 2,320 directions no longer offered all cross to a different controller board whose sensor inputs are wired differently; a differing persistent startup word is now corrected on the drive rather than refused. 960 directions are new. MediaTek is unchanged at 3,166 directions, all within one chip and hardware family.
 - `flash --no-backup` skips the pre-flash backup; no rollback file is saved and cross-flashes that need it refuse. `--force-empty-tray` proceeds when a drive falsely reports a disc; an open tray still refuses.
 - Native phase corrections change the incoming firmware's output assignment while preserving its DSP program, waveform tables, calibration and motion behavior. Architecture and output interface must agree; unsupported directions remain unavailable. Other hardware and startup requirements still apply.
 - Recognise the native hardware contracts of BDR-L12SH and BDR-L13SH firmware carrying REC tags, so their families and supported destinations appear correctly. Keep the original REC tags and show any direction-specific requirements.
@@ -37,7 +37,7 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 
 ### Under the hood
 
-- Updated to pioneer-optical 1.6.0 and mediatek-optical 1.3.0, with old and replaced interfaces removed.
+- Updated to pioneer-optical 2.0.0 and mediatek-optical 2.0.0, with old and replaced interfaces removed.
 - The shared flasher uses Pioneer and MediaTek backend interfaces for vendor policy; file selection, discovery, integrity, route classification and receiver details stay backend-owned.
 - Integrate the completed component-composition, paired-component, native-reader and static instruction-ownership packets. These establish bounded implementation contracts, not complete new crossflash corrections or family merges.
 - A full code audit of freemkv-firmware, mediatek-optical and pioneer-optical; every issue it found has been fixed.

@@ -152,13 +152,13 @@ fn parser_preserves_shipping_defaults_and_rejects_ambiguous_requests() {
         [255, 255, 255, 1, 1, 255, 255]
     );
     assert_eq!(
-        settings(&["hrl=off", "enc=off", "speed=uncapped", "region=free"]).flags(),
+        settings(&["hrl=off", "encryption=off", "speed=uncapped", "region=free"]).flags(),
         [255, 1, 1, 1, 1, 0, 0]
     );
     assert_eq!(settings(&["unrestricted=off"]).flags()[3..5], [0, 0]);
     for args in [
         vec!["hrl=on", "hrl=off"],
-        vec!["enc=off", "encryption=on"],
+        vec!["encryption=off", "encryption=on"],
         vec!["hrl=wipe"],
         vec!["region=bd:a"],
         vec!["speed=cap:255"],
@@ -170,10 +170,7 @@ fn parser_preserves_shipping_defaults_and_rejects_ambiguous_requests() {
             "{args:?}"
         );
     }
-    assert_eq!(
-        settings(&["hrl=passthrough"]).value(BootFeature::Hrl),
-        "oem"
-    );
+    assert_eq!(settings(&["hrl=oem"]).value(BootFeature::Hrl), "oem");
 }
 
 #[test]

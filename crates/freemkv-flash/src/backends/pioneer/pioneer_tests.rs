@@ -1008,7 +1008,7 @@ fn generic_receiver_matrix_when_configured() {
             pioneer_optical::envelope::decode_envelope_with_kernel(&normal, &decoded_kernel)
                 .unwrap();
         assert!(
-            Receiver::detect(&decoded_normal).is_ok(),
+            Receiver::from_firmware(&decoded_normal).is_ok(),
             "{} receiver word",
             path.display()
         );

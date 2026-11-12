@@ -97,14 +97,13 @@ impl BootSettings {
             explicit: 0,
         }
     }
-    /// Parse repeated --default assignments, rejecting duplicates even via aliases.
+    /// Parse repeated --default assignments, rejecting duplicates.
     pub fn parse(assignments: &[String]) -> Result<Self> {
         let mut settings = Self::standard();
         for assignment in assignments {
             let (name, value) = assignment
                 .split_once('=')
                 .ok_or_else(|| anyhow::anyhow!("expected FEATURE=VALUE, got {assignment:?}"))?;
-            let name = if name == "enc" { "encryption" } else { name };
             let feature = BootFeature::ALL.into_iter().find(|f| f.key() == name)
                 .ok_or_else(|| anyhow::anyhow!("unknown boot feature {name:?}; use unrestricted, hrl, encryption, speed or region"))?;
             ensure!(
@@ -118,7 +117,6 @@ impl BootSettings {
     }
     /// Select one validated value; the form may change a selection repeatedly.
     pub fn set(&mut self, feature: BootFeature, value: &str) -> Result<()> {
-        let value = if value == "passthrough" { "oem" } else { value };
         let choice = feature
             .choices()
             .iter()

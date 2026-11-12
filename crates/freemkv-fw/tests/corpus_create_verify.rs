@@ -233,7 +233,7 @@ fn corpus_create_verify_100_percent_of_forgeable_images() {
         let out_path = tmp_root.join(format!("out-{i}.bin"));
 
         let create = Command::new(&fw_bin)
-            .arg("create")
+            .arg("modify")
             .arg(path)
             .arg(&out_path)
             .output()

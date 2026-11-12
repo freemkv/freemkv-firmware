@@ -56,7 +56,7 @@ enum Command {
     },
     /// Create freemkv firmware from an OEM image: hijack the `READ BUFFER`
     /// (`0x3C`) handler via the platform engine and re-sign.
-    #[command(name = "modify", alias = "create")]
+    #[command(name = "modify")]
     Create {
         /// Boot setting (repeatable): unrestricted/hrl/encryption=on|off|oem,
         /// speed=oem|uncapped, region=oem|free. Applied on every boot.

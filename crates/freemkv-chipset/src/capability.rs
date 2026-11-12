@@ -178,6 +178,9 @@ pub fn capability_for(model: &str, family: ChipFamily) -> Capability {
         media_class: match family {
             ChipFamily::Mt1939 => media_class.min(MediaClass::Bd),
             ChipFamily::Mt1959 => media_class,
+            // An unrecognized chip gets the most restrictive scope we know how
+            // to reason about: cap at BD rather than assume UHD support.
+            _ => media_class.min(MediaClass::Bd),
         },
         bd_aacs: true,
         region_lockable,

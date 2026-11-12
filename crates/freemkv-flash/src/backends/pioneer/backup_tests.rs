@@ -1341,7 +1341,7 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                             panic!("{}: strict OEM pair refused: {e}", path.display())
                         });
                         if !raw_header_matches || !raw_name_matches {
-                            pioneer_optical::receiver::Receiver::detect_with_kernel(
+                            pioneer_optical::receiver::Receiver::from_firmware_with_kernel(
                                 update.normal(),
                                 update.kernel(),
                             )

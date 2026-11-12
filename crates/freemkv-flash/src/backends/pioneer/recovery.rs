@@ -89,7 +89,7 @@ impl Current {
             kernel.update_dialect().is_some(),
             "Current Kernel update protocol is unsupported; no firmware written"
         );
-        Receiver::detect_with_kernel(&normal, &kernel)
+        Receiver::from_firmware_with_kernel(&normal, &kernel)
             .map_err(super::flash::preparation_error)
             .context(
                 "Current firmware receiver requirements are unsupported; no firmware written",
@@ -160,7 +160,7 @@ impl Plan {
         reencoded: bool,
         bypass_family_check: bool,
     ) -> Result<Self> {
-        let receiver = Receiver::detect_with_kernel(normal, kernel)
+        let receiver = Receiver::from_firmware_with_kernel(normal, kernel)
             .context("Current firmware receiver requirements are unsupported")?;
         #[cfg(test)]
         let control = receiver.entry_control(&normal.image[..16])?;

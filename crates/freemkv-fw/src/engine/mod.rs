@@ -208,6 +208,11 @@ pub fn for_family(fam: ChipFamily) -> Result<Box<dyn Engine>> {
         // still apply the family-agnostic downgrade-enable byte via `modify`, and
         // reports the rest as pending — so it is no longer opaquely refused.
         ChipFamily::Mt1939 => Ok(Box::new(mt1939::Mt1939Engine)),
+        // A chip family this build does not recognize is refused, not silently
+        // handled by a default engine: a decision is required here.
+        other => Err(anyhow::anyhow!(
+            "unsupported MediaTek chip family {other:?}: no engine is available for it"
+        )),
     }
 }
 
