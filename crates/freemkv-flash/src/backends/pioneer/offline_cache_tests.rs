@@ -86,3 +86,36 @@ fn website_graph_matches_the_flasher_decision_for_every_pair() {
     }
     assert_eq!(routes, expected);
 }
+
+/// Timing witness for the whole-catalogue crossflash scan (the website graph).
+/// Not a gate — run with `--ignored --nocapture` to record ms/pair. Each pair
+/// decodes two packages and runs the full `decide` prepare pipeline, the exact
+/// work the Arc-shared `Receiver` optimisation targets. Was ~1s/pair when the
+/// per-pair `Receiver::clone()` copied ~1.9MB of Envelope.
+#[test]
+#[ignore]
+fn crossflash_scan_timing() {
+    let mut owned: Vec<Vec<u8>> = Vec::new();
+    for marker in 0u8..20 {
+        let p = prepared_tests::pair(marker % 2 == 0, marker);
+        owned.push(archive(&p, false));
+        owned.push(archive(
+            &startup(p.clone(), 0xfe00 + marker as u16, marker % 3 == 0),
+            false,
+        ));
+    }
+    let packages: Vec<&[u8]> = owned.iter().map(Vec::as_slice).collect();
+    let pairs = packages.len() * (packages.len() - 1);
+    let start = std::time::Instant::now();
+    let routes =
+        crate::crossflash::classified_routes(crate::backend::registry::PIONEER_PLATFORM, &packages);
+    let elapsed = start.elapsed();
+    eprintln!(
+        "crossflash scan: {} packages, {} directed pairs, {} routes in {:?} => {:.3} ms/pair",
+        packages.len(),
+        pairs,
+        routes.len(),
+        elapsed,
+        elapsed.as_secs_f64() * 1000.0 / pairs as f64,
+    );
+}
