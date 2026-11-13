@@ -907,3 +907,7 @@ mod identity_tests;
 #[cfg(test)]
 #[path = "stage_tests.rs"]
 mod stage_tests;
+
+#[cfg(test)]
+#[path = "oracle_tests.rs"]
+mod oracle_tests;
