@@ -169,7 +169,7 @@ pub enum FlashPlan {
 }
 
 /// Opaque crossflash-family key: the lowercase-hex rendering of
-/// `pioneer_optical::image::Family`. Equal keys mean matching extracted
+/// `pioneer_optical::classify::Family`. Equal keys mean matching extracted
 /// hardware configuration under the library's current fingerprint scheme. Held as a string so the planner is pure and
 /// unit tests can inject families without any firmware.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -181,7 +181,7 @@ impl FamilyKey {
         FamilyKey(id.into())
     }
 
-    fn from_family(family: pioneer_optical::image::Family) -> Self {
+    fn from_family(family: pioneer_optical::classify::Family) -> Self {
         FamilyKey(family.to_string())
     }
 }
@@ -272,19 +272,7 @@ pub(crate) fn receiver_class(kernel: &[u8], paired_normal: &[u8]) -> Option<Rece
     })
 }
 
-/// The big-endian 32-bit additive checksum a resident Kernel requires to be zero
-/// before it programs a decoded body. An empty body is NOT a valid zero-checksum
-/// body (a degenerate decode must not pass this gate); a trailing partial word
-/// fails.
-pub(crate) fn be32_sum_zero(body: &[u8]) -> bool {
-    let (words, rest) = body.as_chunks::<4>();
-    !body.is_empty()
-        && rest.is_empty()
-        && words
-            .iter()
-            .fold(0u32, |s, w| s.wrapping_add(u32::from_be_bytes(*w)))
-            == 0
-}
+pub(crate) use pioneer_optical::envelope::checksum_ok as be32_sum_zero;
 
 /// Offline evidence for the receiver gate: how the target Normal decodes under
 /// the drive's *installed* Kernel versus under the target's own Kernel.
@@ -411,8 +399,18 @@ pub fn family_gate(
 ) -> Result<(), String> {
     use crate::firmware_comparison::FamilyRelationship;
     let relation = FamilyRelationship::compare(
-        installed.map(|f| (pioneer_optical::image::MATRIX_FAMILY_SCHEME, f.0.as_str())),
-        target.map(|f| (pioneer_optical::image::MATRIX_FAMILY_SCHEME, f.0.as_str())),
+        installed.map(|f| {
+            (
+                pioneer_optical::classify::MATRIX_FAMILY_SCHEME,
+                f.0.as_str(),
+            )
+        }),
+        target.map(|f| {
+            (
+                pioneer_optical::classify::MATRIX_FAMILY_SCHEME,
+                f.0.as_str(),
+            )
+        }),
     );
     match (installed, target) {
         (Some(_), Some(_)) if relation == FamilyRelationship::Same => Ok(()),
@@ -653,7 +651,7 @@ pub(super) fn target_from_loaded(
 }
 
 pub(super) fn installed_from_loaded(
-    receiver: &pioneer_optical::receiver::Receiver,
+    receiver: &pioneer_optical::prepare::Receiver,
     normal_bytes: &[u8],
 ) -> Option<Installed> {
     let header = pioneer_optical::envelope::header_info(normal_bytes)?;
@@ -800,7 +798,7 @@ fn decoded_kernel_marker(bytes: &[u8]) -> Result<u8> {
 pub fn controller_id_from_sat(hardware: &str) -> Option<u16> {
     let hardware = hardware.trim();
     if let Some(token) = hardware.strip_prefix("REC ") {
-        pioneer_optical::image::matrix::SatPlatform::from_hardware(hardware)?;
+        pioneer_optical::classify::SatPlatform::from_hardware(hardware)?;
         return u16::from_str_radix(token, 16).ok();
     }
     let token = hardware

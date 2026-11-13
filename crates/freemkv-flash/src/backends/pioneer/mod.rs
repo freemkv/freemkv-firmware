@@ -5,7 +5,7 @@
 //! descriptor/key, then streams validated components with strict transport errors.
 
 use anyhow::{anyhow, bail, Context, Result};
-use pioneer_optical::receiver::Receiver;
+use pioneer_optical::prepare::Receiver;
 use pioneer_optical::Role;
 use std::borrow::Cow;
 
@@ -59,11 +59,11 @@ pub(crate) const IMAGE_MAX: usize = 0x00ff_ff00; // aligned 24-bit transfer addr
 /// The ASCII banner magic every genuine Pioneer image starts with
 /// (re-exported from `pioneer-optical`; used by tests and banner callers).
 #[allow(unused_imports)]
-pub(crate) use pioneer_optical::ident::BANNER_MAGIC as PIONEER_MAGIC;
+pub(crate) use pioneer_optical::envelope::BANNER_MAGIC as PIONEER_MAGIC;
 
 /// The plaintext Pioneer banner and its parser, re-exported from
 /// `pioneer-optical` (the crate that owns the firmware-identity format).
-pub use pioneer_optical::ident::{parse_banner, Banner as PioneerBanner};
+pub use pioneer_optical::envelope::{parse_banner, Banner as PioneerBanner};
 
 // ---- CDB builders ----------------------------------------------------------
 
@@ -390,8 +390,8 @@ const DOWNGRADE_WARNING: &str = "WARNING: this flash crosses the firmware genera
     Keep the pre-flash backup and dump until both updates complete.";
 
 /// User-visible requirements come from the prepared stages, not model names.
-fn bridge_warnings(plan: &pioneer_optical::receiver::PreparedUpdate) -> Vec<String> {
-    use pioneer_optical::receiver::BridgeKind;
+fn bridge_warnings(plan: &pioneer_optical::prepare::PreparedUpdate) -> Vec<String> {
+    use pioneer_optical::prepare::BridgeKind;
     let mut warnings = Vec::new();
     for stage in plan.stages() {
         let warning = match stage.bridge() {
@@ -482,9 +482,16 @@ pub(crate) fn offline_routes(
     installed: &[u8],
     target: &[u8],
 ) -> Result<crate::crossflash::Evaluation> {
+    offline_evaluation(authorize_offline(installed, target))
+}
+
+/// The plan `flash` would authorize for `target` on a drive whose pre-flash
+/// backup is `installed`: the single offline admission path behind
+/// [`offline_routes`].
+fn authorize_offline(installed: &[u8], target: &[u8]) -> Result<AuthorizedPlan> {
     let input = execute_plan(target)?;
     verify_coverage(installed, input.kernel.is_some(), true)?;
-    offline_evaluation(authorize_installed(FlashPlan::new(input), Some(installed)))
+    authorize_installed(FlashPlan::new(input), Some(installed))
 }
 
 /// One package's decode, done ONCE and reused across every pair it appears in
@@ -517,13 +524,21 @@ pub(crate) fn offline_routes_prepared(
     installed: &OfflinePrepared,
     target: &OfflinePrepared,
 ) -> Result<crate::crossflash::Evaluation> {
+    offline_evaluation(authorize_offline_prepared(installed, target))
+}
+
+/// [`authorize_offline`] fed pre-decoded evidence (the same gates).
+fn authorize_offline_prepared(
+    installed: &OfflinePrepared,
+    target: &OfflinePrepared,
+) -> Result<AuthorizedPlan> {
     verify_coverage_roles(&installed.roles, target.plan.kernel.is_some(), true)?;
-    offline_evaluation(authorize_components(
+    authorize_components(
         FlashPlan::new(target.plan.clone()),
         installed.plan.kernel.as_deref(),
         Some(installed.plan.normal.as_slice()),
         &installed.receiver,
-    ))
+    )
 }
 
 fn offline_evaluation(result: Result<AuthorizedPlan>) -> Result<crate::crossflash::Evaluation> {
@@ -578,7 +593,7 @@ pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
         .or(kernel.as_deref())
         .and_then(pioneer_optical::envelope::header_info);
     crate::crossflash::Prefilter {
-        platform: crate::crossflash::Platform::Pioneer,
+        platform: crate::backend::registry::PIONEER_PLATFORM,
         family: normal
             .as_deref()
             .zip(kernel.as_deref())
@@ -593,8 +608,8 @@ pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
 
 /// The library plan the receiver accepted.
 struct Prepared {
-    complete: Option<pioneer_optical::receiver::PreparedUpdate>,
-    normal: Option<pioneer_optical::receiver::PreparedNormal>,
+    complete: Option<pioneer_optical::prepare::PreparedUpdate>,
+    normal: Option<pioneer_optical::prepare::PreparedNormal>,
 }
 
 /// The installed-firmware gates: the Kernel a Normal-only flash pairs with,
@@ -701,8 +716,8 @@ fn authorize_components(
             let source = preparation_error(error.clone());
             if matches!(
                 error,
-                pioneer_optical::receiver::PreparationError::Compatibility(
-                    pioneer_optical::receiver::Error::FamilyMismatch { .. }
+                pioneer_optical::prepare::PreparationError::Compatibility(
+                    pioneer_optical::classify::Error::FamilyMismatch { .. }
                 )
             ) {
                 let installed_model = installed_normal
@@ -1144,11 +1159,7 @@ impl FlashFacet for Pioneer {
             (None, Some(plan)) => PreparedFlash::Normal(plan),
             _ => unreachable!("one prepared plan selected"),
         };
-        execute_prepared(
-            dev,
-            selected,
-            pioneer_optical::receiver::ExecutionMode::Flash,
-        )
+        execute_prepared(dev, selected, pioneer_optical::drive::ExecutionMode::Flash)
     }
 }
 
@@ -1350,3 +1361,5 @@ pub(crate) mod routing;
 pub(crate) mod detection;
 #[cfg(test)]
 mod offline_cache_tests;
+#[cfg(test)]
+mod oracle_tests;

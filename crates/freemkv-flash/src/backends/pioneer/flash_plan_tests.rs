@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn cached_authorization_facts_preserve_pair_and_normal_only_routes() {
-    use pioneer_optical::receiver::Receiver;
+    use pioneer_optical::prepare::Receiver;
     for installed_gated in [false, true] {
         let installed = super::super::prepared_tests::pair(installed_gated, 1);
         let receiver = Receiver::from_installed(&installed).unwrap();

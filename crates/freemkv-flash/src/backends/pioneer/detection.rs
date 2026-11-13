@@ -9,7 +9,7 @@ pub(crate) fn probe(
     inquiry: &[u8],
     result: &mut Detection,
     failures: &mut Vec<anyhow::Error>,
-) -> Option<pioneer_optical::protocol::Evidence> {
+) -> Option<pioneer_optical::drive::Evidence> {
     let pioneer_response = read(
         dev,
         "Pioneer F1 identity",
@@ -26,7 +26,7 @@ pub(crate) fn probe(
         }
     }
     .and_then(
-        |b| match pioneer_optical::protocol::Response::parse(inquiry, &b) {
+        |b| match pioneer_optical::drive::Response::parse(inquiry, &b) {
             Ok(response) => {
                 result.pioneer_identity = Some(response.identity().clone());
                 response.into_evidence()

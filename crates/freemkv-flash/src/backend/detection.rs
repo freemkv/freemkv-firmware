@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 #[derive(Clone, Debug)]
 pub enum Evidence {
     /// Pioneer F1 structure and parsed identity.
-    Pioneer(pioneer_optical::protocol::Evidence),
+    Pioneer(pioneer_optical::drive::Evidence),
     /// MediaTek boot signature and parsed identity.
     Mediatek(Box<mediatek_optical::protocol::Evidence>),
 }

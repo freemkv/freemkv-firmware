@@ -5,7 +5,7 @@ use pioneer_optical::drive::{execute_update, UpdateTransfer};
 
 #[test]
 fn source_readback_mismatch_before_writes_remains_preflight_evidence() {
-    use pioneer_optical::receiver::ExecutionError;
+    use pioneer_optical::drive::ExecutionError;
     let error = execution_error(
         ExecutionError::BeforeWrite(Box::new(ExecutionError::NormalMismatch {
             stage: FlashStage::Initial,
@@ -46,19 +46,18 @@ fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
         },
     ] {
         let error = execution_error(
-            pioneer_optical::receiver::ExecutionError::Flash(error),
+            pioneer_optical::drive::ExecutionError::Flash(error),
             true,
             1,
         );
         let typed = error
-            .downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>()
+            .downcast_ref::<pioneer_optical::drive::ExecutionError<anyhow::Error>>()
             .unwrap();
         let source = match typed {
-            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Preflight {
-                source,
-                ..
+            pioneer_optical::drive::ExecutionError::Flash(FlashError::Preflight {
+                source, ..
             }) => source,
-            pioneer_optical::receiver::ExecutionError::Flash(
+            pioneer_optical::drive::ExecutionError::Flash(
                 FlashError::DescriptorRead {
                     source: pioneer_optical::drive::Error::Transport(source),
                     ..
@@ -68,7 +67,7 @@ fn prepared_errors_keep_transport_causes_and_restoration_guidance() {
                     ..
                 },
             ) => source,
-            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
+            pioneer_optical::drive::ExecutionError::Flash(FlashError::Update {
                 source: UpdateError::Finish(pioneer_optical::drive::Error::Transport(source)),
                 ..
             }) => source,
@@ -130,7 +129,7 @@ fn execute_flash(
     )
     .map_err(|error| {
         execution_error(
-            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
+            pioneer_optical::drive::ExecutionError::Flash(FlashError::Update {
                 stage: FlashStage::Initial,
                 source: error,
             }),
@@ -239,8 +238,7 @@ fn pr1ame_1_05_real_kernel_passes_flash_entry_preflight() {
     .unwrap();
     let normal = Envelope::load_with_kernel(&normal_bytes, &installed).unwrap();
     let receiver =
-        pioneer_optical::receiver::Receiver::from_firmware_with_kernel(&normal, &installed)
-            .unwrap();
+        pioneer_optical::prepare::Receiver::from_firmware_with_kernel(&normal, &installed).unwrap();
     let plan = receiver
         .prepare_normal_without_family_check(&normal_bytes)
         .unwrap();
@@ -517,8 +515,8 @@ fn aborts_before_any_transfer_when_drive_not_in_update_state() {
     let mut dev = BadEntry { writes: Vec::new() };
     let err = execute_flash(&mut dev, &ud04_control(), None, &normal).unwrap_err();
     assert!(matches!(
-        err.downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>(),
-        Some(pioneer_optical::receiver::ExecutionError::Flash(
+        err.downcast_ref::<pioneer_optical::drive::ExecutionError<anyhow::Error>>(),
+        Some(pioneer_optical::drive::ExecutionError::Flash(
             FlashError::Update {
                 source: UpdateError::EntryState { .. },
                 ..
@@ -704,8 +702,8 @@ fn post_entry_identity_gate_aborts_a_degraded_receiver() {
     let mut normal_dev = Degraded::default();
     let err = execute_flash(&mut normal_dev, &ud04_control(), None, &normal).unwrap_err();
     assert!(matches!(
-        err.downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>(),
-        Some(pioneer_optical::receiver::ExecutionError::Flash(
+        err.downcast_ref::<pioneer_optical::drive::ExecutionError<anyhow::Error>>(),
+        Some(pioneer_optical::drive::ExecutionError::Flash(
             FlashError::Update {
                 source: UpdateError::EntryState { .. },
                 ..
@@ -772,7 +770,7 @@ fn error_guidance_retains_phase_and_uncertain_completion() {
         ),
     ] {
         let error = execution_error(
-            pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update {
+            pioneer_optical::drive::ExecutionError::Flash(FlashError::Update {
                 stage: FlashStage::Initial,
                 source,
             }),
@@ -780,9 +778,9 @@ fn error_guidance_retains_phase_and_uncertain_completion() {
             0,
         );
         let typed = error
-            .downcast_ref::<pioneer_optical::receiver::ExecutionError<anyhow::Error>>()
+            .downcast_ref::<pioneer_optical::drive::ExecutionError<anyhow::Error>>()
             .unwrap();
-        let pioneer_optical::receiver::ExecutionError::Flash(FlashError::Update { source, .. }) =
+        let pioneer_optical::drive::ExecutionError::Flash(FlashError::Update { source, .. }) =
             typed
         else {
             panic!("lost typed update cause")
@@ -803,9 +801,9 @@ fn error_guidance_retains_phase_and_uncertain_completion() {
 
 #[test]
 fn preparation_error_keeps_typed_code_cause_and_prewrite_guidance() {
-    let error = preparation_error(pioneer_optical::receiver::Error::UnknownTargetFamily);
+    let error = preparation_error(pioneer_optical::classify::Error::UnknownTargetFamily);
     assert!(error
-        .downcast_ref::<pioneer_optical::receiver::Error>()
+        .downcast_ref::<pioneer_optical::classify::Error>()
         .is_some());
     let message = format!("{error:#}");
     assert!(message.contains("pioneer.receiver.unknown_target_family"));
@@ -1178,7 +1176,7 @@ fn bank_refusals_keep_their_reason_and_do_not_claim_hardware_mismatch() {
 
 #[test]
 fn stage_failure_retains_completion_without_host_progress_callbacks() {
-    use pioneer_optical::receiver::ExecutionError;
+    use pioneer_optical::drive::ExecutionError;
     let error = execution_error(
         ExecutionError::AfterStage {
             completed: 2,
@@ -1239,7 +1237,7 @@ fn timeout_snapshot_is_one_bounded_read_even_when_unavailable() {
 
 #[test]
 fn timeout_diagnostic_gate_distinguishes_finish_failure() {
-    use pioneer_optical::receiver::ExecutionError;
+    use pioneer_optical::drive::ExecutionError;
     for timeout in [false, true] {
         let cause = pioneer_optical::drive::Error::Transport(anyhow!("original cause"));
         let source = if timeout {

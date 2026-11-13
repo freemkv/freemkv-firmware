@@ -384,10 +384,10 @@ impl LiveState {
     /// format). A drive that cannot report it adds a note instead.
     pub(crate) fn read_dvd_region(&mut self, dev: &mut dyn crate::platform::ScsiDevice) {
         match dev.command_in(
-            &pioneer_optical::rpc::report_key(),
-            pioneer_optical::rpc::RESPONSE_LEN,
+            &pioneer_optical::drive::region::report_key(),
+            pioneer_optical::drive::region::RESPONSE_LEN,
         ) {
-            Ok(bytes) => match pioneer_optical::rpc::State::parse(&bytes) {
+            Ok(bytes) => match pioneer_optical::drive::region::State::parse(&bytes) {
                 Some(rpc) => {
                     self.fields
                         .push(Field::new("DVD region", dvd_region_label(rpc)));
@@ -420,7 +420,7 @@ impl LiveState {
 
 /// The regions the drive's RPC mask permits. The mask, not the type code, is
 /// what the drive enforces: 0x00 permits all eight, 0xFF permits none.
-pub(crate) fn dvd_region_label(rpc: pioneer_optical::rpc::State) -> String {
+pub(crate) fn dvd_region_label(rpc: pioneer_optical::drive::region::State) -> String {
     if rpc.scheme == 0 {
         return "Region-free".into();
     }

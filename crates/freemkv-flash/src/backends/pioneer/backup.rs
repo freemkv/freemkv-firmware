@@ -232,7 +232,7 @@ fn embedded_envelope_id(inquiry: &[u8], kernel: &[u8], normal: &[u8]) -> Result<
     let vendor = std::str::from_utf8(inquiry.get(8..16).context("short INQUIRY vendor")?)?;
     let product = std::str::from_utf8(inquiry.get(16..32).context("short INQUIRY product")?)?;
     // Recovery (spacing/media-class/model-only handling) lives in pioneer-optical.
-    pioneer_optical::ident::embedded_envelope_id(vendor, product, &[kernel, normal])
+    pioneer_optical::envelope::embedded_envelope_id(vendor, product, &[kernel, normal])
         .map_err(anyhow::Error::msg)
 }
 

@@ -1,9 +1,9 @@
 //! Pioneer adapter. All decoding and content comparison lives in Optical.
 use crate::inspection::*;
 use anyhow::{Context, Result};
-use pioneer_optical::{
+use pioneer_optical::envelope::{
     analysis::{Observer, Options},
-    envelope::Envelope,
+    Envelope,
 };
 use sha2::{Digest, Sha256};
 
@@ -223,7 +223,7 @@ pub(crate) fn live_state(dev: &mut dyn crate::platform::ScsiDevice) -> LiveState
 
 /// Every region of a decoded Pioneer component (its body and expanded
 /// streams) is firmware the update package delivers; none is per-unit.
-fn region_role(_region: &pioneer_optical::analysis::Region<'_>) -> RegionRole {
+fn region_role(_region: &pioneer_optical::envelope::analysis::Region<'_>) -> RegionRole {
     RegionRole::Code
 }
 
@@ -245,7 +245,7 @@ fn signature_label(status: pioneer_optical::envelope::SignatureStatus) -> &'stat
 const SEMANTIC_COVERAGE: &str = "pioneer.analysis.semantic_coverage";
 
 fn comparison_input(
-    analysis: &pioneer_optical::analysis::FirmwareAnalysis<'_>,
+    analysis: &pioneer_optical::envelope::analysis::FirmwareAnalysis<'_>,
     info: &pioneer_optical::envelope::EnvelopeInfo,
 ) -> crate::inspection::comparison::FirmwareAnalysis {
     use crate::inspection::comparison::{

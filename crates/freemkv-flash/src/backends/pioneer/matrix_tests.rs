@@ -61,7 +61,7 @@ fn every_prepared_package_in_both_directions_within_its_family() {
                 assert!(matches!(selected, FlashPlan::Refused(_)));
                 assert!(matches!(
                     receiver.check_family(update.normal()),
-                    Err(pioneer_optical::receiver::Error::FamilyMismatch { .. })
+                    Err(pioneer_optical::classify::Error::FamilyMismatch { .. })
                 ));
                 different_family += 1;
                 continue;
@@ -75,8 +75,8 @@ fn every_prepared_package_in_both_directions_within_its_family() {
             let prepared = match receiver.prepare(update.clone()) {
                 Ok(prepared) => prepared,
                 Err(
-                    pioneer_optical::receiver::PreparationError::PhaseCorrection(_)
-                    | pioneer_optical::receiver::PreparationError::Startup(
+                    pioneer_optical::prepare::PreparationError::PhaseCorrection(_)
+                    | pioneer_optical::prepare::PreparationError::Startup(
                         pioneer_optical::startup::checks::Error::Banks(_),
                     ),
                 ) => {

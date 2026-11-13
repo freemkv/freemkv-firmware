@@ -7,8 +7,9 @@ use anyhow::bail;
 use anyhow::{ensure, Context, Result};
 #[cfg(test)]
 use pioneer_optical::cdb;
+use pioneer_optical::drive::ExecutionMode;
 use pioneer_optical::envelope::{Envelope, Update};
-use pioneer_optical::receiver::{ExecutionMode, PreparedUpdate, Receiver};
+use pioneer_optical::prepare::{PreparedUpdate, Receiver};
 use pioneer_optical::Identity;
 #[cfg(test)]
 use std::time::Duration;
@@ -173,8 +174,8 @@ impl Plan {
         .map_err(|error| {
             if matches!(
                 &error,
-                pioneer_optical::receiver::PreparationError::Compatibility(
-                    pioneer_optical::receiver::Error::FamilyMismatch { .. }
+                pioneer_optical::prepare::PreparationError::Compatibility(
+                    pioneer_optical::classify::Error::FamilyMismatch { .. }
                 )
             ) {
                 anyhow::Error::new(crate::backend::HardwareMismatch {

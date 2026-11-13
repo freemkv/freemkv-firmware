@@ -44,7 +44,7 @@ sha2 = "0.10"
 getrandom = "0.3"
 time = "0.3"
 # Exact reviewed development commit with the shared verified update executor.
-pioneer-optical = { version = "=2.0.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "a666e3c64445c35aa3a738e051507e75f5c274c3", features = ["drive", "envelope", "analysis", "firmware-info"] }
+pioneer-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "df02d539d1a02e765d0f9104633e9b98f3bacec0", features = ["drive", "envelope", "analysis"] }
 # Shared step-1 chipset detection (MTEKMT19xx family key) — the same detector
 # freemkv-fw uses, so the flash tool and the modify tool never disagree on a
 # firmware image's family. Detection-only crate (std + anyhow); no cycle.
@@ -60,6 +60,11 @@ libfreemkv = { git = "https://github.com/freemkv/libfreemkv", tag = "v1.8.2", de
 
 # Selected-file inspection opens nonblocking before checking regular-file identity.
 # The golden CLI scenarios also use libc for their pseudo-terminal.
+[dev-dependencies]
+# Tests only: a few flasher tests assert on library internals (startup banks,
+# receiver control). Production builds see only the five public modules.
+pioneer-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "df02d539d1a02e765d0f9104633e9b98f3bacec0", features = ["internals"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.190"
 

@@ -88,7 +88,7 @@ fn inspection_and_compare_share_decoded_content_and_ignore_envelope_headers() {
 #[test]
 fn rpc_reads_state_without_any_write_and_failure_is_optional() {
     let mut dev = MockScsiDevice::new().on(
-        |c| c == pioneer_optical::rpc::report_key(),
+        |c| c == pioneer_optical::drive::region::report_key(),
         vec![0, 6, 0, 0, 0x64, 0xfd, 1, 0],
     );
     let state = crate::backends::pioneer::inspect::live_state(&mut dev);
@@ -226,7 +226,7 @@ fn absent_kernel_is_visible_in_inspection_and_comparison() {
 fn dvd_region_label_follows_the_mask_not_the_type_code() {
     let label = |b4: u8, mask: u8| {
         crate::inspection::dvd_region_label(
-            pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, b4, mask, 1, 0]).unwrap(),
+            pioneer_optical::drive::region::State::parse(&[0, 6, 0, 0, b4, mask, 1, 0]).unwrap(),
         )
     };
     // BDR-UD04 live capture: type 0, 5/5 counters, mask 0x00, RPC-2.

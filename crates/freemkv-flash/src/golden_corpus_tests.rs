@@ -266,7 +266,7 @@ fn installed(package: &[u8]) -> std::result::Result<Installed, String> {
     // A drive's INQUIRY is the identity its images embed; the header ID is
     // used only when the images hold it.
     let (vendor, product) = header.id.split_at(8.min(header.id.len()));
-    match pioneer_optical::ident::embedded_envelope_id(vendor, product, &[k, n]) {
+    match pioneer_optical::envelope::embedded_envelope_id(vendor, product, &[k, n]) {
         Ok(id) if id == header.id => {}
         found => {
             return Err(format!(

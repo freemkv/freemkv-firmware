@@ -136,8 +136,8 @@ fn flash_authorize_runs_pioneer_installed_gates_after_backup() {
     // but an installed backup without Kernel still lacks receiver marker policy.
     assert!(
         error.chain().any(|cause| matches!(
-            cause.downcast_ref::<pioneer_optical::receiver::PreparationError>(),
-            Some(pioneer_optical::receiver::PreparationError::UnknownInstalledKernel)
+            cause.downcast_ref::<pioneer_optical::prepare::PreparationError>(),
+            Some(pioneer_optical::prepare::PreparationError::UnknownInstalledKernel)
         )),
         "{error:#}"
     );

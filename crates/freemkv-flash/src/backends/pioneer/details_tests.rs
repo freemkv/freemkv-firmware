@@ -1,5 +1,5 @@
 use super::*;
-use pioneer_optical::device::settings::{Codec, VendorF4};
+use pioneer_optical::drive::settings::{Codec, VendorF4};
 
 /// A Vendor F4 settings block: Quiet active and saved, every other field
 /// as the drive leaves it unreported.

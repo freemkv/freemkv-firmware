@@ -3,7 +3,7 @@
 use crate::backend::{DeviceAccess, WriteDevice};
 use crate::platform::{sense_triplet, ScsiDevice};
 use anyhow::{ensure, Context, Result};
-use pioneer_optical::diagnostic::{self, ReadSurface};
+use pioneer_optical::drive::diagnostic::{self, ReadSurface};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -209,7 +209,7 @@ pub fn capture(mut access: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
         c.response(dev, surface)?;
     }
     if !c.stopped {
-        c.directory.logging = match pioneer_optical::logging::discover(
+        c.directory.logging = match pioneer_optical::drive::discover_logging(
             &c.bytes[..diagnostic::CPU_LOW.length],
         ) {
             None => {
@@ -232,15 +232,12 @@ pub fn capture(mut access: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
 /// Switch on RAM-only CDB arrival logging; the outcome is the directory note.
 fn enable_logging(
     dev: &mut WriteDevice<'_>,
-    layout: pioneer_optical::logging::LoggingLayout,
+    layout: pioneer_optical::drive::LoggingLayout,
 ) -> String {
     use crate::transport::{ScsiTransport, SharedDevice};
     let shared = SharedDevice::new(dev);
-    match pioneer_optical::logging::set_logging_ram(
-        &mut ScsiTransport::flash(&shared),
-        layout,
-        true,
-    ) {
+    match pioneer_optical::drive::set_logging_ram(&mut ScsiTransport::flash(&shared), layout, true)
+    {
         Ok(()) => format!(
             "enabled in RAM; mask address {:#x}, group {:#x}, bit {:#x}",
             layout.mask_address(),

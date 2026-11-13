@@ -1,5 +1,5 @@
 use super::*;
-use pioneer_optical::receiver::PreparedUpdate;
+use pioneer_optical::prepare::PreparedUpdate;
 
 const CONTROL_DESCRIPTOR_ADDRESS: u32 = 0x0041_0000;
 
@@ -34,8 +34,12 @@ fn customer_212u_101_and_213u_102_are_refused_in_both_directions() {
     );
     for (installed, target) in [(&bdr_212u, &bdr_213u), (&bdr_213u, &bdr_212u)] {
         assert_ne!(
-            crate::crossflash::decide(crate::crossflash::Platform::Pioneer, installed, target)
-                .status,
+            crate::crossflash::decide(
+                crate::backend::registry::PIONEER_PLATFORM,
+                installed,
+                target
+            )
+            .status,
             crate::crossflash::CompatibilityStatus::Yes
         );
         assert!(authorize_installed(
@@ -60,7 +64,7 @@ fn execute(dev: &mut dyn ScsiDevice, plan: &PreparedUpdate) -> Result<()> {
     crate::backends::pioneer::flash::execute_with_sleep(
         &mut crate::engine::gates::ungated_for_tests(dev),
         crate::backends::pioneer::flash::PreparedFlash::Complete(plan),
-        pioneer_optical::receiver::ExecutionMode::Flash,
+        pioneer_optical::drive::ExecutionMode::Flash,
         &mut |_| {},
     )
     .map(|_| ())
@@ -309,7 +313,7 @@ impl ScsiDevice for Drive {
                 let offset = (addr - 0x0041_0000) as usize;
                 return Ok(self.normal_memory[offset..offset + len].to_vec());
             }
-            let offset = (addr - pioneer_optical::image::KERNEL_BASE) as usize;
+            let offset = (addr - pioneer_optical::envelope::KERNEL_BASE) as usize;
             return Ok(self.memory[offset..offset + len].to_vec());
         }
         let mut out = vec![0; len];
@@ -468,7 +472,7 @@ fn unpatched_update_reports_target_startup_and_readback_limits() {
     let outcome = crate::backends::pioneer::flash::execute_with_sleep(
         &mut crate::engine::gates::ungated_for_tests(&mut drive),
         crate::backends::pioneer::flash::PreparedFlash::Complete(&plan),
-        pioneer_optical::receiver::ExecutionMode::Flash,
+        pioneer_optical::drive::ExecutionMode::Flash,
         &mut |_| {},
     )
     .unwrap();
@@ -519,7 +523,7 @@ fn different_running_revision_does_not_skip_normal_readback() {
         let result = crate::backends::pioneer::flash::execute_with_sleep(
             &mut crate::engine::gates::ungated_for_tests(&mut drive),
             crate::backends::pioneer::flash::PreparedFlash::Complete(&plan),
-            pioneer_optical::receiver::ExecutionMode::Flash,
+            pioneer_optical::drive::ExecutionMode::Flash,
             &mut |_| {},
         );
         assert!(

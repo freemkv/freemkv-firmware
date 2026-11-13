@@ -5,8 +5,8 @@ pub(crate) fn refusal_status(
     error: &(dyn std::error::Error + 'static),
 ) -> Option<CompatibilityStatus> {
     if matches!(
-        error.downcast_ref::<pioneer_optical::image::KernelHandoffError>(),
-        Some(pioneer_optical::image::KernelHandoffError::Mismatch { .. })
+        error.downcast_ref::<pioneer_optical::classify::KernelHandoffError>(),
+        Some(pioneer_optical::classify::KernelHandoffError::Mismatch { .. })
     ) {
         return Some(CompatibilityStatus::SoftNo);
     }
@@ -21,5 +21,6 @@ pub(crate) fn unsupported_backup_layout(error: &anyhow::Error) -> bool {
 }
 
 pub(crate) fn claims_platform(target: &[u8]) -> bool {
-    target.get(257..262) == Some(b"ustar") || pioneer_optical::ident::parse_banner(target).is_some()
+    target.get(257..262) == Some(b"ustar")
+        || pioneer_optical::envelope::parse_banner(target).is_some()
 }

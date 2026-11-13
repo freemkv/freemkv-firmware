@@ -2,8 +2,8 @@
 //! the interface rows, and Quiet Drive / PureRead after the region rows.
 
 use anyhow::{anyhow, Result};
-use pioneer_optical::device::settings::{Capability, Observed, PureReadMode, QuietMode};
-use pioneer_optical::production;
+use pioneer_optical::drive::production;
+use pioneer_optical::drive::settings::{Capability, Observed, PureReadMode, QuietMode};
 
 use super::Pioneer;
 use crate::backend::{DetailsFacet, InfoSoFar, ReadDevice, SettingsFacet};
@@ -138,7 +138,7 @@ fn settings_rows(settings: &Result<Settings>) -> Vec<Row> {
 /// saved ones, as 0.11.x's read-only choice controls showed them. The CLI never
 /// listed them, so these rows are GUI-only.
 fn mode_rows(s: &Settings) -> Vec<Row> {
-    use pioneer_optical::device::settings::{SettingId, Value as Mode};
+    use pioneer_optical::drive::settings::{SettingId, Value as Mode};
     let name = |v: Mode| match v {
         Mode::Quiet(q) => quiet(q),
         Mode::PureRead(p) => pure(p),

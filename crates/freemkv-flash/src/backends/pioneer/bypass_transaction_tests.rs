@@ -1,5 +1,7 @@
-//! Startup lifecycle refusal and unchanged-comparison read-only preflight
-//! through Flash/Recovery, including Recovery's explicit family override.
+//! Startup word lifecycle through Flash/Recovery, including Recovery's explicit
+//! family override. The live word is never a prerequisite: an installed fixed
+//! gate with the target's value proves it (nothing read or written); otherwise
+//! Flash sets the target's word, which Recovery never does.
 use super::*;
 
 const ORIGINAL: u16 = 0xff01;
@@ -54,15 +56,8 @@ fn unchanged_comparison_plan(bypass: bool, installed: Update) -> PreparedUpdate 
         receiver.prepare(target.clone())
     }
     .unwrap();
-    assert!(plan.startup_setting().is_none());
-    assert!(plan.settings().entries().is_empty());
-    let required = plan.settings().required_words();
-    assert_eq!(required.len(), 1);
-    assert_eq!(required[0].filter, "startup-prerequisite");
-    assert_eq!(required[0].word.parameter, 0x9f);
-    assert_eq!(required[0].word.value, ORIGINAL);
-    // A live prerequisite may authorize the existing target comparison only;
-    // no comparison operand or checksum is rewritten.
+    assert!(plan.settings().required_words().is_empty());
+    // No comparison operand or checksum is rewritten.
     assert_eq!(
         plan.stages().last().unwrap().normal_image(),
         target.normal().image
@@ -172,7 +167,7 @@ impl ScsiDevice for ObservedDrive {
 fn execute_mode(
     drive: &mut ObservedDrive,
     plan: &PreparedUpdate,
-    mode: pioneer_optical::receiver::ExecutionMode,
+    mode: pioneer_optical::drive::ExecutionMode,
 ) -> Result<()> {
     super::super::flash::execute_with_sleep(
         &mut crate::engine::gates::ungated_for_tests(drive),
@@ -186,9 +181,9 @@ fn execute_mode(
 #[test]
 fn differing_startup_words_are_set_by_the_flash_transaction() {
     use crate::backend::{FlashFacet, ReadDevice, RecoveryFacet, RecoveryTarget};
-    use crate::crossflash::{CompatibilityStatus, Platform, RouteStatus};
+    use crate::crossflash::{CompatibilityStatus, RouteStatus};
     use crate::platform::MockScsiDevice;
-    use pioneer_optical::settings::update::Effect;
+    use pioneer_optical::prepare::SettingEffect as Effect;
     for (source_value, target_value) in [(ORIGINAL, TARGET), (TARGET, ORIGINAL)] {
         let installed = archive(&startup_pair(source_value), false);
         let target_update = startup_pair(target_value);
@@ -244,68 +239,65 @@ fn differing_startup_words_are_set_by_the_flash_transaction() {
 
         for normal_only in [false, true] {
             let target = archive(&target_update, normal_only);
-            let decision = crate::crossflash::decide(Platform::Pioneer, &installed, &target);
+            let decision = crate::crossflash::decide(
+                crate::backend::registry::PIONEER_PLATFORM,
+                &installed,
+                &target,
+            );
             assert_eq!(decision.status, CompatibilityStatus::Yes, "{decision:?}");
             assert!(decision
                 .routes
                 .iter()
                 .all(|route| route.status == RouteStatus::Allowed));
-            crate::crossflash::admits(Platform::Pioneer, &installed, &target).unwrap();
+            crate::crossflash::admits(
+                crate::backend::registry::PIONEER_PLATFORM,
+                &installed,
+                &target,
+            )
+            .unwrap();
         }
     }
 }
 
-#[test]
-fn unchanged_native_startup_preserves_live_word_in_flash_and_recovery() {
-    use pioneer_optical::receiver::ExecutionMode::{Flash, Recovery};
-    for (bypass, mode) in [(false, Flash), (false, Recovery), (true, Recovery)] {
-        let plan = unchanged_comparison_plan(bypass, startup_pair(ORIGINAL));
-        let mut drive = ObservedDrive::new(&plan, Fault::None);
-        execute_mode(&mut drive, &plan, mode).unwrap();
-        assert_eq!(drive.events[0], Event::ReadParameter);
-        assert_eq!(
-            drive.events[1],
-            Event::FirmwareCommand(pioneer_optical::cdb::enter_update().to_vec())
-        );
-        assert_eq!(drive.inner.parameter_reads, 1);
-        assert_eq!(drive.inner.parameter, Some(ORIGINAL));
-        assert_eq!(drive.inner.finishes, 1);
-        assert_eq!(drive.inner.memory, plan.final_kernel_image());
-        assert_eq!(
-            drive.inner.normal_memory,
-            plan.stages().last().unwrap().normal_image()
-        );
-    }
+/// The installed fixed gate requires the target's word, so the drive holds it:
+/// nothing is read or written, whatever a probe would have returned.
+fn proven_plan(bypass: bool) -> PreparedUpdate {
+    let plan = unchanged_comparison_plan(bypass, startup_pair(ORIGINAL));
+    assert!(plan.startup_setting().is_none());
+    assert!(plan.settings().entries().is_empty());
+    assert!(plan.settings().word_writes().is_empty());
+    plan
 }
 
 #[test]
-fn read_only_prerequisite_failures_stop_flash_and_bypass_before_firmware() {
-    use pioneer_optical::receiver::ExecutionMode::{Flash, Recovery};
-    for (bypass, mode) in [(false, Flash), (true, Recovery)] {
-        let plan = unchanged_comparison_plan(bypass, startup_pair(ORIGINAL));
-        for fault in [Fault::Read, Fault::ShortRead, Fault::Mismatch] {
+fn proven_startup_word_is_neither_read_nor_written_in_flash_and_recovery() {
+    use pioneer_optical::drive::ExecutionMode::{Flash, Recovery};
+    for (bypass, mode) in [(false, Flash), (false, Recovery), (true, Recovery)] {
+        let plan = proven_plan(bypass);
+        for fault in [Fault::None, Fault::Read, Fault::ShortRead, Fault::Mismatch] {
             let mut drive = ObservedDrive::new(&plan, fault);
             let original = drive.inner.parameter;
-            let error = execute_mode(&mut drive, &plan, mode).unwrap_err();
-            assert!(
-                format!("{error:#}").contains("read-only correction prerequisite"),
-                "{fault:?}: {error:#}"
+            execute_mode(&mut drive, &plan, mode).unwrap();
+            assert!(!drive.events.contains(&Event::ReadParameter), "{fault:?}");
+            assert_eq!(
+                drive.events[0],
+                Event::FirmwareCommand(pioneer_optical::cdb::enter_update().to_vec())
             );
-            assert_eq!(drive.events, [Event::ReadParameter], "{fault:?}");
-            assert_eq!(drive.firmware_attempts(), 0);
+            assert_eq!(drive.inner.parameter_reads, 0);
             assert_eq!(drive.inner.parameter, original);
-            assert_eq!(drive.inner.finishes, 0);
-            let failure = error
-                .downcast_ref::<crate::backend::UpdateFailure>()
-                .unwrap();
-            assert!(!failure.write_started);
+            assert_eq!(drive.inner.finishes, 1);
+            assert_eq!(drive.inner.memory, plan.final_kernel_image());
+            assert_eq!(
+                drive.inner.normal_memory,
+                plan.stages().last().unwrap().normal_image()
+            );
         }
     }
 }
 
 #[test]
 fn firmware_failures_never_write_persistent_startup_parameters() {
-    let plan = unchanged_comparison_plan(true, startup_pair(ORIGINAL));
+    let plan = proven_plan(true);
     for fault in [
         Fault::Entry,
         Fault::KernelTransfer,
@@ -317,81 +309,61 @@ fn firmware_failures_never_write_persistent_startup_parameters() {
         execute_mode(
             &mut drive,
             &plan,
-            pioneer_optical::receiver::ExecutionMode::Recovery,
+            pioneer_optical::drive::ExecutionMode::Recovery,
         )
         .unwrap_err();
         assert!(drive.firmware_attempts() > 0, "{fault:?}");
         assert_eq!(drive.inner.parameter, Some(ORIGINAL), "{fault:?}");
-        assert_eq!(drive.inner.parameter_reads, 1);
+        assert_eq!(drive.inner.parameter_reads, 0);
     }
 }
 
 #[test]
-fn matching_native_startup_still_requires_read_only_live_word() {
-    let plan = unchanged_comparison_plan(true, startup_pair(ORIGINAL));
-    let mut drive = ObservedDrive::new(&plan, Fault::None);
-    execute_mode(
-        &mut drive,
-        &plan,
-        pioneer_optical::receiver::ExecutionMode::Recovery,
-    )
-    .unwrap();
-    assert_eq!(drive.inner.parameter_reads, 1);
-    assert_eq!(drive.inner.parameter, Some(ORIGINAL));
-    let mut mismatched = ObservedDrive::new(&plan, Fault::Mismatch);
-    execute_mode(
-        &mut mismatched,
-        &plan,
-        pioneer_optical::receiver::ExecutionMode::Recovery,
-    )
-    .unwrap_err();
-    assert_eq!(mismatched.firmware_attempts(), 0);
-}
-
-#[test]
-fn unresolved_source_keeps_target_comparison_and_read_only_fallback() {
-    use pioneer_optical::receiver::ExecutionMode::{Flash, Recovery};
-    for (bypass, mode) in [(false, Flash), (false, Recovery), (true, Recovery)] {
+fn unresolved_source_sets_the_target_word_and_recovery_refuses_before_firmware() {
+    use pioneer_optical::drive::ExecutionMode::Recovery;
+    for bypass in [false, true] {
         let installed = pair(false, 1);
         assert!(matches!(
             pioneer_optical::startup::bound_selection(&installed.normal().image),
             pioneer_optical::image::layout::Observation::Unresolved(_)
         ));
         let plan = unchanged_comparison_plan(bypass, installed);
+        let writes = plan.settings().word_writes();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].filter, "startup-prerequisite");
+        assert_eq!(
+            (writes[0].word.parameter, writes[0].word.value),
+            (0x9f, ORIGINAL)
+        );
+        // Recovery never writes the word; it refuses before any device command.
         let mut drive = ObservedDrive::new(&plan, Fault::None);
-        execute_mode(&mut drive, &plan, mode).unwrap();
-        assert_eq!(drive.events[0], Event::ReadParameter);
-        assert_eq!(drive.inner.parameter_reads, 1);
+        let error = execute_mode(&mut drive, &plan, Recovery).unwrap_err();
+        assert!(format!("{error:#}").contains("Recovery"), "{error:#}");
+        assert!(drive.events.is_empty());
         assert_eq!(drive.inner.parameter, Some(ORIGINAL));
-        let mut mismatch = ObservedDrive::new(&plan, Fault::Mismatch);
-        execute_mode(&mut mismatch, &plan, mode).unwrap_err();
-        assert_eq!(mismatch.events, [Event::ReadParameter]);
-        assert_eq!(mismatch.firmware_attempts(), 0);
     }
 }
 
 #[test]
-fn offline_routes_retain_the_executors_read_only_prerequisites() {
-    use crate::crossflash::{decide, CompatibilityStatus, Platform, RouteRequirement, RouteStatus};
+fn offline_routes_admit_a_proven_startup_word_without_requirements() {
+    use crate::crossflash::{decide, CompatibilityStatus, RouteStatus};
     let installed = archive(&startup_pair(ORIGINAL), false);
     for normal_only in [false, true] {
         let target = archive(&startup_pair(ORIGINAL), normal_only);
-        let decision = decide(Platform::Pioneer, &installed, &target);
-        assert_eq!(
-            decision.status,
-            CompatibilityStatus::Conditional,
-            "{decision:?}"
+        let decision = decide(
+            crate::backend::registry::PIONEER_PLATFORM,
+            &installed,
+            &target,
         );
+        assert_eq!(decision.status, CompatibilityStatus::Yes, "{decision:?}");
         assert_eq!(decision.routes.len(), 1);
-        assert_eq!(decision.routes[0].status, RouteStatus::Conditional);
-        assert_eq!(
-            decision.routes[0].requirements,
-            [RouteRequirement::ParameterWord {
-                filter: "startup-prerequisite".into(),
-                parameter: 0x9f,
-                value: ORIGINAL,
-            }]
-        );
-        assert!(crate::crossflash::admits(Platform::Pioneer, &installed, &target).is_err());
+        assert_eq!(decision.routes[0].status, RouteStatus::Allowed);
+        assert!(decision.routes[0].requirements.is_empty());
+        crate::crossflash::admits(
+            crate::backend::registry::PIONEER_PLATFORM,
+            &installed,
+            &target,
+        )
+        .unwrap();
     }
 }

@@ -925,7 +925,7 @@ fn prove_declared_identity_refusal(
             .id
             .split_once(' ')
             .context("alternate identity has no vendor/product")?;
-        if pioneer_optical::ident::embedded_envelope_id(vendor, product, &[kernel, normal])
+        if pioneer_optical::envelope::embedded_envelope_id(vendor, product, &[kernel, normal])
             .is_ok_and(|id| id == candidate.id)
         {
             ensure!(
@@ -952,8 +952,9 @@ fn prove_declared_identity_refusal(
         .id
         .split_once(' ')
         .context("OEM identity has no vendor/product")?;
-    let body_id = pioneer_optical::ident::embedded_envelope_id(vendor, product, &[kernel, normal])
-        .context("alternative OEM identity is absent from the actual decoded bytes")?;
+    let body_id =
+        pioneer_optical::envelope::embedded_envelope_id(vendor, product, &[kernel, normal])
+            .context("alternative OEM identity is absent from the actual decoded bytes")?;
     ensure!(
         body_id == authentic.id,
         "embedded body identity differs from the identical-payload envelope header"
@@ -1141,8 +1142,12 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                 // The declared ID provides no separate vendor. Do not invent
                 // whitespace or a vendor/product split to make a capture fit.
                 assert_eq!(
-                    pioneer_optical::ident::embedded_envelope_id("", &h.id, &[&k.image, &n.image]),
-                    Err(pioneer_optical::ident::IdentError::IncompleteIdentity),
+                    pioneer_optical::envelope::embedded_envelope_id(
+                        "",
+                        &h.id,
+                        &[&k.image, &n.image]
+                    ),
+                    Err(pioneer_optical::envelope::IdentError::IncompleteIdentity),
                     "{}: malformed declared identity was accepted",
                     path.display()
                 );
@@ -1341,7 +1346,7 @@ fn corpus_builder_reports_hardware_coverage_when_configured() {
                             panic!("{}: strict OEM pair refused: {e}", path.display())
                         });
                         if !raw_header_matches || !raw_name_matches {
-                            pioneer_optical::receiver::Receiver::from_firmware_with_kernel(
+                            pioneer_optical::prepare::Receiver::from_firmware_with_kernel(
                                 update.normal(),
                                 update.kernel(),
                             )

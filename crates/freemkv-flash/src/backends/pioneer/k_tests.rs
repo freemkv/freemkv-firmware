@@ -13,7 +13,7 @@ fn live_patched_oem_fixture_when_configured() {
 
 #[test]
 fn receiver_generation_never_treats_a_marker_as_protocol_evidence() {
-    let mut image = vec![0; pioneer_optical::image::KERNEL_LEN];
+    let mut image = vec![0; pioneer_optical::envelope::KERNEL_LEN];
     for marker in [0, 1, 0xff, 0x55] {
         image[0xfe] = marker;
         assert_eq!(receiver_generation(&image), None);

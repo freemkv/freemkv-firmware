@@ -4,8 +4,8 @@
 //! region read, and the rows they render as. Backup, flash, recovery and dump
 //! never read it.
 
-use pioneer_optical::device::info::{Information, Media};
-use pioneer_optical::device::Device;
+use pioneer_optical::drive::info::{Information, Media};
+use pioneer_optical::drive::Device;
 
 use crate::backend::ReadDevice;
 use crate::report::{Group, Row, Value};
@@ -121,7 +121,7 @@ impl StandardInfo {
 
 /// Read the DVD region state (REPORT KEY) and render it.
 pub fn region_rows(dev: &mut ReadDevice<'_>) -> Vec<Row> {
-    let region = with_device(dev, |d| d.get(pioneer_optical::device::DvdRegion));
+    let region = with_device(dev, |d| d.get(pioneer_optical::drive::DvdRegion));
     let rows = match region {
         Ok(rpc) => reported_region_rows(rpc),
         Err(e) => {
@@ -134,7 +134,7 @@ pub fn region_rows(dev: &mut ReadDevice<'_>) -> Vec<Row> {
         .collect()
 }
 
-fn reported_region_rows(rpc: pioneer_optical::rpc::State) -> Vec<Row> {
+fn reported_region_rows(rpc: pioneer_optical::drive::region::State) -> Vec<Row> {
     let mut rows = vec![
         row(
             "rpc",
@@ -254,7 +254,8 @@ mod region_tests {
     use super::*;
     #[test]
     fn rpc1_hides_inapplicable_reset_budget_after_region_free_modify() {
-        let state = pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, 0, 0, 0, 0]).unwrap();
+        let state =
+            pioneer_optical::drive::region::State::parse(&[0, 6, 0, 0, 0, 0, 0, 0]).unwrap();
         let rows = reported_region_rows(state);
         assert_eq!(
             rows.iter().map(|r| r.key).collect::<Vec<_>>(),
@@ -266,7 +267,8 @@ mod region_tests {
     fn rpc2_keeps_real_zero_counts_and_stock_media_counts() {
         for status in [0, 0x64] {
             let state =
-                pioneer_optical::rpc::State::parse(&[0, 6, 0, 0, status, 0xfd, 1, 0]).unwrap();
+                pioneer_optical::drive::region::State::parse(&[0, 6, 0, 0, status, 0xfd, 1, 0])
+                    .unwrap();
             let rows = reported_region_rows(state);
             assert_eq!(
                 rows.iter().map(|r| r.key).collect::<Vec<_>>(),

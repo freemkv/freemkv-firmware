@@ -116,7 +116,7 @@ pub fn recognize(image: &[u8]) -> Option<KernelMatch<'static>> {
 /// Classify the installed receiver from its finalizer code. A patched marker
 /// does not change its implementation; unknown code remains unknown.
 pub fn receiver_generation(image: &[u8]) -> Option<bool> {
-    use pioneer_optical::image::{kernel_marker_policy, KernelMarkerPolicy};
+    use pioneer_optical::classify::{kernel_marker_policy, KernelMarkerPolicy};
     match kernel_marker_policy(image)? {
         KernelMarkerPolicy::NoMarkerCheck => Some(false),
         KernelMarkerPolicy::RejectZeroAndErased => Some(true),

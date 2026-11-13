@@ -31,7 +31,7 @@ fn walk(dir: &Path, counts: &mut BTreeMap<String, usize>) -> Result<()> {
                     "{} {:?} {:?}{}",
                     expected,
                     decoded.info().layout,
-                    pioneer_optical::image::kernel_marker_policy(&decoded.image),
+                    pioneer_optical::classify::kernel_marker_policy(&decoded.image),
                     if expected == "other" {
                         format!(" {id}")
                     } else {

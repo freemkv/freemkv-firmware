@@ -1348,7 +1348,7 @@ fn write_markers_need_the_write_grant() {
          fn y(dev: &mut ReadDevice<'_>) { with_device(dev, |d| d.set(QuietMode, v, p)); }\n\
          fn z(dev: &mut gates::WriteDevice<'_>) { drive::execute_update(t); }\n\
          fn q(dev: &mut ReadDevice<'_>) { Device::with_settings_codec(t, c).query(); }\n\
-         fn h(d: &mut pioneer_optical::device::Device<'_, T>) { d.set(QuietMode, v, p); }\n\
+         fn h(d: &mut pioneer_optical::drive::Device<'_, T>) { d.set(QuietMode, v, p); }\n\
          fn p(t: &mut crate::transport::ScsiTransport<'_, '_>, w: &mut WriteDevice<'_>) { ScsiTransport::flash(&s); }\n\
          fn o(r: &mut ReadDevice<'_>) { r.set_timeout(t); }\n\
          fn k(r: &mut ReadDevice<'_>, c: &Cell<u8>) { c.set(1); r.command_out(&knock(), &[]); }\n",
@@ -1419,15 +1419,15 @@ fn write_issuer_scan_sees_through_lifetimes_turbofish_and_generics() {
 fn hiding_imports_are_refused() {
     let (code, _) = lex("use pioneer_optical::drive::enter_update;\n\
          use pioneer_optical::{drive::{self, execute_update as run}, Role};\n\
-         use pioneer_optical::logging::*;\n\
+         use pioneer_optical::drive::*;\n\
          use pioneer_optical::drive as d;\n\
          use pioneer_optical::drive::{self as dr};\n\
-         use pioneer_optical::device::Device as Dev;\n\
+         use pioneer_optical::drive::Device as Dev;\n\
          use crate::transport::ScsiTransport as T;\n\
          use pioneer_optical::drive::{Data, Error, Transport};\n\
          use crate::transport::{self as transport, flash_err, ScsiTransport};\n\
          use mediatek_optical::drive::Data as MtkData;\n\
-         use pioneer_optical::device::Device;\n\
+         use pioneer_optical::drive::Device;\n\
          use std::fmt::Write as _;\n\
          pub use mediatek_optical::image::cmac::*;\n");
     assert_eq!(
@@ -1435,10 +1435,10 @@ fn hiding_imports_are_refused() {
         [
             "use pioneer_optical::drive::enter_update",
             "use pioneer_optical::{drive::{self, execute_update as run}, Role}",
-            "use pioneer_optical::logging::*",
+            "use pioneer_optical::drive::*",
             "use pioneer_optical::drive as d",
             "use pioneer_optical::drive::{self as dr}",
-            "use pioneer_optical::device::Device as Dev",
+            "use pioneer_optical::drive::Device as Dev",
             "use crate::transport::ScsiTransport as T",
         ]
     );
@@ -1714,11 +1714,17 @@ fn vendor_scan_skips_comments_and_tests() {
 fn optical_dependencies_stay_content_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
     let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
-    for (name, version) in [("pioneer-optical", "2.0.0"), ("mediatek-optical", "2.0.0")] {
+    for (name, version) in [("pioneer-optical", "3.0.0"), ("mediatek-optical", "2.0.0")] {
+        // The first declaration is the production [dependencies] entry; the
+        // unstable `internals` surface is for tests only ([dev-dependencies]).
         let line = manifest
             .lines()
             .find(|line| line.trim_start().starts_with(name))
             .expect("optical dependency");
+        assert!(
+            !line.contains("\"internals\""),
+            "{name}: production builds must see only the public API: {line}"
+        );
         assert!(
             line.contains(&format!("version = \"={version}\"")) && !line.contains("path ="),
             "{name} {version} must be pinned without a local path: {line}"
@@ -2175,7 +2181,7 @@ fn device_types_are_named_only_where_reviewed() {
 fn device_type_census_keys_by_item() {
     let census = |src: &str| device_type_census(&lex(src).0);
     let before = census(
-        "use pioneer_optical::device::Device;\n\
+        "use pioneer_optical::drive::Device;\n\
          pub fn with<R>(f: impl FnOnce(&mut Device<'_, T>) -> R) -> R { f(&mut Device::new(t)) }\n",
     );
     assert_eq!(

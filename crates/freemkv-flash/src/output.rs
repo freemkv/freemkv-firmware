@@ -1,6 +1,6 @@
 //! Scoped application output shared by terminal and graphical front-ends.
 
-pub use pioneer_optical::settings as device_settings;
+pub use pioneer_optical::drive::settings as device_settings;
 
 use std::cell::RefCell;
 use std::fmt;

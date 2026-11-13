@@ -158,7 +158,7 @@ fn fixture_pair_class_with_model(
 
 #[test]
 fn differing_startup_formats_are_hard_refusals_even_with_the_family_override() {
-    use crate::crossflash::{decide, CompatibilityStatus, Platform};
+    use crate::crossflash::{decide, CompatibilityStatus};
     let source = fixture_pair(false, 1);
     let mut normal = source.normal().image.clone();
     for at in [0x180a, 0x190a, 0x220e] {
@@ -177,7 +177,7 @@ fn differing_startup_formats_are_hard_refusals_even_with_the_family_override() {
     let target = archive(&target, false);
     // The persistent layout is never correctable, so the catalogue and Flash
     // refuse at the family gate. No bank conversion exists under any policy.
-    let decision = decide(Platform::Pioneer, &source, &target);
+    let decision = decide(crate::backend::registry::PIONEER_PLATFORM, &source, &target);
     assert_eq!(
         decision.status,
         CompatibilityStatus::HardNo,
@@ -185,7 +185,9 @@ fn differing_startup_formats_are_hard_refusals_even_with_the_family_override() {
         decision.reason
     );
     assert!(decision.routes.is_empty());
-    let refused = crate::crossflash::admits(Platform::Pioneer, &source, &target).unwrap_err();
+    let refused =
+        crate::crossflash::admits(crate::backend::registry::PIONEER_PLATFORM, &source, &target)
+            .unwrap_err();
     assert_eq!(
         crate::crossflash::refusal_status(refused.as_ref()),
         CompatibilityStatus::HardNo
@@ -439,7 +441,7 @@ impl ScsiDevice for Drive {
                     .context("unexpected Kernel readback pass")?
             };
             let start = address
-                .checked_sub(pioneer_optical::image::KERNEL_BASE as usize)
+                .checked_sub(pioneer_optical::envelope::KERNEL_BASE as usize)
                 .context("unexpected readback address")?;
             return Ok(image[start..start + len].to_vec());
         }
@@ -577,7 +579,7 @@ fn application_flash_and_recovery_share_the_pioneer_executor_and_wire_bytes() {
     let flashed = super::super::flash::execute_with_sleep(
         &mut ungated_for_tests(&mut flash),
         super::super::flash::PreparedFlash::Complete(&plan.prepared),
-        pioneer_optical::receiver::ExecutionMode::Flash,
+        pioneer_optical::drive::ExecutionMode::Flash,
         &mut |_| {},
     )
     .unwrap();
@@ -715,7 +717,7 @@ fn recognized_handoff_bridge_is_prepared_by_flash_offline_and_recovery() {
     assert_eq!(stages.len(), 2);
     assert_eq!(
         stages[0].bridge(),
-        Some(pioneer_optical::receiver::BridgeKind::KernelHandoff)
+        Some(pioneer_optical::prepare::BridgeKind::KernelHandoff)
     );
     assert_eq!(stages[1].bridge(), None);
     let original = Current::load(&current).unwrap();
@@ -746,8 +748,11 @@ fn recognized_handoff_bridge_is_prepared_by_flash_offline_and_recovery() {
     // captured Current; do not silently substitute the original OEM backup.
     let forward = Plan::prepare(&inputs[0].bytes, &target).unwrap();
     assert_eq!(forward.prepared.stages().len(), 1);
-    let decision =
-        crate::crossflash::decide(crate::crossflash::Platform::Pioneer, &current, &target);
+    let decision = crate::crossflash::decide(
+        crate::backend::registry::PIONEER_PLATFORM,
+        &current,
+        &target,
+    );
     assert_eq!(decision.status, crate::crossflash::CompatibilityStatus::Yes);
     super::super::decide_offline(&current, &target).unwrap();
 }
@@ -779,17 +784,28 @@ fn unknown_programmer_is_not_bypassed_by_recovery() {
 
 #[test]
 fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
-    use crate::crossflash::{decide, CompatibilityStatus::*, Platform};
+    use crate::crossflash::{decide, CompatibilityStatus::*};
     let installed = archive(&fixture_pair(false, 1), false);
     let same = archive(&fixture_pair(false, 1), false);
-    assert_eq!(decide(Platform::Pioneer, &installed, &same).status, Yes);
+    assert_eq!(
+        decide(
+            crate::backend::registry::PIONEER_PLATFORM,
+            &installed,
+            &same
+        )
+        .status,
+        Yes
+    );
     let unknown = archive(
         &fixture_pair_class_with(false, 1, b"SAT 8600GENERAL 0000", [0x100, 0x200], |k| {
             k[0xe000..0xe016].fill(0)
         }),
         false,
     );
-    assert_eq!(decide(Platform::Pioneer, &unknown, &same).status, HardNo);
+    assert_eq!(
+        decide(crate::backend::registry::PIONEER_PLATFORM, &unknown, &same).status,
+        HardNo
+    );
     assert!(Plan::prepare(&unknown, &same).is_err());
     // A receiver-class change does not add a hard refusal to a paired update:
     // the incoming Kernel receives its own Normal after the handoff.
@@ -801,12 +817,25 @@ fn compatibility_status_preserves_hard_refusals_over_handoff_candidates() {
         false,
     );
     assert_eq!(
-        decide(Platform::Pioneer, &installed, &incompatible).status,
+        decide(
+            crate::backend::registry::PIONEER_PLATFORM,
+            &installed,
+            &incompatible
+        )
+        .status,
         Yes
     );
     let bridge = Plan::prepare(&installed, &incompatible).unwrap();
     assert_eq!(bridge.prepared.stages().len(), 2);
-    assert_eq!(decide(Platform::Pioneer, b"invalid", &same).status, HardNo);
+    assert_eq!(
+        decide(
+            crate::backend::registry::PIONEER_PLATFORM,
+            b"invalid",
+            &same
+        )
+        .status,
+        HardNo
+    );
 }
 
 #[test]
@@ -1182,8 +1211,12 @@ fn supplied_real_recovery_packages_preserve_normal_for_the_receiving_kernel() {
         );
         assert_eq!(plan.prepared.normal_transfer(), update.normal_transfer());
     }
-    crate::crossflash::admits(crate::crossflash::Platform::Pioneer, &current, &target)
-        .expect("Flash must prepare the same paired Normal as Recovery");
+    crate::crossflash::admits(
+        crate::backend::registry::PIONEER_PLATFORM,
+        &current,
+        &target,
+    )
+    .expect("Flash must prepare the same paired Normal as Recovery");
     let mut drive = Drive {
         updating: true,
         ..Default::default()
@@ -2027,14 +2060,17 @@ fn crossflash_links_follow_the_flash_gates() {
     // Crossflash links come from the flasher's own offline
     // decision: a different SAT with the same receiver class links both ways; a
     // different receiver class also links when the incoming Kernel receives Normal.
-    use crate::crossflash::{links, Platform};
+    use crate::crossflash::links;
     let sat_a = archive(&fixture_pair_sat(false, 0, b"SAT 8600GENERAL 0000"), false);
     let sat_b = archive(&fixture_pair_sat(false, 1, b"SAT 8601GENERAL 0000"), false);
     let class_y = archive(
         &fixture_pair_class(false, 0, b"SAT 8600GENERAL 0000", [0x400, 0x800]),
         false,
     );
-    let found = links(Platform::Pioneer, &[&sat_a, &sat_b, &class_y]);
+    let found = links(
+        crate::backend::registry::PIONEER_PLATFORM,
+        &[&sat_a, &sat_b, &class_y],
+    );
     assert!(
         found.contains(&(0, 1)) && found.contains(&(1, 0)),
         "{found:?}"

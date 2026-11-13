@@ -69,7 +69,7 @@ fn website_graph_matches_the_flasher_decision_for_every_pair() {
     ];
     let packages: Vec<&[u8]> = packages_owned.iter().map(Vec::as_slice).collect();
     let routes =
-        crate::crossflash::classified_routes(crate::crossflash::Platform::Pioneer, &packages);
+        crate::crossflash::classified_routes(crate::backend::registry::PIONEER_PLATFORM, &packages);
     let mut expected = Vec::new();
     for i in 0..packages.len() {
         for j in 0..packages.len() {
@@ -77,7 +77,7 @@ fn website_graph_matches_the_flasher_decision_for_every_pair() {
                 continue;
             }
             let decision = crate::crossflash::decide(
-                crate::crossflash::Platform::Pioneer,
+                crate::backend::registry::PIONEER_PLATFORM,
                 packages[i],
                 packages[j],
             );

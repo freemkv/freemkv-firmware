@@ -13,9 +13,9 @@ use crate::transport::{ScsiTransport, SharedDevice};
 use anyhow::anyhow;
 use anyhow::Result;
 
-impl From<pioneer_optical::operation::IssueKind> for crate::user_error::IssueCode {
-    fn from(kind: pioneer_optical::operation::IssueKind) -> Self {
-        use pioneer_optical::operation::IssueKind;
+impl From<pioneer_optical::IssueKind> for crate::user_error::IssueCode {
+    fn from(kind: pioneer_optical::IssueKind) -> Self {
+        use pioneer_optical::IssueKind;
         match kind {
             IssueKind::InvalidFirmware => Self::FirmwareInvalid,
             IssueKind::UnsupportedFirmware => Self::UnsupportedFirmware,
@@ -28,13 +28,12 @@ impl From<pioneer_optical::operation::IssueKind> for crate::user_error::IssueCod
     }
 }
 use pioneer_optical::drive::UpdateRuntime;
+use pioneer_optical::drive::{ExecutionMode, ExecutionRuntime, FlashStage, FlashTransport};
 #[cfg(test)]
 use pioneer_optical::drive::{UpdateError, UpdateOptions};
-use pioneer_optical::receiver::{
-    ExecutionMode, ExecutionRuntime, FlashStage, FlashTransport, PreparedNormal, PreparedUpdate,
-};
+use pioneer_optical::prepare::{PreparedNormal, PreparedUpdate};
 #[cfg(test)]
-use pioneer_optical::{receiver::FlashError, DriveClass};
+use pioneer_optical::{drive::FlashError, DriveClass};
 use pioneer_optical::{CodedError, Role};
 use std::time::Duration;
 
@@ -86,7 +85,7 @@ pub(super) fn execute_with_sleep(
                 .skip(1)
                 .map(|(index, _)| {
                     if plan.stages()[index - 1].bridge()
-                        == Some(pioneer_optical::receiver::BridgeKind::ReceiverMarker)
+                        == Some(pioneer_optical::prepare::BridgeKind::ReceiverMarker)
                     {
                         "restoring the unmodified target Kernel".to_string()
                     } else {
@@ -173,17 +172,17 @@ pub(super) fn execute_with_sleep(
     ))
 }
 
-fn is_readiness_timeout(error: &pioneer_optical::receiver::ExecutionError<anyhow::Error>) -> bool {
-    use pioneer_optical::receiver::ExecutionError;
+fn is_readiness_timeout(error: &pioneer_optical::drive::ExecutionError<anyhow::Error>) -> bool {
+    use pioneer_optical::drive::ExecutionError;
     match error {
         ExecutionError::AfterStage { source, .. } => is_readiness_timeout(source),
         ExecutionError::Startup(error) => match error.as_ref() {
-            pioneer_optical::startup::migration::Error::Flash { source, .. } => {
+            pioneer_optical::drive::StartupError::Flash { source, .. } => {
                 is_readiness_timeout(source)
             }
             _ => false,
         },
-        ExecutionError::Flash(pioneer_optical::receiver::FlashError::Update {
+        ExecutionError::Flash(pioneer_optical::drive::FlashError::Update {
             source: pioneer_optical::drive::UpdateError::ReadyTimeout(_),
             ..
         }) => true,
@@ -206,8 +205,8 @@ fn record_timeout_identity(dev: &mut dyn crate::platform::ScsiDevice) {
     }
 }
 
-fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
-    use pioneer_optical::settings::update::Effect;
+fn report_settings(plan: &pioneer_optical::prepare::SettingsPlan) {
+    use pioneer_optical::prepare::SettingEffect as Effect;
     if let Some(startup) = plan.startup_plan() {
         for check in startup.target_checks().iter() {
             crate::diagnostics::record(format!("Pioneer startup check: {check:?}"));
@@ -228,7 +227,7 @@ fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
                 value,
                 explicit,
             } => {
-                report_startup_setting(pioneer_optical::startup::Setting {
+                report_startup_setting(pioneer_optical::prepare::StartupSetting {
                     parameter,
                     value,
                     explicit,
@@ -245,7 +244,7 @@ fn report_settings(plan: &pioneer_optical::settings::update::Plan) {
     }
 }
 
-pub(super) fn report_startup_setting(setting: pioneer_optical::startup::Setting) {
+pub(super) fn report_startup_setting(setting: pioneer_optical::prepare::StartupSetting) {
     let source = if setting.explicit {
         "required by target firmware"
     } else {
@@ -294,7 +293,7 @@ where
 // partial update it is the correct Current reference; the original backup has
 // the same displayed identity but a different programmer. No desktop files.
 pub(super) fn retain_handoff_bridges(plan: &PreparedUpdate) -> Result<()> {
-    use pioneer_optical::{envelope::Update, receiver::BridgeKind};
+    use pioneer_optical::{envelope::Update, prepare::BridgeKind};
     for (index, stage) in plan.stages().iter().enumerate() {
         if stage.bridge() != Some(BridgeKind::KernelHandoff) {
             continue;
@@ -330,7 +329,7 @@ pub(super) fn retain_handoff_bridges(plan: &PreparedUpdate) -> Result<()> {
 }
 
 fn execution_error(
-    error: pioneer_optical::receiver::ExecutionError<anyhow::Error>,
+    error: pioneer_optical::drive::ExecutionError<anyhow::Error>,
     bridge_required: bool,
     completed_stages: usize,
 ) -> anyhow::Error {
@@ -339,9 +338,9 @@ fn execution_error(
     // Startup parameter writes are device mutations, but do not enter UPDATE.
     // Only expose rollback guidance before any update command or completed stage.
     let startup_issue = if completed_stages == 0 && !error.firmware_write_started() {
-        use pioneer_optical::startup::migration::{Error, Rollback};
+        use pioneer_optical::drive::{Rollback, StartupError as Error};
         match &error {
-            pioneer_optical::receiver::ExecutionError::Startup(migration) => {
+            pioneer_optical::drive::ExecutionError::Startup(migration) => {
                 match migration.as_ref() {
                     Error::Change { rollback, .. } | Error::Flash { rollback, .. } => {
                         fn guidance<E>(
@@ -423,8 +422,8 @@ struct Runtime<'a, 'd> {
     normal: style::Progress,
 }
 impl UpdateRuntime for Runtime<'_, '_> {
-    fn operation_progress(&mut self, progress: pioneer_optical::operation::Progress) {
-        use pioneer_optical::operation::{Component, Phase};
+    fn operation_progress(&mut self, progress: pioneer_optical::Progress) {
+        use pioneer_optical::{Component, Phase};
         crate::output::publish(crate::output::Event::Phase {
             phase: match progress.phase {
                 Phase::Reading => "reading",
