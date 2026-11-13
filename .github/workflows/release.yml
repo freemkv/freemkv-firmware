@@ -105,7 +105,55 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
           RELEASE_REPO: ${{ github.repository }}
-        run: python3 .github/scripts/promote_qa.py "$RELEASE_TAG" --repo "$RELEASE_REPO"
+        run: python3 .github/scripts/promote_qa.py "$RELEASE_TAG" --repo "$RELEASE_REPO" --draft-only
+
+  # The website (crossflash graph, firmware capabilities) is released BEFORE the
+  # binaries: the draft's provenance (asset name -> SHA-256) goes to the site
+  # deploy, which verifies its capability producer against it. The binaries are
+  # published only once the site deployed.
+  website:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: promote-qa
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy the website against this release's draft provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE_TOKEN: ${{ secrets.ORG_DISPATCH_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ -n "${SITE_TOKEN:-}" ] || { echo "::error::ORG_DISPATCH_TOKEN is required to release the website first"; exit 1; }
+          gh release download "$RELEASE_TAG" --repo "$RELEASE_REPO" --pattern release-provenance.json --dir "$RUNNER_TEMP"
+          payload=$(jq -c --arg tag "$RELEASE_TAG" '{event_type: "freemkv-release", client_payload: {provenance: {tag: $tag, assets: .assets}}}' "$RUNNER_TEMP/release-provenance.json")
+          since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          GH_TOKEN="$SITE_TOKEN" gh api repos/freemkv/marketing/dispatches --input - <<<"$payload"
+          run=
+          for _ in $(seq 60); do
+            sleep 10
+            run=$(GH_TOKEN="$SITE_TOKEN" gh run list --repo freemkv/marketing --workflow pages.yml --event repository_dispatch \
+              --json databaseId,createdAt --jq "map(select(.createdAt >= \"$since\")) | last | .databaseId // empty")
+            [ -n "$run" ] && break
+          done
+          [ -n "$run" ] || { echo "::error::website deploy did not start"; exit 1; }
+          echo "website deploy: https://github.com/freemkv/marketing/actions/runs/$run" >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN="$SITE_TOKEN" gh run watch "$run" --repo freemkv/marketing --exit-status --interval 30
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: website
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Publish the staged release after the website
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/promote_qa.py "$RELEASE_TAG" --repo "$RELEASE_REPO" --publish-only
 
   # Single source of truth for the MSRV: `rust-version` in Cargo.toml, so the
   # shipped binary is built with the same compiler CI gates on and the pin
@@ -775,8 +823,8 @@ jobs:
   # workflow_dispatch publishes no Release to point the tap at. Same auth and
   # flow as the freemkv app's update-homebrew-tap job.
   update-homebrew-tap:
-    needs: [promote-qa]
-    if: always() && needs.promote-qa.result == 'success'
+    needs: [publish-release]
+    if: always() && needs.publish-release.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Update the tap to this release
@@ -834,8 +882,8 @@ jobs:
     secrets: inherit
 
   apt:
-    needs: [promote-qa]
-    if: always() && needs.promote-qa.result == 'success'
+    needs: [publish-release]
+    if: always() && needs.publish-release.result == 'success'
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:

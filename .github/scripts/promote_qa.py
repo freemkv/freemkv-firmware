@@ -97,7 +97,15 @@ def main():
     parser.add_argument('tag')
     parser.add_argument('--repo', required=True)
     parser.add_argument('--check-only', action='store_true')
+    # The website is released between these two: stage the complete draft, let
+    # the site deploy against its provenance, then publish the binaries.
+    parser.add_argument('--draft-only', action='store_true',
+                        help='stage the complete draft release but do not publish it')
+    parser.add_argument('--publish-only', action='store_true',
+                        help='publish an already staged, complete draft release')
     args = parser.parse_args()
+    if args.draft_only and args.publish_only:
+        raise ValueError('--draft-only and --publish-only are exclusive')
     if not re.fullmatch(r'v\d+\.\d+\.\d+', args.tag):
         raise ValueError('Stable semantic version tag required')
     version = next(line.split('"')[1] for line in Path('Cargo.toml').read_text().splitlines() if line.startswith('version = '))
@@ -110,11 +118,19 @@ def main():
     existing = subprocess.run(['gh', 'release', 'view', args.tag, '--repo', args.repo,
                                '--json', 'isDraft,assets'], capture_output=True, text=True)
     release = json.loads(existing.stdout) if existing.returncode == 0 else None
-    if release and not release['isDraft']:
+    def complete(release):
         names = {asset['name'] for asset in release['assets']}
-        if 'release-provenance.json' not in names or not {'freemkv-flash-x86_64-windows-setup.exe', 'freemkv-flash-gui-macos-aarch64.zip', 'freemkv-flash-gui-amd64.deb'} <= names:
+        return 'release-provenance.json' in names and {'freemkv-flash-x86_64-windows-setup.exe', 'freemkv-flash-gui-macos-aarch64.zip', 'freemkv-flash-gui-amd64.deb'} <= names
+    if release and not release['isDraft']:
+        if not complete(release):
             raise RuntimeError('Published release is incomplete; refusing to replace immutable assets')
         print('Already published; preserving the existing validated assets')
+        return
+    if args.publish_only:
+        if not release or not complete(release):
+            raise RuntimeError('No complete staged draft to publish')
+        command('gh', 'release', 'edit', args.tag, '--repo', args.repo, '--draft=false', '--latest')
+        print('Published the staged draft release')
         return
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -148,6 +164,9 @@ def main():
         for offset in range(0, len(assets), 30):
             command('gh', 'release', 'upload', args.tag, '--repo', args.repo,
                     *(str(p) for p in assets[offset:offset + 30]))
+        if args.draft_only:
+            print(f'Staged {len(assets)} QA artifacts in the draft release without compiling')
+            return
         command('gh', 'release', 'edit', args.tag, '--repo', args.repo, '--draft=false', '--latest')
         print(f'Published {len(assets)} QA artifacts without compiling')
 

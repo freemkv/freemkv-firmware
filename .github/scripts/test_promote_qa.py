@@ -112,13 +112,24 @@ class PromotionTests(unittest.TestCase):
         block = text.split('\n  resolve-msrv:\n', 1)[1].split('\n    runs-on:', 1)[0]
         self.assertIn("!startsWith(github.ref, 'refs/tags/')", block)
         self.assertIn('needs: resolve-msrv', text)
-        self.assertIn('needs.promote-qa.result', text)
+        self.assertIn('needs.publish-release.result', text)
+
+    def test_website_releases_before_the_binaries(self):
+        text = Path('.github/workflows/release.yml').read_text()
+        self.assertIn('promote_qa.py "$RELEASE_TAG" --repo "$RELEASE_REPO" --draft-only', text)
+        website = text.split('\n  website:\n', 1)[1].split('\n  publish-release:\n', 1)[0]
+        self.assertIn('needs: promote-qa', website)
+        self.assertIn('event_type: "freemkv-release"', website)
+        self.assertIn('--exit-status', website)
+        publish = text.split('\n  publish-release:\n', 1)[1]
+        self.assertIn('needs: website', publish)
+        self.assertIn('--publish-only', publish)
 
 
     def test_release_refreshes_rpm_and_arch_repositories(self):
         text = Path('.github/workflows/release.yml').read_text()
         job = text.split('\n  apt:\n', 1)[1]
-        self.assertIn('needs: [promote-qa]', job)
+        self.assertIn('needs: [publish-release]', job)
         for event in ('apt-refresh', 'rpm-refresh', 'arch-refresh'):
             self.assertIn('event_type=' + event, job)
 
