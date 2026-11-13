@@ -180,6 +180,37 @@ jobs:
       - run: cargo test --tests
         working-directory: freemkv-firmware
 
+  # MediaTek hook contracts executed on an independent ARM CPU (Unicorn), on
+  # every dev push: the replacement blocks must reach a validated continuation
+  # with general registers, stack and CPSR flags exactly as the original left
+  # them (the Nov-2 CPSR flag-transparency regression class). qa.yml runs the
+  # same harness again in its release suite.
+  mtk-cpu:
+    if: needs.resolve-msrv.outputs.code_changed == 'true' && !inputs.coverage_only
+    needs: resolve-msrv
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: freemkv-firmware
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.resolve-msrv.outputs.v }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: freemkv-firmware
+          cache-on-failure: true
+      - run: cargo build --release --locked -p freemkv-fw --bin freemkv-fw
+      - name: Execute MediaTek hook contracts on an independent ARM CPU
+        run: |
+          python3 -m venv "$RUNNER_TEMP/hook-cpu"
+          "$RUNNER_TEMP/hook-cpu/bin/python" -m pip install --only-binary=:all: -r scripts/firmware_execution/requirements.txt
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-hook-execution.py --fw target/release/freemkv-fw
+          "$RUNNER_TEMP/hook-cpu/bin/python" scripts/test-mtk-runtime-execution.py --fw target/release/freemkv-fw
+
   # cargo-deny — audits the RESOLVED graph (RUSTSEC advisories, licence
   # allow-list, source/ban hygiene) against the committed Cargo.lock + deny.toml.
   # Runs on stable: it resolves and audits the graph, it does not build code.
