@@ -239,20 +239,25 @@ jobs:
           var="CROSS_TARGET_$(echo '${{ matrix.target }}' | tr '[:lower:]-' '[:upper:]_')_IMAGE"
           echo "$var=${{ matrix.cross_image }}" >> "$GITHUB_ENV"
 
+      # freemkv-crossflash is the offline crossflash-route evaluator the website
+      # publish pipeline (marketing firmware:release) binds its route-graph cache
+      # to by executable SHA-256. Shipping it as a stable per-release asset (like
+      # freemkv-fw) lets the site reuse that cache across releases instead of a
+      # full all-pairs rescan on every run — see firmware-release.md.
       - name: Build the CLIs (release)
         if: ${{ !matrix.cross_image }}
-        run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw --bin freemkv-crossflash
 
       - name: Build the CLIs (release, cross)
         if: matrix.cross_image
-        run: cross build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
+        run: cross build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw --bin freemkv-crossflash
 
       # The Linux CLIs must be static (no NEEDED entries), on both arches.
       - name: Verify the Linux CLIs are static
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          for b in freemkv-flash freemkv-fw; do
+          for b in freemkv-flash freemkv-fw freemkv-crossflash; do
             bin="target/${{ matrix.target }}/release/$b"
             if readelf -d "$bin" | grep -q NEEDED; then
               readelf -d "$bin"; echo "::error::$bin is not static"; exit 1
@@ -315,7 +320,7 @@ jobs:
             else sha256sum "$1" > "$1.sha256"; fi
           }
 
-          bins="freemkv-flash freemkv-fw"
+          bins="freemkv-flash freemkv-fw freemkv-crossflash"
           if [ "${{ matrix.gui }}" = "true" ]; then bins="$bins freemkv-flash-gui freemkv-fw-gui"; fi
 
           for bin in $bins; do

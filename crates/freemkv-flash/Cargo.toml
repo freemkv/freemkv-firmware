@@ -13,7 +13,11 @@ description = "Optical-drive firmware inspection, backup, and flashing"
 name = "freemkv-flash"
 path = "src/main.rs"
 
-# Internal tool (not shipped): every crossflash `flash` admits between packages.
+# Offline crossflash-route evaluator: every crossflash `flash` admits between
+# packages. Published as a per-release asset (freemkv-crossflash-cli-<arch>-<os>)
+# so the website publish pipeline can bind its route-graph cache to a stable
+# executable SHA-256 and skip the full all-pairs rescan when the engine is
+# unchanged. Not an installed end-user app (no GUI/installer/deb).
 [[bin]]
 name = "freemkv-crossflash"
 path = "src/bin/freemkv-crossflash.rs"
