@@ -266,22 +266,17 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
     // Package validation uses the same worker bound as pair evaluation.
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     let package_chunk = packages.len().div_ceil(workers).max(1);
-    let (keys, pioneer_packages): (Vec<_>, Vec<_>) = std::thread::scope(|scope| {
+    // Prefilter fingerprints only. Pair admission runs through the single
+    // flasher decision path [`decide`] — the same one `--why` and the live
+    // flasher use — so the website graph can never deviate from what Flash does.
+    let keys: Vec<Prefilter> = std::thread::scope(|scope| {
         let handles: Vec<_> = packages
             .chunks(package_chunk)
             .map(|chunk| {
                 scope.spawn(move || {
                     chunk
                         .iter()
-                        .map(|bytes| {
-                            let key = Prefilter::of(platform, bytes);
-                            let evidence = if platform == Platform::Pioneer {
-                                crate::backend::registry::OfflinePackage::load(bytes).ok()
-                            } else {
-                                None
-                            };
-                            (key, evidence)
-                        })
+                        .map(|b| Prefilter::of(platform, b))
                         .collect::<Vec<_>>()
                 })
             })
@@ -289,7 +284,7 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
         handles
             .into_iter()
             .flat_map(|handle| handle.join().expect("package validation worker panicked"))
-            .unzip()
+            .collect()
     });
     let candidates: Vec<(usize, usize)> = (0..packages.len())
         .flat_map(|i| (0..packages.len()).map(move |j| (i, j)))
@@ -309,7 +304,6 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
     let mut admitted: Vec<(usize, usize, Route)> = std::thread::scope(|scope| {
         let handles: Vec<_> = (0..pair_workers)
             .map(|_| {
-                let pioneer_packages = &pioneer_packages;
                 let candidates = &candidates;
                 let next_pair = &next_pair;
                 let completed_pairs = &completed_pairs;
@@ -318,13 +312,7 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
                     while let Some(&(i, j)) =
                         candidates.get(next_pair.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
                     {
-                        let routes = match (pioneer_packages.get(i), pioneer_packages.get(j)) {
-                            (Some(Some(source)), Some(Some(target))) => source
-                                .routes_to(target)
-                                .map(|evaluation| evaluation.routes)
-                                .unwrap_or_default(),
-                            _ => decide(platform, packages[i], packages[j]).routes,
-                        };
+                        let routes = decide(platform, packages[i], packages[j]).routes;
                         admitted.extend(routes.into_iter().map(|route| (i, j, route)));
                         let completed =
                             completed_pairs.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;

@@ -528,53 +528,6 @@ fn offline_evaluation(result: Result<AuthorizedPlan>) -> Result<crate::crossflas
     })
 }
 
-/// Immutable package evidence scoped to one offline catalogue evaluation.
-/// Construction runs the ordinary package gates once. Pair admission is never cached.
-pub(crate) struct OfflinePackage {
-    input: ExecutePlan,
-    receiver: Receiver,
-    target: pioneer_optical::envelope::Update,
-    target_facts: flash_plan::Target,
-    receiver_check: std::result::Result<(), String>,
-}
-impl OfflinePackage {
-    pub(crate) fn load(bytes: &[u8]) -> Result<Self> {
-        let input = execute_plan(bytes)?;
-        let kernel = input
-            .kernel
-            .as_deref()
-            .context("Normal-only package requires pair-local decoding")?;
-        verify_coverage(bytes, true, true)?;
-        let receiver = receiver_from_components(Some(kernel), Some(&input.normal))?;
-        let target = normal_prepare::pair(kernel, &input.normal)?;
-        let target_facts = flash_plan::target_from_loaded(
-            Some(target.kernel()),
-            target.normal(),
-            Some(kernel),
-            &input.normal,
-            None,
-        )?;
-        let receiver_check = flash_plan::check_loaded_receiver(&target);
-        Ok(Self {
-            input,
-            receiver,
-            target,
-            target_facts,
-            receiver_check,
-        })
-    }
-
-    pub(crate) fn routes_to(&self, target: &Self) -> Result<crate::crossflash::Evaluation> {
-        // Both packages passed full Kernel+Normal backup coverage at construction.
-        // The exact same receiver.prepare and app routing gates run for every pair.
-        offline_evaluation(authorize_installed_inner(
-            FlashPlan::new(target.input.clone()),
-            None,
-            Some((self, target)),
-        ))
-    }
-}
-
 /// The routing facts the offline crossflash pre-filter compares: the family
 /// the family gate compares, the controller id (SAT), and whether the package
 /// is Normal-only.
@@ -612,37 +565,19 @@ pub(crate) fn authorize_installed(
     plan: FlashPlan,
     installed: Option<&[u8]>,
 ) -> Result<AuthorizedPlan> {
-    authorize_installed_inner(plan, installed, None)
-}
-
-fn authorize_installed_inner(
-    plan: FlashPlan,
-    installed: Option<&[u8]>,
-    evidence: Option<(&OfflinePackage, &OfflinePackage)>,
-) -> Result<AuthorizedPlan> {
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
-    let owned_components;
-    let owned_receiver;
-    let (installed_kernel, installed_normal, receiver) = if let Some((source, _)) = evidence {
-        (
-            source.input.kernel.as_deref(),
-            Some(source.input.normal.as_slice()),
-            &source.receiver,
-        )
-    } else {
-        owned_components = classify_flash_input(installed.context(
-            "installed firmware backup is required to recover the receiver control key; refusing update entry"
-        ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
-        owned_receiver =
-            receiver_from_components(owned_components.0.as_deref(), owned_components.1.as_deref())?;
-        (
-            owned_components.0.as_deref(),
-            owned_components.1.as_deref(),
-            &owned_receiver,
-        )
-    };
+    let owned_components = classify_flash_input(installed.context(
+        "installed firmware backup is required to recover the receiver control key; refusing update entry"
+    ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
+    let owned_receiver =
+        receiver_from_components(owned_components.0.as_deref(), owned_components.1.as_deref())?;
+    let (installed_kernel, installed_normal, receiver) = (
+        owned_components.0.as_deref(),
+        owned_components.1.as_deref(),
+        &owned_receiver,
+    );
     if kernel.is_none() {
         // Validate both sides as independent images before comparing their
         // tags. Pair validation would call an installed-drive mismatch a
@@ -673,32 +608,20 @@ fn authorize_installed_inner(
     }
     let (prepared, target_facts, receiver_check) = match p.selection {
         FlashSelection::KernelAndNormal => {
-            let owned_target;
-            let target = if let Some((_, package)) = evidence {
-                &package.target
-            } else {
-                owned_target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
-                &owned_target
-            };
-            let facts = if let Some((_, package)) = evidence {
-                package.target_facts.clone()
-            } else {
-                flash_plan::target_from_loaded(
-                    Some(target.kernel()),
-                    target.normal(),
-                    kernel,
-                    normal,
-                    None,
-                )?
-            };
+            let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
+            let facts = flash_plan::target_from_loaded(
+                Some(target.kernel()),
+                target.normal(),
+                kernel,
+                normal,
+                None,
+            )?;
             let check = if installed_kernel == kernel {
                 // Preserve the existing identical-envelope fast path. The
                 // library still validates the complete pair and live plan.
                 Ok(())
-            } else if let Some((_, package)) = evidence {
-                package.receiver_check.clone()
             } else {
-                flash_plan::check_loaded_receiver(target)
+                flash_plan::check_loaded_receiver(&target)
             };
             let prepared = receiver.prepare(target.clone());
             let prepared = prepared.map(|complete| (Some(complete), None));
