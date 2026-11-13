@@ -26,13 +26,16 @@ def main():
     if len(packages) != 1:
         raise SystemExit('Expected exactly one resolved pioneer-optical dependency')
     package = packages[0]
-    # Refuse a local patch or mutable branch/tag. The source must resolve the
-    # full revision requested by the application's committed dependency pin.
+    # Refuse a local patch or mutable branch/tag. The source must be a published
+    # crates.io release (immutable, ships its examples) or resolve the full git
+    # revision requested by the application's committed dependency pin.
+    source = package['source'] or ''
+    registry = source == 'registry+https://github.com/rust-lang/crates.io-index'
     match = re.fullmatch(
         r'git\+https://github\.com/MattJackson/pioneer-optical\?rev=([0-9a-f]{40})#([0-9a-f]{40})',
-        package['source'] or '')
-    if not match or match[1] != match[2]:
-        raise SystemExit('Pioneer examples require an immutable, matching git revision')
+        source)
+    if not registry and (not match or match[1] != match[2]):
+        raise SystemExit('Pioneer examples require a crates.io release or an immutable, matching git revision')
     targets = {t['name'] for t in package['targets'] if 'example' in t['kind']}
     if not EXAMPLES.keys() <= targets:
         raise SystemExit('Pinned Pioneer dependency is missing mandatory Rust examples')
