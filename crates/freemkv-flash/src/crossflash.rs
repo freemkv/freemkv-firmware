@@ -104,7 +104,14 @@ pub(crate) fn refusal_status(mut error: &(dyn std::error::Error + 'static)) -> C
 
 /// Run the same complete admission checks as Flash and retain refusal kind.
 pub fn decide(platform: Platform, installed: &[u8], target: &[u8]) -> Decision {
-    match evaluate(platform, installed, target) {
+    decide_from(evaluate(platform, installed, target))
+}
+
+/// Turn an evaluation result into the final decision. The single post-processing
+/// step shared by `decide` (bytes in) and the offline catalogue scan's
+/// pre-decoded path, so both yield byte-identical verdicts.
+pub(crate) fn decide_from(result: Result<Evaluation>) -> Decision {
+    match result {
         Ok(Evaluation { mut routes, reason }) => {
             routes.sort();
             routes.dedup();
@@ -290,6 +297,29 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
         .flat_map(|i| (0..packages.len()).map(move |j| (i, j)))
         .filter(|&(i, j)| i != j && keys[i].may_admit(&keys[j]))
         .collect();
+    // Decode each package ONCE. The per-pair path otherwise re-untars and
+    // re-clones each firmware out of its tar for every pair it appears in
+    // (hundreds of times) — that allocation churn, not the decision logic, was
+    // the cost. A package that cannot be prepared (e.g. Normal-only) is `None`
+    // and its pairs fall back to the ordinary byte path (identical verdict).
+    let prepared: Vec<Option<crate::backend::registry::OfflinePrepared>> =
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = packages
+                .chunks(package_chunk)
+                .map(|chunk| {
+                    scope.spawn(move || {
+                        chunk
+                            .iter()
+                            .map(|b| crate::backend::registry::offline_prepare(platform, b))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|handle| handle.join().expect("package decode worker panicked"))
+                .collect()
+        });
     // Pair costs vary substantially by family. Claim one pair at a time so
     // workers finishing cheap candidates can help with the expensive ones.
     // Relaxed ordering suffices: the counter only assigns immutable work.
@@ -307,12 +337,24 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
                 let candidates = &candidates;
                 let next_pair = &next_pair;
                 let completed_pairs = &completed_pairs;
+                let prepared = &prepared;
                 scope.spawn(move || {
                     let mut admitted = Vec::new();
                     while let Some(&(i, j)) =
                         candidates.get(next_pair.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
                     {
-                        let routes = decide(platform, packages[i], packages[j]).routes;
+                        // Same decision core as `decide` (and the live flasher),
+                        // fed the decode-once evidence when both sides have it;
+                        // otherwise the ordinary byte path. Verdicts are identical.
+                        let routes = match (&prepared[i], &prepared[j]) {
+                            (Some(installed), Some(target)) => {
+                                decide_from(crate::backend::registry::offline_routes_prepared(
+                                    installed, target,
+                                ))
+                                .routes
+                            }
+                            _ => decide(platform, packages[i], packages[j]).routes,
+                        };
                         admitted.extend(routes.into_iter().map(|route| (i, j, route)));
                         let completed =
                             completed_pairs.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;

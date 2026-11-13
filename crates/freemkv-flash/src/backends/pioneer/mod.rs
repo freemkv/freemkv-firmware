@@ -487,6 +487,45 @@ pub(crate) fn offline_routes(
     offline_evaluation(authorize_installed(FlashPlan::new(input), Some(installed)))
 }
 
+/// One package's decode, done ONCE and reused across every pair it appears in
+/// (as installed or target). The whole-catalogue scan paired packages by
+/// re-untarring and re-cloning each firmware out of its tar on every pair
+/// (`classify_flash_input`/`verify_coverage`); that allocation churn — not the
+/// decision logic — was the cost. Decoding once collapses it.
+pub(crate) struct OfflinePrepared {
+    plan: ExecutePlan,
+    receiver: Receiver,
+    roles: Vec<(String, String)>,
+}
+
+pub(crate) fn offline_prepare(bytes: &[u8]) -> Result<OfflinePrepared> {
+    let plan = execute_plan(bytes)?;
+    let receiver = receiver_from_components(plan.kernel.as_deref(), Some(&plan.normal))?;
+    let roles = crate::backends::pioneer::backup::component_roles(bytes);
+    Ok(OfflinePrepared {
+        plan,
+        receiver,
+        roles,
+    })
+}
+
+/// Same admission pipeline as [`offline_routes`], fed pre-decoded evidence. It
+/// routes through the identical [`authorize_components`] core; only the decode
+/// location differs, so the verdict is identical (guarded by the
+/// `website_graph_matches_the_flasher_decision` test).
+pub(crate) fn offline_routes_prepared(
+    installed: &OfflinePrepared,
+    target: &OfflinePrepared,
+) -> Result<crate::crossflash::Evaluation> {
+    verify_coverage_roles(&installed.roles, target.plan.kernel.is_some(), true)?;
+    offline_evaluation(authorize_components(
+        FlashPlan::new(target.plan.clone()),
+        installed.plan.kernel.as_deref(),
+        Some(installed.plan.normal.as_slice()),
+        &installed.receiver,
+    ))
+}
+
 fn offline_evaluation(result: Result<AuthorizedPlan>) -> Result<crate::crossflash::Evaluation> {
     let authorized = match result {
         Ok(authorized) => authorized,
@@ -565,19 +604,32 @@ pub(crate) fn authorize_installed(
     plan: FlashPlan,
     installed: Option<&[u8]>,
 ) -> Result<AuthorizedPlan> {
+    let components = classify_flash_input(installed.context(
+        "installed firmware backup is required to recover the receiver control key; refusing update entry"
+    ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
+    let receiver = receiver_from_components(components.0.as_deref(), components.1.as_deref())?;
+    authorize_components(
+        plan,
+        components.0.as_deref(),
+        components.1.as_deref(),
+        &receiver,
+    )
+}
+
+/// Shared decision core with the installed side already decoded (components +
+/// receiver). `authorize_installed` decodes the backup bytes then calls this;
+/// the offline catalogue scan decodes each package ONCE and calls this per
+/// pair, so the same firmware is never re-untarred/re-cloned per pair. Both
+/// paths run identical logic — the only difference is where the decode happens.
+fn authorize_components(
+    plan: FlashPlan,
+    installed_kernel: Option<&[u8]>,
+    installed_normal: Option<&[u8]>,
+    receiver: &Receiver,
+) -> Result<AuthorizedPlan> {
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
-    let owned_components = classify_flash_input(installed.context(
-        "installed firmware backup is required to recover the receiver control key; refusing update entry"
-    ).map_err(|error| error.context(crate::user_error::IssueCode::BackupRequired))?)?;
-    let owned_receiver =
-        receiver_from_components(owned_components.0.as_deref(), owned_components.1.as_deref())?;
-    let (installed_kernel, installed_normal, receiver) = (
-        owned_components.0.as_deref(),
-        owned_components.1.as_deref(),
-        &owned_receiver,
-    );
     if kernel.is_none() {
         // Validate both sides as independent images before comparing their
         // tags. Pair validation would call an installed-drive mismatch a
@@ -707,7 +759,20 @@ pub(crate) fn authorize_installed(
 
 /// Whether `backup` holds a rollback for every region the flash overwrites.
 fn verify_coverage(backup: &[u8], writes_kernel: bool, writes_normal: bool) -> Result<()> {
-    let roles = crate::backends::pioneer::backup::component_roles(backup);
+    verify_coverage_roles(
+        &crate::backends::pioneer::backup::component_roles(backup),
+        writes_kernel,
+        writes_normal,
+    )
+}
+
+/// Coverage check over already-extracted backup roles, so the offline scan can
+/// untar each package once instead of per pair.
+fn verify_coverage_roles(
+    roles: &[(String, String)],
+    writes_kernel: bool,
+    writes_normal: bool,
+) -> Result<()> {
     let has = |role: &str| roles.iter().any(|(r, _)| r == role);
     for (writes, role, label) in [
         (writes_normal, "main", "Normal"),

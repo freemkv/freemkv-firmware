@@ -32,6 +32,36 @@ pub(crate) fn offline_routes(
     }
 }
 
+/// Decode-once evidence for the whole-catalogue scan. Only Pioneer caches
+/// (its tar untar/clone per pair was the cost); MediaTek decode is cheap, so
+/// its pairs fall back to the ordinary byte path. Same decision core either way.
+pub(crate) enum OfflinePrepared {
+    Pioneer(pioneer::OfflinePrepared),
+}
+
+pub(crate) fn offline_prepare(
+    platform: crate::crossflash::Platform,
+    bytes: &[u8],
+) -> Option<OfflinePrepared> {
+    match platform {
+        crate::crossflash::Platform::Pioneer => pioneer::offline_prepare(bytes)
+            .ok()
+            .map(OfflinePrepared::Pioneer),
+        crate::crossflash::Platform::Mediatek => None,
+    }
+}
+
+pub(crate) fn offline_routes_prepared(
+    installed: &OfflinePrepared,
+    target: &OfflinePrepared,
+) -> Result<crate::crossflash::Evaluation> {
+    match (installed, target) {
+        (OfflinePrepared::Pioneer(i), OfflinePrepared::Pioneer(t)) => {
+            pioneer::offline_routes_prepared(i, t)
+        }
+    }
+}
+
 /// Origin evidence is supplied by protocol file analysis, not the front end.
 pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
     pioneer::file_info::file_origin(bytes)
