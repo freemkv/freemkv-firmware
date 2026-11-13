@@ -145,7 +145,7 @@ fn build(
     assert!(engine::audit::audit_image(image, &report).ok());
     engine::validate_metadata(image, &report.image).unwrap();
     freemkv_flash::crossflash::admits(
-        freemkv_flash::crossflash::Platform::Mediatek,
+        freemkv_flash::crossflash::Platform::by_id("mediatek").unwrap(),
         image,
         &report.image,
     )

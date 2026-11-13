@@ -58,7 +58,7 @@ pub(super) fn recovery_target(input: &[u8], member: Option<&str>) -> Result<Vec<
 pub(super) fn wrap_image(image: Vec<u8>) -> Result<Vec<u8>> {
     use super::package::{digest, Component, Manifest, Package, Role, FORMAT};
     use std::collections::BTreeMap;
-    crate::crossflash::admits(crate::crossflash::Platform::Mediatek, &image, &image)?;
+    crate::crossflash::admits(crate::backend::registry::MEDIATEK_PLATFORM, &image, &image)?;
     let manifest = Manifest {
         format: FORMAT.into(),
         version: 1,

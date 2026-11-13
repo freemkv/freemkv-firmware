@@ -21,15 +21,36 @@ pub use pioneer::transport as pioneer_transport;
 static MTK: mtk::Mtk = mtk::Mtk;
 static PIONEER: pioneer::Pioneer = pioneer::Pioneer::new();
 
-pub(crate) fn offline_routes(
-    platform: crate::crossflash::Platform,
-    installed: &[u8],
-    target: &[u8],
-) -> Result<crate::crossflash::Evaluation> {
-    match platform {
-        crate::crossflash::Platform::Pioneer => pioneer::offline_routes(installed, target),
-        crate::crossflash::Platform::Mediatek => mtk::routing::single_stage(installed, target),
+/// A backend's offline crossflash evaluator. [`crate::crossflash`] reaches
+/// backends only through this facet; each implementation delegates to its
+/// backend module. `id` names the package-tree directory and the namespace of
+/// the backend's family fingerprints.
+pub(crate) trait Offline: Sync {
+    /// Package-tree directory and route namespace (`pioneer`, `mediatek`).
+    fn id(&self) -> &'static str;
+    /// Whether a flash input is this backend's firmware (probe order applies).
+    fn claims(&self, input: &[u8]) -> bool;
+    /// Routing facts the scan pre-filters pairs on.
+    fn prefilter(&self, bytes: &[u8]) -> crate::crossflash::Prefilter;
+    /// False only when the flasher's routing must refuse the pair.
+    fn may_admit(
+        &self,
+        installed: &crate::crossflash::Prefilter,
+        target: &crate::crossflash::Prefilter,
+        same_family: bool,
+    ) -> bool;
+    /// The complete offline admission decision for one pair.
+    fn evaluate(&self, installed: &[u8], target: &[u8]) -> Result<crate::crossflash::Evaluation>;
+    /// Package-local evidence decoded once for the whole-catalogue scan.
+    fn prepare(&self, _bytes: &[u8]) -> Option<OfflinePrepared> {
+        None
     }
+    /// [`Self::evaluate`] fed [`Self::prepare`]d evidence (identical verdict).
+    fn evaluate_prepared(
+        &self,
+        installed: &OfflinePrepared,
+        target: &OfflinePrepared,
+    ) -> Result<crate::crossflash::Evaluation>;
 }
 
 /// Decode-once evidence for the whole-catalogue scan. Only Pioneer caches
@@ -39,44 +60,117 @@ pub(crate) enum OfflinePrepared {
     Pioneer(pioneer::OfflinePrepared),
 }
 
-pub(crate) fn offline_prepare(
-    platform: crate::crossflash::Platform,
-    bytes: &[u8],
-) -> Option<OfflinePrepared> {
-    match platform {
-        crate::crossflash::Platform::Pioneer => pioneer::offline_prepare(bytes)
+struct PioneerOffline;
+impl Offline for PioneerOffline {
+    fn id(&self) -> &'static str {
+        "pioneer"
+    }
+    fn claims(&self, input: &[u8]) -> bool {
+        mtk::package::Package::parse(input).is_err() && pioneer::routing::claims_platform(input)
+    }
+    fn prefilter(&self, bytes: &[u8]) -> crate::crossflash::Prefilter {
+        pioneer::offline_prefilter(bytes)
+    }
+    fn may_admit(
+        &self,
+        installed: &crate::crossflash::Prefilter,
+        target: &crate::crossflash::Prefilter,
+        same_family: bool,
+    ) -> bool {
+        // The family gate runs first; a Normal-only target can only be a
+        // same-controller flash (a crossflash needs a Kernel).
+        if target.normal_only {
+            installed.model.is_some() && installed.model == target.model
+        } else {
+            same_family
+        }
+    }
+    fn evaluate(&self, installed: &[u8], target: &[u8]) -> Result<crate::crossflash::Evaluation> {
+        pioneer::offline_routes(installed, target)
+    }
+    fn prepare(&self, bytes: &[u8]) -> Option<OfflinePrepared> {
+        pioneer::offline_prepare(bytes)
             .ok()
-            .map(OfflinePrepared::Pioneer),
-        crate::crossflash::Platform::Mediatek => None,
+            .map(OfflinePrepared::Pioneer)
+    }
+    fn evaluate_prepared(
+        &self,
+        installed: &OfflinePrepared,
+        target: &OfflinePrepared,
+    ) -> Result<crate::crossflash::Evaluation> {
+        let (OfflinePrepared::Pioneer(i), OfflinePrepared::Pioneer(t)) = (installed, target);
+        pioneer::offline_routes_prepared(i, t)
     }
 }
 
-pub(crate) fn offline_routes_prepared(
-    installed: &OfflinePrepared,
-    target: &OfflinePrepared,
-) -> Result<crate::crossflash::Evaluation> {
-    match (installed, target) {
-        (OfflinePrepared::Pioneer(i), OfflinePrepared::Pioneer(t)) => {
-            pioneer::offline_routes_prepared(i, t)
+struct MediatekOffline;
+impl Offline for MediatekOffline {
+    fn id(&self) -> &'static str {
+        "mediatek"
+    }
+    fn claims(&self, input: &[u8]) -> bool {
+        // Anything Pioneer does not claim is evaluated as MediaTek firmware.
+        mtk::package::Package::parse(input).is_ok() || !pioneer::routing::claims_platform(input)
+    }
+    fn prefilter(&self, bytes: &[u8]) -> crate::crossflash::Prefilter {
+        match crate::mediatek_package::Package::parse(bytes) {
+            Ok(package) => mtk::offline_prefilter(package.firmware()),
+            Err(_) => mtk::offline_prefilter(bytes),
         }
     }
+    fn may_admit(
+        &self,
+        installed: &crate::crossflash::Prefilter,
+        target: &crate::crossflash::Prefilter,
+        same_family: bool,
+    ) -> bool {
+        // A same-model image (the image model contains the drive's) skips the
+        // family gate, so it stays a candidate.
+        match (&installed.model, &target.model) {
+            (Some(drive), Some(image)) => {
+                same_family
+                    || image
+                        .to_ascii_uppercase()
+                        .contains(&drive.to_ascii_uppercase())
+            }
+            _ => same_family,
+        }
+    }
+    fn evaluate(&self, installed: &[u8], target: &[u8]) -> Result<crate::crossflash::Evaluation> {
+        mtk::routing::evaluate(installed, target)
+    }
+    fn evaluate_prepared(
+        &self,
+        _installed: &OfflinePrepared,
+        _target: &OfflinePrepared,
+    ) -> Result<crate::crossflash::Evaluation> {
+        unreachable!("MediaTek prepares no offline evidence")
+    }
+}
+
+/// Offline evaluators, in input-claim order (MediaTek packages first, then
+/// Pioneer tars and bare Normal envelopes).
+static OFFLINE: [&'static dyn Offline; 2] = [&PioneerOffline, &MediatekOffline];
+
+/// Each backend's own crossflash platform handle (for backend code only).
+pub(crate) const PIONEER_PLATFORM: crate::crossflash::Platform =
+    crate::crossflash::Platform(&PioneerOffline);
+pub(crate) const MEDIATEK_PLATFORM: crate::crossflash::Platform =
+    crate::crossflash::Platform(&MediatekOffline);
+
+/// Every registered offline evaluator.
+pub(crate) fn offline() -> impl Iterator<Item = &'static dyn Offline> {
+    OFFLINE.iter().copied()
+}
+
+/// The evaluator for the route namespace `id`.
+pub(crate) fn offline_by_id(id: &str) -> Option<&'static dyn Offline> {
+    offline().find(|backend| backend.id() == id)
 }
 
 /// Origin evidence is supplied by protocol file analysis, not the front end.
 pub(crate) fn file_origin(bytes: &[u8]) -> crate::workflow::FileOrigin {
     pioneer::file_info::file_origin(bytes)
-}
-
-/// The routing facts [`crate::crossflash`] pre-filters pairs on.
-pub(crate) fn offline_prefilter(
-    platform: crate::crossflash::Platform,
-    bytes: &[u8],
-) -> crate::crossflash::Prefilter {
-    use crate::crossflash::Platform;
-    match platform {
-        Platform::Pioneer => pioneer::offline_prefilter(bytes),
-        Platform::Mediatek => mtk::offline_prefilter(bytes),
-    }
 }
 
 /// Probe order.
@@ -240,25 +334,5 @@ pub(crate) fn refusal_status(
 pub(crate) fn unsupported_backup_layout(error: &anyhow::Error) -> bool {
     pioneer::routing::unsupported_backup_layout(error)
 }
-pub(crate) fn input_platform(target: &[u8]) -> crate::crossflash::Platform {
-    if mtk::package::Package::parse(target).is_ok() {
-        crate::crossflash::Platform::Mediatek
-    } else if pioneer::routing::claims_platform(target) {
-        crate::crossflash::Platform::Pioneer
-    } else {
-        crate::crossflash::Platform::Mediatek
-    }
-}
-pub(crate) fn offline_evaluate(
-    platform: crate::crossflash::Platform,
-    installed: &[u8],
-    target: &[u8],
-) -> Result<crate::crossflash::Evaluation> {
-    match platform {
-        crate::crossflash::Platform::Mediatek => mtk::routing::evaluate(installed, target),
-        crate::crossflash::Platform::Pioneer => offline_routes(platform, installed, target),
-    }
-}
-
 pub(crate) use mtk::detection::probe as probe_mediatek;
 pub(crate) use pioneer::detection::probe as probe_pioneer;

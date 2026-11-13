@@ -151,27 +151,53 @@ pub(crate) fn decide_from(result: Result<Evaluation>) -> Decision {
     }
 }
 
-/// The firmware platform a set of packages belongs to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Platform {
-    /// Pioneer installer tars (Kernel+Normal or Normal-only components).
-    Pioneer,
-    /// MediaTek MT19xx complete images.
-    Mediatek,
-}
+/// The registered backend a set of packages belongs to, named by its route
+/// namespace (the package-tree directory, e.g. `pioneer`). Crossflash never
+/// matches on a vendor: every decision goes through the backend's facet.
+#[derive(Clone, Copy)]
+pub struct Platform(pub(crate) &'static dyn crate::backend::registry::Offline);
 
 impl Platform {
-    /// Platform of a flash input: a MediaTek package or image, a Pioneer tar, or a
-    /// bare Pioneer Normal `.enc`.
+    /// Platform of a flash input, by the registered backends' input claims.
     pub fn of_input(target: &[u8]) -> Self {
-        crate::backend::registry::input_platform(target)
+        Self(
+            crate::backend::registry::offline()
+                .find(|backend| backend.claims(target))
+                .expect("the last registered evaluator claims every input"),
+        )
+    }
+    /// Every registered platform, in claim order.
+    pub fn all() -> impl Iterator<Item = Self> {
+        crate::backend::registry::offline().map(Self)
+    }
+    /// The platform whose route namespace is `id`.
+    pub fn by_id(id: &str) -> Option<Self> {
+        crate::backend::registry::offline_by_id(id).map(Self)
+    }
+    /// Route namespace and package-tree directory.
+    pub fn id(self) -> &'static str {
+        self.0.id()
+    }
+    pub(crate) fn backend(self) -> &'static dyn crate::backend::registry::Offline {
+        self.0
+    }
+}
+impl PartialEq for Platform {
+    fn eq(&self, other: &Self) -> bool {
+        self.id() == other.id()
+    }
+}
+impl Eq for Platform {}
+impl std::fmt::Debug for Platform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.id())
     }
 }
 
 /// Whether `flash` admits `target` on a drive whose installed firmware is
 /// `installed` (refusal reason on `Err`).
 fn evaluate(platform: Platform, installed: &[u8], target: &[u8]) -> Result<Evaluation> {
-    crate::backend::registry::offline_evaluate(platform, installed, target)
+    platform.backend().evaluate(installed, target)
 }
 
 /// Every alternative of one stage combines with every alternative of the next.
@@ -310,7 +336,7 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
                     scope.spawn(move || {
                         chunk
                             .iter()
-                            .map(|b| crate::backend::registry::offline_prepare(platform, b))
+                            .map(|b| platform.backend().prepare(b))
                             .collect::<Vec<_>>()
                     })
                 })
@@ -348,10 +374,8 @@ pub fn classified_routes(platform: Platform, packages: &[&[u8]]) -> Vec<(usize, 
                         // otherwise the ordinary byte path. Verdicts are identical.
                         let routes = match (&prepared[i], &prepared[j]) {
                             (Some(installed), Some(target)) => {
-                                decide_from(crate::backend::registry::offline_routes_prepared(
-                                    installed, target,
-                                ))
-                                .routes
+                                decide_from(platform.backend().evaluate_prepared(installed, target))
+                                    .routes
                             }
                             _ => decide(platform, packages[i], packages[j]).routes,
                         };
@@ -406,7 +430,7 @@ pub fn classified_links(
 }
 
 /// What decides, without the full gates, that a pair can never be admitted.
-/// Each backend computes it from the bytes (`registry::offline_prefilter`).
+/// Each backend computes it from the bytes (its offline facet).
 pub(crate) struct Prefilter {
     pub(crate) platform: Platform,
     /// The family the flasher's family gate compares (`None`: unknown, which
@@ -421,48 +445,23 @@ pub(crate) struct Prefilter {
 
 impl Prefilter {
     fn of(platform: Platform, bytes: &[u8]) -> Self {
-        if platform == Platform::Mediatek {
-            if let Ok(package) = crate::mediatek_package::Package::parse(bytes) {
-                return crate::backend::registry::offline_prefilter(platform, package.firmware());
-            }
-        }
-        crate::backend::registry::offline_prefilter(platform, bytes)
+        platform.backend().prefilter(bytes)
     }
 
-    /// False only when the flasher's routing must refuse the pair. Pioneer: the
-    /// family gate runs first, and a Normal-only target can only be a
-    /// same-controller flash (a crossflash needs a Kernel). MediaTek: a
-    /// same-model image (the image model contains the drive's) skips the family
-    /// gate, so it stays a candidate.
+    /// False only when the flasher's routing must refuse the pair; the
+    /// platform's facet owns its routing rule over the family comparison.
     pub(crate) fn may_admit(&self, target: &Prefilter) -> bool {
         use crate::firmware_comparison::FamilyRelationship;
-        // Both fingerprints came from current backend analyzers in this process.
-        let namespace = |platform| match platform {
-            Platform::Pioneer => "current-pioneer",
-            Platform::Mediatek => "current-mediatek",
-        };
+        // Both fingerprints came from current backend analyzers in this
+        // process; the platform's route namespace scopes them.
         let same_family = FamilyRelationship::compare(
-            self.family
-                .as_deref()
-                .map(|id| (namespace(self.platform), id)),
+            self.family.as_deref().map(|id| (self.platform.id(), id)),
             target
                 .family
                 .as_deref()
-                .map(|id| (namespace(target.platform), id)),
+                .map(|id| (target.platform.id(), id)),
         ) == FamilyRelationship::Same;
-        match (self.platform, &self.model, &target.model) {
-            (Platform::Pioneer, _, _) if target.normal_only => {
-                self.model.is_some() && self.model == target.model
-            }
-            (Platform::Pioneer, _, _) => same_family,
-            (Platform::Mediatek, Some(drive), Some(image)) => {
-                same_family
-                    || image
-                        .to_ascii_uppercase()
-                        .contains(&drive.to_ascii_uppercase())
-            }
-            (Platform::Mediatek, _, _) => same_family,
-        }
+        self.platform.backend().may_admit(self, target, same_family)
     }
 }
 
@@ -540,7 +539,7 @@ mod route_tests {
 
     #[test]
     fn only_a_typed_adapter_refusal_becomes_a_future_route() {
-        use pioneer_optical::image::KernelHandoffError;
+        use pioneer_optical::classify::KernelHandoffError;
         let future = collect_route(Err(KernelHandoffError::Mismatch {
             installed: 0x400100,
             target: 0x400200,
@@ -584,11 +583,11 @@ mod platform_tests {
         let mut enc = vec![0u8; 512];
         let header = b"********  Copyright(c) 2000 Pioneer Corporation\r\nID : PIONEER BD-RW   BDR-UD04.\r\nRevision Level : 1.11.\r\nHardware Version : SAT 8A10.\r\nDestination : GENERAL.\r\nFile Type : Normal.\r\n";
         enc[..header.len()].copy_from_slice(header);
-        assert_eq!(Platform::of_input(&enc), Platform::Pioneer);
+        assert_eq!(Platform::of_input(&enc).id(), "pioneer");
         let bin = include_bytes!("../tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
-        assert_eq!(Platform::of_input(bin), Platform::Mediatek);
+        assert_eq!(Platform::of_input(bin).id(), "mediatek");
         let mut tar = vec![0u8; 512];
         tar[257..262].copy_from_slice(b"ustar");
-        assert_eq!(Platform::of_input(&tar), Platform::Pioneer);
+        assert_eq!(Platform::of_input(&tar).id(), "pioneer");
     }
 }

@@ -59,11 +59,9 @@ fn run() -> Result<()> {
     };
     let mut groups: BTreeMap<(String, Route), Vec<String>> = BTreeMap::new();
     let mut evaluated_packages = Vec::new();
-    for (dir, ext, platform) in [
-        ("pioneer", "tar", Platform::Pioneer),
-        ("mediatek", "tar", Platform::Mediatek),
-    ] {
-        let (ids, bytes) = read_packages(&Path::new(root).join(dir), ext)?;
+    for platform in Platform::all() {
+        let dir = platform.id();
+        let (ids, bytes) = read_packages(&Path::new(root).join(dir), "tar")?;
         let refs: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
         let found = classified_routes(platform, &refs);
         eprintln!(

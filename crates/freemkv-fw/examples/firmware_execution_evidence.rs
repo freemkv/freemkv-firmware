@@ -109,7 +109,7 @@ fn main() -> Result<()> {
     }
     ensure!(api::verify(&report.image, None)?.ok, "output integrity");
     freemkv_flash::crossflash::admits(
-        freemkv_flash::crossflash::Platform::Mediatek,
+        freemkv_flash::crossflash::Platform::by_id("mediatek").unwrap(),
         original,
         &report.image,
     )?;

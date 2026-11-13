@@ -48,7 +48,7 @@ fn checked_modify(image: &[u8], settings: &BootSettings) -> engine::ModifyReport
             );
             assert!(freemkv_flash::cmac::verify(&updated.image));
             freemkv_flash::crossflash::admits(
-                freemkv_flash::crossflash::Platform::Mediatek,
+                freemkv_flash::crossflash::Platform::by_id("mediatek").unwrap(),
                 image,
                 &updated.image,
             )
@@ -57,7 +57,7 @@ fn checked_modify(image: &[u8], settings: &BootSettings) -> engine::ModifyReport
     }
     assert!(engine::audit::audit_image(image, &report).ok());
     freemkv_flash::crossflash::admits(
-        freemkv_flash::crossflash::Platform::Mediatek,
+        freemkv_flash::crossflash::Platform::by_id("mediatek").unwrap(),
         image,
         &report.image,
     )
@@ -132,7 +132,7 @@ fn held_modify_corpus_roundtrips_every_advertised_choice() {
         assert!(engine::audit::audit_image(&data, &report).ok());
         assert!(freemkv_flash::cmac::verify(&report.image));
         freemkv_flash::crossflash::admits(
-            freemkv_flash::crossflash::Platform::Mediatek,
+            freemkv_flash::crossflash::Platform::by_id("mediatek").unwrap(),
             &data,
             &report.image,
         )
@@ -172,7 +172,7 @@ fn held_modify_corpus_roundtrips_every_advertised_choice() {
                 );
                 assert!(freemkv_flash::cmac::verify(&updated.image));
                 freemkv_flash::crossflash::admits(
-                    freemkv_flash::crossflash::Platform::Mediatek,
+                    freemkv_flash::crossflash::Platform::by_id("mediatek").unwrap(),
                     &data,
                     &updated.image,
                 )

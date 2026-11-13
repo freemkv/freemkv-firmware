@@ -225,7 +225,7 @@ fn wh16ns60_103_normal_modify_qualifies_space_and_preserves_native_programming()
         &report.image
     ));
     freemkv_flash::crossflash::admits(
-        freemkv_flash::crossflash::Platform::Mediatek,
+        freemkv_flash::crossflash::Platform::by_id("mediatek").unwrap(),
         original,
         &report.image,
     )
