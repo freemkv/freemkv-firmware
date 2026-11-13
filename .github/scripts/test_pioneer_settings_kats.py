@@ -5,12 +5,10 @@ TESTS = (
     'backends::pioneer::recovery::tests::pioneer_212u_213u_bank_contract_regression',
     *('backends::pioneer::prepared_tests::bypass_transaction_tests::' + name for name in (
         'differing_startup_words_are_set_by_the_flash_transaction',
-        'unchanged_native_startup_preserves_live_word_in_flash_and_recovery',
-        'unresolved_source_keeps_target_comparison_and_read_only_fallback',
-        'read_only_prerequisite_failures_stop_flash_and_bypass_before_firmware',
+        'proven_startup_word_is_neither_read_nor_written_in_flash_and_recovery',
+        'unresolved_source_sets_the_target_word_and_recovery_refuses_before_firmware',
         'firmware_failures_never_write_persistent_startup_parameters',
-        'matching_native_startup_still_requires_read_only_live_word',
-        'offline_routes_retain_the_executors_read_only_prerequisites',
+        'offline_routes_admit_a_proven_startup_word_without_requirements',
     )),
 )
 COMMAND = ['cargo', 'test', '--locked', '-p', 'freemkv-flash', '--lib']

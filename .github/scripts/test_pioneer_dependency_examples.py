@@ -41,7 +41,7 @@ def main():
     env.setdefault('CARGO_TARGET_DIR', str(Path(metadata['target_directory']).resolve()))
     manifest = package['manifest_path']
     for example, tests in EXAMPLES.items():
-        common = ['--locked', '--manifest-path', manifest, '--features', 'image',
+        common = ['--locked', '--manifest-path', manifest, '--features', 'image,internals',
                   '--example', example]
         for test in tests:
             output = run(['cargo', 'test', *common, test, '--', '--exact'], env)
