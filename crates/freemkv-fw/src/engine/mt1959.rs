@@ -257,6 +257,7 @@ impl Mt1959Engine {
                 boot_init_pair,
                 defaults,
                 Some(identity),
+                false,
             )?
             .1
         } else {
@@ -469,6 +470,7 @@ impl Mt1959Engine {
                             boot_init_pair,
                             defaults,
                             Some(identity),
+                            false,
                         )?;
                         // Editable settings must refer to the replacement hook.
                         let identity = levers

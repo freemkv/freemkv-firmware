@@ -64,8 +64,8 @@ const EXPECT_HANDLER_HEX: &str = "b64b58780e280dd19878c02803d1d878de2800d12ce098
 // setters, and shifted literal/stub placement. Independent execution covers
 // 21,648 settings cases over 123 inputs; 12 broken-code mutations are rejected.
 // PROGRAM completion remains outside those execution checks.
-const EXPECT_CMAC_1: &str = "c5b50825ccf21ad19a582c595085d0ca";
-const EXPECT_CMAC_15: &str = "56c3e5ad27bc2e17606fa2b3210398c8";
+const EXPECT_CMAC_1: &str = "959c7fc76f4b8872677197080108b4d4";
+const EXPECT_CMAC_15: &str = "47e072cf1735f8bcc5c1a4f0c4dc3ec8";
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()

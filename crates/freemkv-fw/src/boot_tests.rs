@@ -501,13 +501,22 @@ fn older_conversion_normal_apis_clear_private_identity_before_native_boot() {
             call_seq,
             "call setup: pop args, restore r4, blx orig_init"
         );
-        let ret_at = (restore + call_seq.len()..bytes.len() - 1)
-            .step_by(2)
-            .find(|&at| bytes[at..at + 2] == 0xbd10u16.to_le_bytes())
-            .expect("pop {{r4, pc}} return after flag writes");
+        // Modern writes the flag table (and clears the private identity) BEFORE
+        // the native call, so the only instruction between BLX and the return is
+        // the POP itself: the native R0/NZCV reach conv+4 untouched. (A `movs`
+        // flag write after the call would clobber NZCV — the exact transparency
+        // proven end-to-end by scripts/test-mtk-hook-execution.py.)
+        let ret = restore + call_seq.len();
+        assert_eq!(
+            &bytes[ret..ret + 2],
+            &0xbd10u16.to_le_bytes(),
+            "pop {{r4, pc}} returns immediately after BLX — nothing clobbers native NZCV"
+        );
         assert!(
-            ret_at > restore + call_seq.len(),
-            "flag writes between call and return"
+            bytes[2..restore]
+                .windows(2)
+                .any(|w| w == 0x7011u16.to_le_bytes()),
+            "the default flag stores (strb r1,[r2]) precede the native call"
         );
         assert_eq!(
             thumb_asm::analysis::literal_value(bytes, restore - 4),

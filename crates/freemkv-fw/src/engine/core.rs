@@ -3178,6 +3178,7 @@ impl Mt1959Engine {
         self.build_boot_init_with_defaults(flag_base, orig_init, &BootSettings::standard())
     }
 
+    #[cfg(test)]
     pub(crate) fn build_boot_init_with_defaults(
         &self,
         flag_base: u32,
@@ -3189,6 +3190,11 @@ impl Mt1959Engine {
 
     /// Build the same native-call-preserving boot wrapper with an optional
     /// conversion-owned identity cache. Native images retain the old bytes.
+    ///
+    /// Defaults to the modern flag placement (before the native call). Classic
+    /// images route through [`Self::build_boot_init_inner`] with `classic =
+    /// true`; `emit_boot_init` selects the correct one from the resolved site.
+    #[cfg(test)]
     pub(crate) fn build_boot_init_with_private_identity(
         &self,
         flag_base: u32,
@@ -3196,32 +3202,67 @@ impl Mt1959Engine {
         defaults: &BootSettings,
         identity: Option<u32>,
     ) -> Result<Vec<u8>> {
+        self.build_boot_init_inner(flag_base, orig_init, defaults, identity, false)
+    }
+
+    /// Emit the boot detour stub. The default flag table is written with
+    /// `movs #imm; strb` so [`crate::boot`] can locate, read and rewrite each
+    /// setting in place by its immediate.
+    ///
+    /// Placement relative to the native `blx` depends on the detour site:
+    ///
+    /// * **Modern** (`classic = false`): write the defaults BEFORE the call.
+    ///   The modern detour sits AFTER the OEM SRAM clear, so the flags survive;
+    ///   and because the only post-call instruction is a flag-neutral
+    ///   `pop {r4, pc}`, the condition flags `orig_init` returns reach `conv+4`
+    ///   unchanged — the detour is transparent to the native call's result.
+    /// * **Classic** (`classic = true`): write the defaults AFTER the call.
+    ///   The classic detour sits BEFORE the SRAM clear that `orig_init`
+    ///   performs, so earlier writes would be wiped. (`conv+4` on the classic
+    ///   images does not consume the native return flags.)
+    pub(crate) fn build_boot_init_inner(
+        &self,
+        flag_base: u32,
+        orig_init: u32,
+        defaults: &BootSettings,
+        identity: Option<u32>,
+        classic: bool,
+    ) -> Result<Vec<u8>> {
         if let Some(identity) = identity {
             ensure!(
                 flag_base.checked_add(UHD_IDENTITY_OFF) == Some(identity),
                 "private UHD identity overlaps flags or scratch"
             );
         }
+        // `movs #imm; strb` run that `crate::boot` relocates/reads in place.
+        // r2 = &flag table; r1 = scratch. Both are popped back as native call
+        // arguments, so clobbering them before the call is safe.
+        let write_flags = |a: &mut Asm| {
+            a.ldr_lit(2, flag_base);
+            for (off, &val) in defaults.flags().iter().enumerate() {
+                a.movs_imm(1, val);
+                a.strb_imm(1, 2, off as u16);
+            }
+            if identity.is_some() {
+                a.movs_imm(1, 0);
+                a.strb_imm(1, 2, UHD_IDENTITY_OFF as u16);
+            }
+        };
         let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         // Preserve all four native arguments and the caller's r4. Keep two
         // words on the stack across the call so its entry remains 8-byte aligned.
         a.push(0x011F); // push {r0-r4, lr}       6 words → sp 8-aligned
+        if !classic {
+            write_flags(&mut a);
+        }
         a.ldr_lit(4, orig_init | 1);
         a.mov_reg(12, 4);
         a.pop(0x000F); // pop {r0-r3} — native call arguments
         a.mov_reg(4, 13);
         a.ldr_imm(4, 4, 0); // restore caller r4 without changing flags
-        a.blx(12); // call orig_init; on classic this includes SRAM clear
-                   // Write defaults AFTER the call so they survive any SRAM clear the
-                   // OEM init performs (classic detours before clear, modern after).
-        a.ldr_lit(2, flag_base); // r2 = &flag table (r0 holds native return value)
-        for (off, &val) in defaults.flags().iter().enumerate() {
-            a.movs_imm(1, val);
-            a.strb_imm(1, 2, off as u16);
-        }
-        if identity.is_some() {
-            a.movs_imm(1, 0);
-            a.strb_imm(1, 2, UHD_IDENTITY_OFF as u16);
+        a.blx(12); // call orig_init; on classic this includes the SRAM clear
+        if classic {
+            write_flags(&mut a);
         }
         a.pop(0x0110); // pop {r4, pc}   restore r4 pad + return to conv+4
         a.finish().map_err(anyhow::Error::from)
@@ -3278,13 +3319,28 @@ impl Mt1959Engine {
     /// caller. The resolver qualifies the pair before this emitter consumes it.
     pub(crate) fn emit_boot_init(
         &self,
-        _image: &[u8],
+        image: &[u8],
         out: &mut [u8],
         flag_base: u32,
         boot_init_pair: (usize, u32),
         defaults: &BootSettings,
     ) -> Result<(u32, u32)> {
-        self.emit_boot_init_with_private_identity(out, flag_base, boot_init_pair, defaults, None)
+        // The resolved pair collapses Modern/Classic to `(conv, orig_init)`;
+        // recover the site class so the stub places its flag writes correctly
+        // (modern: before the native call, flag-transparent; classic: after it,
+        // to survive the SRAM clear). Resolving already succeeded upstream.
+        let classic = matches!(
+            self.find_boot_init(image)?,
+            Some(BootInitSite::ClassicUnconfirmed(_))
+        );
+        self.emit_boot_init_with_private_identity(
+            out,
+            flag_base,
+            boot_init_pair,
+            defaults,
+            None,
+            classic,
+        )
     }
 
     /// Replace the boot hook after installing a conversion that owns a private
@@ -3296,6 +3352,7 @@ impl Mt1959Engine {
         boot_init_pair: (usize, u32),
         defaults: &BootSettings,
         identity: Option<u32>,
+        classic: bool,
     ) -> Result<(u32, u32)> {
         // Detour pair is pre-resolved by [`Self::resolve_boot_init_pair`]:
         // * Modern — the cold/warm-boot convergence `bl <orig_init>` (first
@@ -3304,15 +3361,8 @@ impl Mt1959Engine {
         //   at `anchor+4` — keeps the stub's 0xFF fill alive.
         // * Classic — the helper's unique caller `bl` (only when blessed).
         let (conv, orig_init) = boot_init_pair;
-        let bytes = match identity {
-            Some(identity) => self.build_boot_init_with_private_identity(
-                flag_base,
-                orig_init,
-                defaults,
-                Some(identity),
-            )?,
-            None => self.build_boot_init_with_defaults(flag_base, orig_init, defaults)?,
-        };
+        let bytes =
+            self.build_boot_init_inner(flag_base, orig_init, defaults, identity, classic)?;
         let stub_va = self.free_space(out, bytes.len())?;
         thumb::write(out, stub_va as usize, &bytes);
         // Decode-back guarded like every other install site. This one was the
