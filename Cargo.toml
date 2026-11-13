@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 # freemkv-firmware versions INDEPENDENTLY of the rest of the freemkv stack.
-version = "0.18.0"
+version = "0.18.1"
 edition = "2021"
 rust-version = "1.94"
 license = "MIT"
@@ -49,4 +49,3 @@ opt-level = 2
 
 [profile.test.package.digest]
 opt-level = 2
-

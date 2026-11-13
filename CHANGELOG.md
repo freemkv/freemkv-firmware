@@ -5,6 +5,16 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
+## [0.18.1] - unreleased
+
+### freemkv Flash
+
+- Pioneer cross-flashes no longer stop when the drive's persistent startup word is unset or differs. Flash now sets the word the incoming firmware checks for, in the same settings step that already corrected differing words. The drive's current word is read only to restore it if the update fails before firmware is written. Routes that previously needed a "read-only drive check" are now offered without one. Example: BDR-212U on BDR-L13SH 1.08 to BDX-PR1MA 1.03.
+- Flashing back from firmware that checks the startup word to firmware that never reads it resets the word to its unset state, so the drive ends as it shipped. Recovery skips this reset; it never writes the word.
+- `freemkv-crossflash --why` and the website can explain which hardware contracts keep two firmwares apart.
+- The firmware-route graph scan is about 400 times faster (about 2.5 ms per pair instead of about 1 s), so the website's route data refreshes quickly. Verdicts are unchanged.
+- Releases now publish the website's firmware routes before the downloads appear.
+
 ## [0.18.0] - 2026-11-12
 
 ### freemkv Flash
