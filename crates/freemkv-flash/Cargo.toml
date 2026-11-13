@@ -44,12 +44,12 @@ sha2 = "0.10"
 getrandom = "0.3"
 time = "0.3"
 # Exact reviewed development commit with the shared verified update executor.
-pioneer-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "574195f2ef3df9e993c32d1c0fd04f2483940f07", features = ["drive", "envelope", "analysis"] }
+pioneer-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "ff1775c0470521f5f3916bcd14600c06149e15b1", features = ["drive", "envelope", "analysis"] }
 # Shared step-1 chipset detection (MTEKMT19xx family key) — the same detector
 # freemkv-fw uses, so the flash tool and the modify tool never disagree on a
 # firmware image's family. Detection-only crate (std + anyhow); no cycle.
 freemkv-chipset = { path = "../freemkv-chipset" }
-mediatek-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "f3b896023b82e80d1844787801d1881aba31d53d", features = ["drive", "image", "enc", "oem"] }
+mediatek-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/mediatek-optical", rev = "717af5c8fcdc760687b82115c147d523f82cba90", features = ["drive", "image", "enc", "oem"] }
 # The SCSI pass-through transport (SG_IO / IOKit / SPTI + the macOS shim) is the
 # `scsi` feature of libfreemkv — the single source of truth for that layer.
 # freemkv-flash used to carry a trimmed copy of those backends; now it adapts
@@ -63,7 +63,7 @@ libfreemkv = { git = "https://github.com/freemkv/libfreemkv", tag = "v1.8.2", de
 [dev-dependencies]
 # Tests only: a few flasher tests assert on library internals (startup banks,
 # receiver control). Production builds see only the five public modules.
-pioneer-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "574195f2ef3df9e993c32d1c0fd04f2483940f07", features = ["internals"] }
+pioneer-optical = { version = "=3.0.0", git = "https://github.com/MattJackson/pioneer-optical", rev = "ff1775c0470521f5f3916bcd14600c06149e15b1", features = ["internals"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.190"
