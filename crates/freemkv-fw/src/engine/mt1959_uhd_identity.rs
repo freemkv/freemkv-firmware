@@ -1,7 +1,7 @@
 //! Standalone source-bound private U/5 identity-cache reset emitter.
 //! Emission neither allocates SRAM nor installs a detour or a DI producer.
 use anyhow::{ensure, Context, Result};
-use mediatek_optical::image::analysis::{LegacyIdentityReset, LegacyStackDi};
+use mediatek_optical::classify::analysis::{LegacyIdentityReset, LegacyStackDi};
 use sha2::{Digest, Sha256};
 use thumb_asm::{isa::decode_at, Asm};
 

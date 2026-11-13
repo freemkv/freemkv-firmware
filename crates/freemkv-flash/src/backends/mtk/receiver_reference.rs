@@ -4,18 +4,19 @@ use anyhow::ensure;
 use anyhow::Result;
 #[cfg(test)]
 use mediatek_optical::drive::Transport;
+use mediatek_optical::drive::{ReceiverError, ReferenceError};
+use mediatek_optical::envelope::Envelope;
 #[cfg(test)]
-use mediatek_optical::{cdb, layout};
-use mediatek_optical::{envelope::Envelope, receiver};
+use mediatek_optical::{cdb, envelope};
 
-pub(super) fn issue<E>(error: &receiver::reference::Error<E>) -> crate::user_error::IssueCode {
+pub(super) fn issue<E>(error: &ReferenceError<E>) -> crate::user_error::IssueCode {
     use mediatek_optical::CodedError;
     match error {
-        receiver::reference::Error::Session(
-            receiver::Error::Changed | receiver::Error::InvalidIdentity,
-        ) => crate::user_error::IssueCode::DriveChanged,
+        ReferenceError::Session(ReceiverError::Changed | ReceiverError::InvalidIdentity) => {
+            crate::user_error::IssueCode::DriveChanged
+        }
         _ => match error.kind() {
-            mediatek_optical::operation::IssueKind::InvalidFirmware => {
+            mediatek_optical::IssueKind::InvalidFirmware => {
                 crate::user_error::IssueCode::CurrentInvalid
             }
             kind => crate::user_error::IssueCode::from(kind),
@@ -26,7 +27,7 @@ pub(super) fn issue<E>(error: &receiver::reference::Error<E>) -> crate::user_err
 pub(super) fn detect(
     dev: &mut crate::backend::ReadDevice<'_>,
     input: &[u8],
-) -> Result<receiver::Receiver> {
+) -> Result<mediatek_optical::prepare::Receiver> {
     let envelope = Envelope::load(input).map_err(|error| {
         anyhow::Error::new(error)
             .context("invalid Current MediaTek image")
@@ -34,8 +35,8 @@ pub(super) fn detect(
     })?;
     let shared = crate::transport::SharedDevice::new(dev);
     let mut live = crate::transport::ScsiTransport::reads(&shared);
-    let receiver =
-        receiver::reference::detect_user_supplied(&mut live, &envelope).map_err(|error| {
+    let receiver = mediatek_optical::drive::detect_receiver_with_user_current(&mut live, &envelope)
+        .map_err(|error| {
             let issue = issue(&error);
             anyhow::Error::new(error)
                 .context("Current image receiver analysis failed")
@@ -66,7 +67,10 @@ mod tests {
             "restricted fixture".into()
         }
     }
-    fn detect_device(live: &mut Restricted, input: &[u8]) -> Result<receiver::Receiver> {
+    fn detect_device(
+        live: &mut Restricted,
+        input: &[u8],
+    ) -> Result<mediatek_optical::prepare::Receiver> {
         detect(
             &mut crate::backend::ReadDevice::without_unlocks(live),
             input,
@@ -91,7 +95,7 @@ mod tests {
                 inquiry[0] = 5;
                 inquiry[4] = 31;
                 inquiry[8..36].copy_from_slice(
-                    &self.image[layout::DESCRIPTOR.start..layout::DESCRIPTOR.start + 28],
+                    &self.image[envelope::DESCRIPTOR.start..envelope::DESCRIPTOR.start + 28],
                 );
                 buf.copy_from_slice(&inquiry);
                 return Ok(buf.len());
@@ -120,9 +124,9 @@ mod tests {
     }
     fn image() -> Vec<u8> {
         let mut bytes = super::super::fixture::image(&super::super::fixture::BU3, "BD-RE BU40N", 1);
-        bytes[layout::DESCRIPTOR.start + 24..layout::DESCRIPTOR.start + 28]
+        bytes[envelope::DESCRIPTOR.start + 24..envelope::DESCRIPTOR.start + 28]
             .copy_from_slice(b"INTM");
-        mediatek_optical::image::cmac::resign(&bytes).unwrap()
+        mediatek_optical::envelope::cmac::resign(&bytes).unwrap()
     }
     #[test]
     fn restricted_current_file_supports_full_receiver_analysis_without_writes() {
@@ -131,40 +135,43 @@ mod tests {
             image: image.clone(),
             writes: 0,
         };
-        let mode = receiver::detect_mode(&mut live).unwrap();
+
         // Detection captures receiver code once before analyzing it. A refused
         // physical capture retains the transport error instead of becoming an
         // unknown signature after a scan of unreadable blocks.
-        let Err(error) = receiver::detect(&mut live, &mode) else {
+        let Err(error) = mediatek_optical::drive::detect_receiver(&mut live) else {
             panic!("restricted physical receiver detection must fail");
         };
         match error {
-            receiver::Error::Read(mediatek_optical::drive::Error::Transport(error)) => {
+            ReceiverError::Read(mediatek_optical::drive::Error::Transport(error)) => {
                 assert_eq!(error.to_string(), "restricted read at 0x98000");
             }
             other => panic!("expected refused physical code capture, got {other}"),
         }
         let receiver = detect_device(&mut live, &image).unwrap();
-        assert_eq!(receiver.encoding(), receiver::Encoding::Plaintext);
+        assert_eq!(
+            receiver.encoding(),
+            mediatek_optical::prepare::Encoding::Plaintext
+        );
         assert!(receiver.prepare_command().is_some());
         assert_eq!(live.writes, 0);
     }
     #[test]
     fn modified_current_binds_across_de_marker_without_writes() {
         let mut current = image();
-        current[layout::DESCRIPTOR.start + 0x56] = 0xde;
-        let current = mediatek_optical::image::cmac::resign(&current).unwrap();
+        current[envelope::DESCRIPTOR.start + 0x56] = 0xde;
+        let current = mediatek_optical::envelope::cmac::resign(&current).unwrap();
         let mut live = Restricted {
             image: current.clone(),
             writes: 0,
         };
-        live.image[layout::DESCRIPTOR.start + 0x56] = 0xff;
+        live.image[envelope::DESCRIPTOR.start + 0x56] = 0xff;
         let reference = detect_device(&mut live, &current).unwrap();
         reference.revalidate(&mut live).unwrap();
-        live.image[layout::DESCRIPTOR.start + 0x56] = 0xde;
+        live.image[envelope::DESCRIPTOR.start + 0x56] = 0xde;
         assert!(reference.revalidate(&mut live).is_err());
-        live.image[layout::DESCRIPTOR.start + 0x56] = 0xff;
-        live.image[layout::DESCRIPTOR.start + 0x40] ^= 1;
+        live.image[envelope::DESCRIPTOR.start + 0x56] = 0xff;
+        live.image[envelope::DESCRIPTOR.start + 0x40] ^= 1;
         assert!(reference.revalidate(&mut live).is_err());
         detect_device(&mut live, &current).unwrap();
         assert_eq!(live.writes, 0);
@@ -177,7 +184,7 @@ mod tests {
             image: image.clone(),
             writes: 0,
         };
-        let descriptor = layout::DESCRIPTOR.start;
+        let descriptor = envelope::DESCRIPTOR.start;
         live.image[descriptor + 8..descriptor + 24].copy_from_slice(b"BD-RE BH16NS60  ");
         live.image[descriptor + 24..descriptor + 28].copy_from_slice(b"1.01");
         live.image[descriptor + 0x1c..descriptor + 0x24].copy_from_slice(b"N999999 ");
@@ -185,10 +192,10 @@ mod tests {
         let reference = detect_device(&mut live, &image).unwrap();
         assert_eq!(
             reference.provenance(),
-            receiver::reference::Provenance::UserSuppliedReference
+            mediatek_optical::prepare::Provenance::UserSuppliedReference
         );
         reference.revalidate(&mut live).unwrap();
-        live.image[layout::DESCRIPTOR.start + 24..layout::DESCRIPTOR.start + 28]
+        live.image[envelope::DESCRIPTOR.start + 24..envelope::DESCRIPTOR.start + 28]
             .copy_from_slice(b"1.V1");
         assert!(reference
             .revalidate(&mut live)
@@ -204,7 +211,7 @@ mod tests {
             image: image.clone(),
             writes: 0,
         };
-        live.image[layout::DESCRIPTOR.start + 24..layout::DESCRIPTOR.start + 28]
+        live.image[envelope::DESCRIPTOR.start + 24..envelope::DESCRIPTOR.start + 28]
             .copy_from_slice(b"BOOT");
         let error = detect_device(&mut live, &image).unwrap_err();
         assert_eq!(
@@ -236,8 +243,11 @@ mod tests {
             writes: 0,
         };
         live.image[0x3014] ^= 1;
-        let reference =
-            receiver::reference::detect(&mut live, &Envelope::load(&image).unwrap()).unwrap();
+        let reference = mediatek_optical::drive::detect_receiver_with_current(
+            &mut live,
+            &Envelope::load(&image).unwrap(),
+        )
+        .unwrap();
         reference.revalidate(&mut live).unwrap();
         live.image[0x3014] ^= 2;
         assert!(
@@ -255,7 +265,7 @@ mod tests {
         let receiver = detect_device(&mut live, &image).unwrap();
         assert_eq!(
             receiver.provenance(),
-            receiver::reference::Provenance::UserSuppliedReference
+            mediatek_optical::prepare::Provenance::UserSuppliedReference
         );
         let shared = crate::transport::SharedDevice::new(&mut live);
         let mut reads = crate::transport::ScsiTransport::reads(&shared);
@@ -288,7 +298,10 @@ mod tests {
             writes: 0,
         };
         let receiver = detect_device(&mut live, image).unwrap();
-        assert_eq!(receiver.encoding(), receiver::Encoding::Encrypted);
+        assert_eq!(
+            receiver.encoding(),
+            mediatek_optical::prepare::Encoding::Encrypted
+        );
         assert!(receiver.prepare_command().is_some());
         assert_eq!(live.writes, 0);
     }

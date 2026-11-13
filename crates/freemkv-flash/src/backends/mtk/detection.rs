@@ -9,7 +9,7 @@ pub(crate) fn probe(
     inquiry: &[u8],
     result: &mut Detection,
     failures: &mut Vec<anyhow::Error>,
-) -> Option<mediatek_optical::protocol::Evidence> {
+) -> Option<mediatek_optical::drive::Evidence> {
     let mediatek_response = read(
         dev,
         "MediaTek boot banner",
@@ -26,7 +26,7 @@ pub(crate) fn probe(
         }
     }
     .and_then(
-        |b| match mediatek_optical::protocol::Evidence::parse(inquiry, &b) {
+        |b| match mediatek_optical::drive::Evidence::parse(inquiry, &b) {
             Ok(e) => e,
             Err(source) => {
                 result
@@ -46,6 +46,6 @@ pub(crate) fn probe(
 }
 
 /// BOOT evidence identifies the protocol but only Recovery can bind its loader.
-pub(crate) fn normal_operations_available(evidence: &mediatek_optical::protocol::Evidence) -> bool {
+pub(crate) fn normal_operations_available(evidence: &mediatek_optical::drive::Evidence) -> bool {
     evidence.identity().revision() != "BOOT"
 }

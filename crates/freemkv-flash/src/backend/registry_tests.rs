@@ -497,7 +497,7 @@ fn truncated_feature_header_is_not_protocol_evidence() {
 fn truncated_boot_rom_is_not_protocol_evidence() {
     let mut inquiry = [0; 36];
     inquiry[0] = 5;
-    assert!(mediatek_optical::protocol::Evidence::parse(&inquiry, b"MT1959").is_err());
+    assert!(mediatek_optical::drive::Evidence::parse(&inquiry, b"MT1959").is_err());
 }
 
 #[test]

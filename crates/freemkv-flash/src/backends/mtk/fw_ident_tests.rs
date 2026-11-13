@@ -116,13 +116,14 @@ fn corpus_mt1939_catalog_builds_are_identified() {
     let mut identified = 0;
     for path in paths {
         let image = std::fs::read(&path).unwrap();
-        let Some(key) = mediatek_optical::oem::content_key(&image) else {
+        let Some(key) = mediatek_optical::envelope::content_key(&image) else {
             continue;
         };
         let Some(build) = catalog.build(&key) else {
             continue;
         };
-        if mediatek_optical::image::detect_chip(&image).map(|c| c.family.label()) != Ok("MT1939") {
+        if mediatek_optical::envelope::detect_chip(&image).map(|c| c.family.label()) != Ok("MT1939")
+        {
             continue;
         }
         let r = report(&image[0x3000..0x3020], &image[0x1E_C000..0x1E_C100]);

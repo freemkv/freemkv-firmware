@@ -16,9 +16,10 @@ fn stock() -> Vec<u8> {
 /// page, and this unit's own data in the drive-written regions.
 fn drive_read(image: &[u8], unit: u8) -> Vec<u8> {
     let mut read = image.to_vec();
-    let mirror = layout::BOOT_MIRROR.start..layout::BOOT_MIRROR.end();
-    read.copy_within(mirror, layout::BOOT_PAGE.start);
-    for (i, range) in layout::DRIVE_WRITTEN.iter().enumerate() {
+    let mirror = mediatek_optical::envelope::BOOT_MIRROR.start
+        ..mediatek_optical::envelope::BOOT_MIRROR.end();
+    read.copy_within(mirror, mediatek_optical::envelope::BOOT_PAGE.start);
+    for (i, range) in mediatek_optical::envelope::DRIVE_WRITTEN.iter().enumerate() {
         for k in 0..16 {
             read[range.start + 64 * k + i] = unit.wrapping_add(k as u8);
         }

@@ -5,7 +5,7 @@
 //! nor generate patches. Existing freemkv AKE/encryption controls are separate.
 //! No incomplete media conversion is installed; physical testing is separate.
 use anyhow::{ensure, Context, Result};
-use mediatek_optical::image::analysis::{
+use mediatek_optical::classify::analysis::{
     ClassicConsumer, ClassicConsumerKind, LegacyControlTail, LegacyDensityTarget,
     LegacyIdentityReset, LegacyReverse, LegacyStackDi, SavedLink, UhdArea, UhdAreas, UhdKeyPath,
 };

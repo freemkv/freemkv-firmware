@@ -91,7 +91,15 @@ fn row(image: &[u8]) -> serde_json::Value {
     };
     let capabilities = freemkv_fw::capabilities::report_json(image);
     let verify = match freemkv_fw::api::verify(image, None) {
-        Ok(v) => serde_json::json!(format!("{:?} {} {}", v.verdicts.iter().map(|r| (r.index, r.start, r.end, r.ok)).collect::<Vec<_>>(), v.ok, v.scheme)),
+        Ok(v) => serde_json::json!(format!(
+            "{:?} {} {}",
+            v.verdicts
+                .iter()
+                .map(|r| (r.index, r.start, r.end, r.ok))
+                .collect::<Vec<_>>(),
+            v.ok,
+            v.scheme
+        )),
         Err(error) => serde_json::json!({ "error": format!("{error:#}") }),
     };
     let sign = match freemkv_fw::api::sign(image, None) {
@@ -122,13 +130,19 @@ fn oracle_mediatek_modify_outputs_over_corpus() {
         let bytes = std::fs::read(file).unwrap();
         let members: Vec<(String, Vec<u8>)> = if file.extension().is_some_and(|e| e == "tar") {
             let package = freemkv_flash::mediatek_package::Package::parse(&bytes).unwrap();
-            let mut m = vec![(format!("{}:final", digest(&bytes)), package.firmware().to_vec())];
+            let mut m = vec![(
+                format!("{}:final", digest(&bytes)),
+                package.firmware().to_vec(),
+            )];
             if let Some(i) = package.intermediate() {
                 m.push((format!("{}:intermediate", digest(&bytes)), i.to_vec()));
             }
             m
         } else {
-            vec![(file.file_name().unwrap().to_string_lossy().into_owned(), bytes)]
+            vec![(
+                file.file_name().unwrap().to_string_lossy().into_owned(),
+                bytes,
+            )]
         };
         for (label, data) in members {
             images

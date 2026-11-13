@@ -467,7 +467,7 @@ pub(crate) fn pc_literal(image: &[u8], at: usize) -> Option<u32> {
 /// not evidence of runtime ownership or writability.
 #[cfg(test)]
 pub(crate) fn referenced_sram(image: &[u8]) -> std::collections::BTreeSet<u32> {
-    mediatek_optical::image::analysis::RamReferences::inspect(image)
+    mediatek_optical::classify::analysis::RamReferences::inspect(image)
         .bytes()
         .clone()
 }
@@ -675,14 +675,14 @@ impl Mt1959Engine {
     /// Require one connected native scanner: incoming CDB, table stride,
     /// linked/terminal records, READ BUFFER routing, and balanced handler calls.
     pub fn find_scanner_entry(&self, image: &[u8]) -> Result<u32> {
-        mediatek_optical::image::analysis::CommandScanner::inspect(image)
+        mediatek_optical::classify::analysis::CommandScanner::inspect(image)
             .map(|scanner| scanner.entry() as u32)
             .context("native command scanner contract")
     }
 
     /// Incoming command bytes proven by the connected native scanner grammar.
     pub fn find_cdb_base(&self, image: &[u8]) -> Result<u32> {
-        mediatek_optical::image::analysis::CommandScanner::inspect(image)
+        mediatek_optical::classify::analysis::CommandScanner::inspect(image)
             .map(|scanner| scanner.cdb())
             .context("native CDB operand contract")
     }
@@ -718,13 +718,13 @@ impl Mt1959Engine {
     /// with the live media-gated flag and an in-image handler, and requiring
     /// exactly one whose handler lands on a real `push {…,lr}` prologue.
     pub fn find_live_record(&self, image: &[u8], opcode: u8) -> Result<CommandRecord> {
-        let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(image)
+        let commands = mediatek_optical::classify::analysis::CommandDispatch::inspect(image)
             .context("native command ownership")?;
         Self::live_record_from(&commands, opcode)
     }
 
     pub(super) fn live_record_from(
-        commands: &mediatek_optical::image::analysis::CommandDispatch<'_>,
+        commands: &mediatek_optical::classify::analysis::CommandDispatch<'_>,
         opcode: u8,
     ) -> Result<CommandRecord> {
         let image = commands.image();
@@ -771,7 +771,7 @@ impl Mt1959Engine {
     /// signature over its (fixed) body, which loads `0xaf90`, `[0x02000c7c]`,
     /// `[0x02000c78]`, then `strb r1,[r0]; bx lr`. Returns `(writer, commit_off)`.
     pub fn find_response_writer(&self, image: &[u8]) -> Result<(u32, u32)> {
-        let io = mediatek_optical::image::analysis::ResponseIo::inspect(image)
+        let io = mediatek_optical::classify::analysis::ResponseIo::inspect(image)
             .map_err(|error| anyhow!("native response I/O: {error}"))?;
         Ok((io.writer() as u32, io.buffer_offset()))
     }
@@ -791,7 +791,7 @@ impl Mt1959Engine {
     /// control-block base loaded for the `[rN,#0x28]` store is a `0x04..` literal,
     /// so the entry scan keeps only the `ldr r1,[pc]` that targets SRAM.
     pub fn find_response_commit(&self, image: &[u8]) -> Result<(u32, u32)> {
-        let io = mediatek_optical::image::analysis::ResponseIo::inspect(image)
+        let io = mediatek_optical::classify::analysis::ResponseIo::inspect(image)
             .map_err(|error| anyhow!("native response I/O: {error}"))?;
         Ok((io.commit().entry() as u32, io.commit().length_cell()))
     }
@@ -803,8 +803,9 @@ impl Mt1959Engine {
         lo: usize,
         hi: usize,
     ) -> Result<(u32, u32)> {
-        let commit = mediatek_optical::image::analysis::ResponseCommit::inspect_in(image, lo, hi)
-            .map_err(|error| anyhow!("native response committer: {error}"))?;
+        let commit =
+            mediatek_optical::classify::analysis::ResponseCommit::inspect_in(image, lo, hi)
+                .map_err(|error| anyhow!("native response committer: {error}"))?;
         Ok((commit.entry() as u32, commit.length_cell()))
     }
 
@@ -962,7 +963,7 @@ impl Mt1959Engine {
             [] => {
                 // A used RPC record need not retain its factory tag/padding.
                 // Bind its native copy routine instead of guessing a flash base.
-                let copy = mediatek_optical::image::analysis::NvRecordCopy::detect(image)
+                let copy = mediatek_optical::classify::analysis::NvRecordCopy::detect(image)
                     .context("NV record has no factory marker or source-bound native copy")?;
                 let base = copy.record & !0xfff;
                 ensure!(
@@ -1076,7 +1077,7 @@ impl Mt1959Engine {
     /// Resolve all supported grammars together. Multiple matches, including
     /// different variants, refuse the role rather than selecting by priority.
     pub(crate) fn find_vid_gate(&self, image: &[u8]) -> Result<usize> {
-        mediatek_optical::image::analysis::VidGate::inspect(image)
+        mediatek_optical::classify::analysis::VidGate::inspect(image)
             .map(|gate| gate.anchor())
             .map_err(|e| anyhow!("VID gate: {e}"))
     }
@@ -1092,7 +1093,7 @@ impl Mt1959Engine {
     /// hardcoded). Calling the producer stages the CLEAR VID into that buffer
     /// before any transit encryption.
     pub fn find_vid_producer(&self, image: &[u8]) -> Result<(u32, u32)> {
-        let contract = mediatek_optical::image::analysis::VidGate::inspect(image)
+        let contract = mediatek_optical::classify::analysis::VidGate::inspect(image)
             .map_err(|e| anyhow!("VID producer contract: {e}"))?;
         let gate = contract.anchor() + 16;
         let producer = contract
@@ -1283,7 +1284,7 @@ impl Mt1959Engine {
     /// producer runs, so a prior read or `04 00` deny can't leave the selector
     /// `>= 2` (which makes the producer bail with ABORTED COMMAND until power-cycle).
     pub fn find_vid_agid_struct(&self, image: &[u8]) -> Result<u32> {
-        mediatek_optical::image::analysis::VidGate::inspect(image)
+        mediatek_optical::classify::analysis::VidGate::inspect(image)
             .and_then(|gate| gate.agid_address())
             .map_err(|e| anyhow!("VID AGID operand binding: {e}"))
     }
@@ -1626,7 +1627,7 @@ impl Mt1959Engine {
         identity: Vec<u8>,
         defaults: &BootSettings,
     ) -> Result<Vec<u8>> {
-        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let analysis = mediatek_optical::classify::analysis::ImageAnalysis::inspect(image);
         self.build_handler_from_analysis(
             &analysis,
             oem_handler,
@@ -1640,7 +1641,7 @@ impl Mt1959Engine {
     /// Reuse source-bound native command/response facts from the enclosing build.
     pub(super) fn build_handler_from_analysis(
         &self,
-        analysis: &mediatek_optical::image::analysis::ImageAnalysis<'_>,
+        analysis: &mediatek_optical::classify::analysis::ImageAnalysis<'_>,
         oem_handler: u32,
         flag_base: u32,
         boot_function_entry: u32,
@@ -2562,7 +2563,7 @@ impl Mt1959Engine {
     /// Descriptor-pattern candidates remain discoverable for analysis, but they
     /// do not authorize a BD hook on a different structure-response path.
     pub(crate) fn bd_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
-        let contract = mediatek_optical::image::analysis::MediaGate::inspect(image)
+        let contract = mediatek_optical::classify::analysis::MediaGate::inspect(image)
             .map_err(|error| anyhow!("BD layout: {error}"))?;
         let site = contract.bd_site().ok_or_else(|| anyhow!(
             "descriptor candidate has no proven native BD-control role; refusing to patch an unrelated structure-response path"
@@ -2588,7 +2589,7 @@ impl Mt1959Engine {
     /// fixed offset, so UHD is UNAVAILABLE there — this returns an `Err` (the caller
     /// leaves `uhd_stub_va = 0`, feature not applied), never a guessed site.
     pub(crate) fn uhd_gate_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
-        let contract = mediatek_optical::image::analysis::MediaGate::inspect(image)
+        let contract = mediatek_optical::classify::analysis::MediaGate::inspect(image)
             .map_err(|error| anyhow!("UHD layout: {error}"))?;
         let site = contract.uhd_site().ok_or_else(|| {
             anyhow!("no role-validated native UHD discriminator in this instruction layout")
@@ -2691,7 +2692,7 @@ impl Mt1959Engine {
         image: &[u8],
         flag_base: u32,
     ) -> Result<(usize, Vec<u8>)> {
-        use mediatek_optical::image::analysis::{AuthCell, AuthCellVariant};
+        use mediatek_optical::classify::analysis::{AuthCell, AuthCellVariant};
         let contract = AuthCell::detect(image)?;
         ensure!(
             contract.variant() == AuthCellVariant::R0StateR1Alternate,
@@ -2727,7 +2728,7 @@ impl Mt1959Engine {
     /// Select the state-band implementation from the shared OEM VID-success
     /// contract. Its role and continuations are established before any emission.
     pub fn auth_cell_widen_detour(&self, image: &[u8], flag_base: u32) -> Result<(usize, Vec<u8>)> {
-        use mediatek_optical::image::analysis::{AuthCell, AuthCellVariant};
+        use mediatek_optical::classify::analysis::{AuthCell, AuthCellVariant};
         let contract = AuthCell::detect(image).map_err(|e| anyhow!("auth-cell layout: {e}"))?;
         let bytes = match contract.variant() {
             AuthCellVariant::R0StateR4 => {
@@ -2752,7 +2753,7 @@ impl Mt1959Engine {
     /// Resolve the shared OEM media-control grammar. Ambiguous evidence fails;
     /// a model name or silicon label never grants a code-layout match.
     pub fn find_bd_gate(&self, image: &[u8]) -> Result<u32> {
-        mediatek_optical::image::analysis::MediaGate::inspect(image)
+        mediatek_optical::classify::analysis::MediaGate::inspect(image)
             .map(|gate| gate.anchor() as u32)
             .map_err(|e| anyhow!("AACS media gate: {e}"))
     }
@@ -3014,7 +3015,7 @@ impl Mt1959Engine {
                     "AKE setter literal is out of image"
                 );
             }
-            mediatek_optical::image::analysis::SavedLink::detect(image, reset_site)
+            mediatek_optical::classify::analysis::SavedLink::detect(image, reset_site)
                 .context("AKE writer caller does not prove saved LR and balanced exits")?;
             let bytes = self.build_ake_stub(flag_base, ake_back, reset)?;
             return Ok((reset_site, bytes, ake_gate, BranchKind::Bl));

@@ -1429,7 +1429,7 @@ fn hiding_imports_are_refused() {
          use mediatek_optical::drive::Data as MtkData;\n\
          use pioneer_optical::device::Device;\n\
          use std::fmt::Write as _;\n\
-         pub use mediatek_optical::image::cmac::*;\n");
+         pub use mediatek_optical::envelope::cmac::*;\n");
     assert_eq!(
         hiding_imports(&code),
         [
@@ -1714,7 +1714,7 @@ fn vendor_scan_skips_comments_and_tests() {
 fn optical_dependencies_stay_content_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
     let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
-    for (name, version) in [("pioneer-optical", "2.0.0"), ("mediatek-optical", "2.0.0")] {
+    for (name, version) in [("pioneer-optical", "2.0.0"), ("mediatek-optical", "3.0.0")] {
         let line = manifest
             .lines()
             .find(|line| line.trim_start().starts_with(name))

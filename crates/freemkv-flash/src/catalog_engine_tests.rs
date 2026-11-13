@@ -6,7 +6,8 @@
 
 use super::*;
 use fixture::{catalog_builds, stand_ins};
-use mediatek_optical::update::{InstalledFirmware, PreparationError, ValidatedUpdate};
+use mediatek_optical::classify::{InstalledFirmware, Refusal as PreparationError};
+use mediatek_optical::prepare::ValidatedUpdate;
 
 #[test]
 fn every_catalog_build_reflashes_verbatim_in_the_oem_session() {
@@ -14,7 +15,7 @@ fn every_catalog_build_reflashes_verbatim_in_the_oem_session() {
     let session: Vec<Vec<u8>> = mediatek_optical::DriveClass::Mt19
         .steps()
         .iter()
-        .filter(|s| s.direction == mediatek_optical::update::Direction::Out)
+        .filter(|s| s.direction == mediatek_optical::prepare::Direction::Out)
         .map(|s| s.cdb.to_vec())
         .collect();
     for (i, (build, image)) in stand_ins().iter().enumerate() {
@@ -97,7 +98,7 @@ fn every_catalog_build_reflashes_its_real_oem_image_verbatim() {
     let session: Vec<Vec<u8>> = mediatek_optical::DriveClass::Mt19
         .steps()
         .iter()
-        .filter(|s| s.direction == mediatek_optical::update::Direction::Out)
+        .filter(|s| s.direction == mediatek_optical::prepare::Direction::Out)
         .map(|s| s.cdb.to_vec())
         .collect();
     let recorded = catalog_builds();
@@ -105,17 +106,17 @@ fn every_catalog_build_reflashes_its_real_oem_image_verbatim() {
     let mut covered = Vec::new();
     for (i, path) in paths.iter().enumerate() {
         let image = std::fs::read(path).unwrap();
-        if image.len() != IMAGE_SIZE || mediatek_optical::image::is_drive_read(&image) {
+        if image.len() != IMAGE_SIZE || mediatek_optical::envelope::is_drive_read(&image) {
             continue;
         }
-        let Some(key) = mediatek_optical::oem::content_key(&image) else {
+        let Some(key) = mediatek_optical::envelope::content_key(&image) else {
             continue;
         };
         let Some(build) = catalog.build(&key) else {
             continue;
         };
         let model = build.model.clone();
-        let family = mediatek_optical::image::family(&image).map(|f| f.to_string());
+        let family = mediatek_optical::envelope::family(&image).map(|f| f.to_string());
         assert!(
             recorded.iter().any(|b| b.model == model
                 && b.revision == build.revision
@@ -348,10 +349,10 @@ fn corpus() -> Vec<(String, PathBuf, Vec<u8>)> {
         .into_iter()
         .filter_map(|path| {
             let image = std::fs::read(&path).ok()?;
-            let descriptor = mediatek_optical::layout::DESCRIPTOR.of(&image)?;
+            let descriptor = mediatek_optical::envelope::DESCRIPTOR.of(&image)?;
             let usable = image.len() == IMAGE_SIZE
                 && mediatek_optical::Chip::from_tag(descriptor).is_some()
-                && !mediatek_optical::image::is_drive_read(&image);
+                && !mediatek_optical::envelope::is_drive_read(&image);
             usable.then(|| (sha(&image), path, image))
         })
         .collect()

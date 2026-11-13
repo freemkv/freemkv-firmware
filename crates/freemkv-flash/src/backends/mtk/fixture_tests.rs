@@ -1,5 +1,5 @@
 //! Test fixtures: the hardware configuration a synthetic MediaTek image
-//! needs for `mediatek_optical::image::family` to name its board. Built in
+//! needs for `mediatek_optical::envelope::family` to name its board. Built in
 //! code from the documented record layout; no vendor bytes.
 
 /// A board a synthetic image is built for.
@@ -116,7 +116,7 @@ pub(crate) fn stamp(img: &mut [u8], board: &Board) {
         3, 0x21, 9, 3, 0x61, 0x18, 9, 0xa8, 0, 0x5d, 9, 0x78, 0x88, 0x42,
     ];
     img[0x9a300..0x9a300 + signature.len()].copy_from_slice(&signature);
-    let banner = mediatek_optical::layout::BANNER;
+    let banner = mediatek_optical::envelope::BANNER;
     img[banner.start..banner.end()].fill(0);
     img[banner.start..banner.start + board.banner.len()].copy_from_slice(board.banner.as_bytes());
     img[DESCRIPTOR_PLATFORM..DESCRIPTOR_PLATFORM + 6].copy_from_slice(&padded(board.platform, 6));
@@ -127,9 +127,9 @@ pub(crate) fn stamp(img: &mut [u8], board: &Board) {
 /// A signed update image for `board` and `model` with the catalog's stored
 /// boot page and one active integrity range, `0x11000..=0x1FFFF`.
 pub(crate) fn image(board: &Board, model: &str, code: u8) -> Vec<u8> {
-    use mediatek_optical::image::cmac;
-    use mediatek_optical::layout;
-    let mut img: Vec<u8> = (0..layout::IMAGE_SIZE)
+    use mediatek_optical::envelope;
+    use mediatek_optical::envelope::cmac;
+    let mut img: Vec<u8> = (0..envelope::IMAGE_SIZE)
         .map(|i| (i % 251) as u8 ^ code)
         .collect();
     let boot = super::oem::catalog()
@@ -137,8 +137,8 @@ pub(crate) fn image(board: &Board, model: &str, code: u8) -> Vec<u8> {
         .expect("a stored boot page")
         .boot_page()
         .to_vec();
-    img[..layout::BOOT_PAGE.len].copy_from_slice(&boot);
-    let d = layout::DESCRIPTOR.start;
+    img[..envelope::BOOT_PAGE.len].copy_from_slice(&boot);
+    let d = envelope::DESCRIPTOR.start;
     img[d..d + 8].copy_from_slice(b"HL-DT-ST");
     img[d + 0x18..d + 0x1C].copy_from_slice(b"1.00");
     img[d + 0x08..d + 0x18].fill(b' ');
@@ -163,16 +163,16 @@ pub(crate) fn without_record(img: &[u8]) -> Vec<u8> {
             .position(|w| w == b"\x55\xAAUNIQUE")
             .expect("a stamped record");
     img[at] = 0;
-    mediatek_optical::image::cmac::resign(&img).expect("a well-formed integrity table")
+    mediatek_optical::envelope::cmac::resign(&img).expect("a well-formed integrity table")
 }
 
 /// The live identity of a drive running `image`, as the plan reads it.
 pub(crate) fn identity(image: &[u8]) -> mediatek_optical::Identity {
-    use mediatek_optical::layout;
+    use mediatek_optical::envelope;
     mediatek_optical::Identity::parse(
         &[0; mediatek_optical::INQUIRY_LEN],
-        layout::BANNER.of(image).unwrap(),
-        layout::DESCRIPTOR.of(image).unwrap(),
+        envelope::BANNER.of(image).unwrap(),
+        envelope::DESCRIPTOR.of(image).unwrap(),
     )
     .unwrap()
 }
@@ -263,11 +263,11 @@ pub(crate) fn board(key: &str) -> Board {
 /// and factory contents (the catalog holds no code bytes).
 pub(crate) fn stand_in(build: &CatalogBuild, seed: u8) -> Vec<u8> {
     let mut img = image(&board(&build.hardware), &build.model, seed);
-    let d = mediatek_optical::layout::DESCRIPTOR.start;
+    let d = mediatek_optical::envelope::DESCRIPTOR.start;
     img[d..d + 0x08].copy_from_slice(&padded(build.vendor(), 8));
     img[d + 0x18..d + 0x1C].copy_from_slice(&format!("{:<4}", build.revision).as_bytes()[..4]);
     img[..0x400].copy_from_slice(&build.boot);
-    for (range, contents) in mediatek_optical::layout::DRIVE_WRITTEN
+    for (range, contents) in mediatek_optical::envelope::DRIVE_WRITTEN
         .iter()
         .zip(&build.regions)
     {
@@ -286,7 +286,7 @@ pub(crate) fn stand_ins() -> Vec<(CatalogBuild, Vec<u8>)> {
         .enumerate()
         .map(|(i, b)| {
             let image = stand_in(&b, i as u8);
-            let family = mediatek_optical::image::family(&image).map(|f| f.to_string());
+            let family = mediatek_optical::envelope::family(&image).map(|f| f.to_string());
             assert_eq!(family.as_deref(), Some(b.family.as_str()), "{}", b.model);
             (b, image)
         })
@@ -302,12 +302,12 @@ fn stamped_boards_have_their_families() {
         // stale MTEKMT1939 label) and its family hash flips accordingly.
         (JB8, "336e449ab6a827e3"),
     ] {
-        let mut img = vec![0x11u8; mediatek_optical::layout::IMAGE_SIZE];
-        let d = mediatek_optical::layout::DESCRIPTOR.start;
+        let mut img = vec![0x11u8; mediatek_optical::envelope::IMAGE_SIZE];
+        let d = mediatek_optical::envelope::DESCRIPTOR.start;
         img[d + 0x34..d + 0x3E].copy_from_slice(board.tag.as_bytes());
         stamp(&mut img, &board);
         assert_eq!(
-            mediatek_optical::image::family(&img).map(|f| f.to_string()),
+            mediatek_optical::envelope::family(&img).map(|f| f.to_string()),
             Some(family.to_string()),
             "{board:?}"
         );

@@ -2,7 +2,7 @@
 //! Static absence is not proof of runtime ownership or hardware writability.
 use super::core::{FLASHWRITE_SCRATCH_OFF, NUM_FEATURES, SRAM_END, SRAM_LO};
 use anyhow::{anyhow, Result};
-use mediatek_optical::image::analysis::RamReferences;
+use mediatek_optical::classify::analysis::RamReferences;
 
 pub(super) struct SramPlacement {
     references: RamReferences,

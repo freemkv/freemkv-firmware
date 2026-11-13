@@ -6,8 +6,8 @@
 use std::ops::Range;
 
 use anyhow::{Context, Result};
-use mediatek_optical::image::{cmac, detect_chip, is_drive_read, is_uhd, ChipInfo};
-use mediatek_optical::{layout, oem};
+use mediatek_optical::envelope;
+use mediatek_optical::envelope::{cmac, detect_chip, is_drive_read, is_uhd, ChipInfo};
 use sha2::{Digest, Sha256};
 
 use super::{Mtk, IMAGE_SIZE};
@@ -144,7 +144,7 @@ fn analyze(source: String, image: &[u8], chip: &ChipInfo, control: &Control) -> 
     control.check()?;
     let drive_read = is_drive_read(image);
     let catalog = super::oem::catalog();
-    let key = oem::content_key(image);
+    let key = envelope::content_key(image);
     let build = key.as_ref().and_then(|k| catalog.build(k));
     let entries = entries(image)?;
     control.check()?;
@@ -192,7 +192,7 @@ fn analyze(source: String, image: &[u8], chip: &ChipInfo, control: &Control) -> 
         );
         span.fields.push(Field::new(
             "Erased",
-            if layout::is_erased(&image[gap]) {
+            if envelope::is_erased(&image[gap]) {
                 "Yes"
             } else {
                 "No"
@@ -343,10 +343,10 @@ fn fixed_spans(
     image: &[u8],
     chip: &ChipInfo,
     drive_read: bool,
-    build: Option<&oem::Build>,
+    build: Option<&envelope::OemBuild>,
     entries: &[Entry],
 ) -> Vec<Span> {
-    let span = |range: layout::Range, role: RegionRole| {
+    let span = |range: envelope::Range, role: RegionRole| {
         Span::new(
             range.start..range.end(),
             capitalized(range.name),
@@ -355,7 +355,7 @@ fn fixed_spans(
         )
     };
     let mut boot = span(
-        layout::BOOT_PAGE,
+        envelope::BOOT_PAGE,
         if drive_read {
             RegionRole::ReadBack
         } else {
@@ -366,14 +366,14 @@ fn fixed_spans(
         "Form",
         if drive_read {
             "Read back (equal to the boot mirror; flash stores a different page)"
-        } else if super::oem::catalog().knows_boot_page(&image[..layout::BOOT_PAGE.len]) {
+        } else if super::oem::catalog().knows_boot_page(&image[..envelope::BOOT_PAGE.len]) {
             "Stored (a known OEM boot page)"
         } else {
             "Stored (not a known OEM boot page)"
         },
     ));
-    let mut banner = span(layout::BANNER, RegionRole::Identity);
-    let text = image[layout::BANNER.start..layout::BANNER.end()]
+    let mut banner = span(envelope::BANNER, RegionRole::Identity);
+    let text = image[envelope::BANNER.start..envelope::BANNER.end()]
         .split(|&b| b == 0)
         .next()
         .unwrap_or_default();
@@ -381,14 +381,14 @@ fn fixed_spans(
         "Banner",
         sanitize_ascii(String::from_utf8_lossy(text).trim()),
     ));
-    let mirror = span(layout::BOOT_MIRROR, RegionRole::Code);
-    let mut table = span(layout::CMAC_TABLE, RegionRole::Integrity);
+    let mirror = span(envelope::BOOT_MIRROR, RegionRole::Code);
+    let mut table = span(envelope::CMAC_TABLE, RegionRole::Integrity);
     table.fields.push(Field::new(
         "Active entries",
         entries.iter().filter(|e| e.entry.is_active()).count(),
     ));
     table.tables.push(integrity_table(entries));
-    let mut descriptor = span(layout::DESCRIPTOR, RegionRole::Identity);
+    let mut descriptor = span(envelope::DESCRIPTOR, RegionRole::Identity);
     descriptor.fields.extend([
         Field::new("Vendor", sanitize_ascii(&chip.vendor)),
         Field::new("Model", sanitize_ascii(&chip.model)),
@@ -402,12 +402,12 @@ fn fixed_spans(
         ),
     ]);
     let mut spans = vec![boot, banner, mirror, table, descriptor];
-    for (i, range) in layout::DRIVE_WRITTEN.iter().enumerate() {
+    for (i, range) in envelope::DRIVE_WRITTEN.iter().enumerate() {
         let mut region = span(*range, RegionRole::PerUnit);
         let bytes = &image[range.start..range.end()];
         region.fields.push(Field::new(
             "State",
-            if layout::is_erased(bytes) {
+            if envelope::is_erased(bytes) {
                 "Erased"
             } else {
                 "Written"
@@ -437,7 +437,7 @@ fn fixed_spans(
 fn integrity_table(entries: &[Entry]) -> TableView {
     TableView {
         format: "AES-CMAC integrity table".into(),
-        range: 0..layout::CMAC_TABLE.len,
+        range: 0..envelope::CMAC_TABLE.len,
         records: entries
             .iter()
             .map(|e| {

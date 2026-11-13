@@ -1,6 +1,6 @@
 //! Unit tests for [`super`]: the model gate and the same-hardware-family
 //! crossflash gate. A crossflash is admitted exactly when the image and the
-//! drive are one hardware family (`mediatek_optical::image::family`), both
+//! drive are one hardware family (`mediatek_optical::envelope::family`), both
 //! non-INTM, with equal boot banners; there is no curated allowlist and no
 //! override.
 
@@ -16,7 +16,7 @@ const BU3_FAMILY: &str = "309829e6c3c8f31d";
 const JB8_BANNER: &[u8; 16] = b"MT1959 Boot JB8 ";
 
 fn family(board: &Board) -> Option<Family> {
-    mediatek_optical::image::family(&fixture::image(board, "BD-RE  X", 0))
+    mediatek_optical::envelope::family(&fixture::image(board, "BD-RE  X", 0))
 }
 
 fn build(vendor: &str, product: &str, revision: &str, board: &Board, banner: &[u8; 16]) -> Build {
@@ -498,7 +498,9 @@ fn the_gate_takes_no_override_parameter() {
             );
         }
     }
-    assert!(signatures >= 10, "{signatures} signatures scanned");
+    // The gate itself is `mediatek_optical::classify` (its `decide_*` take no
+    // flag either); this adapter only phrases its refusals.
+    assert!(signatures >= 8, "{signatures} signatures scanned");
     for word in [
         "allow_crossflash",
         "--force",

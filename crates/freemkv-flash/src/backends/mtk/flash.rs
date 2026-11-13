@@ -5,9 +5,9 @@
 
 use anyhow::{anyhow, bail, Context, Result};
 
-impl From<mediatek_optical::operation::IssueKind> for crate::user_error::IssueCode {
-    fn from(kind: mediatek_optical::operation::IssueKind) -> Self {
-        use mediatek_optical::operation::IssueKind;
+impl From<mediatek_optical::IssueKind> for crate::user_error::IssueCode {
+    fn from(kind: mediatek_optical::IssueKind) -> Self {
+        use mediatek_optical::IssueKind;
         match kind {
             IssueKind::InvalidFirmware => Self::FirmwareInvalid,
             IssueKind::UnsupportedFirmware => Self::UnsupportedFirmware,
@@ -19,11 +19,10 @@ impl From<mediatek_optical::operation::IssueKind> for crate::user_error::IssueCo
         }
     }
 }
+use mediatek_optical::classify::{self, InstalledFirmware, Refusal};
 use mediatek_optical::drive::Error as DriveError;
-use mediatek_optical::update::{
-    ExecutionRuntime, FlashTransport, InstalledFirmware, PreparationError, Stage, Status,
-    ValidatedUpdate,
-};
+use mediatek_optical::drive::{ExecutionRuntime, FlashTransport, Stage, Status};
+use mediatek_optical::prepare::ValidatedUpdate;
 use mediatek_optical::Identity;
 
 use super::crossflash::{Build, Verdict};
@@ -44,7 +43,7 @@ struct Plan {
     image: Vec<u8>,
     following: Vec<Executable>,
     live: Identity,
-    receiver: mediatek_optical::receiver::Receiver,
+    receiver: mediatek_optical::prepare::Receiver,
     drive_product: String,
     verdict: Verdict,
 }
@@ -58,11 +57,11 @@ pub(super) struct Authorized {
 }
 
 struct Executable {
-    prepared: mediatek_optical::receiver::PreparedUpdate,
+    prepared: mediatek_optical::prepare::PreparedUpdate,
 }
 
 impl Authorized {
-    fn bind(self, receiver: &mediatek_optical::receiver::Receiver) -> Result<Executable> {
+    fn bind(self, receiver: &mediatek_optical::prepare::Receiver) -> Result<Executable> {
         let prepared = receiver.bind_prepared(&self.prepared).map_err(refusal)?;
         Ok(Executable { prepared })
     }
@@ -122,7 +121,7 @@ impl FlashFacet for Mtk {
             None => detect_receiver(dev)
                 .map_err(|source| crate::backend::CurrentFirmwareRequired { source })?,
         };
-        let enc = receiver.encoding() == mediatek_optical::receiver::Encoding::Encrypted;
+        let enc = receiver.encoding() == mediatek_optical::prepare::Encoding::Encrypted;
         if req.enc_override.is_some_and(|requested| requested != enc) {
             bail!("encoding override contradicts the active MediaTek receiver");
         }
@@ -260,18 +259,21 @@ impl FlashFacet for Mtk {
 fn prepare_next_stage(intermediate: &[u8], target: &[u8]) -> Result<Executable> {
     check_image(target)?;
     let envelope = mediatek_optical::envelope::Envelope::load(intermediate)?;
-    let receiver = mediatek_optical::receiver::Receiver::from_firmware(&envelope)
+    let receiver = mediatek_optical::prepare::Receiver::from_firmware(&envelope)
         .map_err(|e| anyhow!("{e}"))?;
     let live = identity_of_image(intermediate)?;
-    let product = Build::of_image(intermediate)?.product;
-    let verdict =
-        crossflash::decide_plan(&product, &Build::of_drive(&live), &Build::of_image(target)?)?;
+    let product = crossflash::build_of_image(intermediate)?.product;
+    let verdict = crossflash::decide_plan(
+        &product,
+        &Build::of_drive(&live),
+        &crossflash::build_of_image(target)?,
+    )?;
     authorize_bytes(&live, &product, verdict, target, Some(intermediate))?.bind(&receiver)
 }
 
 fn execute_stage(
     dev: &mut WriteDevice<'_>,
-    prepared: &mediatek_optical::receiver::PreparedUpdate,
+    prepared: &mediatek_optical::prepare::PreparedUpdate,
     temporary_firmware: bool,
     completed_stages: Vec<String>,
 ) -> Result<UpdateEvidence> {
@@ -289,10 +291,10 @@ fn execute_stage(
         )
         .map_err(|error| {
             let (phase, write_started) = match &error {
-                mediatek_optical::receiver::ExecutionError::Receiver(_) => {
+                mediatek_optical::drive::ExecutionError::Receiver(_) => {
                     ("receiver revalidation", false)
                 }
-                mediatek_optical::receiver::ExecutionError::Flash(error) => failure_phase(error),
+                mediatek_optical::drive::ExecutionError::Flash(error) => failure_phase(error),
                 // Future library failures retain conservative write evidence.
                 _ => ("firmware update", true),
             };
@@ -302,24 +304,24 @@ fn execute_stage(
                 crate::backend::UpdateProgress::UploadComplete
             } else {
                 match &error {
-                    mediatek_optical::receiver::ExecutionError::Receiver(_) => {
+                    mediatek_optical::drive::ExecutionError::Receiver(_) => {
                         crate::backend::UpdateProgress::Preflight
                     }
-                    mediatek_optical::receiver::ExecutionError::Flash(
-                        mediatek_optical::update::FlashError::Entry(_),
+                    mediatek_optical::drive::ExecutionError::Flash(
+                        mediatek_optical::drive::FlashError::Entry(_),
                     ) if writes.empty_write_attempted() => {
                         crate::backend::UpdateProgress::EntryAttempted
                     }
-                    mediatek_optical::receiver::ExecutionError::Flash(
-                        mediatek_optical::update::FlashError::Entry(_),
+                    mediatek_optical::drive::ExecutionError::Flash(
+                        mediatek_optical::drive::FlashError::Entry(_),
                     ) => crate::backend::UpdateProgress::Preflight,
-                    mediatek_optical::receiver::ExecutionError::Flash(
-                        mediatek_optical::update::FlashError::Transfer { .. },
+                    mediatek_optical::drive::ExecutionError::Flash(
+                        mediatek_optical::drive::FlashError::Transfer { .. },
                     ) if runtime.payload_bytes_accepted == 0 => {
                         crate::backend::UpdateProgress::PayloadAttempted
                     }
-                    mediatek_optical::receiver::ExecutionError::Flash(
-                        mediatek_optical::update::FlashError::Transfer { .. },
+                    mediatek_optical::drive::ExecutionError::Flash(
+                        mediatek_optical::drive::FlashError::Transfer { .. },
                     ) => crate::backend::UpdateProgress::PayloadAccepted,
                     _ if runtime.upload_complete => crate::backend::UpdateProgress::UploadComplete,
                     _ if runtime.payload_bytes_accepted > 0 => {
@@ -335,7 +337,7 @@ fn execute_stage(
                 }
             };
             let source = match error {
-                mediatek_optical::receiver::ExecutionError::Flash(error) => flash_error(error),
+                mediatek_optical::drive::ExecutionError::Flash(error) => flash_error(error),
                 error => anyhow::Error::new(error),
             };
             source
@@ -355,7 +357,7 @@ fn execute_stage(
     Ok(completion_evidence(completion))
 }
 
-pub(super) fn log_transfer(plan: &mediatek_optical::receiver::TransferPlan) {
+pub(super) fn log_transfer(plan: &mediatek_optical::prepare::TransferPlan) {
     crate::diagnostics::record(format!(
         "MediaTek transfer plan: receiver={:?} provenance={:?} header={:?} body={:?} prepare={:?} image_sha256={} wire_sha256={}",
         plan.receiver().mode(), plan.receiver().provenance(), plan.encoding().header,
@@ -381,9 +383,9 @@ pub(super) fn log_transfer(plan: &mediatek_optical::receiver::TransferPlan) {
 
 /// Retain transport sense and error sources beneath lifecycle metadata.
 pub(super) fn flash_error(
-    error: mediatek_optical::update::FlashError<anyhow::Error>,
+    error: mediatek_optical::drive::FlashError<anyhow::Error>,
 ) -> anyhow::Error {
-    use mediatek_optical::update::FlashError;
+    use mediatek_optical::drive::FlashError;
     let detail = error.to_string();
     match error {
         FlashError::Entry(source) => crate::transport::mtk_err(source).context(detail),
@@ -399,9 +401,9 @@ pub(super) fn flash_error(
 }
 
 pub(super) fn failure_phase(
-    error: &mediatek_optical::update::FlashError<anyhow::Error>,
+    error: &mediatek_optical::drive::FlashError<anyhow::Error>,
 ) -> (&'static str, bool) {
-    use mediatek_optical::update::FlashError;
+    use mediatek_optical::drive::FlashError;
     match error {
         FlashError::Entry(_) => ("update entry", true),
         FlashError::Transfer { .. } => ("firmware transfer", true),
@@ -423,9 +425,9 @@ fn publish_running_identity(inquiry: &[u8]) -> String {
 }
 
 pub(super) fn completion_evidence(
-    completion: mediatek_optical::update::FlashOutcome,
+    completion: mediatek_optical::drive::FlashOutcome,
 ) -> UpdateEvidence {
-    use mediatek_optical::update::ReadbackQuality;
+    use mediatek_optical::drive::ReadbackQuality;
     let (verified_regions, unverified_regions) = match completion.readback {
         ReadbackQuality::Complete(verified) if verified.checked > 0 => (
             vec![format!(
@@ -478,8 +480,8 @@ pub(super) fn completion_evidence(
 /// The plan's crossflash lines: what changes, how to go back, and the hardware
 /// family the image and the drive share.
 fn crossflash_lines(live: &Identity, image: &[u8]) -> Result<Vec<PlanLine>> {
-    let (from, to) = (Build::of_drive(live), Build::of_image(image)?);
-    let family = mediatek_optical::image::family(image)
+    let (from, to) = (Build::of_drive(live), crossflash::build_of_image(image)?);
+    let family = mediatek_optical::envelope::family(image)
         .map(|f| f.to_string())
         .unwrap_or_else(|| "unknown".into());
     Ok(vec![
@@ -522,10 +524,10 @@ pub(super) fn authorize_bytes(
         None => ValidatedUpdate::prepare_without_installed(image, live),
     }
     .map_err(|error| {
-        if matches!(error, PreparationError::FamilyMismatch { .. }) {
+        if matches!(error, Refusal::FamilyMismatch { .. }) {
             crate::backend::HardwareMismatch {
                 installed_model: drive_product.into(),
-                target_model: Build::of_image(image)
+                target_model: crossflash::build_of_image(image)
                     .map(|build| build.product)
                     .unwrap_or_default(),
                 source: refusal(error),
@@ -558,7 +560,10 @@ fn authorize_crossflash(
     backup: &[u8],
     image: &[u8],
 ) -> Result<String> {
-    let (installed, target) = (Build::of_image(backup)?, Build::of_image(image)?);
+    let (installed, target) = (
+        crossflash::build_of_image(backup)?,
+        crossflash::build_of_image(image)?,
+    );
     let now = crossflash::decide_authorized(drive_product, &installed, &target)?;
     crossflash::ensure_unchanged(planned, now)?;
     rollback(backup, image).context(crossflash::BACKUP_NOT_FLASHABLE_BACK)?;
@@ -591,13 +596,7 @@ fn check_image(image: &[u8]) -> Result<()> {
 /// The drive identity a complete image (or backup) reports, as the gates see a
 /// live drive running it. The INQUIRY is blank; the gates read the descriptor.
 fn identity_of_image(image: &[u8]) -> Result<Identity> {
-    use mediatek_optical::layout;
-    Identity::parse(
-        &[0; mediatek_optical::INQUIRY_LEN],
-        layout::BANNER.of(image).unwrap_or_default(),
-        layout::DESCRIPTOR.of(image).unwrap_or_default(),
-    )
-    .context("an empty INQUIRY")
+    Ok(mediatek_optical::envelope::identity(image))
 }
 
 /// The whole `flash` decision with no device: `installed` (a complete image)
@@ -606,12 +605,12 @@ fn identity_of_image(image: &[u8]) -> Result<Identity> {
 pub(crate) fn decide_offline(installed: &[u8], image: &[u8]) -> Result<()> {
     check_image(image)?;
     let live = identity_of_image(installed)?;
-    ValidatedUpdate::check(image, &live).map_err(refusal)?;
-    let drive_product = Build::of_image(installed)?.product;
+    classify::check(image, &live).map_err(refusal)?;
+    let drive_product = crossflash::build_of_image(installed)?.product;
     let verdict = crossflash::decide_plan(
         &drive_product,
         &Build::of_drive(&live),
-        &Build::of_image(image)?,
+        &crossflash::build_of_image(image)?,
     )?;
     authorize_bytes(&live, &drive_product, verdict, image, Some(installed)).map(|_| ())
 }
@@ -672,8 +671,8 @@ impl Runtime {
 }
 
 impl ExecutionRuntime<anyhow::Error> for Runtime {
-    fn operation_progress(&mut self, progress: mediatek_optical::operation::Progress) {
-        use mediatek_optical::operation::{Component, Phase};
+    fn operation_progress(&mut self, progress: mediatek_optical::Progress) {
+        use mediatek_optical::{Component, Phase};
         crate::output::publish(crate::output::Event::Phase {
             phase: match progress.phase {
                 Phase::Reading => "reading",
@@ -790,38 +789,18 @@ impl ExecutionRuntime<anyhow::Error> for Runtime {
     }
 }
 
-/// The hardware-family gate's refusal, worded like Pioneer's `family_gate`.
-/// Both families must be known and equal; nothing overrides it.
-pub(crate) fn family_gate(error: &PreparationError) -> Option<String> {
-    Some(match error {
-        PreparationError::FamilyMismatch { installed, target } => format!(
-            "family mismatch: installed firmware is family {installed}, target is family \
-             {target} (a different board line; not update-compatible)"
-        ),
-        PreparationError::UnknownInstalledFamily => "could not determine the installed firmware \
-             family (the pre-flash backup has no hardware configuration record to profile); \
-             flashing requires a known family"
-            .to_string(),
-        PreparationError::UnknownTargetFamily => "could not determine the target firmware family \
-             (the image has no hardware configuration record to profile); flashing requires a \
-             known family"
-            .to_string(),
-        _ => return None,
-    })
-}
-
 /// A refusal before any write, in the flasher's words.
-fn refusal(error: PreparationError) -> anyhow::Error {
+fn refusal(error: Refusal) -> anyhow::Error {
     use mediatek_optical::CodedError;
     let issue = crate::user_error::IssueCode::from(error.kind());
-    if let Some(reason) = family_gate(&error) {
+    if let Some(reason) = error.family_gate() {
         return anyhow::Error::new(error).context(reason).context(issue);
     }
     match error {
-        PreparationError::ChipMismatch { .. } => anyhow::Error::new(error)
+        Refusal::ChipMismatch { .. } => anyhow::Error::new(error)
             .context("This gate cannot be overridden.")
             .context(issue),
-        PreparationError::UnknownDriveChip => anyhow::Error::new(error)
+        Refusal::UnknownDriveChip => anyhow::Error::new(error)
             .context("refusing to flash")
             .context(issue),
         other => anyhow::Error::new(other)
@@ -845,7 +824,7 @@ impl Mtk {
     ) -> Result<(Identity, Verdict)> {
         check_image(image)?;
         let (live, identity_read) = live_identity_checked(dev);
-        ValidatedUpdate::check(image, &live).map_err(|error| {
+        classify::check(image, &live).map_err(|error| {
             let error = refusal(error);
             if identity_read {
                 error
@@ -855,7 +834,7 @@ impl Mtk {
                     .context(crate::user_error::IssueCode::Connection)
             }
         })?;
-        let target = Build::of_image(image)?;
+        let target = crossflash::build_of_image(image)?;
         let mut drive = Build::of_drive(&live);
         // A crossflash gates on the boot banner too (its loader tells apart the
         // families that share a platform). `live_identity` skips the banner for

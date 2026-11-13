@@ -1,4 +1,4 @@
-use mediatek_optical::image::analysis::RamReferences;
+use mediatek_optical::classify::analysis::RamReferences;
 
 fn main() {
     let path = std::env::args()

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::platform::MockScsiDevice;
-use mediatek_optical::update::Step;
+use mediatek_optical::prepare::Step;
 
 // ---- CDB layouts ------------------------------------------------------------
 
@@ -534,7 +534,7 @@ fn flash_stream_sends_the_oem_sequence() {
 
 #[test]
 fn transfer_error_keeps_structured_boundary_and_sense_for_user_guidance() {
-    let error = super::flash::flash_error(mediatek_optical::update::FlashError::Transfer {
+    let error = super::flash::flash_error(mediatek_optical::drive::FlashError::Transfer {
         offset: 0x1fc000,
         length: 16384,
         source: mediatek_optical::drive::Error::Transport(anyhow::Error::new(

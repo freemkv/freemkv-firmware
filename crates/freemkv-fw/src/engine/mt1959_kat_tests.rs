@@ -1998,7 +1998,7 @@ fn ake_reject_writer_requires_a_native_call_join_and_setter_operands() {
         .ake_detour(&bad_state, super::FLAG_TABLE_BASE)
         .is_err());
 
-    let caller = mediatek_optical::image::analysis::SavedLink::detect(&source, site).unwrap();
+    let caller = mediatek_optical::classify::analysis::SavedLink::detect(&source, site).unwrap();
     let mut missing_frame = source;
     missing_frame[caller.entry()..caller.entry() + 2].copy_from_slice(&[0xc0, 0x46]);
     assert!(engine

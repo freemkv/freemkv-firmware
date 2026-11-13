@@ -9,7 +9,7 @@ pub enum Evidence {
     /// Pioneer F1 structure and parsed identity.
     Pioneer(pioneer_optical::protocol::Evidence),
     /// MediaTek boot signature and parsed identity.
-    Mediatek(Box<mediatek_optical::protocol::Evidence>),
+    Mediatek(Box<mediatek_optical::drive::Evidence>),
 }
 /// Complete discovery conclusion; transport failures remain errors.
 #[derive(Clone, Debug)]

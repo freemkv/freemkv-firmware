@@ -1,6 +1,6 @@
 //! Source-bound candidate direct-call ancestry; never a proof of dynamic absence.
 use anyhow::{Context, Result};
-use mediatek_optical::image::analysis::{CommandDispatch, SavedLink};
+use mediatek_optical::classify::analysis::{CommandDispatch, SavedLink};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

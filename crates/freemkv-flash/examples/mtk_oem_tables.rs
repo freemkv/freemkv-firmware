@@ -9,12 +9,18 @@
 use anyhow::{bail, Context, Result};
 use flate2::{write::GzEncoder, Compression};
 use mediatek_optical::{
-    image::{cmac, detect_chip, family, hardware, is_drive_read, FAMILY_SCHEME},
-    layout,
-    oem::{self, Build, Catalog, Factory},
+    envelope::{
+        self, cmac, detect_chip, family, hardware, is_drive_read, Catalog, Factory,
+        OemBuild as Build, FAMILY_SCHEME,
+    },
     Chip,
 };
 use serde_json::{json, Map, Value};
+use sha2::{Digest as _, Sha256};
+
+fn sha256(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
+}
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     io::Write,
@@ -31,7 +37,7 @@ fn files(root: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         let ty = entry.file_type()?;
         if ty.is_dir() {
             files(&entry.path(), out)?;
-        } else if ty.is_file() && entry.metadata()?.len() == layout::IMAGE_SIZE as u64 {
+        } else if ty.is_file() && entry.metadata()?.len() == envelope::IMAGE_SIZE as u64 {
             out.push(entry.path());
         }
     }
@@ -41,11 +47,11 @@ fn files(root: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 /// What a drive returns once `image` is flashed and has written per-unit data.
 fn simulated_read(image: &[u8]) -> Vec<u8> {
     let mut read = image.to_vec();
-    let mirror = read[layout::BOOT_MIRROR.start..layout::BOOT_MIRROR.end()].to_vec();
-    read[..layout::BOOT_PAGE.len].copy_from_slice(&mirror);
-    for range in layout::DRIVE_WRITTEN {
+    let mirror = read[envelope::BOOT_MIRROR.start..envelope::BOOT_MIRROR.end()].to_vec();
+    read[..envelope::BOOT_PAGE.len].copy_from_slice(&mirror);
+    for range in envelope::DRIVE_WRITTEN {
         let region = &mut read[range.start..range.end()];
-        if !layout::is_erased(region) {
+        if !envelope::is_erased(region) {
             region[..32].fill(0x52);
         }
     }
@@ -115,7 +121,7 @@ const MODIFIED: &[&str] = &[
 /// The descriptor's downgrade-enable byte: freemkv-fw and community
 /// "DE" builds set it to `0xDE` without re-signing, as it is outside every
 /// integrity range.
-const DE_BYTE: usize = layout::DESCRIPTOR.start + 0x56;
+const DE_BYTE: usize = envelope::DESCRIPTOR.start + 0x56;
 
 /// Why an image is not an OEM build, or `None` for an OEM build.
 fn exclusion(image: &[u8], prov: &Provenance) -> Option<String> {
@@ -148,8 +154,8 @@ fn exclusion(image: &[u8], prov: &Provenance) -> Option<String> {
     }
     // An update image carries the factory calibration template: the
     // `VENDOR_INFO` header and nothing else. More is one unit's calibration.
-    let calibration = layout::CALIBRATION.of(image)?;
-    if !layout::is_erased(&calibration[16..]) {
+    let calibration = envelope::CALIBRATION.of(image)?;
+    if !envelope::is_erased(&calibration[16..]) {
         return Some("carries a unit's calibration (a drive dump)".into());
     }
     if hardware(image).is_none() {
@@ -162,15 +168,15 @@ fn exclusion(image: &[u8], prov: &Provenance) -> Option<String> {
 fn without_de_byte(image: &[u8]) -> Vec<u8> {
     let mut out = image.to_vec();
     out[DE_BYTE] = 0;
-    out[..layout::BOOT_PAGE.len].fill(0);
-    for range in layout::DRIVE_WRITTEN {
+    out[..envelope::BOOT_PAGE.len].fill(0);
+    for range in envelope::DRIVE_WRITTEN {
         out[range.start..range.end()].fill(0);
     }
     out
 }
 
 fn normalized_key(image: &[u8]) -> [u8; 32] {
-    oem::sha256(&without_de_byte(image))
+    sha256(&without_de_byte(image))
 }
 
 /// Digest matches select candidates; bytes still decide DE-copy equality.
@@ -243,7 +249,7 @@ fn scan_candidates(
     let mut seen = BTreeSet::new();
     for path in paths {
         let image = std::fs::read(&path)?;
-        let sha = hex(&oem::sha256(&image));
+        let sha = hex(&sha256(&image));
         if seen.contains(&sha) {
             continue;
         }
@@ -330,13 +336,13 @@ fn main() -> Result<()> {
     let mut by_key: BTreeMap<String, Vec<Candidate>> = BTreeMap::new();
     for c in kept {
         let image = std::fs::read(&c.path)?;
-        let key = hex(&oem::content_key(&image).context("content key")?);
+        let key = hex(&envelope::content_key(&image).context("content key")?);
         by_key.entry(key).or_default().push(c);
     }
 
     let mut blobs: BTreeMap<String, String> = BTreeMap::new();
     let mut blob = |bytes: &[u8]| -> String {
-        let digest = hex(&oem::sha256(bytes));
+        let digest = hex(&sha256(bytes));
         blobs.entry(digest.clone()).or_insert_with(|| hex(bytes));
         digest
     };
@@ -401,10 +407,10 @@ fn main() -> Result<()> {
                 let written = members
                     .iter()
                     .map(|c| &c.factory.regions()[i])
-                    .filter(|r| !layout::is_erased(r));
+                    .filter(|r| !envelope::is_erased(r));
                 let best = mode(written.map(|r| hex(r)));
                 if best.is_empty() {
-                    hex(&vec![0xFF; layout::DRIVE_WRITTEN[i].len])
+                    hex(&vec![0xFF; envelope::DRIVE_WRITTEN[i].len])
                 } else {
                     best
                 }
@@ -440,7 +446,7 @@ fn main() -> Result<()> {
         let c = &candidates[0];
         let image = std::fs::read(&c.path)?;
         let read = simulated_read(&image);
-        let rebuilt = oem::rebuild(&read, &catalog)
+        let rebuilt = envelope::rebuild(&read, &catalog)
             .with_context(|| format!("rebuilding {}", c.path.display()))?;
         let exact = rebuilt.provenance.is_exact();
         if !rebuild_admitted(exact, rebuilt.image == image, cataloged.contains(key)) {
@@ -556,7 +562,7 @@ mod tests {
 
     #[test]
     fn normalized_keys_retain_only_a_digest_per_full_image() {
-        let image = vec![0x5a; layout::IMAGE_SIZE];
+        let image = vec![0x5a; envelope::IMAGE_SIZE];
         let key = normalized_key(&image);
         assert_eq!(
             key.len(),
@@ -565,12 +571,12 @@ mod tests {
         );
         let mut changed = image.clone();
         changed[DE_BYTE] = 0xde;
-        changed[..layout::BOOT_PAGE.len].fill(0x22);
-        for range in layout::DRIVE_WRITTEN {
+        changed[..envelope::BOOT_PAGE.len].fill(0x22);
+        for range in envelope::DRIVE_WRITTEN {
             changed[range.start..range.end()].fill(0x33);
         }
         assert_eq!(normalized_key(&changed), key);
-        changed[layout::BOOT_MIRROR.start + 128] ^= 1;
+        changed[envelope::BOOT_MIRROR.start + 128] ^= 1;
         assert_ne!(
             normalized_key(&changed),
             key,
@@ -582,9 +588,9 @@ mod tests {
         let dir = test_dir();
         let original_path = dir.join("original.bin");
         let different_path = dir.join("different.bin");
-        let original = vec![0x5a; layout::IMAGE_SIZE];
+        let original = vec![0x5a; envelope::IMAGE_SIZE];
         let mut different = original.clone();
-        different[layout::BOOT_MIRROR.start + 128] ^= 1;
+        different[envelope::BOOT_MIRROR.start + 128] ^= 1;
         std::fs::write(&original_path, &original).unwrap();
         std::fs::write(&different_path, different).unwrap();
         let mut de_copy = original.clone();

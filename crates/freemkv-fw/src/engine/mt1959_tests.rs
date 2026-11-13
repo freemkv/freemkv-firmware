@@ -235,8 +235,8 @@ fn wh16ns60_103_normal_modify_qualifies_space_and_preserves_native_programming()
     for span in [0x1a000..0x1a828, 0x13cd76..0x13cf0e, 0x13cbb4..0x13ccf0] {
         assert_eq!(&original[span.clone()], &report.image[span]);
     }
-    for reserved in core::iter::once(mediatek_optical::layout::BOOT_AREA)
-        .chain(mediatek_optical::layout::DRIVE_WRITTEN)
+    for reserved in core::iter::once(mediatek_optical::envelope::BOOT_AREA)
+        .chain(mediatek_optical::envelope::DRIVE_WRITTEN)
     {
         assert_eq!(
             &original[reserved.start..reserved.end()],
@@ -1225,7 +1225,7 @@ fn reported_wh16ns58_v9_build_installs_raw_read_inside_signed_flash() {
         .iter()
         .any(|hook| hook.id == "bd-native" && hook.reason.is_some()));
     let boundary_stub = fact(raw, "auth_cell_stub_va").unwrap();
-    let contract = mediatek_optical::image::analysis::AuthCell::detect(original).unwrap();
+    let contract = mediatek_optical::classify::analysis::AuthCell::detect(original).unwrap();
     let bytes = Mt1959Engine
         .build_authcell_widen_value_stub(FLAG_TABLE_BASE, contract.deny() as u32, 1)
         .unwrap();
@@ -1334,13 +1334,13 @@ fn agid_binding_uses_the_pointer_read_by_native_code() {
 
 #[test]
 fn response_io_binds_inquiry_before_selecting_a_writer() {
-    use mediatek_optical::image::analysis::ResponseIo;
+    use mediatek_optical::classify::analysis::ResponseIo;
     for image in [
         include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin").as_slice(),
         include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin").as_slice(),
         include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin").as_slice(),
     ] {
-        let scanner = mediatek_optical::image::analysis::CommandScanner::inspect(image).unwrap();
+        let scanner = mediatek_optical::classify::analysis::CommandScanner::inspect(image).unwrap();
         assert_eq!(
             scanner.entry() as u32,
             Mt1959Engine.find_scanner_entry(image).unwrap()
@@ -1361,7 +1361,7 @@ fn response_io_binds_inquiry_before_selecting_a_writer() {
 
 #[test]
 fn scanner_requires_connected_record_and_command_semantics() {
-    use mediatek_optical::image::analysis::CommandScanner;
+    use mediatek_optical::classify::analysis::CommandScanner;
     use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
     let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
     let entry = CommandScanner::inspect(original).unwrap().entry();
@@ -1398,7 +1398,7 @@ fn scanner_requires_connected_record_and_command_semantics() {
 
 #[test]
 fn native_dispatch_ignores_orphans_and_rejects_cycles() {
-    use mediatek_optical::image::analysis::{CommandDispatch, CommandScanner, ResponseIo};
+    use mediatek_optical::classify::analysis::{CommandDispatch, CommandScanner, ResponseIo};
     let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
     let commands = CommandDispatch::inspect(original).unwrap();
     let native = *commands.record(0x3c, 1).unwrap();
@@ -1457,10 +1457,10 @@ fn native_response_contract_corpus() {
             format!("{:x}", sha2::Sha256::digest(&image)),
             row["sha256"].as_str().unwrap()
         );
-        let new = mediatek_optical::image::analysis::ResponseIo::inspect(&image);
+        let new = mediatek_optical::classify::analysis::ResponseIo::inspect(&image);
         let result = match new {
             Ok(io) => {
-                let scanner = mediatek_optical::image::analysis::CommandScanner::inspect(&image)
+                let scanner = mediatek_optical::classify::analysis::CommandScanner::inspect(&image)
                     .unwrap_or_else(|e| panic!("{} scanner: {e}", row["sha256"]));
                 assert_eq!(
                     scanner.entry() as u32,
@@ -1521,7 +1521,7 @@ fn response_writer_ignores_unrelated_buffer_and_refuses_duplicate_role() {
 
 #[test]
 fn response_committer_requires_length_queue_and_balanced_return() {
-    use mediatek_optical::image::analysis::ResponseCommit;
+    use mediatek_optical::classify::analysis::ResponseCommit;
     use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
     let original = include_bytes!("../../tests/fixtures/BU40N_OEM_1.00.bin");
     let contract = ResponseCommit::at(original, 0x98180).unwrap();
@@ -1598,7 +1598,7 @@ fn response_committer_requires_length_queue_and_balanced_return() {
 
 #[test]
 fn response_committer_preserves_pointer_and_count_relationships() {
-    use mediatek_optical::image::analysis::ResponseCommit;
+    use mediatek_optical::classify::analysis::ResponseCommit;
     use thumb_asm::isa::{decode_at, encode_bytes, Operand, Reg};
     let original = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
     assert!(ResponseCommit::at(original, 0x985fc).is_ok());
@@ -1641,7 +1641,7 @@ fn response_committer_preserves_pointer_and_count_relationships() {
 #[test]
 fn response_writer_supports_immediate_shift_buffer_offsets() {
     let image = include_bytes!("../../tests/fixtures/BW16D1HT_OEM_3.03.bin");
-    let io = mediatek_optical::image::analysis::ResponseIo::inspect(image).unwrap();
+    let io = mediatek_optical::classify::analysis::ResponseIo::inspect(image).unwrap();
     assert_eq!((io.writer(), io.buffer_offset()), (0xa192c, 0xda00));
     assert_eq!(
         Mt1959Engine.find_response_writer(image).unwrap(),
@@ -1655,7 +1655,7 @@ fn response_writer_supports_immediate_shift_buffer_offsets() {
 #[test]
 fn modify_does_not_require_the_report_only_sense_setter_anchor() {
     let mut img = fixture();
-    let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(&img);
+    let analysis = mediatek_optical::classify::analysis::ImageAnalysis::inspect(&img);
     let entry = analysis.commands().unwrap().scanner().entry();
     let hw = |image: &[u8], at: usize| u16::from_le_bytes([image[at], image[at + 1]]);
     let is_movs = |image: &[u8], at: usize, rt: u16| {

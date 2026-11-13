@@ -2,7 +2,7 @@
 //! Files are private test inputs; stdout contains only the result manifest.
 use anyhow::{ensure, Context, Result};
 use freemkv_fw::{api, artifact::Artifact, boot::BootSettings, engine};
-use mediatek_optical::image::analysis::{ClassicSpeed, ResponseIo};
+use mediatek_optical::classify::analysis::{ClassicSpeed, ResponseIo};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -12,7 +12,7 @@ fn digest(bytes: &[u8]) -> String {
 }
 
 fn native_contracts(data: &[u8]) -> Value {
-    use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
+    use mediatek_optical::classify::analysis::{UhdArea, UhdAreas};
     let areas = UhdAreas::inspect(data);
     let response = match ResponseIo::inspect(data) {
         Ok(io) => json!({"status":"source-bound", "writer":io.writer(),
@@ -180,7 +180,7 @@ fn main() -> Result<()> {
             .context("auth native refusal edge")?;
         contracts["auth_cell"] = json!({"site":site, "deny":branch,
             "value_register":(comparison >> 8) & 7,
-            "native_refusal": mediatek_optical::image::analysis::AuthCell::detect(original).ok().filter(|c| c.variant() == mediatek_optical::image::analysis::AuthCellVariant::R0StateR1Alternate).map(|c| c.refusal())});
+            "native_refusal": mediatek_optical::classify::analysis::AuthCell::detect(original).ok().filter(|c| c.variant() == mediatek_optical::classify::analysis::AuthCellVariant::R0StateR1Alternate).map(|c| c.refusal())});
     }
     let media_sites: Vec<_> = ["bd_site", "uhd_site"]
         .into_iter()
@@ -280,12 +280,12 @@ fn main() -> Result<()> {
             if let Some(c) = parameter.hook {
                 routing!([c]);
             }
-            if let Ok(di) = mediatek_optical::image::analysis::ClassicDi::detect(original) {
+            if let Ok(di) = mediatek_optical::classify::analysis::ClassicDi::detect(original) {
                 metadata.insert(di.prevalidation,json!({"kind":"di","state":di.state,"entry":di.entry,
                     "replay_continuation":di.replay_continuation,"format":di.format,"format_flag":di.format_flag,
                     "layers":di.layers,"layer_store":di.layer_store,"epilogue":di.epilogue,"one_register":di.one_register}));
             } else {
-                let di = mediatek_optical::image::analysis::LegacyStackDi::detect(original)?;
+                let di = mediatek_optical::classify::analysis::LegacyStackDi::detect(original)?;
                 let mut info = json!({"kind":"legacy_di_admission","state":di.state,"entry":di.caller.entry(),
                     "frame_bytes":di.caller.stack_bytes(),"prevalidation":di.prevalidation,
                     "replay_continuation":di.replay_continuation,"format":di.format,"format_flag":di.format_flag,
@@ -296,7 +296,7 @@ fn main() -> Result<()> {
                 info["kind"] = json!("legacy_di_layers");
                 metadata.insert(di.layers, info);
             }
-            use mediatek_optical::image::analysis::{ClassicConsumer, ClassicConsumerKind};
+            use mediatek_optical::classify::analysis::{ClassicConsumer, ClassicConsumerKind};
             contracts["preserved_native_workflows"] = match ClassicConsumer::inspect_kind(
                 original,
                 plan.state_address(),
@@ -339,7 +339,7 @@ fn main() -> Result<()> {
                 plan.pending().is_empty(),
                 "installed incomplete media conversion"
             );
-            use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
+            use mediatek_optical::classify::analysis::{UhdArea, UhdAreas};
             let areas = UhdAreas::inspect(original);
             let state = areas.media_state_address()?;
             for role in [
@@ -369,7 +369,7 @@ fn main() -> Result<()> {
                 .identity_reset()
                 .map(|_| engine::mt1959_uhd_identity::marker_address(flags))
                 .transpose()?;
-            if let Ok(di) = mediatek_optical::image::analysis::LegacyStackDi::detect(original) {
+            if let Ok(di) = mediatek_optical::classify::analysis::LegacyStackDi::detect(original) {
                 let mut info = json!({"kind":"legacy_di_admission","state":di.state,"entry":di.caller.entry(),
                     "frame_bytes":di.caller.stack_bytes(),"prevalidation":di.prevalidation,
                     "replay_continuation":di.replay_continuation,"format":di.format,"format_flag":di.format_flag,

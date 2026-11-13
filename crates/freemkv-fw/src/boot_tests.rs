@@ -350,7 +350,7 @@ fn normal_modify_refuses_a_raw_drive_dump_before_creating_unflashable_output() {
     let mut image = fixture();
     let mirror = image[0x10000..0x10400].to_vec();
     image[..0x400].copy_from_slice(&mirror);
-    assert!(mediatek_optical::image::is_drive_read(&image));
+    assert!(mediatek_optical::envelope::is_drive_read(&image));
     let error = crate::api::modify_with_defaults(&image, &BootSettings::standard()).unwrap_err();
     assert!(format!("{error:#}").contains("raw MediaTek drive dump"));
     assert_eq!(

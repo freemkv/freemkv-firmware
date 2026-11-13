@@ -1,7 +1,7 @@
 //! Read-only instruction-contract survey; does not infer physical UHD capability.
 //! Usage: cargo run -p freemkv-fw --example mtk_uhd_scan -- OUTPUT.json [--modify-pairs] ROOT ...
 use anyhow::{bail, Context, Result};
-use mediatek_optical::image::analysis::{
+use mediatek_optical::classify::analysis::{
     AuthCell, ClassicCalibration, ClassicConsumer, ClassicDi, ClassicParameter, ClassicPosition,
     ClassicPositionSetup, ClassicReadCompletion, ClassicReadPosition, CommandDispatch, MediaGate,
     UhdArea, UhdAreas,
@@ -92,7 +92,7 @@ fn scan(bytes: &[u8]) -> Value {
             let result = |name: &str,
                           value: std::result::Result<
                 String,
-                mediatek_optical::image::analysis::Error,
+                mediatek_optical::classify::analysis::Error,
             >| {
                 match value {
                     Ok(contract) => json!({"role":name,"bound":true,"contract":contract}),

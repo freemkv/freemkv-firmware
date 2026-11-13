@@ -18,12 +18,17 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 /// One receiver-bound stage: every byte stream and command the executor uses.
-fn stage(prepared: &mediatek_optical::receiver::PreparedUpdate) -> serde_json::Value {
+fn stage(prepared: &mediatek_optical::prepare::PreparedUpdate) -> serde_json::Value {
     let plan = prepared.plan();
     let steps: String = plan
         .steps()
         .iter()
-        .map(|s| format!("{} {:02x?} {:?} {}\n", s.label, s.cdb, s.direction, s.length))
+        .map(|s| {
+            format!(
+                "{} {:02x?} {:?} {}\n",
+                s.label, s.cdb, s.direction, s.length
+            )
+        })
         .collect();
     serde_json::json!({
         "receiver": format!(
@@ -69,7 +74,7 @@ fn correction(installed: &[u8], target: &[u8]) -> serde_json::Value {
         let verdict =
             crossflash::decide_plan(&product, &Build::of_drive(&live), &Build::of_image(&image)?)?;
         let envelope = mediatek_optical::envelope::Envelope::load(&installed)?;
-        let receiver = mediatek_optical::receiver::Receiver::from_firmware(&envelope)
+        let receiver = mediatek_optical::prepare::Receiver::from_firmware(&envelope)
             .map_err(|e| anyhow!("{e}"))?;
         authorize_bytes(&live, &product, verdict, &image, Some(&installed))?.bind(&receiver)
     })();
@@ -91,12 +96,12 @@ fn correction(installed: &[u8], target: &[u8]) -> serde_json::Value {
 fn rebuild(image: &[u8]) -> serde_json::Value {
     let mut read = image.to_vec();
     if read.len() == IMAGE_SIZE {
-        let page = mediatek_optical::layout::BOOT_PAGE.len;
-        let mirror = mediatek_optical::layout::BOOT_MIRROR.start;
+        let page = mediatek_optical::envelope::BOOT_PAGE.len;
+        let mirror = mediatek_optical::envelope::BOOT_MIRROR.start;
         let copy = read[mirror..mirror + page].to_vec();
         read[..page].copy_from_slice(&copy);
     }
-    match mediatek_optical::oem::rebuild(&read, crate::backends::mtk::oem::catalog()) {
+    match mediatek_optical::envelope::rebuild(&read, crate::backends::mtk::oem::catalog()) {
         Ok(r) => serde_json::json!({
             "image": digest(&r.image),
             "equals_input": r.image == image,
@@ -204,10 +209,18 @@ fn oracle_mediatek_verdicts_and_transfers_over_corpus() {
     });
 
     let slices: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
-    let routes = crate::crossflash::classified_routes(crate::crossflash::Platform::Mediatek, &slices);
+    let routes =
+        crate::crossflash::classified_routes(crate::crossflash::Platform::Mediatek, &slices);
     let routes: String = routes
         .iter()
-        .map(|(i, j, r)| format!("{}>{} {}\n", ids[*i], ids[*j], serde_json::to_string(r).unwrap()))
+        .map(|(i, j, r)| {
+            format!(
+                "{}>{} {}\n",
+                ids[*i],
+                ids[*j],
+                serde_json::to_string(r).unwrap()
+            )
+        })
         .collect();
 
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();

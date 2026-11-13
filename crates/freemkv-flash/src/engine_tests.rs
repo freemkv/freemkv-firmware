@@ -592,7 +592,7 @@ fn flash_execute_fails_on_mismatch_inside_a_cmac_protected_range() {
     let req = bin_req(image, true);
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        matches!(err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Mismatch { differing, .. }) if *differing > 0),
+        matches!(err.downcast_ref::<mediatek_optical::drive::FlashError<anyhow::Error>>(), Some(mediatek_optical::drive::FlashError::Mismatch { differing, .. }) if *differing > 0),
         "unexpected error: {err}"
     );
 }
@@ -615,8 +615,8 @@ fn flash_execute_requires_target_startup_when_protected_readback_is_unavailable(
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
         matches!(
-            err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(),
-            Some(mediatek_optical::update::FlashError::Startup(_))
+            err.downcast_ref::<mediatek_optical::drive::FlashError<anyhow::Error>>(),
+            Some(mediatek_optical::drive::FlashError::Startup(_))
         ),
         "{err:#}"
     );
@@ -720,10 +720,12 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
         .flat_map(|(_, bytes)| bytes.clone())
         .collect();
     // A 0.10.x archive restores as its OEM-format rebuild, never the raw capture.
-    let expected =
-        mediatek_optical::oem::rebuild(&backup_firmware(), crate::backends::mtk::oem::catalog())
-            .unwrap()
-            .image;
+    let expected = mediatek_optical::envelope::rebuild(
+        &backup_firmware(),
+        crate::backends::mtk::oem::catalog(),
+    )
+    .unwrap()
+    .image;
     assert_eq!(streamed, expected);
     assert!(!dev.writes.iter().any(|(cdb, data)| cdb.get(3..6)
         == Some(&offset_bytes(ROM_1EC000_OFFSET)[..])
@@ -855,7 +857,7 @@ fn flash_close_fails_on_hardware_error_sense() {
     );
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        matches!(err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Fault { sense, .. }) if sense.0 == 4),
+        matches!(err.downcast_ref::<mediatek_optical::drive::FlashError<anyhow::Error>>(), Some(mediatek_optical::drive::FlashError::Fault { sense, .. }) if sense.0 == 4),
         "unexpected error: {err}"
     );
 }
@@ -876,7 +878,7 @@ fn flash_restore_tar_detects_readback_mismatch() {
     req.drive_model = "BD-RE BU40N".into();
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
-        matches!(err.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Mismatch { differing, .. }) if *differing > 0),
+        matches!(err.downcast_ref::<mediatek_optical::drive::FlashError<anyhow::Error>>(), Some(mediatek_optical::drive::FlashError::Mismatch { differing, .. }) if *differing > 0),
         "unexpected error: {err}"
     );
 }
@@ -1203,7 +1205,7 @@ fn encrypted_upload_still_detects_corrupt_plaintext_readback() {
         .expect_err("encrypted transport must not disable integrity verification");
     let _ = std::fs::remove_file(req.predump_out.unwrap());
     assert!(
-        matches!(error.downcast_ref::<mediatek_optical::update::FlashError<anyhow::Error>>(), Some(mediatek_optical::update::FlashError::Mismatch { differing, .. }) if *differing > 0),
+        matches!(error.downcast_ref::<mediatek_optical::drive::FlashError<anyhow::Error>>(), Some(mediatek_optical::drive::FlashError::Mismatch { differing, .. }) if *differing > 0),
         "{error:#}"
     );
 }

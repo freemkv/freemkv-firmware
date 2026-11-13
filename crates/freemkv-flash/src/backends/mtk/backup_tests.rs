@@ -3,7 +3,7 @@
 use super::*;
 use crate::backends::mtk::IMAGE_SIZE;
 use crate::platform::MockScsiDevice;
-use mediatek_optical::{layout, Chip};
+use mediatek_optical::{envelope, Chip};
 
 /// A signed image of `chip` carrying the cataloged stored boot page.
 fn stored_image(chip: &[u8; 10], model: &str, code: u8) -> Vec<u8> {
@@ -13,8 +13,8 @@ fn stored_image(chip: &[u8; 10], model: &str, code: u8) -> Vec<u8> {
         .unwrap()
         .boot_page()
         .to_vec();
-    img[..layout::BOOT_PAGE.len].copy_from_slice(&boot);
-    let d = layout::DESCRIPTOR.start;
+    img[..envelope::BOOT_PAGE.len].copy_from_slice(&boot);
+    let d = envelope::DESCRIPTOR.start;
     img[d + 0x08..d + 0x18].fill(b' ');
     img[d + 0x08..d + 0x08 + model.len()].copy_from_slice(model.as_bytes());
     img[d + 0x34..d + 0x3E].copy_from_slice(chip);
@@ -38,9 +38,9 @@ fn stored_image(chip: &[u8; 10], model: &str, code: u8) -> Vec<u8> {
 /// bytes in every drive-written region.
 fn drive_read(image: &[u8]) -> Vec<u8> {
     let mut read = image.to_vec();
-    let mirror = read[layout::BOOT_MIRROR.start..layout::BOOT_MIRROR.end()].to_vec();
-    read[..layout::BOOT_PAGE.len].copy_from_slice(&mirror);
-    for range in layout::DRIVE_WRITTEN {
+    let mirror = read[envelope::BOOT_MIRROR.start..envelope::BOOT_MIRROR.end()].to_vec();
+    read[..envelope::BOOT_PAGE.len].copy_from_slice(&mirror);
+    for range in envelope::DRIVE_WRITTEN {
         read[range.start..range.start + 16].fill(0x52);
     }
     read
@@ -55,17 +55,17 @@ fn unknown_mt1939_build_backs_up_as_a_labelled_reconstruction() {
         .with_product("BD-RE BE14NU40");
     let backup = capture(&mut crate::backend::ReadDevice::without_unlocks(&mut dev)).unwrap();
     assert_eq!(
-        backup[..layout::BOOT_PAGE.len],
-        installed[..layout::BOOT_PAGE.len]
+        backup[..envelope::BOOT_PAGE.len],
+        installed[..envelope::BOOT_PAGE.len]
     );
     // Code is the installed firmware's; no per-unit byte survives.
     assert_eq!(backup[0x2_0000..0x1D_0000], installed[0x2_0000..0x1D_0000]);
     let defaults = super::super::oem::catalog()
         .default_for(Chip::Mt1939)
         .unwrap();
-    for (range, want) in layout::DRIVE_WRITTEN.iter().zip(defaults.regions()) {
+    for (range, want) in envelope::DRIVE_WRITTEN.iter().zip(defaults.regions()) {
         let got = &backup[range.start..range.start + range.len];
-        assert!(!layout::is_erased(got));
+        assert!(!envelope::is_erased(got));
         assert!(got == &want[..], "region at {:#x} differs", range.start);
     }
     assert!(matches!(notice(&backup), BackupNotice::Unverified(_)));
@@ -103,7 +103,7 @@ fn unknown_boot_page_is_refused() {
 fn validation_requires_a_known_stored_boot_page() {
     let mut image = stored_image(b"MTEKMT1959", "BD-RE BU40N", 3);
     validate(&image, "BD-RE BU40N", IMAGE_SIZE).unwrap();
-    image[..layout::BOOT_PAGE.len].fill(0x18);
+    image[..envelope::BOOT_PAGE.len].fill(0x18);
     assert!(validate(&image, "BD-RE BU40N", IMAGE_SIZE).is_err());
 }
 
@@ -132,13 +132,15 @@ fn corpus_backups_are_exact_only_for_oem_builds() {
     for path in paths {
         let image = std::fs::read(&path).unwrap();
         if image.len() != IMAGE_SIZE
-            || mediatek_optical::image::is_drive_read(&image)
-            || mediatek_optical::image::detect_chip(&image).is_err()
+            || mediatek_optical::envelope::is_drive_read(&image)
+            || mediatek_optical::envelope::detect_chip(&image).is_err()
         {
             continue;
         }
-        let cataloged = catalog.build(&oem::content_key(&image).unwrap()).is_some();
-        let Ok(rebuilt) = oem::rebuild(&drive_read(&image), catalog) else {
+        let cataloged = catalog
+            .build(&envelope::content_key(&image).unwrap())
+            .is_some();
+        let Ok(rebuilt) = envelope::rebuild(&drive_read(&image), catalog) else {
             assert!(!cataloged, "{}", path.display());
             continue;
         };
@@ -170,8 +172,8 @@ fn corpus_backups_are_exact_only_for_oem_builds() {
 fn live_capture_rebuilds_flashable() {
     let path = std::env::var("FREEMKV_MTK_LIVE").expect("FREEMKV_MTK_LIVE");
     let read = std::fs::read(path).unwrap();
-    assert!(mediatek_optical::image::is_drive_read(&read));
-    let rebuilt = oem::rebuild(&read, super::super::oem::catalog()).unwrap();
+    assert!(mediatek_optical::envelope::is_drive_read(&read));
+    let rebuilt = envelope::rebuild(&read, super::super::oem::catalog()).unwrap();
     assert_eq!(rebuilt.provenance.boot_page, BootPage::Restored);
     validate_image(&rebuilt.image, None).unwrap();
     eprintln!("{}", describe(&rebuilt.provenance));

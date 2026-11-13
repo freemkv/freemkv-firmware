@@ -1,5 +1,5 @@
 //! MediaTek backups: the flashable OEM image rebuilt from a complete drive read
-//! by [`mediatek_optical::oem::rebuild`] against the embedded catalog
+//! by [`mediatek_optical::envelope::rebuild`] against the embedded catalog
 //! ([`super::oem`]), plus decoding of the 0.10.x rollback archives they
 //! replace.
 //!
@@ -13,7 +13,7 @@ use std::io::Read;
 use std::io::Write;
 
 use anyhow::{bail, Context, Result};
-use mediatek_optical::oem::{self, BootPage, Provenance, Source};
+use mediatek_optical::envelope::{self, BootPage, Provenance, Source};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -171,7 +171,7 @@ impl BackupArtifact {
 /// firmware is read through its injected `DumpAll` command (stock MediaTek
 /// firmware exposes no full-flash read — see [`super::fwdump`]); any other drive
 /// is read through the OEM `READ BUFFER` path. Both return the same bytes, so
-/// everything afterward — `oem::rebuild` (boot page from the catalog,
+/// everything afterward — `envelope::rebuild` (boot page from the catalog,
 /// drive-written regions reset to factory) and validation — is identical.
 pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
     let ((read, readable, gaps), restricted) = super::capture_raw(dev)?;
@@ -183,10 +183,10 @@ pub(crate) fn capture(dev: &mut ReadDevice<'_>) -> Result<Vec<u8>> {
             error
         });
     }
-    let rebuilt = oem::rebuild(&read, super::oem::catalog()).map_err(|error| {
+    let rebuilt = envelope::rebuild(&read, super::oem::catalog()).map_err(|error| {
         let unsupported = matches!(
             error,
-            oem::RebuildError::NoFactory(_) | oem::RebuildError::UnknownBootPage(_)
+            envelope::RebuildError::NoFactory(_) | envelope::RebuildError::UnknownBootPage(_)
         );
         let error =
             anyhow::Error::new(error).context("rebuilding the OEM image from the drive read");
@@ -243,9 +243,9 @@ fn describe(p: &Provenance) -> String {
 /// What a saved backup is: a byte-exact vendor image, or a reconstruction.
 pub(crate) fn notice(bytes: &[u8]) -> BackupNotice {
     let catalog = super::oem::catalog();
-    let exact = oem::content_key(bytes).and_then(|key| catalog.build(&key));
+    let exact = envelope::content_key(bytes).and_then(|key| catalog.build(&key));
     match exact {
-        Some(build) if oem::rebuild(bytes, catalog).is_ok_and(|r| r.image == bytes) => {
+        Some(build) if envelope::rebuild(bytes, catalog).is_ok_and(|r| r.image == bytes) => {
             BackupNotice::VerifiedOem(format!(
                 "byte-identical to the OEM {} {} image: per-drive settings, calibration and \
                  revocation lists are factory contents; safe to share and flash back",
@@ -278,7 +278,7 @@ pub(super) fn backup_image(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>
     }
     let legacy = BackupArtifact::from_tar_bytes(bytes, expected_size)
         .context("not a MediaTek firmware backup")?;
-    Ok(oem::rebuild(&legacy.firmware, super::oem::catalog())
+    Ok(envelope::rebuild(&legacy.firmware, super::oem::catalog())
         .context("rebuilding the archived firmware")?
         .image)
 }
@@ -286,7 +286,7 @@ pub(super) fn backup_image(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>
 fn validate_image(image: &[u8], target_model: Option<&str>) -> Result<()> {
     cmac::validate_flags(image)?;
     let boot = image
-        .get(..mediatek_optical::layout::BOOT_PAGE.len)
+        .get(..mediatek_optical::envelope::BOOT_PAGE.len)
         .context("backup is shorter than a boot page")?;
     if !super::oem::catalog().knows_boot_page(boot) {
         bail!(
