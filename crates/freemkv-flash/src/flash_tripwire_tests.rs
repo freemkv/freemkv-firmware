@@ -641,7 +641,7 @@ fn oem_session() -> Vec<String> {
         .steps()
         .iter()
         .map(|step| {
-            use mediatek_optical::update::Direction;
+            use mediatek_optical::prepare::Direction;
             match step.direction {
                 Direction::Out => format!("OUTS cdb={} len={}", hex(&step.cdb), step.length),
                 _ => format!("IN   cdb={} alloc={}", hex(&step.cdb), step.length),

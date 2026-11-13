@@ -2529,8 +2529,8 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "mediatek-optical"
-version = "2.0.0"
-source = "git+https://github.com/MattJackson/mediatek-optical?rev=8041726eeb185158b4fe7c2d38e87f0ade00fe05#8041726eeb185158b4fe7c2d38e87f0ade00fe05"
+version = "3.0.0"
+source = "git+https://github.com/MattJackson/mediatek-optical?rev=f3b896023b82e80d1844787801d1881aba31d53d#f3b896023b82e80d1844787801d1881aba31d53d"
 dependencies = [
  "aes",
  "cmac",
@@ -3294,7 +3294,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pioneer-optical"
 version = "3.0.0"
-source = "git+https://github.com/MattJackson/pioneer-optical?rev=df02d539d1a02e765d0f9104633e9b98f3bacec0#df02d539d1a02e765d0f9104633e9b98f3bacec0"
+source = "git+https://github.com/MattJackson/pioneer-optical?rev=574195f2ef3df9e993c32d1c0fd04f2483940f07#574195f2ef3df9e993c32d1c0fd04f2483940f07"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",

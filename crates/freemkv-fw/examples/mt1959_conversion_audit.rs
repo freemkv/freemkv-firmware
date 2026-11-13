@@ -1,6 +1,6 @@
 //! Inventory source-bound MT1959 conversion contracts. Never writes firmware.
 use anyhow::{Context, Result};
-use mediatek_optical::image::analysis::LegacyStackDi;
+use mediatek_optical::classify::analysis::LegacyStackDi;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;

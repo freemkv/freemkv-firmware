@@ -8,7 +8,7 @@
 //! byte, per-unit splice or CMAC re-sign). It backs up, writes the bytes and
 //! verifies. The active receiver determines the transport encoding.
 //!
-//! `mediatek_optical::update` owns the update: the gates against the installed
+//! `mediatek_optical` owns the update (`classify`, `prepare`, `drive`): the gates against the installed
 //! firmware (chip, hardware family), the session's commands, readiness timing
 //! and read-back. This backend owns the drive: identity reads, the backup,
 //! model checks, progress and the post-flash identity. `FlashMode` does not
@@ -44,7 +44,7 @@ pub(crate) use flash::decide_offline;
 pub(crate) fn offline_prefilter(bytes: &[u8]) -> crate::crossflash::Prefilter {
     crate::crossflash::Prefilter {
         platform: crate::backend::registry::MEDIATEK_PLATFORM,
-        family: mediatek_optical::image::family(bytes).map(|f| f.to_string()),
+        family: mediatek_optical::envelope::family(bytes).map(|f| f.to_string()),
         model: crossflash::Build::of_image(bytes).ok().map(|b| b.product),
         normal_only: false,
     }
@@ -59,25 +59,25 @@ use crate::backend::{
     Identity, Match, ReadDevice,
 };
 use crate::platform::ScsiDevice;
-use mediatek_optical::update::{Direction, Step};
+use mediatek_optical::prepare::{Direction, Step};
 
 // ---- Region geometry and wire constants (from `mediatek_optical`) -----------
 
 pub use mediatek_optical::cdb;
-use mediatek_optical::layout;
+use mediatek_optical::envelope;
 
 /// Boot banner / metadata region offset.
-pub const ROM_003000_OFFSET: u32 = layout::BANNER.start as u32;
+pub const ROM_003000_OFFSET: u32 = envelope::BANNER.start as u32;
 /// Boot banner / metadata region length.
-pub const ROM_003000_LEN: u32 = layout::BANNER.len as u32;
+pub const ROM_003000_LEN: u32 = envelope::BANNER.len as u32;
 /// Identity-page region offset.
-pub const ROM_1EC000_OFFSET: u32 = layout::DESCRIPTOR.start as u32;
+pub const ROM_1EC000_OFFSET: u32 = envelope::DESCRIPTOR.start as u32;
 /// Identity-page region length (256 B).
-pub const ROM_1EC000_LEN: u32 = layout::DESCRIPTOR.len as u32;
+pub const ROM_1EC000_LEN: u32 = envelope::DESCRIPTOR.len as u32;
 /// Per-unit calibration region offset.
-pub const ROM_1F0000_OFFSET: u32 = layout::CALIBRATION.start as u32;
+pub const ROM_1F0000_OFFSET: u32 = envelope::CALIBRATION.start as u32;
 /// Per-unit calibration region length (64 KiB).
-pub const ROM_1F0000_LEN: u32 = layout::CALIBRATION.len as u32;
+pub const ROM_1F0000_LEN: u32 = envelope::CALIBRATION.len as u32;
 
 /// Per-member cap for [`UserDump::read_tar`] — hard ceiling on how many bytes
 /// a single tar entry may carry before we refuse. The largest legitimate
@@ -95,7 +95,7 @@ pub const FEATURE_SERIAL: u16 = cdb::FEATURE_SERIAL;
 /// GET CONFIGURATION feature code carrying the ASCII firmware date (fd_fwdate.bin).
 pub const FEATURE_FWDATE: u16 = cdb::FEATURE_FIRMWARE_DATE;
 /// Expected full firmware image size (2 MiB).
-pub const IMAGE_SIZE: usize = layout::IMAGE_SIZE;
+pub const IMAGE_SIZE: usize = envelope::IMAGE_SIZE;
 /// Streaming chunk size for the flash sequence, 16 KiB.
 pub const CHUNK: usize = cdb::CHUNK;
 
@@ -111,29 +111,25 @@ pub const MEMBER_NAMES: [&str; 6] = [
 
 /// AES-128-ECB encrypt the whole image in place (the `enc` transport envelope).
 pub fn enc_transform(image: &mut [u8]) -> Result<()> {
-    mediatek_optical::enc::encrypt(image).map_err(|e| anyhow!(e))
+    mediatek_optical::envelope::encrypt(image).map_err(|e| anyhow!(e))
 }
 
 /// Read the active receiver and its required transfer encoding.
 /// Detection belongs to `mediatek_optical`; this adapter supplies shared SCSI I/O.
-pub fn detect_receiver(dev: &mut ReadDevice<'_>) -> Result<mediatek_optical::receiver::Receiver> {
+pub fn detect_receiver(dev: &mut ReadDevice<'_>) -> Result<mediatek_optical::prepare::Receiver> {
     let shared = crate::transport::SharedDevice::new(dev);
     let mut transport = crate::transport::ScsiTransport::reads(&shared);
-    let mode =
-        mediatek_optical::receiver::detect_mode(&mut transport).map_err(anyhow::Error::new)?;
-    mediatek_optical::receiver::detect(&mut transport, &mode).map_err(anyhow::Error::new)
+    mediatek_optical::drive::detect_receiver(&mut transport).map_err(anyhow::Error::new)
 }
 
 /// Lightweight read-only planning probe. Executable authorization completes
 /// entry detection after the backup destination and capture gates.
 pub fn probe_receiver_encoding(
     dev: &mut ReadDevice<'_>,
-) -> Result<mediatek_optical::receiver::Receiver> {
+) -> Result<mediatek_optical::prepare::Receiver> {
     let shared = crate::transport::SharedDevice::new(dev);
     let mut transport = crate::transport::ScsiTransport::reads(&shared);
-    let mode =
-        mediatek_optical::receiver::detect_mode(&mut transport).map_err(|e| anyhow!("{e}"))?;
-    mediatek_optical::receiver::detect_encoding(&mut transport, &mode).map_err(|e| anyhow!("{e}"))
+    mediatek_optical::drive::detect_receiver_encoding(&mut transport).map_err(|e| anyhow!("{e}"))
 }
 
 // ---- Dump plan --------------------------------------------------------------
@@ -506,13 +502,13 @@ pub struct FieldDescriptor {
 
 /// Parse a REQUEST SENSE payload into `(sense_key, asc, ascq)`.
 pub fn parse_sense(data: &[u8]) -> Option<(u8, u8, u8)> {
-    mediatek_optical::sense::parse(data)
+    mediatek_optical::drive::sense::parse(data)
 }
 
 /// MEDIUM (0x3), HARDWARE (0x4) and ABORTED (0xB): the sense keys that prove a
 /// programming failure on the MTK flash path.
 pub fn sense_key_is_fatal(key: u8) -> bool {
-    mediatek_optical::sense::is_flash_fault(key)
+    mediatek_optical::drive::sense::is_flash_fault(key)
 }
 
 // INQUIRY's additional length counts bytes after its five-byte header.
@@ -798,14 +794,14 @@ pub(crate) fn read_chip(dev: &mut dyn ScsiDevice) -> Option<mediatek_optical::Ch
 /// place of the boot page, which the integrity table does not cover. The boot
 /// page must also be one the OEM catalog knows.
 fn ensure_flashable_boot_page(image: &[u8]) -> Result<()> {
-    if mediatek_optical::image::is_drive_read(image) {
+    if mediatek_optical::envelope::is_drive_read(image) {
         bail!(
             "this is a raw drive read (its boot page is the read-back copy), not a flashable \
              image — refusing to flash. Restore from a freemkv backup .bin, or the vendor's \
              update image. This gate cannot be overridden."
         );
     }
-    let boot = &image[..mediatek_optical::layout::BOOT_PAGE.len];
+    let boot = &image[..mediatek_optical::envelope::BOOT_PAGE.len];
     if !oem::catalog().knows_boot_page(boot) {
         bail!(
             "the image's boot page is not one any known OEM build stores — refusing to flash \

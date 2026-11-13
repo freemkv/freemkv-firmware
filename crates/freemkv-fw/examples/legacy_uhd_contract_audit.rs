@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 pub use freemkv_fw::abi;
 #[allow(dead_code)]
 use freemkv_fw::engine::mt1939_uhd as research;
-use mediatek_optical::image::analysis::{
+use mediatek_optical::classify::analysis::{
     ClassicCalibration, ClassicConsumer, ClassicConsumerKind as K, ClassicDi, ClassicParameter,
     ClassicPosition, ClassicPositionSetup, ClassicReadCompletion, ClassicReadPosition,
     LegacyStackDi, NativeSpeedPolicy, UhdAreas,
@@ -12,7 +12,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 fn binding<T: std::fmt::Debug>(
-    value: Result<T, mediatek_optical::image::analysis::Error>,
+    value: Result<T, mediatek_optical::classify::analysis::Error>,
 ) -> serde_json::Value {
     match value {
         Ok(v) => json!({"bound":true,"native_contract":format!("{v:?}")}),

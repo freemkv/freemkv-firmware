@@ -73,9 +73,9 @@ impl ScsiDevice for Drive {
             self.wire_stages.push(self.written.clone());
             if self.encrypted_after && !self.stages.is_empty() {
                 if self.header_only_after {
-                    mediatek_optical::enc::decrypt(&mut self.written[0x3000..0x3010]).unwrap();
+                    mediatek_optical::envelope::decrypt(&mut self.written[0x3000..0x3010]).unwrap();
                 } else {
-                    mediatek_optical::enc::decrypt(&mut self.written).unwrap();
+                    mediatek_optical::envelope::decrypt(&mut self.written).unwrap();
                 }
             }
             self.stages.push(self.written.clone());
@@ -99,7 +99,7 @@ fn image(revision: &[u8; 4], code: u8) -> Vec<u8> {
     let mut bytes = fixture::image(&fixture::BU3, "BD-RE BU40N", code);
     bytes[0x1ec000..0x1ec008].copy_from_slice(b"HL-DT-ST");
     bytes[0x1ec018..0x1ec01c].copy_from_slice(revision);
-    mediatek_optical::image::cmac::resign(&bytes).unwrap()
+    mediatek_optical::envelope::cmac::resign(&bytes).unwrap()
 }
 
 #[test]
@@ -409,7 +409,7 @@ fn recovery_uses_selected_current_intm_without_reflashing_it() {
     assert_eq!(dev.stages, vec![current, target.clone()]);
     assert_eq!(dev.wire_stages.len(), 1);
     let mut expected = target;
-    mediatek_optical::enc::encrypt(&mut expected).unwrap();
+    mediatek_optical::envelope::encrypt(&mut expected).unwrap();
     assert_eq!(dev.wire_stages[0], expected);
 }
 
@@ -483,7 +483,7 @@ fn production_intm_recovery_streams_header_encrypted_body_plaintext() {
     assert_eq!(dev.stages, vec![current, target]);
     assert_eq!(dev.wire_stages.len(), 1);
     let mut expected = dev.stages[1].clone();
-    mediatek_optical::enc::encrypt(&mut expected[0x3000..0x3010]).unwrap();
+    mediatek_optical::envelope::encrypt(&mut expected[0x3000..0x3010]).unwrap();
     assert_eq!(dev.wire_stages[0], expected);
     assert_eq!(
         &dev.wire_stages[0][0x10600..0x10608],
@@ -552,7 +552,7 @@ fn production_v1_paired_flash_runs_intm_then_mixed_v9_with_restricted_reads() {
     );
     assert_eq!(dev.wire_stages[0], package.intermediate().unwrap());
     let mut expected = package.firmware().to_vec();
-    mediatek_optical::enc::encrypt(&mut expected[0x3000..0x3010]).unwrap();
+    mediatek_optical::envelope::encrypt(&mut expected[0x3000..0x3010]).unwrap();
     assert_eq!(dev.wire_stages[1], expected);
 }
 
@@ -628,10 +628,10 @@ fn mediatek_family_mismatch_keeps_hashes_in_diagnostics_only() {
         "{message}"
     );
     assert!(message.contains("BU40N"));
-    let current_family = mediatek_optical::image::family(&current)
+    let current_family = mediatek_optical::envelope::family(&current)
         .unwrap()
         .to_string();
-    let target_family = mediatek_optical::image::family(&target)
+    let target_family = mediatek_optical::envelope::family(&target)
         .unwrap()
         .to_string();
     assert_ne!(current_family, target_family);
@@ -673,7 +673,7 @@ fn final_stage_redetects_and_encrypts_for_the_new_receiver() {
     assert_eq!(dev.stages, vec![intermediate.clone(), final_image.clone()]);
     assert_eq!(dev.wire_stages[0], intermediate);
     let mut expected = final_image;
-    mediatek_optical::enc::encrypt(&mut expected).unwrap();
+    mediatek_optical::envelope::encrypt(&mut expected).unwrap();
     assert_eq!(dev.wire_stages[1], expected);
 }
 
@@ -687,7 +687,7 @@ fn restricted_intm_to_final_uses_just_installed_image_and_encrypted_wire() {
     assert!(!evidence.unverified_regions.is_empty());
     assert_eq!(dev.stages, vec![intermediate, final_image.clone()]);
     let mut expected = final_image;
-    mediatek_optical::enc::encrypt(&mut expected).unwrap();
+    mediatek_optical::envelope::encrypt(&mut expected).unwrap();
     assert_eq!(dev.wire_stages[1], expected);
 }
 
@@ -746,11 +746,11 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     assert_eq!(state.image, target);
     assert_eq!(
         state.receiver.encoding(),
-        mediatek_optical::receiver::Encoding::Encrypted
+        mediatek_optical::prepare::Encoding::Encrypted
     );
     assert_eq!(
         state.receiver.provenance(),
-        mediatek_optical::receiver::reference::Provenance::UserSuppliedReference
+        mediatek_optical::prepare::Provenance::UserSuppliedReference
     );
     assert!(plan
         .dry_run
@@ -771,7 +771,7 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     let executable = authorized.state::<Executable>().unwrap();
     assert_eq!(
         executable.prepared.plan().encoding().body,
-        mediatek_optical::receiver::Encoding::Encrypted
+        mediatek_optical::prepare::Encoding::Encrypted
     );
     let mut stale = current;
     stale[0x1ec01b] ^= 1;
@@ -857,10 +857,10 @@ fn exact_v9_current_reference_prepares_normal_flash_with_restricted_reads() {
     );
     assert_eq!(
         prepared.plan().encoding().body,
-        mediatek_optical::receiver::Encoding::Encrypted
+        mediatek_optical::prepare::Encoding::Encrypted
     );
     let mut decoded = prepared.plan().transfer().to_vec();
-    mediatek_optical::enc::decrypt(&mut decoded).unwrap();
+    mediatek_optical::envelope::decrypt(&mut decoded).unwrap();
     assert_eq!(decoded, target);
     assert!(dev.inner.writes.is_empty());
 }
@@ -962,7 +962,7 @@ fn final_receiver_refusal_retains_previous_write_and_intermediate_evidence() {
 
 #[test]
 fn prepare_entry_failure_conservatively_records_possible_command_mutation() {
-    let error = mediatek_optical::update::FlashError::Entry(
+    let error = mediatek_optical::drive::FlashError::Entry(
         mediatek_optical::drive::Error::Transport(anyhow!("prepare transport error")),
     );
     assert_eq!(failure_phase(&error), ("update entry", true));

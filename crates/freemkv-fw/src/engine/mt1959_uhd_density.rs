@@ -1,6 +1,6 @@
 //! Standalone source-bound density target emitter; it installs no patch.
 use anyhow::{ensure, Result};
-use mediatek_optical::image::analysis::SLIM_UHD_DENSITY_TARGETS;
+use mediatek_optical::classify::analysis::SLIM_UHD_DENSITY_TARGETS;
 use thumb_asm::Asm;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

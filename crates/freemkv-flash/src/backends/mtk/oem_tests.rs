@@ -1,7 +1,7 @@
 //! Unit tests for [`super`] (embedded MediaTek OEM catalog).
 
 use super::*;
-use mediatek_optical::layout;
+use mediatek_optical::envelope;
 
 #[test]
 fn embedded_catalog_parses_with_both_chip_defaults() {
@@ -18,7 +18,7 @@ fn embedded_catalog_parses_with_both_chip_defaults() {
     // Defaults hold written contents; rebuild keeps an erased region erased.
     for chip in [Chip::Mt1959, Chip::Mt1939] {
         let f = catalog.default_for(chip).unwrap();
-        assert!(f.regions()[1..].iter().all(|r| !layout::is_erased(r)));
+        assert!(f.regions()[1..].iter().all(|r| !envelope::is_erased(r)));
     }
 }
 

@@ -1,7 +1,7 @@
 //! The MT19xx AES-CMAC integrity table, re-exported from
-//! [`mediatek_optical::image::cmac`] for `freemkv-fw` and the flash engine.
+//! [`mediatek_optical::envelope::cmac`] for `freemkv-fw` and the flash engine.
 
-pub use mediatek_optical::image::cmac::*;
+pub use mediatek_optical::envelope::cmac::*;
 
 /// Reject overwritten table slots before an update or re-sign. The underlying
 /// MAC verifier checks only flag `1`, so instruction bytes in an unused slot

@@ -1,5 +1,5 @@
 //! Read-only receiver evidence for allocation research; never authorizes changes.
-use mediatek_optical::receiver::analysis::ApplicationAnalysis;
+use mediatek_optical::classify::analysis::ApplicationAnalysis;
 
 fn main() -> anyhow::Result<()> {
     let path = std::env::args()
@@ -161,7 +161,7 @@ fn main() -> anyhow::Result<()> {
             return Ok(());
         }
         if offset == "ram-references" {
-            let map = mediatek_optical::image::analysis::RamReferences::inspect(&image);
+            let map = mediatek_optical::classify::analysis::RamReferences::inspect(&image);
             println!(
                 "{}",
                 serde_json::json!({"bytes":map.bytes(),"incomplete":map.incomplete(),"calls":map.calls(),"uses":map.uses(),"fills":map.fills()})
@@ -169,7 +169,7 @@ fn main() -> anyhow::Result<()> {
             return Ok(());
         }
         if offset == "speed-policy" {
-            let p = mediatek_optical::image::analysis::NativeSpeedPolicy::detect(&image)?;
+            let p = mediatek_optical::classify::analysis::NativeSpeedPolicy::detect(&image)?;
             println!(
                 "{}",
                 serde_json::json!({"variant":p.variant,"entry":p.entry,"length":p.length,
@@ -180,7 +180,7 @@ fn main() -> anyhow::Result<()> {
             return Ok(());
         }
         if offset == "classic-speed-candidate" {
-            let role = mediatek_optical::image::analysis::ClassicSpeed::detect(&image)?;
+            let role = mediatek_optical::classify::analysis::ClassicSpeed::detect(&image)?;
             let stub = freemkv_fw::engine::mt1959::Mt1959Engine
                 .build_speed_stub_classic(0x0200f000, role.maximum_cell())?;
             println!(
@@ -234,7 +234,7 @@ fn main() -> anyhow::Result<()> {
             return Ok(());
         }
         if offset == "program-candidates" {
-            use mediatek_optical::receiver::programming::inspect_program_loop;
+            use mediatek_optical::classify::analysis::inspect_program_loop;
             let candidates: Vec<_> = (0..image.len())
                 .step_by(2)
                 .filter_map(|at| {
@@ -260,17 +260,13 @@ fn main() -> anyhow::Result<()> {
         }
         if offset == "receiver-plan" {
             use mediatek_optical::{
-                envelope::Envelope, layout, receiver::Receiver, update::InstalledFirmware,
-                Identity, INQUIRY_LEN,
+                classify::InstalledFirmware,
+                envelope::{self, Envelope},
+                prepare::Receiver,
             };
             let envelope = Envelope::load(&image)?;
             let canonical = envelope.image();
-            let identity = Identity::parse(
-                &[0; INQUIRY_LEN],
-                layout::BANNER.of(canonical).unwrap(),
-                layout::DESCRIPTOR.of(canonical).unwrap(),
-            )
-            .ok_or_else(|| anyhow::anyhow!("firmware has no recognized MediaTek identity"))?;
+            let identity = envelope::identity(canonical);
             let installed = InstalledFirmware::new(identity, canonical)?;
             let receiver = Receiver::from_firmware(&envelope)
                 .map_err(|e| anyhow::anyhow!("receiver evidence: {e:?}"))?;
@@ -286,7 +282,7 @@ fn main() -> anyhow::Result<()> {
         }
         if offset == "auth-candidate" {
             use freemkv_fw::engine::mt1959::Mt1959Engine;
-            use mediatek_optical::image::analysis::AuthCell;
+            use mediatek_optical::classify::analysis::AuthCell;
             use sha2::{Digest, Sha256};
             let flag_base = if let Some(value) = std::env::args().nth(3) {
                 u32::from_str_radix(value.trim_start_matches("0x"), 16)?

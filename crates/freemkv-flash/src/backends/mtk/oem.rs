@@ -1,5 +1,5 @@
 //! Embedded MediaTek OEM catalog (`oem.bin`): a gzip'd JSON table of the OEM
-//! MT1959/MT1939 builds in our hoard, keyed by [`mediatek_optical::oem::content_key`],
+//! MT1959/MT1939 builds in our hoard, keyed by [`mediatek_optical::envelope::content_key`],
 //! plus each chip generation's default factory contents.
 //!
 //! Built by `examples/mtk_oem_tables.rs`, which admits a build only if it is
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::{Arc, OnceLock};
 
-use mediatek_optical::oem::{Build, Catalog, Digest, Factory};
+use mediatek_optical::envelope::{Catalog, Digest, Factory, OemBuild as Build};
 use mediatek_optical::Chip;
 use serde::Deserialize;
 

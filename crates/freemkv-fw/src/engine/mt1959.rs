@@ -142,7 +142,7 @@ impl Mt1959Engine {
 
         // Base prerequisites: the verb handler, boot hook and save/reset need these;
         // a miss means this image cannot carry a freemkv base, so refuse.
-        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let analysis = mediatek_optical::classify::analysis::ImageAnalysis::inspect(image);
         let commands = analysis.commands().context("native command ownership")?;
         let scanner_entry = commands.scanner().entry() as u32;
         let cdb_base = commands.scanner().cdb();
@@ -366,7 +366,7 @@ impl Mt1959Engine {
 
         // Base prerequisites: if these fail the vendor command cannot exist, so
         // abort the whole run ("nothing modifiable").
-        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let analysis = mediatek_optical::classify::analysis::ImageAnalysis::inspect(image);
         let commands = analysis
             .commands()
             .context("nothing modifiable: native command ownership")?;
@@ -729,7 +729,7 @@ impl Mt1959Engine {
             ),
             HookReport::applied(
                 "vid",
-                mediatek_optical::image::analysis::VidGate::inspect(image)
+                mediatek_optical::classify::analysis::VidGate::inspect(image)
                     .map(|g| format!("{:?}", g.variant()))
                     .unwrap_or_else(|e| format!("unknown: {e}")),
             ),
@@ -819,7 +819,7 @@ impl Mt1959Engine {
                 w = h;
                 hooks.push(HookReport::applied(
                     "bd-native",
-                    mediatek_optical::image::analysis::MediaGate::inspect(image)
+                    mediatek_optical::classify::analysis::MediaGate::inspect(image)
                         .map(|g| format!("{:?}", g.variant()))
                         .unwrap_or_else(|e| format!("unknown: {e}")),
                 ));
@@ -848,7 +848,7 @@ impl Mt1959Engine {
                 commit_detour(&mut h, site, stub_va, &bytes, "auth-cell widen")?;
                 Ok((h, site, stub_va))
             });
-        let detected = mediatek_optical::image::analysis::AuthCell::detect(image)
+        let detected = mediatek_optical::classify::analysis::AuthCell::detect(image)
             .map(|c| c.variant())
             .ok();
         let (auth_cell_site, auth_cell_stub_va) = match auth_cell {
@@ -868,7 +868,7 @@ impl Mt1959Engine {
 
         let auth_cell_refusal = auth_cell_stub_va != 0
             && detected
-                != Some(mediatek_optical::image::analysis::AuthCellVariant::R0StateR1Alternate);
+                != Some(mediatek_optical::classify::analysis::AuthCellVariant::R0StateR1Alternate);
         // UHD conversion is separate from the raw-read controls above. Each
         // required media gap must be closed before conversion edits reach output.
         // G01-G06 matches establish the agreed media definition, not a hardware test.

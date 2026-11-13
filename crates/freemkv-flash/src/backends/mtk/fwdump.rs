@@ -19,7 +19,7 @@ use anyhow::Result;
 
 use crate::backends::mtk::probe::FullImage;
 use crate::platform::ScsiDevice;
-use mediatek_optical::layout::IMAGE_SIZE;
+use mediatek_optical::envelope::IMAGE_SIZE;
 
 /// `READ BUFFER` opcode the injected handler hijacks (`abi::READ_BUFFER_OPCODE`).
 const OPCODE: u8 = 0x3C;

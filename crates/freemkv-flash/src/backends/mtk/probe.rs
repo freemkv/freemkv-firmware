@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 
 use crate::platform::ScsiDevice;
 use mediatek_optical::cdb::{self, CHUNK};
-use mediatek_optical::layout::IMAGE_SIZE;
+use mediatek_optical::envelope::IMAGE_SIZE;
 
 /// A `(mode, buffer-id)` READ BUFFER channel to try.
 struct Channel {

@@ -83,26 +83,23 @@ pub(crate) fn stamp(image: &mut [u8]) {
 #[test]
 fn prepared_receiver_proves_and_encodes_both_header_and_body() {
     use mediatek_optical::{
+        classify::InstalledFirmware,
         envelope::Envelope,
-        receiver::{Encoding, Receiver},
-        update::InstalledFirmware,
+        prepare::{Encoding, Receiver},
     };
     let mut image = super::fixture::image(&super::fixture::BU3, "BD-RE BU40N", 2);
     image[0x1ec000..0x1ec008].copy_from_slice(b"HL-DT-ST");
     image[0x1ec018..0x1ec01c].copy_from_slice(b"INTM");
     stamp(&mut image);
-    let image = mediatek_optical::image::cmac::resign(&image).unwrap();
+    let image = mediatek_optical::envelope::cmac::resign(&image).unwrap();
     let envelope = Envelope::load(&image).unwrap();
     let receiver = Receiver::from_firmware(&envelope).unwrap();
-    let analysis = receiver.application_analysis().unwrap();
-    assert_eq!(analysis.bulk_decoders().len(), 1);
-    assert!(analysis.scratch_decoders().is_empty());
     let installed = InstalledFirmware::new(super::fixture::identity(&image), &image).unwrap();
     let prepared = receiver.prepare(&envelope, &installed).unwrap();
     assert_eq!(prepared.plan().encoding().header, Encoding::Encrypted);
     assert_eq!(prepared.plan().encoding().body, Encoding::Encrypted);
     let mut wire = prepared.plan().transfer().to_vec();
     assert_ne!(wire, image);
-    mediatek_optical::enc::decrypt(&mut wire).unwrap();
+    mediatek_optical::envelope::decrypt(&mut wire).unwrap();
     assert_eq!(wire, image);
 }

@@ -61,7 +61,7 @@ fn fixture() -> Vec<u8> {
         .unwrap_or_else(|e| panic!("BU40N fixture must be present at {path}: {e}"));
     // A grafted classic grammar replaces the modern one; retaining both must
     // now be refused as ambiguous rather than resolved by search priority.
-    let modern_anchor = mediatek_optical::image::analysis::VidGate::inspect(&image)
+    let modern_anchor = mediatek_optical::classify::analysis::VidGate::inspect(&image)
         .unwrap()
         .anchor();
     image[modern_anchor..modern_anchor + 2].fill(0);
@@ -1059,7 +1059,7 @@ fn classic_full_image() -> Vec<u8> {
 
     // Relocate the actual registered table, including INQUIRY and its terminator.
     // A coherent orphan table is not native dispatch ownership evidence.
-    let commands = mediatek_optical::image::analysis::CommandDispatch::inspect(&img).unwrap();
+    let commands = mediatek_optical::classify::analysis::CommandDispatch::inspect(&img).unwrap();
     let root = *commands.roots().first().unwrap();
     let mut end = root;
     loop {

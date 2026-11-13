@@ -304,7 +304,7 @@ impl Mt1959Engine {
         out: &mut [u8],
         flag_base: u32,
     ) -> Result<Vec<(&'static str, u32)>> {
-        let role = mediatek_optical::image::analysis::ClassicSpeed::detect(image)
+        let role = mediatek_optical::classify::analysis::ClassicSpeed::detect(image)
             .map_err(|e| anyhow!("native read-speed selector: {e}"))?;
         let bytes = self.build_speed_stub_classic(flag_base, role.maximum_cell())?;
         let va = self.free_space(out, bytes.len())?;
@@ -404,7 +404,7 @@ impl Mt1959Engine {
         }
 
         // ---- BASE (mandatory) — classic finders, all PROVEN 17/17.
-        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let analysis = mediatek_optical::classify::analysis::ImageAnalysis::inspect(image);
         let commands = analysis
             .commands()
             .context("classic base: native command ownership")?;
@@ -681,7 +681,7 @@ impl Mt1959Engine {
 
         // Base prerequisites: scanner, CDB base (r5) and the response writer/commit
         // build_handler needs. If any is missing the caller degrades to DE-only.
-        let analysis = mediatek_optical::image::analysis::ImageAnalysis::inspect(image);
+        let analysis = mediatek_optical::classify::analysis::ImageAnalysis::inspect(image);
         let commands = analysis
             .commands()
             .context("classic base: native command ownership")?;

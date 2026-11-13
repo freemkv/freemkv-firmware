@@ -1,7 +1,7 @@
 //! Research builds only: DI acceptance versus the first post-DI mode selector.
 use crate::boot::{BootSettings, BootSupport};
 use crate::engine::{self, mt1939_research as research, mt1959::Mt1959Engine};
-use mediatek_optical::image::analysis::ClassicConsumerKind;
+use mediatek_optical::classify::analysis::ClassicConsumerKind;
 use sha2::{Digest, Sha256};
 
 fn digest(bytes: &[u8]) -> String {

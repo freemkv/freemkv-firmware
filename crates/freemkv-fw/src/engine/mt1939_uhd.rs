@@ -3,7 +3,7 @@
 //! Locators live in mediatek-optical. This module owns policy and Thumb emission.
 //! Installation requires every named software contract and commits atomically.
 use anyhow::{ensure, Context, Result};
-use mediatek_optical::image::analysis::{UhdArea, UhdAreas};
+use mediatek_optical::classify::analysis::{UhdArea, UhdAreas};
 use sha2::{Digest, Sha256};
 use thumb_asm::Asm;
 
@@ -83,7 +83,7 @@ impl UhdConversionPlan {
     pub fn prepared_patches(&self, image: &[u8], flags: u32) -> Result<Vec<UhdPatch>> {
         self.require_complete_conversion()?;
         let mut patches = if self.stack_di {
-            let di = mediatek_optical::image::analysis::LegacyStackDi::detect(image)?;
+            let di = mediatek_optical::classify::analysis::LegacyStackDi::detect(image)?;
             super::mt1959_uhd::di_candidates(image, flags, &di, None)?
                 .into_iter()
                 .map(|c| UhdPatch {
@@ -190,7 +190,7 @@ impl UhdConversionPlan {
         areas
             .area(UhdArea::DiscInformation)
             .context("UHD DI recognition contract")?;
-        use mediatek_optical::image::analysis::*;
+        use mediatek_optical::classify::analysis::*;
         let stack_di = LegacyStackDi::detect(image).is_ok();
         // Parser layout and boot silicon are independent. Require the complete
         // native position substrate plus classic reverse grammar before this
@@ -363,7 +363,7 @@ impl UhdConversionPlan {
                 accept,
                 reject,
                 bytes,
-                caller: mediatek_optical::image::analysis::SavedLink::detect(image, site)?,
+                caller: mediatek_optical::classify::analysis::SavedLink::detect(image, site)?,
             });
         }
         Ok(candidates)
@@ -374,7 +374,7 @@ impl UhdConversionPlan {
         &self,
         image: &[u8],
         flags: u32,
-    ) -> Result<Vec<UhdRoutingCandidate<mediatek_optical::image::analysis::ClassicConsumerKind>>>
+    ) -> Result<Vec<UhdRoutingCandidate<mediatek_optical::classify::analysis::ClassicConsumerKind>>>
     {
         ensure!(
             <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
@@ -384,7 +384,7 @@ impl UhdConversionPlan {
         // Its own native entry guard excludes C7/C8. This group extends only
         // the shared ROM selectors; the generic completion reflection below
         // remains independently required and patched.
-        mediatek_optical::image::analysis::ClassicConsumer::inspect_rom(image, self.state)?
+        mediatek_optical::classify::analysis::ClassicConsumer::inspect_rom(image, self.state)?
             .into_iter()
             .map(|contract| {
                 let selection = contract.selection;
@@ -420,8 +420,9 @@ impl UhdConversionPlan {
             <[u8; 32]>::from(Sha256::digest(image)) == self.source_hash,
             "source state changed"
         );
-        let contract =
-            mediatek_optical::image::analysis::ClassicReadCompletion::inspect(image, self.state)?;
+        let contract = mediatek_optical::classify::analysis::ClassicReadCompletion::inspect(
+            image, self.state,
+        )?;
         let mut result = Vec::new();
         for (index, area) in [
             CompletionRole::ControllerTiming,
@@ -469,7 +470,7 @@ impl UhdConversionPlan {
             "source state changed"
         );
         let contract =
-            mediatek_optical::image::analysis::ClassicPosition::detect(image, self.state)?;
+            mediatek_optical::classify::analysis::ClassicPosition::detect(image, self.state)?;
         [
             (
                 PositionRole::PositionInput,
@@ -518,7 +519,7 @@ impl UhdConversionPlan {
             "source state changed"
         );
         let contract =
-            mediatek_optical::image::analysis::ClassicPositionSetup::detect(image, self.state)?;
+            mediatek_optical::classify::analysis::ClassicPositionSetup::detect(image, self.state)?;
         [
             (
                 PositionRole::PositionSetupInput,
@@ -570,7 +571,7 @@ impl UhdConversionPlan {
             "source state changed"
         );
         let contract =
-            mediatek_optical::image::analysis::ClassicReadPosition::detect(image, self.state)?;
+            mediatek_optical::classify::analysis::ClassicReadPosition::detect(image, self.state)?;
         let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         let oem = a.label();
         let reject = a.label();
@@ -647,7 +648,7 @@ impl UhdConversionPlan {
             "source state changed"
         );
         let contract =
-            mediatek_optical::image::analysis::ClassicCalibration::detect(image, self.state)?;
+            mediatek_optical::classify::analysis::ClassicCalibration::detect(image, self.state)?;
         // EXPERIMENT (grafted high-layer): the calibration detour exists only for
         // images whose getter exposes a C7 coefficient table.
         let Some(_coefficients) = contract.c7_coefficients else {
@@ -703,7 +704,7 @@ impl UhdConversionPlan {
             "source state changed"
         );
         let contract =
-            mediatek_optical::image::analysis::ClassicParameter::detect(image, self.state)?;
+            mediatek_optical::classify::analysis::ClassicParameter::detect(image, self.state)?;
         let hook = if let Some(selection) = &contract.selection {
             let site = selection.site();
             Some(UhdRoutingCandidate {
@@ -751,7 +752,7 @@ impl UhdPatch {
 #[derive(Debug, Clone)]
 pub struct UhdReadPositionCandidate {
     /// Complete native decode/range routine and state cells.
-    pub contract: mediatek_optical::image::analysis::ClassicReadPosition,
+    pub contract: mediatek_optical::classify::analysis::ClassicReadPosition,
     /// Source CMP/branch displaced by the replacement.
     pub original: Vec<u8>,
     /// Relocatable C7 decoder.
@@ -761,7 +762,7 @@ pub struct UhdReadPositionCandidate {
 #[derive(Debug, Clone)]
 pub struct UhdCalibrationCandidate {
     /// Native table/getter and saved-frame contract.
-    pub contract: mediatek_optical::image::analysis::ClassicCalibration,
+    pub contract: mediatek_optical::classify::analysis::ClassicCalibration,
     /// Source instructions displaced by the detour.
     pub original: Vec<u8>,
     /// Relocatable Thumb replacement.
@@ -787,10 +788,10 @@ pub enum PositionRole {
 #[derive(Debug, Clone)]
 pub struct UhdParameterCandidate {
     /// Native getter, rate list, coefficient table and setter relationship.
-    pub contract: mediatek_optical::image::analysis::ClassicParameter,
+    pub contract: mediatek_optical::classify::analysis::ClassicParameter,
     /// Absent when the complete native getter is state-independent.
     pub hook:
-        Option<UhdRoutingCandidate<mediatek_optical::image::analysis::ClassicParameterVariant>>,
+        Option<UhdRoutingCandidate<mediatek_optical::classify::analysis::ClassicParameterVariant>>,
 }
 /// A candidate detour with exact replay bytes and both native continuations.
 /// Includes the native saved-link contract needed before installing a branch.
@@ -813,7 +814,7 @@ pub struct UhdRoutingCandidate<R = UhdArea> {
     /// Position-independent Thumb bytes for controlled CPU testing.
     pub bytes: Vec<u8>,
     /// Native stack/LR lifetime proof for installing a Thumb BL at this site.
-    pub caller: mediatek_optical::image::analysis::SavedLink,
+    pub caller: mediatek_optical::classify::analysis::SavedLink,
 }
 /// Resolve only consecutive branches with the condition already known true.
 /// No intervening instruction is skipped, so native NZCV remain authoritative.
@@ -1187,9 +1188,10 @@ mod tests {
         stale[last] ^= 1;
         assert!(plan.prepared_patches(&stale, 0x0200f000).is_err());
         let mut changed = CLASSIC.to_vec();
-        let completion =
-            mediatek_optical::image::analysis::ClassicReadCompletion::inspect(CLASSIC, plan.state)
-                .unwrap();
+        let completion = mediatek_optical::classify::analysis::ClassicReadCompletion::inspect(
+            CLASSIC, plan.state,
+        )
+        .unwrap();
         changed[completion.controller_region + 0x20] ^= 1;
         let broken = UhdConversionPlan::inspect(&changed).unwrap();
         assert!(broken
@@ -1207,9 +1209,10 @@ mod tests {
         }
         let auxiliary = plan.auxiliary_candidates(CLASSIC, 0x0200f000).unwrap();
         assert_eq!(auxiliary.len(), 10);
-        assert!(auxiliary.iter().all(
-            |c| c.area != mediatek_optical::image::analysis::ClassicConsumerKind::ReadBoundary
-        ));
+        assert!(auxiliary
+            .iter()
+            .all(|c| c.area
+                != mediatek_optical::classify::analysis::ClassicConsumerKind::ReadBoundary));
         for candidate in auxiliary {
             assert_eq!(
                 &CLASSIC[candidate.site..candidate.site + candidate.original.len()],
@@ -1346,13 +1349,13 @@ mod tests {
 #[derive(Debug, Clone)]
 pub struct UhdDiCandidate {
     /// Source-derived parser/frame/continuation evidence.
-    pub contract: mediatek_optical::image::analysis::ClassicDi,
+    pub contract: mediatek_optical::classify::analysis::ClassicDi,
     /// Exact eight bytes displaced by the entry detour.
     pub original: Vec<u8>,
     /// Position-independent Thumb code.
     pub bytes: Vec<u8>,
     /// Native frame/lifetime evidence for the entry detour.
-    pub caller: mediatek_optical::image::analysis::SavedLink,
+    pub caller: mediatek_optical::classify::analysis::SavedLink,
 }
 /// Recognize U/5 with two or three layers, then reuse the native format and
 /// layer handlers. OEM/Off/unknown flags replay native prevalidation exactly.
@@ -1381,9 +1384,9 @@ fn build_di_prevalidation_candidate(
     format_one: bool,
     native_attributes: bool,
 ) -> Result<UhdDiCandidate> {
-    let contract = mediatek_optical::image::analysis::ClassicDi::detect(image)?;
+    let contract = mediatek_optical::classify::analysis::ClassicDi::detect(image)?;
     let caller =
-        mediatek_optical::image::analysis::SavedLink::detect(image, contract.prevalidation)?;
+        mediatek_optical::classify::analysis::SavedLink::detect(image, contract.prevalidation)?;
     ensure!(
         caller.entry() == contract.entry && caller.stack_bytes() == 40,
         "DI caller frame disagrees"
