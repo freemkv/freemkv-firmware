@@ -155,11 +155,11 @@ jobs:
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           rec=()
           [ "$PERF" = true ] && rec=(perf record -F 199 -g -o "$out/graph.perf.data" --)
-          /usr/bin/time -f 'graph: %e s wall, %U s user, %S s sys, %M KB maxrss' -o "$out/graph.time" \
+          /usr/bin/time -f 'graph: %e s wall, %U s user, %S s sys, %M KB maxrss, %R minor faults' -o "$out/graph.time" \
             "${rec[@]}" "$RUNNER_TEMP/bin/freemkv-crossflash" "$RUNNER_TEMP/graph/fw" > "$out/graph.json" 2> "$out/graph.err"
           cat "$out/graph.time"; tail -n 5 "$out/graph.err"; sha256sum "$out/graph.json"
       - name: Modify capabilities
-        if: inputs.mode != 'graph'
+        if: ${{ !cancelled() && inputs.mode != 'graph' }}
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/out"; mkdir -p "$out/site-data"
@@ -180,11 +180,11 @@ jobs:
           JS
           rec=()
           [ "$PERF" = true ] && rec=(perf record -F 199 -g -o "$out/caps.perf.data" --)
-          /usr/bin/time -f 'capabilities (incl. hoard extraction): %e s wall, %U s user, %S s sys' -o "$out/caps.time" \
+          /usr/bin/time -f 'capabilities (incl. hoard extraction): %e s wall, %U s user, %S s sys, %R minor faults' -o "$out/caps.time" \
             "${rec[@]}" node "$RUNNER_TEMP/caps.mjs" "$RUNNER_TEMP/stage" "$RUNNER_TEMP/bin/freemkv-fw" "$RUNNER_TEMP/bin/freemkv-crossflash" "$out/site-data" "$PWD/marketing"
           cat "$out/caps.time"; sha256sum "$out"/site-data/*
       - name: Reports
-        if: env.PERF == 'true'
+        if: ${{ !cancelled() && env.PERF == 'true' }}
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/out"
@@ -198,6 +198,7 @@ jobs:
             rm -f "$d"
           done
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: profile-${{ inputs.tag }}-${{ matrix.side }}
           path: ${{ runner.temp }}/out/
