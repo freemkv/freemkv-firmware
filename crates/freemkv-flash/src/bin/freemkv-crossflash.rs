@@ -14,6 +14,12 @@ use freemkv_flash::crossflash::{classified_routes, decide, CompatibilityStatus, 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+// The catalogue scan allocates and frees image-sized buffers on every worker;
+// the macOS system allocator serializes on them.
+#[cfg(target_os = "macos")]
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() -> std::process::ExitCode {
     match freemkv_flash::user_error::read_only(freemkv_flash::diagnostics::run(
         "crossflash analysis",

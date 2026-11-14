@@ -503,16 +503,51 @@ pub(crate) struct OfflinePrepared {
     plan: ExecutePlan,
     receiver: Receiver,
     roles: Vec<(String, String)>,
+    /// The package's own loaded target evidence. It depends only on this
+    /// package, so it is built once rather than once per directed pair.
+    /// `None` when loading fails: those pairs take the ordinary per-pair path,
+    /// which reproduces the exact error.
+    target: Option<LoadedTarget>,
+}
+
+/// A Kernel+Normal package loaded as a flash target (see [`load_target`]).
+struct LoadedTarget {
+    update: pioneer_optical::envelope::Update,
+    facts: flash_plan::Target,
+    receiver_check: Result<(), String>,
+}
+
+/// Target-only work of [`authorize_components`] for a Kernel+Normal plan.
+fn load_target(kernel: &[u8], normal: &[u8]) -> Result<LoadedTarget> {
+    let update = normal_prepare::pair(kernel, normal)?;
+    let facts = flash_plan::target_from_loaded(
+        Some(update.kernel()),
+        update.normal(),
+        Some(kernel),
+        normal,
+        None,
+    )?;
+    let receiver_check = flash_plan::check_loaded_receiver(&update);
+    Ok(LoadedTarget {
+        update,
+        facts,
+        receiver_check,
+    })
 }
 
 pub(crate) fn offline_prepare(bytes: &[u8]) -> Result<OfflinePrepared> {
     let plan = execute_plan(bytes)?;
     let receiver = receiver_from_components(plan.kernel.as_deref(), Some(&plan.normal))?;
     let roles = crate::backends::pioneer::backup::component_roles(bytes);
+    let target = match (plan.selection, plan.kernel.as_deref()) {
+        (FlashSelection::KernelAndNormal, Some(kernel)) => load_target(kernel, &plan.normal).ok(),
+        _ => None,
+    };
     Ok(OfflinePrepared {
         plan,
         receiver,
         roles,
+        target,
     })
 }
 
@@ -533,11 +568,12 @@ fn authorize_offline_prepared(
     target: &OfflinePrepared,
 ) -> Result<AuthorizedPlan> {
     verify_coverage_roles(&installed.roles, target.plan.kernel.is_some(), true)?;
-    authorize_components(
+    authorize_components_with(
         FlashPlan::new(target.plan.clone()),
         installed.plan.kernel.as_deref(),
         Some(installed.plan.normal.as_slice()),
         &installed.receiver,
+        target.target.as_ref(),
     )
 }
 
@@ -642,6 +678,18 @@ fn authorize_components(
     installed_normal: Option<&[u8]>,
     receiver: &Receiver,
 ) -> Result<AuthorizedPlan> {
+    authorize_components_with(plan, installed_kernel, installed_normal, receiver, None)
+}
+
+/// [`authorize_components`], optionally reusing the target's own loaded
+/// evidence ([`load_target`] of this same plan's components).
+fn authorize_components_with(
+    plan: FlashPlan,
+    installed_kernel: Option<&[u8]>,
+    installed_normal: Option<&[u8]>,
+    receiver: &Receiver,
+    loaded: Option<&LoadedTarget>,
+) -> Result<AuthorizedPlan> {
     use crate::backends::pioneer::flash::preparation_error;
     let p: &ExecutePlan = plan.state()?;
     let (kernel, normal) = (p.kernel.as_deref(), p.normal.as_slice());
@@ -675,20 +723,21 @@ fn authorize_components(
     }
     let (prepared, target_facts, receiver_check) = match p.selection {
         FlashSelection::KernelAndNormal => {
-            let target = normal_prepare::pair(kernel.expect("selected Kernel"), normal)?;
-            let facts = flash_plan::target_from_loaded(
-                Some(target.kernel()),
-                target.normal(),
-                kernel,
-                normal,
-                None,
-            )?;
+            let owned;
+            let loaded = match loaded {
+                Some(loaded) => loaded,
+                None => {
+                    owned = load_target(kernel.expect("selected Kernel"), normal)?;
+                    &owned
+                }
+            };
+            let (target, facts) = (&loaded.update, loaded.facts.clone());
             let check = if installed_kernel == kernel {
                 // Preserve the existing identical-envelope fast path. The
                 // library still validates the complete pair and live plan.
                 Ok(())
             } else {
-                flash_plan::check_loaded_receiver(&target)
+                loaded.receiver_check.clone()
             };
             let prepared = receiver.prepare(target.clone());
             let prepared = prepared.map(|complete| (Some(complete), None));

@@ -44,7 +44,7 @@ sha2 = "0.10"
 getrandom = "0.3"
 time = "0.3"
 # Exact reviewed development commit with the shared verified update executor.
-pioneer-optical = { version = "=3.0.0", features = ["drive", "envelope", "analysis"] }
+pioneer-optical = { version = "=3.0.1", features = ["drive", "envelope", "analysis"] }
 # Shared step-1 chipset detection (MTEKMT19xx family key) — the same detector
 # freemkv-fw uses, so the flash tool and the modify tool never disagree on a
 # firmware image's family. Detection-only crate (std + anyhow); no cycle.
@@ -63,10 +63,15 @@ libfreemkv = { git = "https://github.com/freemkv/libfreemkv", tag = "v1.8.2", de
 [dev-dependencies]
 # Tests only: a few flasher tests assert on library internals (startup banks,
 # receiver control). Production builds see only the five public modules.
-pioneer-optical = { version = "=3.0.0", features = ["internals"] }
+pioneer-optical = { version = "=3.0.1", features = ["internals"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.190"
 
 [lints]
 workspace = true
+
+# Global allocator of the allocation-heavy freemkv-crossflash catalogue scan,
+# which the website release runs on macOS.
+[target.'cfg(target_os = "macos")'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
