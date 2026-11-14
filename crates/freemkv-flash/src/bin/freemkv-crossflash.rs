@@ -15,8 +15,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 // The catalogue scan allocates and frees image-sized buffers on every worker;
-// the macOS system allocator serializes on them.
-#[cfg(target_os = "macos")]
+// the macOS system allocator serializes on them, and musl maps and unmaps
+// every one (a page fault per page: a third of the scan was kernel time).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[global_allocator]
 static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

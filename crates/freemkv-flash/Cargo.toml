@@ -72,6 +72,6 @@ libc = "=0.2.190"
 workspace = true
 
 # Global allocator of the allocation-heavy freemkv-crossflash catalogue scan,
-# which the website release runs on macOS.
-[target.'cfg(target_os = "macos")'.dependencies]
+# which the website data runs on Linux (static musl) and macOS.
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false }
