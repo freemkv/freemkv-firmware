@@ -529,11 +529,11 @@ jobs:
   # QA computes the website's crossflash route graph and Modify capabilities
   # with the exact Linux release binaries over the published firmware set. The
   # tag release computes nothing: its website step deploys this QA artifact.
-  site-data:
+  site-graph:
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     needs: build
     runs-on: ubuntu-latest
-    steps:
+    steps: &site-steps
       - uses: actions/checkout@v7
         with:
           repository: freemkv/marketing
@@ -554,23 +554,60 @@ jobs:
       # The route graph depends only on the crossflash binary and the package
       # set: reuse it across reruns and website-only fixes. The cache itself
       # re-checks the engine hash and every package before reuse.
-      - uses: actions/cache/restore@v4
+      - if: env.PART == 'graph'
+        uses: actions/cache/restore@v4
         with:
           path: graph-cache
           key: crossflash-graph-${{ hashFiles('bin/freemkv-crossflash-cli-x86_64-linux', 'stage/publish-manifest.json') }}
-      - name: Compute the route graph and Modify capabilities
+      - name: Compute the website data
         run: |
-          node marketing/scripts/site-data.mjs --stage "$PWD/stage" \
+          node marketing/scripts/site-data.mjs --only "$PART" --stage "$PWD/stage" \
             --fw "$PWD/bin/freemkv-fw-cli-x86_64-linux" \
             --flash "$PWD/bin/freemkv-crossflash-cli-x86_64-linux" \
             --cache "$PWD/graph-cache/crossflash.json" \
             --out "$PWD/site-data"
       # Keep a computed graph even when a later check fails.
-      - if: always() && hashFiles('graph-cache/crossflash.json') != ''
+      - if: always() && env.PART == 'graph' && hashFiles('graph-cache/crossflash.json') != ''
         uses: actions/cache/save@v4
         with:
           path: graph-cache
           key: crossflash-graph-${{ hashFiles('bin/freemkv-crossflash-cli-x86_64-linux', 'stage/publish-manifest.json') }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-${{ env.PART }}
+          path: site-data/
+          if-no-files-found: error
+    env:
+      PART: graph
+
+  # The Modify capabilities run on their own runner, in parallel with the graph.
+  site-capabilities:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      PART: capabilities
+    steps: *site-steps
+
+  # One artifact for the release's website deploy.
+  site-data:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: [site-graph, site-capabilities]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-graph
+          path: site-data
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-capabilities
+          path: site-data
+      - run: |
+          set -euo pipefail
+          for f in crossflash-links.json firmware-capabilities.json firmware-features.json firmware-index.json firmware-features-summary.md; do
+            test -s "site-data/$f"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: site-data
