@@ -36,6 +36,8 @@ freemkv-chipset = { path = "../freemkv-chipset" }
 thumb-asm = "=0.15.0"
 mediatek-optical = { version = "=3.0.0", features = ["image", "analysis", "drive", "enc"] }
 
+# SIMD substring search for the boot settings record in a whole image.
+memchr = "2"
 sha2 = "0.10"
 tempfile = "3"
 

@@ -354,24 +354,28 @@ impl Plan {
                 }
             }
         }
-        // Authentication parity is retained for internal analysis only. Neither
-        // a difference nor an unresolved diagnostic authorizes an auth patch
-        // or prevents a complete G01-G06 media plan.
+        Ok(plan)
+    }
+    /// Authentication parity diagnostics (internal analysis only). Modify and
+    /// audit never read them, so they are computed only when asked for.
+    pub fn with_authentication_diagnostics(mut self, image: &[u8]) -> Self {
+        // Neither a difference nor an unresolved diagnostic authorizes an auth
+        // patch or prevents a complete G01-G06 media plan.
         match UhdKeyPath::inspect(image) {
             Ok(keys) => {
                 if !keys.report.legacy_selectors.is_empty()
                     || !keys.send.legacy_selectors.is_empty()
                 {
-                    plan.authentication_differences.push(Gap::KeyRouting);
+                    self.authentication_differences.push(Gap::KeyRouting);
                 }
                 if keys.mode.is_none() || keys.certificate.is_none() {
-                    plan.authentication_differences
+                    self.authentication_differences
                         .push(Gap::ExtendedAuthentication);
                 }
             }
-            Err(e) => plan.authentication_diagnostic_error = Some(format!("{e:#}")),
+            Err(e) => self.authentication_diagnostic_error = Some(format!("{e:#}")),
         }
-        Ok(plan)
+        self
     }
     /// Verify that the output contains the complete group, or no candidate edits
     /// when any required contract remains unresolved.
@@ -760,7 +764,9 @@ mod tests {
     #[test]
     fn authentication_differences_are_diagnostics_without_patches_or_blockers() {
         let image = include_bytes!("../../tests/fixtures/WH16NS58_OEM_1.V9.bin");
-        let plan = Plan::inspect(image, FLAGS).unwrap();
+        let plan = Plan::inspect(image, FLAGS)
+            .unwrap()
+            .with_authentication_diagnostics(image);
         assert_eq!(
             plan.authentication_differences(),
             &[Gap::KeyRouting, Gap::ExtendedAuthentication]
@@ -829,7 +835,9 @@ mod tests {
         ] {
             let mut changed = image.to_vec();
             changed[site] ^= 1;
-            let plan = Plan::inspect(&changed, FLAGS).unwrap();
+            let plan = Plan::inspect(&changed, FLAGS)
+                .unwrap()
+                .with_authentication_diagnostics(&changed);
             assert!(
                 plan.authentication_diagnostic_error().is_some(),
                 "{site:#x}"

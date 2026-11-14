@@ -330,6 +330,8 @@ mod tests;
 const RECORD_MAGIC: &[u8; 16] = b"freemkv.boot.v1\0";
 const RECORD_MAGIC_V2: &[u8; 16] = b"freemkv.boot.v2\0";
 const RECORD_MAGIC_V3: &[u8; 16] = b"freemkv.boot.v3\0";
+/// `freemkv.boot.`, shared by every record magic.
+const RECORD_PREFIX: usize = 13;
 const LIMITED_UNRESTRICTED: u8 = 1 << 5;
 const RECORD_LEN: usize = 36;
 
@@ -356,11 +358,14 @@ fn stores(flags: &[u8; 7], base_register: u16) -> Vec<u8> {
 }
 
 fn read_record(image: &[u8]) -> Result<Option<Record>> {
-    let locations: Vec<_> = image
-        .windows(RECORD_MAGIC.len())
-        .enumerate()
-        .filter(|(_, w)| *w == RECORD_MAGIC || *w == RECORD_MAGIC_V2 || *w == RECORD_MAGIC_V3)
-        .map(|(i, _)| i)
+    // Every record magic starts with this prefix, which cannot overlap itself,
+    // so its occurrences are exactly the offsets worth comparing in full.
+    let locations: Vec<_> = memchr::memmem::find_iter(image, &RECORD_MAGIC[..RECORD_PREFIX])
+        .filter(|&i| {
+            image
+                .get(i..i + RECORD_MAGIC.len())
+                .is_some_and(|w| w == RECORD_MAGIC || w == RECORD_MAGIC_V2 || w == RECORD_MAGIC_V3)
+        })
         .collect();
     if locations.is_empty() {
         return Ok(None);
@@ -595,4 +600,32 @@ pub(crate) fn attach(
     *image = freemkv_flash::cmac::resign(image)?;
     inspect(image)?.ok_or_else(|| anyhow::anyhow!("missing boot settings after signing"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod record_scan_tests {
+    use super::*;
+
+    /// The prefix search finds the same offsets as comparing every window.
+    #[test]
+    fn prefix_search_matches_a_full_window_scan() {
+        assert!([RECORD_MAGIC, RECORD_MAGIC_V2, RECORD_MAGIC_V3]
+            .iter()
+            .all(|magic| magic[..RECORD_PREFIX] == RECORD_MAGIC[..RECORD_PREFIX]));
+        let mut image = vec![0u8; 4096];
+        image[100..113].copy_from_slice(&RECORD_MAGIC[..RECORD_PREFIX]);
+        image[700..716].copy_from_slice(RECORD_MAGIC_V3);
+        image[4090..4096].copy_from_slice(&RECORD_MAGIC[..6]);
+        let windows: Vec<_> = image
+            .windows(16)
+            .enumerate()
+            .filter(|(_, w)| *w == RECORD_MAGIC || *w == RECORD_MAGIC_V2 || *w == RECORD_MAGIC_V3)
+            .map(|(i, _)| i)
+            .collect();
+        let found: Vec<_> = memchr::memmem::find_iter(&image, &RECORD_MAGIC[..RECORD_PREFIX])
+            .filter(|&i| image.get(i..i + 16).is_some_and(|w| w == RECORD_MAGIC_V3))
+            .collect();
+        assert_eq!(windows, vec![700]);
+        assert_eq!(found, windows);
+    }
 }

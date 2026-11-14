@@ -49,3 +49,16 @@ opt-level = 2
 
 [profile.test.package.digest]
 opt-level = 2
+
+# The Thumb/ARM decoders run millions of times per image analysis.
+[profile.test.package.thumb-asm]
+opt-level = 2
+
+[profile.test.package.yaxpeax-arm]
+opt-level = 2
+
+[profile.test.package.yaxpeax-arch]
+opt-level = 2
+
+[profile.test.package.memchr]
+opt-level = 2

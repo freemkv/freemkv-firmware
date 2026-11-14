@@ -18,7 +18,8 @@ fn main() -> Result<()> {
                 == row["sha256"].as_str().context("source hash")?,
             "source hash mismatch"
         );
-        let plan = freemkv_fw::engine::mt1959_uhd::Plan::inspect(&data, 0x0200_0e40);
+        let plan = freemkv_fw::engine::mt1959_uhd::Plan::inspect(&data, 0x0200_0e40)
+            .map(|p| p.with_authentication_diagnostics(&data));
         let di = plan
             .as_ref()
             .ok()
