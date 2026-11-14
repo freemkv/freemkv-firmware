@@ -209,42 +209,11 @@ jobs:
             binext: ''
             gui: false
             cross_image: ghcr.io/cross-rs/armv7-unknown-linux-musleabihf:0.2.5@sha256:b4f481f30ceca34730a5723f717396d762d94f6eddd7e1cf7c7862d1377ff98c
-          # macOS: ship both architectures as separate binaries, GUIs included.
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            osname: macos
-            arch: x86_64
-            archive: tar.gz
-            binext: ''
-            gui: true
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            osname: macos
-            arch: aarch64
-            archive: tar.gz
-            binext: ''
-            gui: true
-          # Windows: MSVC toolchain, GUIs included.
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            osname: windows
-            arch: x86_64
-            archive: zip
-            binext: '.exe'
-            gui: true
-          # Windows on Arm: native arm64 runner, GUIs included.
-          - os: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            osname: windows
-            arch: aarch64
-            archive: zip
-            binext: '.exe'
-            gui: true
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: freemkv-firmware
-    steps:
+    steps: &build-steps
       - uses: actions/checkout@v7
         with:
           path: freemkv-firmware
@@ -435,6 +404,77 @@ jobs:
             freemkv-firmware/*-cli-*-linux
             freemkv-firmware/*-cli-*-macos
             freemkv-firmware/*-cli-*-windows.exe
+
+  # Same steps as build (one anchored list), split by OS so Linux packaging
+  # does not wait for the macOS and Windows archives it never uses.
+  build-macos:
+    # verify is a fast tripwire that fails the run on a version mismatch, but
+    # packaging can start in parallel — so `build` only waits on resolve-msrv
+    # (a few seconds) to learn the toolchain, not on `verify`.
+    needs: resolve-msrv
+    strategy:
+      # One red leg (e.g. a backend that stops compiling on its host) must not
+      # cancel the others — the platforms that do build should still ship.
+      fail-fast: false
+      matrix:
+        include:
+          # macOS: ship both architectures as separate binaries, GUIs included.
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            osname: macos
+            arch: x86_64
+            archive: tar.gz
+            binext: ''
+            gui: true
+            cross_image: ''
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            osname: macos
+            arch: aarch64
+            archive: tar.gz
+            binext: ''
+            gui: true
+            cross_image: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps: *build-steps
+
+  build-windows:
+    # verify is a fast tripwire that fails the run on a version mismatch, but
+    # packaging can start in parallel — so `build` only waits on resolve-msrv
+    # (a few seconds) to learn the toolchain, not on `verify`.
+    needs: resolve-msrv
+    strategy:
+      # One red leg (e.g. a backend that stops compiling on its host) must not
+      # cancel the others — the platforms that do build should still ship.
+      fail-fast: false
+      matrix:
+        include:
+          # Windows: MSVC toolchain, GUIs included.
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            osname: windows
+            arch: x86_64
+            archive: zip
+            binext: '.exe'
+            gui: true
+            cross_image: ''
+          # Windows on Arm: native arm64 runner, GUIs included.
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            osname: windows
+            arch: aarch64
+            archive: zip
+            binext: '.exe'
+            gui: true
+            cross_image: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: freemkv-firmware
+    steps: *build-steps
 
   # Compile Linux GUIs alongside the archive matrix. Waiting for all macOS/
   # Windows archives before starting this took ten minutes on rc1. Packaging
@@ -695,7 +735,7 @@ jobs:
   # and the per-binary freemkv-<bin>-windows-<arch>.zip archives come from `build`.
   # No winget manifest, by decision.
   windows-installer:
-    needs: build
+    needs: build-windows
     strategy:
       fail-fast: false
       matrix:
