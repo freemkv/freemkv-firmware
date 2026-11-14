@@ -1,5 +1,5 @@
 """Run mandatory Pioneer Rust KATs; missing or unexecuted tests fail this gate."""
-import subprocess
+import sys
 
 TESTS = (
     'backends::pioneer::recovery::tests::pioneer_212u_213u_bank_contract_regression',
@@ -11,20 +11,24 @@ TESTS = (
         'offline_routes_admit_a_proven_startup_word_without_requirements',
     )),
 )
-COMMAND = ['cargo', 'test', '--locked', '-p', 'freemkv-flash', '--lib']
 
 
 def main():
-    for name in TESTS:
-        options = ['--exact']
-        result = subprocess.run(
-            [*COMMAND, name, '--', *options],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            check=False,
-        )
-        print(result.stdout, end='', flush=True)
-        if result.returncode or 'test result: ok. 1 passed; 0 failed; 0 ignored;' not in result.stdout:
-            raise SystemExit(f'Mandatory Pioneer Rust KAT did not execute and pass: {name}')
+    """Check the workspace test log: each KAT must have run and passed there.
+
+    The KATs are ordinary freemkv-flash unit tests, so `cargo test --tests`
+    already executes them; re-running each through `cargo test -p` only
+    recompiled the crate under a different feature resolution.
+    """
+    if len(sys.argv) != 2:
+        raise SystemExit('usage: test_pioneer_settings_kats.py <cargo test log>')
+    with open(sys.argv[1], encoding='utf-8', errors='replace') as log:
+        passed = {line.split()[1] for line in log
+                  if line.startswith('test ') and line.rstrip().endswith(' ... ok')}
+    missing = [name for name in TESTS if name not in passed]
+    if missing:
+        raise SystemExit('Mandatory Pioneer Rust KATs did not execute and pass: ' + ', '.join(missing))
+    print(f'All {len(TESTS)} mandatory Pioneer Rust KATs executed and passed.')
 
 
 if __name__ == '__main__':
