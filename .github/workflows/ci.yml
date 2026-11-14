@@ -34,13 +34,27 @@ jobs:
     # Feature branches and forks still run their full PR checks.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || !contains(fromJSON('["dev","qa","main"]'), github.head_ref)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       v: ${{ steps.msrv.outputs.v }}
       code_changed: ${{ steps.scope.outputs.code_changed }}
+      test: ${{ steps.tests.outputs.test }}
+      packages: ${{ steps.tests.outputs.packages }}
+      gui: ${{ steps.tests.outputs.gui }}
+      flash: ${{ steps.tests.outputs.flash }}
+      deps: ${{ steps.tests.outputs.deps }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # dev tests only the crates changed since the last green dev commit;
+      # qa runs the complete suite on every OS before promotion.
+      - id: tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/test_scope.py
       - id: scope
         shell: bash
         run: |
@@ -148,7 +162,7 @@ jobs:
         working-directory: freemkv-firmware
 
   test:
-    if: needs.resolve-msrv.outputs.code_changed == 'true' && !inputs.coverage_only
+    if: needs.resolve-msrv.outputs.code_changed == 'true' && needs.resolve-msrv.outputs.test == 'true' && !inputs.coverage_only
     needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
@@ -164,20 +178,26 @@ jobs:
           cache-on-failure: true
       # The flash GUI's native Linux shell (gtk4/libadwaita) probes pkg-config at build time.
       - name: Install GTK4 + libadwaita development headers
+        if: needs.resolve-msrv.outputs.gui == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libgtk-4-dev libadwaita-1-dev
       - name: Test pinned Pioneer Rust example KATs
+        if: needs.resolve-msrv.outputs.deps == 'true'
         run: python3 .github/scripts/test_pioneer_dependency_examples.py
         working-directory: freemkv-firmware
       # Includes the CMAC-verify T0 proof against a committed stock image.
-      # One invocation builds and tests every test target and example, so
-      # shared units compile once and examples build alongside the tests.
+      # One invocation builds and tests every test target and example of the
+      # changed crates (the whole workspace when manifests or CI change).
       - name: cargo test --tests --examples
         shell: bash
-        run: cargo test --locked --tests --examples 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+        env:
+          PACKAGES: ${{ needs.resolve-msrv.outputs.packages }}
+        # PACKAGES is a list of `-p name` words; empty means the workspace.
+        run: cargo test --locked --tests --examples $PACKAGES 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
         working-directory: freemkv-firmware
       - name: Mandatory Pioneer settings Rust KATs (no skips)
+        if: needs.resolve-msrv.outputs.flash == 'true'
         run: python3 .github/scripts/test_pioneer_settings_kats.py "$RUNNER_TEMP/cargo-test.log"
         working-directory: freemkv-firmware
 
