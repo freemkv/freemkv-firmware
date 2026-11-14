@@ -98,6 +98,14 @@ jobs:
       matrix:
         os: ['ubuntu-latest', 'macos-latest', 'windows-latest']
     runs-on: ${{ matrix.os }}
+    # Release semantics (opt-level 3, no debug assertions or overflow checks)
+    # without the shipping link-time work: thin LTO with one codegen unit was
+    # re-linking every test executable and was most of this job (13 of 15
+    # minutes on Windows). Shipped binaries are built by release-packages with
+    # the full release profile.
+    env:
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
     defaults:
       run:
         working-directory: freemkv-firmware
