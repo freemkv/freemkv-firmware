@@ -1487,6 +1487,7 @@ dependencies = [
  "freemkv-flash",
  "mediatek-optical",
  "memchr",
+ "mimalloc",
  "serde_json",
  "sha2",
  "tempfile",

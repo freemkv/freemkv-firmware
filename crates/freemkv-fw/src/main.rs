@@ -27,6 +27,12 @@ macro_rules! eprintln {
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+// Image analysis allocates and frees image-sized buffers; the static musl
+// allocator maps and unmaps every one.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 

@@ -46,3 +46,8 @@ serde_json = "1"
 
 [lints]
 workspace = true
+
+# Modify's image analysis allocates image-sized buffers; the static musl
+# allocator maps and unmaps each one (a page fault per page).
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
