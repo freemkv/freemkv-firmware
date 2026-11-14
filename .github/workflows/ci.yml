@@ -14,10 +14,44 @@ on:
         description: Run optional instrumented library coverage separately from release gates
         type: boolean
         default: false
+      # Manual performance probe (.github/workflows/profile.yml); a non-empty
+      # tag runs only the probe. Never part of push or PR checks.
+      profile:
+        description: Profile tag (non-empty runs only the website-data performance probe)
+        type: string
+        default: ''
+      profile_baseline:
+        description: Baseline freemkv-firmware ref for the byte-identical comparison
+        type: string
+        default: ''
+      profile_patches:
+        description: "Candidate crate patches: name=git-url@rev ..."
+        type: string
+        default: ''
+      profile_baseline_patches:
+        description: "Baseline crate patches: name=git-url@rev ..."
+        type: string
+        default: ''
+      profile_subset:
+        description: Pioneer packages in the route graph (0 for all)
+        type: string
+        default: '0'
+      profile_mode:
+        description: graph, capabilities or both
+        type: string
+        default: both
+      profile_marketing:
+        description: Candidate marketing ref
+        type: string
+        default: main
+      profile_baseline_marketing:
+        description: Baseline marketing ref
+        type: string
+        default: main
 
 # Rapid dev pushes supersede their own in-progress runs instead of stacking.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}${{ inputs.profile }}
   cancel-in-progress: true
 
 # Every build job checks itself out into `freemkv-firmware/` and runs there.
@@ -120,6 +154,7 @@ jobs:
   # fmt on the pinned MSRV; clippy on stable so new-lint debt is a blocking gate
   # the pinned version would hide. --all-targets lints the test code too.
   lint:
+    if: "!inputs.profile"
     needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
@@ -162,7 +197,7 @@ jobs:
         working-directory: freemkv-firmware
 
   test:
-    if: needs.resolve-msrv.outputs.code_changed == 'true' && needs.resolve-msrv.outputs.test == 'true' && !inputs.coverage_only
+    if: "!inputs.profile && needs.resolve-msrv.outputs.code_changed == 'true' && needs.resolve-msrv.outputs.test == 'true' && !inputs.coverage_only"
     needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
@@ -251,3 +286,17 @@ jobs:
           files: freemkv-firmware/lcov.info
           slug: freemkv/freemkv-firmware
           fail_ci_if_error: false
+
+  # Manual only: the website-data performance probe (see profile.yml).
+  profile:
+    if: github.event_name == 'workflow_dispatch' && inputs.profile != ''
+    uses: ./.github/workflows/profile.yml
+    with:
+      tag: ${{ inputs.profile }}
+      baseline: ${{ inputs.profile_baseline }}
+      patches: ${{ inputs.profile_patches }}
+      baseline_patches: ${{ inputs.profile_baseline_patches }}
+      subset: ${{ inputs.profile_subset }}
+      mode: ${{ inputs.profile_mode }}
+      marketing: ${{ inputs.profile_marketing }}
+      baseline_marketing: ${{ inputs.profile_baseline_marketing }}

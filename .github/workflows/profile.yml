@@ -1,0 +1,235 @@
+# Manual performance probe for the website-data workloads. Never runs on push:
+# CI's workflow_dispatch calls it only when the `profile` input is set.
+#
+# Builds the release CLIs (x86_64 musl, as shipped) with line tables and frame
+# pointers for one or two refs, runs them over the published firmware stage,
+# records CPU time and a perf profile, and diffs the outputs of the two sides
+# (route graph JSON and Modify capability/features data) byte for byte.
+name: profile
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      baseline:
+        description: freemkv-firmware ref for the comparison side (empty for none)
+        type: string
+        default: ''
+      patches:
+        description: "candidate crate patches: name=git-url@rev, space separated"
+        type: string
+        default: ''
+      baseline_patches:
+        type: string
+        default: ''
+      subset:
+        description: Pioneer packages in the route graph (0 for all)
+        type: string
+        default: '0'
+      mode:
+        description: graph, capabilities or both
+        type: string
+        default: both
+      marketing:
+        description: marketing ref driving the capabilities workload (candidate side)
+        type: string
+        default: main
+      baseline_marketing:
+        type: string
+        default: main
+      perf:
+        description: record perf profiles (candidate side)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      sides: ${{ steps.sides.outputs.v }}
+    steps:
+      - id: sides
+        env:
+          BASELINE: ${{ inputs.baseline }}
+          PATCHES: ${{ inputs.patches }}
+          BASELINE_PATCHES: ${{ inputs.baseline_patches }}
+          MARKETING: ${{ inputs.marketing }}
+          BASELINE_MARKETING: ${{ inputs.baseline_marketing }}
+          SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          sides = [{"side": "candidate", "ref": os.environ["SHA"], "patches": os.environ["PATCHES"], "marketing": os.environ["MARKETING"]}]
+          if os.environ["BASELINE"]:
+              sides.append({"side": "baseline", "ref": os.environ["BASELINE"], "patches": os.environ["BASELINE_PATCHES"], "marketing": os.environ["BASELINE_MARKETING"]})
+          print("v=" + json.dumps({"include": sides}))
+          PY
+
+  run:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.sides) }}
+    env:
+      TARGET: x86_64-unknown-linux-musl
+      CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+      CARGO_PROFILE_RELEASE_STRIP: none
+      RUSTFLAGS: -C force-frame-pointers=yes
+      PERF: ${{ inputs.perf && matrix.side == 'candidate' }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+          path: fw
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/marketing
+          ref: ${{ matrix.marketing }}
+          path: marketing
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - name: Toolchain
+        working-directory: fw
+        run: |
+          set -euo pipefail
+          v=$(grep -m1 -E '^[[:space:]]*rust-version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          rustup toolchain install "$v" --profile minimal --target "$TARGET"
+          rustup default "$v"
+          sudo apt-get update
+          sudo apt-get install -y musl-tools linux-tools-common "linux-tools-$(uname -r)" || sudo apt-get install -y musl-tools linux-tools-common linux-tools-azure
+          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
+      - name: Apply crate patches
+        working-directory: fw
+        env:
+          PATCHES: ${{ matrix.patches }}
+        run: |
+          set -euo pipefail
+          [ -n "$PATCHES" ] || exit 0
+          printf '\n[patch.crates-io]\n' >> Cargo.toml
+          for p in $PATCHES; do
+            name=${p%%=*}; rest=${p#*=}; url=${rest%@*}; rev=${rest##*@}
+            printf '%s = { git = "%s", rev = "%s" }\n' "$name" "$url" "$rev" >> Cargo.toml
+            # Exact pins would reject a bumped patch version.
+            sed -i -E "s/^(${name} = \{ version = )\"=[^\"]+\"/\1\"*\"/" crates/*/Cargo.toml
+          done
+          tail -n 8 Cargo.toml
+          cargo update -w
+      - name: Build
+        working-directory: fw
+        run: |
+          set -euo pipefail
+          /usr/bin/time -f 'build %e s' cargo build --release --target "$TARGET" --bin freemkv-fw --bin freemkv-crossflash
+          mkdir -p "$RUNNER_TEMP/bin"
+          cp "target/$TARGET/release/freemkv-fw" "target/$TARGET/release/freemkv-crossflash" "$RUNNER_TEMP/bin/"
+          cargo tree -i pioneer-optical --target "$TARGET" -e normal | head -3 || true
+          cargo tree -i mediatek-optical --target "$TARGET" -e normal | head -3 || true
+      - name: Stage
+        env:
+          SUBSET: ${{ inputs.subset }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/stage"
+          curl -fsSL -A freemkv-release https://freemkv.org/fw/latest.tar.gz | tar -xz -C "$RUNNER_TEMP/stage"
+          sub="$RUNNER_TEMP/graph/fw"
+          mkdir -p "$sub/pioneer" "$sub/mediatek"
+          ln -s "$RUNNER_TEMP"/stage/payloads/fw/mediatek/*.tar "$sub/mediatek/"
+          if [ "$SUBSET" = 0 ]; then
+            ln -s "$RUNNER_TEMP"/stage/payloads/fw/pioneer/*.tar "$sub/pioneer/"
+          else
+            find "$RUNNER_TEMP/stage/payloads/fw/pioneer" -name '*.tar' | sort | head -n "$SUBSET" | xargs -I{} ln -s {} "$sub/pioneer/"
+          fi
+          ls "$sub/pioneer" | wc -l; ls "$sub/mediatek" | wc -l; nproc
+      - name: Route graph
+        if: inputs.mode != 'capabilities'
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          rec=()
+          [ "$PERF" = true ] && rec=(perf record -F 199 -g -o "$out/graph.perf.data" --)
+          /usr/bin/time -f 'graph: %e s wall, %U s user, %S s sys, %M KB maxrss' -o "$out/graph.time" \
+            "${rec[@]}" "$RUNNER_TEMP/bin/freemkv-crossflash" "$RUNNER_TEMP/graph/fw" > "$out/graph.json" 2> "$out/graph.err"
+          cat "$out/graph.time"; tail -n 5 "$out/graph.err"; sha256sum "$out/graph.json"
+      - name: Modify capabilities
+        if: inputs.mode != 'graph'
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"; mkdir -p "$out/site-data"
+          cat > "$RUNNER_TEMP/caps.mjs" <<'JS'
+          import path from 'node:path';
+          import os from 'node:os';
+          import { promises as fs } from 'node:fs';
+          const [stage, fw, flash, out, marketing] = process.argv.slice(2);
+          const { stageHoard } = await import(path.join(marketing, 'scripts/site-data.mjs'));
+          const { generate, eligibleImageHashes } = await import(path.join(marketing, 'scripts/firmware-features.mjs'));
+          const manifest = JSON.parse(await fs.readFile(path.join(stage, 'publish-manifest.json'), 'utf8'));
+          const catalog = JSON.parse(await fs.readFile(path.join(stage, 'finder-catalog.json'), 'utf8'));
+          const work = await fs.mkdtemp(path.join(os.tmpdir(), 'caps-'));
+          const hoard = await stageHoard(stage, manifest.objects, path.join(work, 'hoard'));
+          const started = Date.now();
+          await generate({ hoard, fw, flash, outDir: out, eligible: eligibleImageHashes(catalog), jobs: os.availableParallelism(), log: () => {} });
+          console.log(`capabilities wall ${((Date.now() - started) / 1000).toFixed(1)} s`);
+          JS
+          rec=()
+          [ "$PERF" = true ] && rec=(perf record -F 199 -g -o "$out/caps.perf.data" --)
+          /usr/bin/time -f 'capabilities (incl. hoard extraction): %e s wall, %U s user, %S s sys' -o "$out/caps.time" \
+            "${rec[@]}" node "$RUNNER_TEMP/caps.mjs" "$RUNNER_TEMP/stage" "$RUNNER_TEMP/bin/freemkv-fw" "$RUNNER_TEMP/bin/freemkv-crossflash" "$out/site-data" "$PWD/marketing"
+          cat "$out/caps.time"; sha256sum "$out"/site-data/*
+      - name: Reports
+        if: env.PERF == 'true'
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"
+          for d in "$out"/*.perf.data; do
+            n=$(basename "$d" .perf.data)
+            perf report -i "$d" --no-children --stdio -g none --percent-limit 0.2 --sort comm,dso,sym > "$out/$n.self.txt" 2>/dev/null || true
+            perf report -i "$d" --children --stdio -g none --percent-limit 1 --sort sym > "$out/$n.children.txt" 2>/dev/null || true
+            perf report -i "$d" --no-children --stdio -g caller,0.5,callee --percent-limit 2 --sort sym > "$out/$n.callers.txt" 2>/dev/null || true
+            timeout 1200 perf report -i "$d" --no-children --stdio -g none --percent-limit 0.3 --sort srcline > "$out/$n.srcline.txt" 2>/dev/null || true
+            head -n 60 "$out/$n.self.txt"
+            rm -f "$d"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: profile-${{ inputs.tag }}-${{ matrix.side }}
+          path: ${{ runner.temp }}/out/
+
+  compare:
+    needs: run
+    if: inputs.baseline != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: profile-${{ inputs.tag }}-*
+          path: sides
+      - name: Byte-identical outputs
+        run: |
+          set -euo pipefail
+          c=sides/profile-${{ inputs.tag }}-candidate b=sides/profile-${{ inputs.tag }}-baseline
+          cat "$b"/*.time "$c"/*.time
+          status=0
+          if [ -f "$c/graph.json" ]; then
+            if cmp "$b/graph.json" "$c/graph.json"; then echo "graph.json identical ($(sha256sum < "$c/graph.json"))"; else echo "::error::graph.json differs"; diff "$b/graph.json" "$c/graph.json" | head -n 40; status=1; fi
+          fi
+          if [ -d "$c/site-data" ]; then
+            # The producer binaries differ by construction; everything else must not.
+            norm() { jq -S 'del(.producer.sha256, .flash.sha256) | if .images then .images |= map(del(.producer_sha256)) else . end' "$1"; }
+            for f in "$b"/site-data/*; do
+              n=$(basename "$f")
+              case "$n" in
+                firmware-capabilities.json) a=$(norm "$f" | sha256sum); z=$(norm "$c/site-data/$n" | sha256sum) ;;
+                *) a=$(sha256sum < "$f"); z=$(sha256sum < "$c/site-data/$n") ;;
+              esac
+              if [ "$a" = "$z" ]; then echo "$n identical"; else echo "::error::$n differs"; diff <(norm "$f" 2>/dev/null || cat "$f") <(norm "$c/site-data/$n" 2>/dev/null || cat "$c/site-data/$n") | head -n 40; status=1; fi
+            done
+          fi
+          exit $status
