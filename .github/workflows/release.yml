@@ -108,9 +108,10 @@ jobs:
         run: python3 .github/scripts/promote_qa.py "$RELEASE_TAG" --repo "$RELEASE_REPO" --draft-only
 
   # The website (crossflash graph, firmware capabilities) is released BEFORE the
-  # binaries: the draft's provenance (asset name -> SHA-256) goes to the site
-  # deploy, which verifies its capability producer against it. The binaries are
-  # published only once the site deployed.
+  # binaries: the draft's provenance (asset name -> SHA-256, and the QA run that
+  # built them) goes to the site deploy, which deploys that QA run's site-data
+  # artifact and verifies its capability producer against the assets. The
+  # binaries are published only once the site deployed.
   website:
     if: startsWith(github.ref, 'refs/tags/')
     needs: promote-qa
@@ -126,7 +127,7 @@ jobs:
           set -euo pipefail
           [ -n "${SITE_TOKEN:-}" ] || { echo "::error::ORG_DISPATCH_TOKEN is required to release the website first"; exit 1; }
           gh release download "$RELEASE_TAG" --repo "$RELEASE_REPO" --pattern release-provenance.json --dir "$RUNNER_TEMP"
-          payload=$(jq -c --arg tag "$RELEASE_TAG" '{event_type: "freemkv-release", client_payload: {provenance: {tag: $tag, assets: .assets}}}' "$RUNNER_TEMP/release-provenance.json")
+          payload=$(jq -c --arg tag "$RELEASE_TAG" '{event_type: "freemkv-release", client_payload: {provenance: {tag: $tag, assets: .assets, qa_run: .qa_run}}}' "$RUNNER_TEMP/release-provenance.json")
           since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           GH_TOKEN="$SITE_TOKEN" gh api repos/freemkv/marketing/dispatches --input - <<<"$payload"
           run=
@@ -522,6 +523,44 @@ jobs:
           path: |
             freemkv-firmware/target/${{ matrix.target }}/release/freemkv-flash-gui
             freemkv-firmware/target/${{ matrix.target }}/release/freemkv-fw-gui
+          if-no-files-found: error
+
+  # ── Website data from the release binaries ─────────────────────────────────
+  # QA computes the website's crossflash route graph and Modify capabilities
+  # with the exact Linux release binaries over the published firmware set. The
+  # tag release computes nothing: its website step deploys this QA artifact.
+  site-data:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: freemkv/marketing
+          path: marketing
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: actions/download-artifact@v4
+        with:
+          name: freemkv-linux-x86_64
+          path: bin
+      - name: Download the published firmware stage
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/stage"
+          curl -fsSL -A freemkv-release https://freemkv.org/fw/latest.tar.gz | tar -xz -C "$RUNNER_TEMP/stage"
+          chmod +x bin/freemkv-fw-cli-x86_64-linux bin/freemkv-crossflash-cli-x86_64-linux
+      - name: Compute the route graph and Modify capabilities
+        run: |
+          node marketing/scripts/site-data.mjs --stage "$RUNNER_TEMP/stage" \
+            --fw "$PWD/bin/freemkv-fw-cli-x86_64-linux" \
+            --flash "$PWD/bin/freemkv-crossflash-cli-x86_64-linux" \
+            --out "$PWD/site-data"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-data
+          path: site-data/
           if-no-files-found: error
 
   # ── Linux packages (.deb + AppImage) ────────────────────────────────────────
