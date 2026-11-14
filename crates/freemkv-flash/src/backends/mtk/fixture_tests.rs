@@ -129,9 +129,10 @@ pub(crate) fn stamp(img: &mut [u8], board: &Board) {
 pub(crate) fn image(board: &Board, model: &str, code: u8) -> Vec<u8> {
     use mediatek_optical::envelope;
     use mediatek_optical::envelope::cmac;
-    let mut img: Vec<u8> = (0..envelope::IMAGE_SIZE)
-        .map(|i| (i % 251) as u8 ^ code)
-        .collect();
+    // `(i % 251) ^ code`, built from one period: tests build hundreds of these.
+    let period: Vec<u8> = (0..251u8).map(|i| i ^ code).collect();
+    let mut img = period.repeat(envelope::IMAGE_SIZE.div_ceil(period.len()));
+    img.truncate(envelope::IMAGE_SIZE);
     let boot = super::oem::catalog()
         .default_for(mediatek_optical::Chip::Mt1959)
         .expect("a stored boot page")
@@ -178,6 +179,7 @@ pub(crate) fn identity(image: &[u8]) -> mediatek_optical::Identity {
 }
 
 /// One build of the embedded OEM catalog, as `oem.bin` records it.
+#[derive(Clone)]
 pub(crate) struct CatalogBuild {
     pub model: String,
     pub revision: String,
@@ -279,6 +281,13 @@ pub(crate) fn stand_in(build: &CatalogBuild, seed: u8) -> Vec<u8> {
 /// Every catalog build with its stand-in image, whose family is the one the
 /// catalog records.
 pub(crate) fn stand_ins() -> Vec<(CatalogBuild, Vec<u8>)> {
+    // 69 signed 2 MiB images: build them once per test process.
+    static STAND_INS: std::sync::OnceLock<Vec<(CatalogBuild, Vec<u8>)>> =
+        std::sync::OnceLock::new();
+    STAND_INS.get_or_init(build_stand_ins).clone()
+}
+
+fn build_stand_ins() -> Vec<(CatalogBuild, Vec<u8>)> {
     let builds = catalog_builds();
     assert_eq!(builds.len(), 69, "catalog size");
     builds

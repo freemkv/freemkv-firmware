@@ -62,3 +62,13 @@ opt-level = 2
 
 [profile.test.package.memchr]
 opt-level = 2
+
+# Test fixtures and backups are built as tar.gz archives.
+[profile.test.package.crc32fast]
+opt-level = 2
+
+[profile.test.package.flate2]
+opt-level = 2
+
+[profile.test.package.miniz_oxide]
+opt-level = 2
