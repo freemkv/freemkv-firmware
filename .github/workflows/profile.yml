@@ -153,11 +153,13 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
-          rec=()
-          [ "$PERF" = true ] && rec=(perf record -F 199 -g -o "$out/graph.perf.data" --)
+          # Timed without the profiler; profiled in a second, untimed run.
           /usr/bin/time -f 'graph: %e s wall, %U s user, %S s sys, %M KB maxrss, %R minor faults' -o "$out/graph.time" \
-            "${rec[@]}" "$RUNNER_TEMP/bin/freemkv-crossflash" "$RUNNER_TEMP/graph/fw" > "$out/graph.json" 2> "$out/graph.err"
+            "$RUNNER_TEMP/bin/freemkv-crossflash" "$RUNNER_TEMP/graph/fw" > "$out/graph.json" 2> "$out/graph.err"
           cat "$out/graph.time"; tail -n 5 "$out/graph.err"; sha256sum "$out/graph.json"
+          if [ "$PERF" = true ]; then
+            perf record -F 199 -g -o "$out/graph.perf.data" -- "$RUNNER_TEMP/bin/freemkv-crossflash" "$RUNNER_TEMP/graph/fw" > /dev/null 2>&1
+          fi
       - name: Modify capabilities
         if: ${{ !cancelled() && inputs.mode != 'graph' }}
         run: |
@@ -178,11 +180,13 @@ jobs:
           await generate({ hoard, fw, flash, outDir: out, eligible: eligibleImageHashes(catalog), jobs: os.availableParallelism(), log: () => {} });
           console.log(`capabilities wall ${((Date.now() - started) / 1000).toFixed(1)} s`);
           JS
-          rec=()
-          [ "$PERF" = true ] && rec=(perf record -F 199 -g -o "$out/caps.perf.data" --)
+          caps=(node "$RUNNER_TEMP/caps.mjs" "$RUNNER_TEMP/stage" "$RUNNER_TEMP/bin/freemkv-fw" "$RUNNER_TEMP/bin/freemkv-crossflash")
           /usr/bin/time -f 'capabilities (incl. hoard extraction): %e s wall, %U s user, %S s sys, %R minor faults' -o "$out/caps.time" \
-            "${rec[@]}" node "$RUNNER_TEMP/caps.mjs" "$RUNNER_TEMP/stage" "$RUNNER_TEMP/bin/freemkv-fw" "$RUNNER_TEMP/bin/freemkv-crossflash" "$out/site-data" "$PWD/marketing"
+            "${caps[@]}" "$out/site-data" "$PWD/marketing"
           cat "$out/caps.time"; sha256sum "$out"/site-data/*
+          if [ "$PERF" = true ]; then
+            perf record -F 199 -g -o "$out/caps.perf.data" -- "${caps[@]}" "$RUNNER_TEMP/caps-perf" "$PWD/marketing" > /dev/null 2>&1 || true
+          fi
       - name: Reports
         if: ${{ !cancelled() && env.PERF == 'true' }}
         run: |
@@ -194,6 +198,11 @@ jobs:
             perf report -i "$d" --children --stdio -g none --percent-limit 1 --sort sym > "$out/$n.children.txt" 2>/dev/null || true
             perf report -i "$d" --no-children --stdio -g caller,0.5,callee --percent-limit 2 --sort sym > "$out/$n.callers.txt" 2>/dev/null || true
             timeout 1200 perf report -i "$d" --no-children --stdio -g none --percent-limit 0.3 --sort srcline > "$out/$n.srcline.txt" 2>/dev/null || true
+            # Folded stacks (leaf last) without inline frames, for offline analysis.
+            perf script -i "$d" --no-inline -F comm,ip,sym 2>/dev/null | awk '
+              /^[^ \t]/ { if (n) { s=f[n]; for (i=n-1;i>=1;i--) s=s ";" f[i]; c[s]++ }; n=0; next }
+              /^[ \t]+[0-9a-f]+ / { sub(/^[ \t]+[0-9a-f]+ /, ""); sub(/\+0x[0-9a-f]+$/, ""); f[++n]=$0; next }
+              END { if (n) { s=f[n]; for (i=n-1;i>=1;i--) s=s ";" f[i]; c[s]++ }; for (k in c) print k, c[k] }' | gzip > "$out/$n.folded.gz" || true
             head -n 60 "$out/$n.self.txt"
             rm -f "$d"
           done
