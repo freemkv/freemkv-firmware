@@ -14,10 +14,9 @@ name = "freemkv-flash"
 path = "src/main.rs"
 
 # Offline crossflash-route evaluator: every crossflash `flash` admits between
-# packages. Published as a per-release asset (freemkv-crossflash-cli-<arch>-<os>)
-# so the website publish pipeline can bind its route-graph cache to a stable
-# executable SHA-256 and skip the full all-pairs rescan when the engine is
-# unchanged. Not an installed end-user app (no GUI/installer/deb).
+# packages. Internal website tooling, built only for the site-data CI runner
+# and stored in a separate CI artifact. Never packaged as a customer download.
+# The website route-graph cache is bound to this executable's SHA-256.
 [[bin]]
 name = "freemkv-crossflash"
 path = "src/bin/freemkv-crossflash.rs"

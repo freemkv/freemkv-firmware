@@ -53,6 +53,21 @@ class PromotionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
                 promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0')
 
+    def test_older_qa_crossflash_downloads_are_not_promoted(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.artifact(root / 'download')
+            for name in ('freemkv-crossflash-cli-x86_64-linux',
+                         'freemkv-crossflash-cli-aarch64-windows.exe',
+                         'freemkv-crossflash-macos-aarch64.tar.gz',
+                         'freemkv-crossflash-dev-abcdef0-windows-x86_64.zip'):
+                self.artifact(root / 'download', name=name)
+            self.assertEqual(promote.stage_assets(root / 'download', root / 'assets', 'v0.15.0'), 1)
+            self.assertEqual({p.name for p in (root / 'assets').iterdir()}, {
+                'freemkv-flash-v0.15.0-linux-x86_64.tar.gz',
+                'freemkv-flash-v0.15.0-linux-x86_64.tar.gz.sha256',
+            })
+
     def test_conflicting_artifact_names_cannot_overwrite(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

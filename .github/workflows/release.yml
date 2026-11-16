@@ -257,25 +257,34 @@ jobs:
           var="CROSS_TARGET_$(echo '${{ matrix.target }}' | tr '[:lower:]-' '[:upper:]_')_IMAGE"
           echo "$var=${{ matrix.cross_image }}" >> "$GITHUB_ENV"
 
-      # freemkv-crossflash is the offline crossflash-route evaluator the website
-      # publish pipeline (marketing firmware:release) binds its route-graph cache
-      # to by executable SHA-256. Shipping it as a stable per-release asset (like
-      # freemkv-fw) lets the site reuse that cache across releases instead of a
-      # full all-pairs rescan on every run — see firmware-release.md.
       - name: Build the CLIs (release)
         if: ${{ !matrix.cross_image }}
-        run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw --bin freemkv-crossflash
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
 
       - name: Build the CLIs (release, cross)
         if: matrix.cross_image
-        run: cross build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw --bin freemkv-crossflash
+        run: cross build --release --locked --target ${{ matrix.target }} --bin freemkv-flash --bin freemkv-fw
+
+      # Internal website tooling: build only for the site-data runner and keep
+      # it in a separate CI artifact, outside the promoted release packages.
+      - name: Build the website route evaluator
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin freemkv-crossflash
+
+      - name: Upload internal website tooling
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-tools-linux-x86_64
+          path: freemkv-firmware/target/${{ matrix.target }}/release/freemkv-crossflash
+          if-no-files-found: error
 
       # The Linux CLIs must be static (no NEEDED entries), on both arches.
       - name: Verify the Linux CLIs are static
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          for b in freemkv-flash freemkv-fw freemkv-crossflash; do
+          for b in freemkv-flash freemkv-fw; do
             bin="target/${{ matrix.target }}/release/$b"
             if readelf -d "$bin" | grep -q NEEDED; then
               readelf -d "$bin"; echo "::error::$bin is not static"; exit 1
@@ -338,7 +347,7 @@ jobs:
             else sha256sum "$1" > "$1.sha256"; fi
           }
 
-          bins="freemkv-flash freemkv-fw freemkv-crossflash"
+          bins="freemkv-flash freemkv-fw"
           if [ "${{ matrix.gui }}" = "true" ]; then bins="$bins freemkv-flash-gui freemkv-fw-gui"; fi
 
           for bin in $bins; do
@@ -525,9 +534,9 @@ jobs:
             freemkv-firmware/target/${{ matrix.target }}/release/freemkv-fw-gui
           if-no-files-found: error
 
-  # ── Website data from the release binaries ─────────────────────────────────
+  # ── Website data from the release modifier and internal route evaluator ────
   # QA computes the website's crossflash route graph and Modify capabilities
-  # with the exact Linux release binaries over the published firmware set. The
+  # with the Linux release modifier and CI-only evaluator over the firmware set. The
   # tag release computes nothing: its website step deploys this QA artifact.
   site-graph:
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -545,12 +554,16 @@ jobs:
         with:
           name: freemkv-linux-x86_64
           path: bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-tools-linux-x86_64
+          path: bin
       - name: Download the published firmware stage
         run: |
           set -euo pipefail
           mkdir -p stage
           curl -fsSL -A freemkv-release https://freemkv.org/fw/latest.tar.gz | tar -xz -C stage
-          chmod +x bin/freemkv-fw-cli-x86_64-linux bin/freemkv-crossflash-cli-x86_64-linux
+          chmod +x bin/freemkv-fw-cli-x86_64-linux bin/freemkv-crossflash
       # The route graph depends only on the crossflash binary and the package
       # set: reuse it across reruns and website-only fixes. The cache itself
       # re-checks the engine hash and every package before reuse.
@@ -558,12 +571,12 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: graph-cache
-          key: crossflash-graph-${{ hashFiles('bin/freemkv-crossflash-cli-x86_64-linux', 'stage/publish-manifest.json') }}
+          key: crossflash-graph-${{ hashFiles('bin/freemkv-crossflash', 'stage/publish-manifest.json') }}
       - name: Compute the website data
         run: |
           node marketing/scripts/site-data.mjs --only "$PART" --stage "$PWD/stage" \
             --fw "$PWD/bin/freemkv-fw-cli-x86_64-linux" \
-            --flash "$PWD/bin/freemkv-crossflash-cli-x86_64-linux" \
+            --flash "$PWD/bin/freemkv-crossflash" \
             --cache "$PWD/graph-cache/crossflash.json" \
             --out "$PWD/site-data"
       # Keep a computed graph even when a later check fails.
@@ -571,7 +584,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: graph-cache
-          key: crossflash-graph-${{ hashFiles('bin/freemkv-crossflash-cli-x86_64-linux', 'stage/publish-manifest.json') }}
+          key: crossflash-graph-${{ hashFiles('bin/freemkv-crossflash', 'stage/publish-manifest.json') }}
       - uses: actions/upload-artifact@v4
         with:
           name: site-${{ env.PART }}

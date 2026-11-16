@@ -35,7 +35,10 @@ def eligible(run, artifacts):
 
 
 def stage_assets(source, destination, tag):
-    files = [p for p in source.rglob('*') if p.is_file()]
+    # Older QA runs bundled the internal website evaluator with shipping tools.
+    # Exclude its binaries, archives and checksums even when reusing those runs.
+    files = [p for p in source.rglob('*')
+             if p.is_file() and not p.name.startswith('freemkv-crossflash')]
     checked, verified = 0, set()
     for path in files:
         if path.name.endswith('.sha256'):
