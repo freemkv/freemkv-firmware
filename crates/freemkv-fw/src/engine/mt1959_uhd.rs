@@ -849,4 +849,29 @@ mod tests {
             assert_eq!(out, changed);
         }
     }
+
+    #[test]
+    fn gap_ids_are_stable_and_native_plans_bind_no_legacy_contracts() {
+        let ids = [
+            Gap::DiscInformation,
+            Gap::ControlBit,
+            Gap::ControlField,
+            Gap::ForwardCalculation,
+            Gap::ReverseCalculation,
+            Gap::Parameter,
+            Gap::KeyRouting,
+            Gap::ExtendedAuthentication,
+        ]
+        .map(Gap::id);
+        assert_eq!(
+            ids,
+            ["G01", "G02", "G03", "G04", "G05", "G06", "G07", "G08"]
+        );
+        let image = include_bytes!("../../tests/fixtures/BU40N_OEM_1.05.bin");
+        let plan = Plan::inspect(image, FLAGS).unwrap();
+        assert!(plan.reverse_arithmetic().is_none());
+        assert!(plan.density_target().is_none());
+        assert!(plan.disc_information_mode().is_none());
+        assert!(plan.identity_reset().is_none());
+    }
 }

@@ -1226,6 +1226,17 @@ mod tests {
         assert!(plan.routing_candidates(&changed, 0x0200f000).is_err());
     }
     #[test]
+    fn format_one_detection_extends_the_prevalidation_stub() {
+        let base = di_prevalidation_candidate(CLASSIC, 0x0200f000).unwrap();
+        let detection = di_detection_candidate(CLASSIC, 0x0200f000).unwrap();
+        let native = di_bu40n_candidate(CLASSIC, 0x0200f000).unwrap();
+        assert_eq!(detection.original, base.original);
+        assert!(detection.bytes.len() > base.bytes.len());
+        assert_ne!(native.bytes, detection.bytes);
+        let plan = UhdConversionPlan::inspect(CLASSIC).unwrap();
+        assert_eq!(plan.state_address(), plan.state);
+    }
+    #[test]
     fn component_plans_match_all_corpus_roles_without_promoting_classic() {
         let Ok(path) = std::env::var("FREEMKV_UHD_PLAN_CORPUS") else {
             return;

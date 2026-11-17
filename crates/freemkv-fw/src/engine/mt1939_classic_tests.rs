@@ -1481,3 +1481,22 @@ fn scanner_whitelist_patch_emits_only_one_ldrb() {
         "the compressed whitelist must have exactly one ldrb (OEM repeats one per mode)"
     );
 }
+
+#[test]
+fn paused_media_conversion_reports_its_count_or_reason() {
+    let source: &[u8] = include_bytes!("../../tests/fixtures/BE14NU40_MT1939_JB7_1.01.bin");
+    let mut out = source.to_vec();
+    let (hook, count) = Mt1959Engine.emit_media_conversion_classic(source, &mut out, 0x0200f000);
+    assert!(count > 0);
+    let variant = hook.variant.expect("applied conversion names its variant");
+    assert!(variant.contains(&format!("classic {count} ")), "{variant}");
+    assert_ne!(out, source);
+
+    let blank = vec![0u8; 0x20_0000];
+    let mut out = blank.clone();
+    let (hook, count) = Mt1959Engine.emit_media_conversion_classic(&blank, &mut out, 0x0200f000);
+    assert_eq!(count, 0);
+    assert!(hook.variant.is_none());
+    assert!(hook.reason.unwrap().contains("0 conversion edits"));
+    assert_eq!(out, blank);
+}
