@@ -1,4 +1,5 @@
 //! Window arithmetic and integrity-table comparison of the code-space policy.
+#![allow(clippy::single_range_in_vec_init)]
 
 use super::*;
 
