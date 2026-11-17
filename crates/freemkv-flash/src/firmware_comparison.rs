@@ -287,3 +287,198 @@ mod tests {
         assert_eq!(facts.family, FamilyRelationship::Same);
     }
 }
+
+#[cfg(test)]
+mod table_tests {
+    use super::*;
+
+    #[test]
+    fn family_needs_complete_fingerprints_under_one_scheme() {
+        use FamilyRelationship::*;
+        let compare = FamilyRelationship::compare;
+        assert_eq!(compare(Some(("s1", "a")), Some(("s1", "a"))), Same);
+        assert_eq!(compare(Some(("s1", "a")), Some(("s1", "b"))), Different);
+        assert_eq!(compare(Some(("s1", "a")), Some(("s2", "a"))), NotComparable);
+        for incomplete in [("", "a"), ("s1", "")] {
+            assert_eq!(compare(Some(incomplete), Some(("s1", "a"))), Unknown);
+            assert_eq!(compare(Some(("s1", "a")), Some(incomplete)), Unknown);
+            assert_eq!(compare(Some(incomplete), Some(incomplete)), Unknown);
+        }
+        assert_eq!(compare(None, Some(("s1", "a"))), Unknown);
+        assert_eq!(compare(Some(("s1", "a")), None), Unknown);
+        assert_eq!(compare(None, None), Unknown);
+        let family = |scheme: &str, id: &str| HardwareFamily {
+            scheme: scheme.into(),
+            id: id.into(),
+        };
+        assert_eq!(
+            FamilyRelationship::between(Some(&family("s", "1")), Some(&family("s", "1"))),
+            Same
+        );
+        assert_eq!(FamilyRelationship::between(None, None), Unknown);
+    }
+
+    #[test]
+    fn versions_order_only_plain_dotted_numbers_in_one_lineage() {
+        use VersionRelationship::*;
+        let compare = VersionRelationship::compare;
+        assert_eq!(compare("", "1.0", true), Unknown);
+        assert_eq!(compare("1.0", "", true), Unknown);
+        assert_eq!(compare("1.0", "1.1", false), NotComparable);
+        assert_eq!(compare("1.0", "1.0", true), Same);
+        assert_eq!(compare("1.0", "1.1", true), Newer);
+        assert_eq!(compare("1.10", "1.9", true), Older);
+        assert_eq!(compare("1.0", "1.0.0", true), Same);
+        assert_eq!(compare("1.0", "1.0.1", true), Newer);
+        assert_eq!(compare("2", "3", true), NotComparable);
+        assert_eq!(compare("1.0a", "1.1", true), NotComparable);
+        assert_eq!(compare("1.+2", "1.3", true), NotComparable);
+        assert_eq!(compare("1..2", "1.3", true), NotComparable);
+        assert_eq!(compare("1.0", "1.-1", true), NotComparable);
+    }
+
+    fn identity(name: &str, revision: &str, lineage: Option<&str>) -> ComponentIdentity {
+        ComponentIdentity {
+            name: name.into(),
+            revision: revision.into(),
+            lineage: lineage.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn identity_facts_are_independent() {
+        let same = FamilyRelationship::Same;
+        let facts =
+            |a: ComponentIdentity, b: ComponentIdentity| a.compare(&b, Contents::Different, same);
+        let base = identity("Drive", "1.0", Some("edition"));
+        let f = facts(base.clone(), identity("Drive", "1.1", Some("edition")));
+        assert_eq!(f.naming, Naming::Same);
+        assert_eq!(f.revision_label_changed, Some(true));
+        assert_eq!(f.version, VersionRelationship::Newer);
+        assert_eq!(
+            facts(base.clone(), identity("Other", "1.0", Some("edition"))).naming,
+            Naming::Different
+        );
+        assert_eq!(
+            facts(base.clone(), identity("", "1.0", Some("edition"))).naming,
+            Naming::Unknown
+        );
+        assert_eq!(
+            facts(identity("", "1.0", None), base.clone()).naming,
+            Naming::Unknown
+        );
+        assert_eq!(
+            facts(base.clone(), identity("Drive", "1.0", Some("edition"))).revision_label_changed,
+            Some(false)
+        );
+        assert_eq!(
+            facts(base.clone(), identity("Drive", "", Some("edition"))).revision_label_changed,
+            None
+        );
+        assert_eq!(
+            facts(identity("Drive", "", None), base.clone()).revision_label_changed,
+            None
+        );
+        for other in [None, Some(""), Some("series")] {
+            let different = facts(base.clone(), identity("Drive", "1.1", other));
+            assert_eq!(
+                different.version,
+                VersionRelationship::NotComparable,
+                "{other:?}"
+            );
+        }
+        let empty = facts(
+            identity("D", "1.0", Some("")),
+            identity("D", "1.1", Some("")),
+        );
+        assert_eq!(empty.version, VersionRelationship::NotComparable);
+        let one_sided = facts(
+            identity("D", "1.0", Some("edition")),
+            identity("D", "1.1", None),
+        );
+        assert_eq!(one_sided.version, VersionRelationship::NotComparable);
+    }
+
+    #[test]
+    fn summaries_follow_the_fixed_precedence() {
+        use {Contents::*, FamilyRelationship as F, Naming as N, VersionRelationship as V};
+        let facts = |contents, naming, label, version, family| ComparisonFacts {
+            contents,
+            naming,
+            revision_label_changed: label,
+            version,
+            family,
+        };
+        let s = |f: ComparisonFacts| f.summary();
+        assert_eq!(
+            s(facts(
+                Incomplete,
+                N::Different,
+                Some(true),
+                V::Newer,
+                F::Different
+            )),
+            "Comparison incomplete"
+        );
+        assert_eq!(
+            s(facts(
+                Identical,
+                N::Different,
+                Some(true),
+                V::Newer,
+                F::Different
+            )),
+            "Same firmware, different branding"
+        );
+        assert_eq!(
+            s(facts(Identical, N::Same, Some(true), V::Same, F::Same)),
+            "Same firmware, different version label"
+        );
+        assert_eq!(
+            s(facts(Identical, N::Same, Some(false), V::Same, F::Same)),
+            "Same firmware"
+        );
+        assert_eq!(
+            s(facts(Identical, N::Unknown, None, V::Unknown, F::Unknown)),
+            "Same firmware"
+        );
+        assert_eq!(
+            s(facts(Different, N::Same, None, V::Newer, F::Different)),
+            "Different firmware and hardware family"
+        );
+        assert_eq!(
+            s(facts(Different, N::Same, None, V::Newer, F::Same)),
+            "Different firmware, newer version"
+        );
+        assert_eq!(
+            s(facts(Different, N::Same, None, V::Older, F::Same)),
+            "Different firmware, older version"
+        );
+        assert_eq!(
+            s(facts(Different, N::Same, None, V::Same, F::Same)),
+            "Different firmware, same version"
+        );
+        assert_eq!(
+            s(facts(Different, N::Same, None, V::NotComparable, F::Same)),
+            "Different firmware, same hardware family"
+        );
+        assert_eq!(
+            s(facts(Different, N::Same, None, V::Unknown, F::Same)),
+            "Different firmware, same hardware family"
+        );
+        assert_eq!(
+            s(facts(Different, N::Same, None, V::Unknown, F::Unknown)),
+            "Different firmware"
+        );
+        assert_eq!(
+            s(facts(
+                Different,
+                N::Same,
+                None,
+                V::NotComparable,
+                F::NotComparable
+            )),
+            "Different firmware"
+        );
+    }
+}
