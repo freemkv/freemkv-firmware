@@ -1196,3 +1196,189 @@ fn recovery_transfer_failure_reports_how_much_payload_was_accepted() {
         assert!(!failure.temporary_firmware);
     }
 }
+
+fn injected_flash_failure(
+    current: &[u8],
+    target: &[u8],
+    fail: impl Fn(&[u8]) -> bool + Send + Sync + 'static,
+) -> anyhow::Error {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    let armed = Arc::new(AtomicBool::new(false));
+    let gate = armed.clone();
+    let mut dev = MockScsiDevice::echoing()
+        .with_firmware_image(current.to_vec())
+        .on_fail(
+            move |c| gate.load(Ordering::SeqCst) && fail(c),
+            "injected failure",
+        );
+    let req = request(target.to_vec(), &super::super::IMAGE);
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+        .unwrap();
+    let backup = crate::engine::gates::saved_for_tests(current.to_vec());
+    let authorized = Mtk
+        .authorize(
+            &mut ReadDevice::without_unlocks(&mut dev),
+            plan,
+            Some(&backup),
+        )
+        .unwrap();
+    armed.store(true, Ordering::SeqCst);
+    Mtk.execute(
+        &mut crate::engine::gates::ungated_for_tests(&mut dev),
+        &authorized,
+    )
+    .unwrap_err()
+}
+
+#[test]
+fn failed_flash_reports_how_far_it_progressed() {
+    use crate::backend::UpdateProgress;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let current = image(b"1.00", 1);
+    let target = image(b"1.01", 3);
+    let is_transfer = |c: &[u8]| c.len() > 1 && c[0] == 0x3b && c[1] == 0x06;
+    let mut clean = MockScsiDevice::echoing().with_firmware_image(current.clone());
+    flash_single_image(&mut clean, &current, &target).unwrap();
+    let total = clean.writes.iter().filter(|(c, _)| is_transfer(c)).count();
+    assert!(total > 1);
+
+    let error = injected_flash_failure(&current, &target, |c| c == cdb::probe());
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert_eq!(failure.progress, UpdateProgress::Preflight);
+    assert!(!failure.write_started);
+
+    let error = injected_flash_failure(&current, &target, |c| c == cdb::enter_update());
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert_eq!(failure.progress, UpdateProgress::EntryAttempted);
+    assert_eq!(failure.phase, "update entry");
+    assert!(!failure.temporary_firmware);
+
+    for (fail_at, progress) in [
+        (1, UpdateProgress::PayloadAttempted),
+        (total, UpdateProgress::PayloadAccepted),
+    ] {
+        let seen = Arc::new(AtomicUsize::new(0));
+        let counter = seen.clone();
+        let error = injected_flash_failure(&current, &target, move |c| {
+            is_transfer(c) && counter.fetch_add(1, Ordering::SeqCst) + 1 == fail_at
+        });
+        let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+        assert_eq!(failure.progress, progress, "chunk {fail_at}");
+        assert_eq!(failure.phase, "firmware transfer");
+        assert!(failure.write_started);
+        assert!(!failure.temporary_firmware, "single-stage flash");
+        if fail_at == 1 {
+            assert_eq!(failure.payload_bytes_accepted, Some(0));
+        } else {
+            assert!(failure.payload_bytes_accepted > Some(0));
+        }
+    }
+}
+
+#[test]
+fn failed_first_stage_of_a_two_stage_flash_leaves_temporary_firmware() {
+    let (result, _, _, _) = run(false, false);
+    let error = result.unwrap_err();
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert!(failure.temporary_firmware);
+}
+
+#[test]
+fn failure_phase_names_each_flash_boundary() {
+    use mediatek_optical::drive::FlashError;
+    let transport = || DriveError::Transport(anyhow!("x"));
+    assert_eq!(
+        failure_phase(&FlashError::Transfer {
+            offset: 0,
+            length: 1,
+            source: transport()
+        }),
+        ("firmware transfer", true)
+    );
+    assert_eq!(
+        failure_phase(&FlashError::Fault {
+            stage: Stage::Commit,
+            sense: (4, 0x44, 0)
+        }),
+        ("programming status", true)
+    );
+    assert_eq!(
+        failure_phase(&FlashError::ReadyTimeout(transport())),
+        ("waiting for programming to finish", true)
+    );
+}
+
+#[test]
+fn runtime_tracks_upload_state_clock_and_phases() {
+    use mediatek_optical::{Component, Phase, Progress};
+    use std::{cell::RefCell, rc::Rc, time::Duration};
+    let mut runtime = Runtime::new();
+    assert!(!runtime.upload_complete());
+    assert_eq!(runtime.payload_bytes_accepted(), 0);
+    runtime.progress(10, 100);
+    assert_eq!(runtime.payload_bytes_accepted(), 10);
+    runtime.uploaded(100);
+    assert!(runtime.upload_complete());
+    assert_eq!(runtime.payload_bytes_accepted(), 100);
+
+    crate::runtime_clock::simulated(|| {
+        let mut runtime = Runtime::new();
+        runtime.sleep(Duration::from_secs(5));
+        assert_eq!(runtime.elapsed(), Duration::from_secs(5));
+    });
+
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let sink = seen.clone();
+    crate::output::capture_events(
+        move |event| sink.borrow_mut().push(event),
+        || {
+            Runtime::new().operation_progress(Progress::bytes(
+                Phase::Writing,
+                Component::Firmware,
+                5,
+                10,
+            ));
+        },
+    );
+    assert!(seen.borrow().contains(&crate::output::Event::Phase {
+        phase: "writing",
+        component: "filter.firmware",
+        done: Some(5),
+        total: Some(10),
+    }));
+}
+
+#[test]
+fn mediatek_helpers_report_banner_text_and_flash_acceptance() {
+    assert!(Mtk.accepts_current());
+    let mut img = image(b"1.00", 1);
+    let at = ROM_003000_OFFSET as usize;
+    for k in 0..crossflash::BANNER_LEN {
+        img[at + k] = 0xA0 + k as u8;
+    }
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(img.clone());
+    let banner = read_drive_banner(&mut ReadDevice::without_unlocks(&mut dev)).unwrap();
+    assert_eq!(&banner[..], &img[at..at + crossflash::BANNER_LEN]);
+    let mut failing = MockScsiDevice::echoing()
+        .with_firmware_image(img)
+        .on_fail(|c| c.first() == Some(&0x3c), "banner unreadable");
+    assert!(read_drive_banner(&mut ReadDevice::without_unlocks(&mut failing)).is_none());
+
+    assert_eq!(
+        text(&DriveError::Transport(anyhow!("inner").context("outer"))),
+        "outer: inner"
+    );
+    let short = DriveError::Short {
+        expected: 4,
+        actual: 2,
+    };
+    assert_eq!(text(&short), short.to_string());
+    assert!(!text(&short).is_empty());
+}
