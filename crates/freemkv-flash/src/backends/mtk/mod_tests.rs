@@ -550,3 +550,83 @@ fn transfer_error_keeps_structured_boundary_and_sense_for_user_guidance() {
         .unwrap();
     assert_eq!((sense.sense_key, sense.asc, sense.ascq), (5, 0x26, 2));
 }
+
+fn descriptor(feature: u16, ascii: &[u8]) -> Vec<u8> {
+    let mut data = vec![0u8; 12];
+    data[8..10].copy_from_slice(&feature.to_be_bytes());
+    data[11] = ascii.len() as u8;
+    data.extend_from_slice(ascii);
+    data
+}
+
+#[test]
+fn field_descriptor_bounds_are_exact() {
+    assert!(parse_field_descriptor(&[0u8; 11]).is_none());
+    let empty = parse_field_descriptor(&descriptor(0x0108, b"")).unwrap();
+    assert_eq!(
+        (empty.feature, empty.add_len, empty.ascii.as_str()),
+        (0x0108, 0, "")
+    );
+    let exact = parse_field_descriptor(&descriptor(0x0109, b" 24/05/17\0\0")).unwrap();
+    assert_eq!(exact.ascii, "24/05/17");
+    assert_eq!(exact.add_len, 11);
+    let mut truncated = descriptor(0x0109, b"abcd");
+    truncated.pop();
+    assert!(parse_field_descriptor(&truncated).is_none());
+
+    let mut dump = sample_dump(0, 0);
+    dump.fd_fwdate = descriptor(0x0109, b"24/05/17   ");
+    assert_eq!(dump.fw_date().as_deref(), Some("24/05/17"));
+    dump.fd_fwdate = vec![0; 4];
+    assert_eq!(dump.fw_date(), None);
+}
+
+#[test]
+fn flash_fault_keys_are_medium_hardware_and_aborted() {
+    for key in 0..=0x0f_u8 {
+        assert_eq!(
+            sense_key_is_fatal(key),
+            matches!(key, 0x3 | 0x4 | 0xB),
+            "key {key:#x}"
+        );
+    }
+}
+
+#[test]
+fn backend_reports_its_read_guidance_and_capability() {
+    assert_eq!(Mtk.read_notice(), Some("ui.mtk_read_limits"));
+    assert_eq!(
+        Mtk.can_read(),
+        mediatek_optical::DriveClass::Mt19.can_read()
+    );
+}
+
+#[test]
+fn sequence_plan_counts_collapsed_chunks_exactly() {
+    let all = steps();
+    let text = describe_sequence(&all, true);
+    assert!(
+        text.contains("... 128 identical STREAM chunks collapsed ("),
+        "{text}"
+    );
+    assert!(text.contains("#131 STREAM"), "{text}");
+    let first = all.iter().position(|s| s.label == STREAM).unwrap();
+    // A run reaching the end of the list still terminates and reports itself.
+    let tail_only = describe_sequence(&all[first..first + 5], true);
+    assert!(
+        tail_only.contains("... 5 identical STREAM chunks collapsed"),
+        "{tail_only}"
+    );
+    // Two chunks are shown as their endpoints, with nothing collapsed between.
+    let pair = describe_sequence(&all[first..first + 2], true);
+    assert!(!pair.contains("collapsed"), "{pair}");
+    assert!(
+        pair.contains("#01 STREAM") && pair.contains("#02 STREAM"),
+        "{pair}"
+    );
+    let single = describe_sequence(&all[first..first + 1], true);
+    assert!(
+        single.contains("#01 STREAM") && !single.contains("#02"),
+        "{single}"
+    );
+}
