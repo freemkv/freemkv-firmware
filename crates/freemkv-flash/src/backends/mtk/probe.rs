@@ -465,3 +465,7 @@ pub fn read_probe(dev: &mut dyn ScsiDevice, out: Option<&Path>) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "probe_tests.rs"]
+mod tests;
