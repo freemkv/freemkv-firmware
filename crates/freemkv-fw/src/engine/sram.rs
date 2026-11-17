@@ -94,3 +94,7 @@ impl SramPlacement {
         used
     }
 }
+
+#[cfg(test)]
+#[path = "sram_tests.rs"]
+mod tests;

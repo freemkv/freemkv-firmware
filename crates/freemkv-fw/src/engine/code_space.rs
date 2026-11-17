@@ -156,3 +156,7 @@ pub(super) fn find(image: &[u8], need: usize, code_start: usize) -> Result<u32> 
     );
     Ok(u32::try_from(at)?)
 }
+
+#[cfg(test)]
+#[path = "code_space_tests.rs"]
+mod tests;
