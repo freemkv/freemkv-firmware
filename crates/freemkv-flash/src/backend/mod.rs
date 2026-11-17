@@ -1138,3 +1138,163 @@ mod outcome_tests {
         assert!(!UpdateOutcome::Completed(evidence).safe_to_probe());
     }
 }
+
+#[cfg(test)]
+mod default_method_tests {
+    use super::*;
+    use crate::platform::MockScsiDevice;
+
+    static FORMAT: FileFormat = FileFormat {
+        id: "defaults-test",
+        label: "Test",
+        extensions: &["tst"],
+        update_input: false,
+        role: FormatRole::Image,
+    };
+    static DESCRIPTOR: Descriptor = Descriptor {
+        id: BackendId("defaults-test"),
+        display_name: "Defaults",
+        flash_summary: None,
+        formats: &[],
+    };
+
+    struct Bare;
+    impl Backend for Bare {
+        fn descriptor(&self) -> &'static Descriptor {
+            &DESCRIPTOR
+        }
+        fn probe(&self, _: &mut ReadDevice<'_>, _: &Identity) -> Result<Option<Match>> {
+            Ok(None)
+        }
+    }
+
+    struct Files;
+    impl FileFacet for Files {
+        fn recognize(&self, _: &[u8]) -> Option<Recognized> {
+            None
+        }
+        fn describe(&self, _: &[u8], _: &Recognized) -> Option<Result<()>> {
+            None
+        }
+        fn classify_input(&self, _: &Path, _: &[u8]) -> &'static FileFormat {
+            &FORMAT
+        }
+    }
+
+    struct Recovery;
+    impl RecoveryFacet for Recovery {
+        fn prepare(
+            &self,
+            _: &mut ReadDevice<'_>,
+            _: &RecoveryTarget,
+            _: Option<&[u8]>,
+            _: &[u8],
+            _: bool,
+        ) -> Result<Box<dyn PreparedRecoveryUpdate>> {
+            anyhow::bail!("unused")
+        }
+        fn identify(&self, _: &mut ReadDevice<'_>) -> Result<Option<RecoveryTarget>> {
+            Ok(None)
+        }
+        fn unidentified(&self) -> &'static str {
+            "none"
+        }
+        fn recover(
+            &self,
+            _: DeviceAccess<'_, '_>,
+            _: &RecoveryTarget,
+            _: Option<&[u8]>,
+            _: &[u8],
+        ) -> Result<UpdateOutcome> {
+            Ok(UpdateOutcome::Planned)
+        }
+    }
+
+    struct Dump;
+    impl DumpFacet for Dump {
+        fn capture(&self, _: DeviceAccess<'_, '_>) -> Result<Vec<u8>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn a_backend_without_facets_offers_nothing_and_reads_no_extras() {
+        let backend = Bare;
+        assert!(backend.read_notice().is_none());
+        assert!(!backend.can_read());
+        assert!(backend.allowed_data_out().is_empty());
+        assert!(backend.files().is_none());
+        assert!(backend.details().is_none());
+        assert!(backend.backup().is_none());
+        assert!(backend.dump().is_none());
+        assert!(backend.flash().is_none());
+        assert!(backend.recovery().is_none());
+        assert!(backend.inspect().is_none());
+        assert!(backend.settings().is_none());
+        let mut dev = MockScsiDevice::new();
+        let _ = backend.identity(&mut ReadDevice::for_backend(&mut dev, &backend));
+        let _ = backend.try_identity(&mut ReadDevice::without_unlocks(&mut dev));
+        assert!(dev.writes.is_empty());
+    }
+
+    #[test]
+    fn file_and_dump_facets_default_to_no_special_handling() {
+        let files = Files;
+        assert!(files.recovery_package(b"x", None).is_none());
+        assert!(files.recovery_members(b"x").is_none());
+        let error = files.wrap_image(vec![1]).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("does not support image wrapping"));
+        assert!(files.family_evidence(b"x").is_none());
+        assert!(files.claims_by_name(Path::new("a.tst")).is_none());
+        let recognized = Recognized {
+            format: &FORMAT,
+            confidence: Confidence::Structural,
+        };
+        files.validate_flash_input(b"x", &recognized).unwrap();
+        assert!(!Dump.deep_salvage());
+        assert!(Dump.writes().is_empty());
+    }
+
+    #[test]
+    fn recovery_defaults_fail_closed_on_family_override() {
+        let facet = Recovery;
+        assert!(!facet.accepts_current_for_identification());
+        assert!(facet.requires_current());
+        assert!(!facet.supports_family_override());
+        let mut dev = MockScsiDevice::new();
+        let mut reader = ReadDevice::without_unlocks(&mut dev);
+        assert!(facet
+            .identify_with_current(&mut reader, Some(b"current"))
+            .unwrap()
+            .is_none());
+        let target = RecoveryTarget::new("receiver".into(), 7u8);
+        assert_eq!(target.state::<u8>().unwrap(), &7);
+        assert!(target.state::<u16>().is_err());
+        let error = facet
+            .recover_with_family_override(
+                DeviceAccess::Read(&mut reader),
+                &target,
+                None,
+                b"t",
+                true,
+            )
+            .unwrap_err();
+        assert!(error.is::<UnsupportedFamilyOverride>());
+        assert_eq!(error.to_string(), "recovery.family_override_unsupported");
+        let planned = facet
+            .recover_with_family_override(
+                DeviceAccess::Read(&mut reader),
+                &target,
+                None,
+                b"t",
+                false,
+            )
+            .unwrap();
+        assert!(matches!(planned, UpdateOutcome::Planned));
+        let mut access = DeviceAccess::Read(&mut reader);
+        assert!(access.writer().is_none());
+        let _ = access.scsi().describe();
+    }
+}
