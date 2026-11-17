@@ -1158,3 +1158,41 @@ fn boot_recovery_with_current_uses_live_receiver() {
     );
     assert!(dev.writes.is_empty());
 }
+
+#[test]
+fn recovery_transfer_failure_reports_how_much_payload_was_accepted() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let current = image(b"1.00", 1);
+    let target = image(b"1.01", 3);
+    let is_transfer = |c: &[u8]| c.len() > 1 && c[0] == 0x3b && c[1] == 0x06;
+    let mut clean = MockScsiDevice::echoing().with_firmware_image(current.clone());
+    crate::engine::recover(&mut clean, &Mtk, None, &target, true, true).unwrap();
+    let total = clean.writes.iter().filter(|(c, _)| is_transfer(c)).count();
+    assert!(total >= 1);
+    for fail_at in [1, total] {
+        let seen = Arc::new(AtomicUsize::new(0));
+        let counter = seen.clone();
+        let mut dev = MockScsiDevice::echoing()
+            .with_firmware_image(current.clone())
+            .on_fail(
+                move |c| is_transfer(c) && counter.fetch_add(1, Ordering::SeqCst) + 1 == fail_at,
+                "transfer rejected",
+            );
+        let error = crate::engine::recover(&mut dev, &Mtk, None, &target, true, true).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("transfer rejected"),
+            "{error:#}"
+        );
+        let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+        assert_ne!(failure.progress, crate::backend::UpdateProgress::Preflight);
+        if fail_at == 1 {
+            assert_eq!(failure.payload_bytes_accepted, Some(0));
+        } else {
+            assert!(failure.payload_bytes_accepted > Some(0), "{failure:?}");
+        }
+        assert!(!failure.temporary_firmware);
+    }
+}
