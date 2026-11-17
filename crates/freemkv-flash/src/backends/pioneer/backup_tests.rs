@@ -2198,3 +2198,71 @@ fn oem_branded_capture_replays_through_the_normal_backup_workflow() {
     assert_eq!(decoded_kernel.image, kernel.as_slice());
     assert_eq!(decoded_normal.image, normal);
 }
+
+#[test]
+fn embedded_slash_dates_are_unique_valid_calendar_fields() {
+    let with = |text: &[u8]| {
+        let mut image = vec![b' '; 16];
+        image.extend_from_slice(text);
+        image.extend_from_slice(&[b' '; 16]);
+        image
+    };
+    for ok in ["24/05/17", "99/12/31", "00/01/01"] {
+        assert_eq!(unique_embedded_date(&with(ok.as_bytes())), Some(ok));
+    }
+    for bad in [
+        "24/13/10", "24/00/10", "24/05/32", "24/05/00", "24x05/17", "24/05x17",
+    ] {
+        assert_eq!(unique_embedded_date(&with(bad.as_bytes())), None, "{bad}");
+    }
+    // A single slash is not a date field.
+    assert_eq!(unique_embedded_date(&with(b"ab/cdefg")), None);
+    // A repeat of the same date is unique; a second distinct date is not.
+    let mut twice = with(b"24/05/17");
+    twice.extend_from_slice(b"24/05/17");
+    assert_eq!(unique_embedded_date(&twice), Some("24/05/17"));
+    let mut conflicting = with(b"24/05/17");
+    conflicting.extend_from_slice(b"24/05/18");
+    assert_eq!(unique_embedded_date(&conflicting), None);
+}
+
+#[test]
+fn embedded_month_name_dates_are_unique_valid_calendar_fields() {
+    let with = |text: &[u8]| {
+        let mut image = vec![b' '; 16];
+        image.extend_from_slice(text);
+        image.extend_from_slice(&[b' '; 16]);
+        image
+    };
+    for ok in ["Jan05,2024", "Dec31,1999", "Sep01,2000"] {
+        assert_eq!(unique_embedded_date(&with(ok.as_bytes())), Some(ok));
+    }
+    for bad in [
+        "Jan32,2024",
+        "Jan00,2024",
+        "Foo05,2024",
+        "Jan05;2024",
+        "Jan0x,2024",
+    ] {
+        assert_eq!(unique_embedded_date(&with(bad.as_bytes())), None, "{bad}");
+    }
+    let mut mixed = with(b"24/05/17");
+    mixed.extend_from_slice(b"Jan05,2024");
+    assert_eq!(unique_embedded_date(&mixed), None);
+    let mut both_names = with(b"Jan05,2024");
+    both_names.extend_from_slice(b"Feb06,2024");
+    assert_eq!(unique_embedded_date(&both_names), None);
+}
+
+#[test]
+fn region_labels_name_the_kernel_the_normal_or_generic_firmware() {
+    assert_eq!(region_label("reading", KERNEL_IMAGE_BASE), "reading kernel");
+    assert_eq!(
+        region_label("verifying", NORMAL_IMAGE_BASE),
+        "verifying normal"
+    );
+    assert_eq!(
+        region_label("reading", KERNEL_IMAGE_BASE + 1),
+        "reading firmware"
+    );
+}
