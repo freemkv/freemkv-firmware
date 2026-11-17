@@ -85,3 +85,13 @@ fn translated_messages_and_recursive_english_diagnostics_keep_data_intact() {
         assert_eq!(template_arguments(template, value), None);
     }
 }
+
+#[test]
+fn every_language_is_named_in_its_own_script() {
+    let names: std::collections::BTreeSet<_> =
+        Language::ALL.iter().map(|l| l.native_name()).collect();
+    assert_eq!(names.len(), Language::ALL.len());
+    assert!(names.iter().all(|n| !n.is_empty()));
+    assert_eq!(Language::En.native_name(), "English");
+    assert_eq!(Language::De.native_name(), "Deutsch");
+}
