@@ -1060,3 +1060,7 @@ mod legacy_guidance_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "user_error_mutation_tests.rs"]
+mod mutation_tests;
