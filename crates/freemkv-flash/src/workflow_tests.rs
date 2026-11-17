@@ -678,3 +678,334 @@ fn firmware_input_collector_keeps_the_bytes_used_before_failed_validation() {
     assert_eq!(seen[0].member.as_deref(), Some("normal"));
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+const BU40N: &[u8] = include_bytes!("../tests/fixtures/HL-DT-ST_BU40N_N1.02_2017-12-08.bin");
+
+fn workflow_scratch(tag: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("freemkv-{tag}-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn file_origin_ids_labels_and_explanations_are_distinct() {
+    let all = [
+        FileOrigin::OemLikely,
+        FileOrigin::UserBackupLikely,
+        FileOrigin::Unknown,
+    ];
+    let labels: Vec<_> = all.iter().map(|origin| origin.label()).collect();
+    assert_eq!(labels, ["OEM likely", "User provided", "Origin unknown"]);
+    let mut ids: Vec<_> = all.iter().map(|origin| origin.label_id()).collect();
+    ids.extend(all.iter().map(|origin| origin.explanation_id()));
+    let mut text: Vec<_> = all.iter().map(|origin| origin.explanation()).collect();
+    for id in &ids {
+        assert!(id.starts_with("domain."), "{id}");
+    }
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), 6);
+    text.sort();
+    text.dedup();
+    assert_eq!(text.len(), 3);
+}
+
+#[test]
+fn drive_choice_shows_the_id_only_when_it_differs_from_the_name() {
+    let same = drive("/dev/sg3", "/dev/sg3");
+    assert_eq!(same.display(), "/dev/sg3  HL-DT-ST BD-RE BU40N (rev 1.04)");
+    assert_eq!(same.list_line(), same.display());
+    let named = drive("/dev/sg3", "/dev/sr1");
+    assert_eq!(named.display(), "/dev/sr1  HL-DT-ST BD-RE BU40N (rev 1.04)");
+    assert_eq!(
+        named.list_line(),
+        "/dev/sr1  HL-DT-ST BD-RE BU40N (rev 1.04)  /dev/sg3"
+    );
+}
+
+#[test]
+fn discovery_and_listing_work_without_a_drive() {
+    let _ = drives();
+    let _ = discover();
+    list().unwrap();
+    assert_eq!(resolve_device(Some("selector-x")).unwrap(), "selector-x");
+}
+
+#[test]
+fn picker_formats_never_export_an_empty_or_unsafe_list() {
+    let preferred = FirmwarePickerFormats::prefer(vec!["bin", "tar.gz"]);
+    assert_eq!(preferred.extensions(), Some(["bin", "tar.gz"].as_slice()));
+    let mut expected = update_file_extensions();
+    expected.retain(|extension| FirmwarePickerFormats::valid_suffix(extension));
+    let fallback = FirmwarePickerFormats::prefer(vec!["bad/ext", "", "a..b", "x*"]);
+    assert_eq!(
+        fallback.extensions().map(<[_]>::to_vec),
+        (!expected.is_empty()).then_some(expected)
+    );
+    assert_eq!(
+        FirmwarePickerFormats::default(),
+        FirmwarePickerFormats::prefer(Vec::new())
+    );
+    for good in ["bin", "tar.gz", "a_b-c", "7z"] {
+        assert!(FirmwarePickerFormats::valid_suffix(good), "{good}");
+    }
+    for bad in ["", ".bin", "bin.", "a..b", "a/b", "a*", "a\0", "a b"] {
+        assert!(!FirmwarePickerFormats::valid_suffix(bad), "{bad:?}");
+    }
+}
+
+#[test]
+fn extension_lists_are_deduplicated_in_first_seen_order() {
+    let formats: Vec<_> = registry::backends()
+        .flat_map(|backend| backend.descriptor().formats)
+        .collect();
+    let once = extensions(formats.iter().copied());
+    let twice = extensions(formats.iter().copied().chain(formats.iter().copied()));
+    assert_eq!(once, twice);
+    let mut unique = once.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(unique.len(), once.len());
+    assert_eq!(file_extensions(), once);
+    for extension in update_file_extensions() {
+        assert!(once.contains(&extension));
+    }
+}
+
+#[test]
+fn default_names_carry_model_revision_and_kind() {
+    let id = crate::backend::Identity {
+        vendor: "HL-DT-ST".into(),
+        product: "BD-RE BU40N".into(),
+        revision: "1.02".into(),
+        banner: None,
+    };
+    let format = || crate::backend::BackupFormat {
+        extension: "tar",
+        infix: "backup",
+    };
+    assert_eq!(
+        default_backup_name(&id, Some(format()), false).unwrap(),
+        PathBuf::from("BD-RE_BU40N_1.02.backup.tar")
+    );
+    for given in [Some(format()), None] {
+        assert_eq!(
+            default_backup_name(&id, given, true).unwrap(),
+            PathBuf::from("BD-RE_BU40N_1.02.dump.bin")
+        );
+    }
+    assert!(default_backup_name(&id, None, false).is_err());
+    assert_eq!(
+        default_backup_path(Path::new("/tmp/nonexistent-dir/fw.bin"), "tar"),
+        Some(PathBuf::from(
+            "/tmp/nonexistent-dir/fw.bin.preflash.backup.tar"
+        ))
+    );
+    assert_eq!(default_backup_path(Path::new("/"), "tar"), None);
+}
+
+#[test]
+fn bounded_reads_and_selected_file_checks_report_their_failures() {
+    let dir = workflow_scratch("bounded-reads");
+    let path = dir.join("fw.bin");
+    std::fs::write(&path, b"bytes").unwrap();
+    assert_eq!(read_capped(&path).unwrap(), b"bytes");
+    assert!(read_capped(&dir.join("missing.bin")).is_err());
+    assert!(selected_file_info(&dir).is_err());
+    assert!(selected_file_info(&dir.join("missing.bin")).is_err());
+    assert_eq!(selected_file_origin(&path).unwrap(), FileOrigin::Unknown);
+    assert!(recovery_members(&path).unwrap().is_empty());
+    assert!(recovery_members(&dir.join("missing.bin")).is_err());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn flash_refuses_before_any_drive_access() {
+    let dir = workflow_scratch("flash-refusals");
+    let missing = dir.join("missing.bin");
+    let garbage = dir.join("garbage.bin");
+    std::fs::write(&garbage, b"not firmware").unwrap();
+    let error = flash(
+        FlashOptions {
+            execute: true,
+            input: missing.clone(),
+            ..Default::default()
+        },
+        &mut Preconfirmed,
+    )
+    .unwrap_err();
+    assert!(error.downcast_ref::<UpdateFailure>().is_some());
+    assert!(format!("{error:#}").contains("without acknowledging the risk"));
+    for input in [missing, garbage] {
+        let options = FlashOptions {
+            input,
+            device: Some("nonexistent-device-must-never-be-opened".into()),
+            ..Default::default()
+        };
+        let error = flash(options.clone(), &mut Preconfirmed).unwrap_err();
+        assert!(error.downcast_ref::<UpdateFailure>().is_some());
+        assert!(preview_flash(&options).is_err());
+        assert!(plan_flash(&options).is_err());
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn flash_input_checks_run_in_order_before_opening_the_device() {
+    use crate::backends::mtk::fixture;
+    let dir = workflow_scratch("flash-order");
+    let image = fixture::image(&fixture::BU3, "BU40N", 1);
+    let input = dir.join("target.bin");
+    std::fs::write(&input, &image).unwrap();
+    let error = match open_flash(&FlashOptions {
+        input: input.clone(),
+        current_member: Some("firmware.bin".into()),
+        ..Default::default()
+    }) {
+        Err(error) => error,
+        Ok(_) => panic!("a Current member without Current was accepted"),
+    };
+    assert!(format!("{error:#}").contains("--current-member requires --current"));
+    let error = match open_flash(&FlashOptions {
+        current: Some(input.clone()),
+        input,
+        device: Some("nonexistent-device-must-never-be-opened".into()),
+        ..Default::default()
+    }) {
+        Err(error) => error,
+        Ok(_) => panic!("an unopenable device was accepted"),
+    };
+    assert!(!error.is::<HardwareMismatch>(), "{error:#}");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn supplied_family_check_accepts_matching_and_unrecognized_files_only() {
+    let package = crate::backends::pioneer::test_oem_recovery_package("TEAC");
+    check_supplied_family(b"unrecognized", BU40N).unwrap();
+    check_supplied_family(BU40N, b"unrecognized").unwrap();
+    check_supplied_family(BU40N, BU40N).unwrap();
+    assert!(check_supplied_family(BU40N, &package).is_err());
+    assert!(check_supplied_family(&package, BU40N).is_err());
+}
+
+#[test]
+fn current_references_reject_member_misuse_and_malformed_packages() {
+    let error = current_firmware_image(b"raw image bytes", Some("firmware.bin")).unwrap_err();
+    assert!(format!("{error:#}").contains("--current-member requires a Current TAR"));
+    let mut tar = vec![0u8; 512];
+    tar[257..262].copy_from_slice(b"ustar");
+    assert!(current_firmware_image(&tar, Some("firmware.bin")).is_err());
+    assert!(is_hardware_mismatch(&anyhow::Error::new(
+        HardwareMismatch {
+            installed_model: "a".into(),
+            target_model: "b".into(),
+            source: anyhow::anyhow!("family"),
+        }
+    )));
+    assert!(!is_hardware_mismatch(&anyhow::anyhow!("other")));
+}
+
+#[test]
+fn recovery_refuses_without_acknowledgement_or_input_and_never_reuses_a_session() {
+    let options = |execute, acknowledged_risk| RecoveryOptions {
+        device: Some("nonexistent-device-must-never-be-opened".into()),
+        input: PathBuf::from("/nonexistent/recovery-input.bin"),
+        member: None,
+        current: CurrentFirmware::NotRequired,
+        current_member: None,
+        execute,
+        acknowledged_risk,
+        bypass_family_check: false,
+    };
+    for (execute, acknowledged) in [(true, false), (false, false), (true, true)] {
+        assert!(recover(options(execute, acknowledged)).is_err());
+        assert!(prepare_recovery(options(execute, acknowledged)).is_err());
+    }
+    let session = PreparedRecovery::default();
+    assert_eq!(session, session.clone());
+    assert_ne!(session, PreparedRecovery::default());
+    assert!(format!("{session:?}").contains("PreparedRecovery"));
+    for acknowledged in [false, true] {
+        let error = execute_recovery(session.clone(), acknowledged).unwrap_err();
+        assert!(error.downcast_ref::<UpdateFailure>().is_some());
+    }
+}
+
+#[test]
+fn drive_actions_on_an_unknown_selector_fail_without_writing() {
+    let selector = "nonexistent-device-must-never-be-opened";
+    assert!(info(Some(selector)).is_err());
+    assert!(profile(selector).is_err());
+    assert!(details(selector).is_err());
+    assert!(backup(Some(selector), None, false).is_err());
+    assert!(backup(Some(selector), None, true).is_err());
+    assert!(profile_with_current(selector, Path::new("/nonexistent/current.bin"), None).is_err());
+}
+
+#[test]
+fn unidentified_drives_are_profiled_but_not_offered_any_operation() {
+    let mut dev = crate::platform::MockScsiDevice::new();
+    assert!(classify_gated(&mut dev).is_err());
+    let profile = profile_on(&mut dev).unwrap();
+    assert_eq!(profile.capabilities, crate::backend::Capabilities::NONE);
+    assert!(profile.flash_formats.is_empty());
+    assert!(profile.backup_format.is_none());
+    assert!(dev.writes.is_empty());
+    let mut receiver = oem_receiver("ACME");
+    let profile = profile_on(&mut receiver).unwrap();
+    assert!(profile.firmware_picker_formats().extensions().is_some());
+    let _ = profile.read_notice();
+    let _ = recovery_requires_current(&profile);
+    let _ = recovery_supports_family_override(&profile);
+    assert!(receiver.writes.is_empty());
+}
+
+#[test]
+fn inspection_entry_points_forward_sources_and_cancellation() {
+    let dir = workflow_scratch("inspection");
+    let path = dir.join("fw.bin");
+    std::fs::write(&path, BU40N).unwrap();
+    let source = Source::File(path.clone());
+    let analysis = inspect(&source, &Control::default()).unwrap();
+    let report = compare(
+        &Source::Analyzed(analysis.clone()),
+        &source,
+        &Control::default(),
+    );
+    assert!(report.is_ok());
+    let cancelled = Control::default();
+    cancelled.cancel();
+    assert!(inspect(&source, &cancelled).is_err());
+    let live = |name: &str| Source::Drive {
+        device: "nonexistent-device-must-never-be-opened".into(),
+        capture: dir.join(name),
+        as_backup: false,
+    };
+    assert!(compare(&live("a.bin"), &live("b.bin"), &Control::default()).is_err());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn packaging_a_recognized_image_creates_one_new_file() {
+    let dir = workflow_scratch("package-ok");
+    let input = dir.join("fw.bin");
+    let output = dir.join("fw.tar");
+    std::fs::write(&input, BU40N).unwrap();
+    package_image(&input, &output).unwrap();
+    assert!(std::fs::metadata(&output).unwrap().len() > 0);
+    assert!(package_image(&input, &output).is_err());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn error_helpers_and_file_info_render_without_a_drive() {
+    let error = anyhow::anyhow!("detail");
+    assert!(!error_message(&error).is_empty());
+    let dir = workflow_scratch("file-info");
+    let path = dir.join("fw.bin");
+    std::fs::write(&path, BU40N).unwrap();
+    info(Some(path.to_str().unwrap())).unwrap();
+    check_file(&path).unwrap();
+    std::fs::remove_dir_all(dir).unwrap();
+}
