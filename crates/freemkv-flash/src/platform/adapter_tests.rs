@@ -875,3 +875,40 @@ fn protocol_detection_survives_opposite_native_probe_rejection() {
         }
     }
 }
+
+#[test]
+fn sense_key_and_triplet_follow_the_response_format() {
+    for lead in [0x70u8, 0x71, 0xF0] {
+        let mut fixed = [0u8; 14];
+        fixed[0] = lead;
+        fixed[2] = 0xFA;
+        fixed[12] = 0x11;
+        fixed[13] = 0x22;
+        assert_eq!(sense_key(&fixed), Some(0x0A), "{lead:#x}");
+        assert_eq!(sense_kaa(&fixed), Some((0x0A, 0x11, 0x22)), "{lead:#x}");
+    }
+    for lead in [0x72u8, 0x73, 0xF2] {
+        let descriptor = [lead, 0xFB, 0x33, 0x44];
+        assert_eq!(sense_key(&descriptor), Some(0x0B), "{lead:#x}");
+        assert_eq!(
+            sense_kaa(&descriptor),
+            Some((0x0B, 0x33, 0x44)),
+            "{lead:#x}"
+        );
+    }
+    assert_eq!(sense_key(&[]), None);
+    assert_eq!(sense_key(&[0x60, 0x05, 0x05, 0x05]), None);
+    assert_eq!(sense_kaa(&[0x60; 16]), None);
+    // A key is readable before the full triplet is.
+    assert_eq!(sense_key(&[0x70, 0, 0x05]), Some(5));
+    assert_eq!(sense_kaa(&[0x70, 0, 0x05]), None);
+    assert_eq!(sense_key(&[0x70, 0]), None);
+    assert_eq!(sense_key(&[0x72, 0x05, 0x01]), Some(5));
+    assert_eq!(sense_kaa(&[0x72, 0x05, 0x01]), None);
+}
+
+#[test]
+fn transport_device_describes_its_path() {
+    let dev = dev_scripted(std::iter::empty());
+    assert_eq!(dev.describe(), "test (libfreemkv SCSI transport)");
+}
