@@ -46,3 +46,52 @@ fn printable_neutralizes_control_characters() {
         "PIONEER BD-RW BDR-UD04"
     );
 }
+
+fn progress_events(len: usize, steps: &[usize]) -> Vec<usize> {
+    use std::{cell::RefCell, rc::Rc};
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let sink = seen.clone();
+    crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Progress { done, total, .. } = event {
+                assert_eq!(total, len);
+                sink.borrow_mut().push(done);
+            }
+        },
+        || {
+            let mut progress = Progress::new("reading", len);
+            for &done in steps {
+                progress.set(done);
+            }
+        },
+    );
+    let events = seen.borrow().clone();
+    events
+}
+
+#[test]
+fn progress_publishes_only_whole_percent_advances_and_every_completion() {
+    let len = 2 * Progress::MIN_BYTES;
+    assert_eq!(
+        progress_events(
+            len,
+            &[0, 10_000, 20_972, 20_973, len / 2, len, len, len + 5]
+        ),
+        vec![0, 20_972, len / 2, len, len, len]
+    );
+}
+
+#[test]
+fn small_transfers_are_silent_and_the_threshold_is_inclusive() {
+    assert!(progress_events(Progress::MIN_BYTES - 1, &[0, 1, Progress::MIN_BYTES - 1]).is_empty());
+    assert_eq!(
+        progress_events(Progress::MIN_BYTES, &[0, Progress::MIN_BYTES]),
+        vec![0, Progress::MIN_BYTES]
+    );
+}
+
+#[test]
+fn the_prompt_glyph_is_a_dollar_sign() {
+    assert!(prompt().contains('$'));
+    assert!(prompt().len() <= "\x1b[1;32m$\x1b[0m".len());
+}
