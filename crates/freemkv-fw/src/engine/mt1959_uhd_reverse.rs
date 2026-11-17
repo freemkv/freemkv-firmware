@@ -124,3 +124,7 @@ fn emit_case(a: &mut Asm, b: &ReverseBindings, cv: u32) {
     a.bind(reject);
     tail(a, b.reject);
 }
+
+#[cfg(test)]
+#[path = "mt1959_uhd_reverse_mutation_tests.rs"]
+mod mutation_tests;
