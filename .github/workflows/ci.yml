@@ -258,6 +258,9 @@ jobs:
   # `test` job's layout and MSRV toolchain. cargo-llvm-cov comes as a prebuilt binary from
   # taiki-e/install-action, so it is toolchain-independent.
   coverage:
+    permissions:
+      contents: read
+      id-token: write
     # Keep coverage on release candidates; avoid a second instrumented test
     # suite on every dev push and on promotion PRs.
     if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.coverage_only
@@ -286,10 +289,11 @@ jobs:
           path: freemkv-firmware/lcov.info
       - uses: codecov/codecov-action@v7
         with:
+          use_oidc: true
+          fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           files: freemkv-firmware/lcov.info
           slug: freemkv/freemkv-firmware
-          fail_ci_if_error: false
 
   # Manual only: the website-data performance probe (see profile.yml).
   profile:
