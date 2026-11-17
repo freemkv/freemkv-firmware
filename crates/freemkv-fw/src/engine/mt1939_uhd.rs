@@ -1287,6 +1287,28 @@ mod tests {
         }
     }
     #[test]
+    fn di_recognition_gates_uhd_formats_and_preserves_the_callers_registers() {
+        let bytes = emit_di_recognition(0x0200_f000).unwrap();
+        let words: Vec<_> = bytes
+            .chunks_exact(2)
+            .map(|w| u16::from_le_bytes([w[0], w[1]]))
+            .collect();
+        // push/pop r1-r3 and return through LR; the result alone occupies r0.
+        assert_eq!(words[0], 0xb40e);
+        assert!(words.windows(2).any(|w| w == [0xbc0e, 0x4770]));
+        // STATE_ON, identifier U, format 5, and only the two UHD layer counts.
+        for instruction in [
+            0x2b01, 0x2855, 0x2905, 0x2a02, 0x2a03, 0x20c7, 0x20c8, 0x2000,
+        ] {
+            assert!(
+                words.contains(&instruction),
+                "missing DI gate {instruction:#x}"
+            );
+        }
+        let flag = (0x0200_f000u32 + crate::abi::Feature::Unrestricted as u32).to_le_bytes();
+        assert!(bytes.windows(4).any(|w| w == flag));
+    }
+    #[test]
     fn di_layers_emits_beq_done_for_both_c7_and_c8_states() {
         let bytes = emit_di_layers(0x0200_f000).unwrap();
         let cmp_c7: [u8; 2] = 0x28C7u16.to_le_bytes();

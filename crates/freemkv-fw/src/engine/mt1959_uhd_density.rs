@@ -187,3 +187,90 @@ fn tail(a: &mut Asm, target: usize) {
     a.str_sp(3, 4);
     a.pop(0x108);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bindings() -> DensityBindings {
+        DensityBindings {
+            state: 0x2000_1000,
+            flags: 0x2000_2000,
+            normal_table: 0x123400,
+            continuation: 0x345600,
+            lookup_displaced: false,
+            adjustment: Adjustment::Add,
+            incoming_nz_valid: false,
+        }
+    }
+
+    #[test]
+    fn every_proven_displacement_emits_the_bound_tables_and_return_address() {
+        for (lookup, adjustment) in [
+            (false, Adjustment::Add),
+            (false, Adjustment::Sub),
+            (true, Adjustment::None),
+        ] {
+            let mut b = bindings();
+            b.lookup_displaced = lookup;
+            b.adjustment = adjustment;
+            b.incoming_nz_valid = lookup;
+            let stub = density_stub(&b).unwrap();
+            let table: Vec<_> = SLIM_UHD_DENSITY_TARGETS
+                .into_iter()
+                .flat_map(u16::to_le_bytes)
+                .collect();
+            assert!(stub.windows(table.len()).any(|bytes| bytes == table));
+            for literal in [
+                b.state,
+                b.flags + crate::abi::Feature::Unrestricted as u32,
+                b.normal_table as u32,
+                b.continuation as u32 | 1,
+            ] {
+                assert!(
+                    stub.windows(4).any(|bytes| bytes == literal.to_le_bytes()),
+                    "missing binding {literal:#x}"
+                );
+            }
+            assert_eq!(stub.len() % 2, 0);
+        }
+    }
+
+    #[test]
+    fn unproven_flags_addresses_and_instruction_shapes_are_rejected() {
+        for table in [0, 1, 0x8000_0000] {
+            let mut b = bindings();
+            b.normal_table = table;
+            assert!(density_stub(&b)
+                .unwrap_err()
+                .to_string()
+                .contains("table address"));
+        }
+        let mut b = bindings();
+        b.continuation |= 1;
+        assert!(density_stub(&b)
+            .unwrap_err()
+            .to_string()
+            .contains("continuation"));
+        b = bindings();
+        b.flags = u32::MAX;
+        assert!(density_stub(&b)
+            .unwrap_err()
+            .to_string()
+            .contains("overflow"));
+        for (lookup, adjustment, valid_nz) in [
+            (true, Adjustment::Add, true),
+            (true, Adjustment::None, false),
+            (false, Adjustment::None, true),
+        ] {
+            let mut b = bindings();
+            b.lookup_displaced = lookup;
+            b.adjustment = adjustment;
+            b.incoming_nz_valid = valid_nz;
+            assert!(density_stub(&b)
+                .unwrap_err()
+                .to_string()
+                .contains("unproven"));
+        }
+    }
+}
