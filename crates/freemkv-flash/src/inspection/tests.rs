@@ -322,3 +322,69 @@ fn the_pioneer_coverage_note_is_a_standing_caveat() {
     assert!(standing[0].contains("semantic_coverage"));
     assert!(normal.findings().all(|d| !d.contains("semantic_coverage")));
 }
+
+#[test]
+fn inspection_errors_have_distinct_codes_and_messages() {
+    let all = [
+        InspectionError::UnsupportedFormat("Family X".into()),
+        InspectionError::UnrecognizedFormat,
+        InspectionError::UnsupportedPair,
+        InspectionError::PackageRequired,
+        InspectionError::Cancelled,
+        InspectionError::TwoDrives,
+    ];
+    let mut codes: Vec<_> = all.iter().map(InspectionError::code).collect();
+    codes.sort();
+    codes.dedup();
+    assert_eq!(codes.len(), all.len());
+    let mut messages: Vec<_> = all.iter().map(ToString::to_string).collect();
+    assert!(messages[0].contains("Family X"));
+    messages.sort();
+    messages.dedup();
+    assert_eq!(messages.len(), all.len());
+    assert_eq!(all[4].code(), "inspect.cancelled");
+    assert_eq!(all[5].code(), "compare.two_drives");
+}
+
+#[test]
+fn unreadable_unrecognized_and_unopenable_sources_fail_with_typed_errors() {
+    let dir = std::env::temp_dir().join(format!(
+        "freemkv-inspect-sources-{}",
+        crate::diagnostics::new_operation_id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let junk = dir.join("junk.bin");
+    std::fs::write(&junk, b"not firmware").unwrap();
+    let error = inspect(&Source::File(junk.clone()), &Control::default()).unwrap_err();
+    assert!(error.chain().any(|e| matches!(
+        e.downcast_ref::<InspectionError>(),
+        Some(InspectionError::UnrecognizedFormat)
+    )));
+    assert!(inspect(&Source::File(dir.join("missing.bin")), &Control::default()).is_err());
+    let live = Source::Drive {
+        device: "nonexistent-device-must-never-be-opened".into(),
+        capture: dir.join("capture.bin"),
+        as_backup: true,
+    };
+    assert!(inspect(&live, &Control::default()).is_err());
+    assert!(!dir.join("capture.bin").exists());
+    let two = compare(&live, &live, &Control::default()).unwrap_err();
+    assert!(two.chain().any(|e| matches!(
+        e.downcast_ref::<InspectionError>(),
+        Some(InspectionError::TwoDrives)
+    )));
+    assert!(compare(
+        &Source::File(junk.clone()),
+        &Source::File(junk),
+        &Control::default()
+    )
+    .is_err());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn damaged_tar_is_reported_as_such_not_as_an_unknown_format() {
+    let mut tar = vec![0u8; 1024];
+    tar[257..262].copy_from_slice(b"ustar");
+    assert!(inspect_bytes("broken.tar".into(), &tar, &Control::default()).is_err());
+}
