@@ -1009,3 +1009,47 @@ fn error_helpers_and_file_info_render_without_a_drive() {
     check_file(&path).unwrap();
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn input_size_cap_admits_exactly_the_maximum_and_refuses_one_more() {
+    const MAX: u64 = 64 * 1024 * 1024;
+    let dir = std::env::temp_dir().join(format!("freemkv-cap-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("input.bin");
+    let open = |len: u64| {
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(len).unwrap();
+        read_capped_file(&path, std::fs::File::open(&path).unwrap())
+    };
+    assert_eq!(open(MAX).unwrap().len() as u64, MAX);
+    let error = open(MAX + 1).unwrap_err();
+    assert!(format!("{error:#}").contains("exceeds the 64 MiB cap"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn only_regular_files_route_as_firmware_images() {
+    let dir = std::env::temp_dir().join(format!("freemkv-route-{}", new_operation_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("image.bin");
+    std::fs::write(&file, b"x").unwrap();
+    assert!(is_firmware_file(file.to_str().unwrap()));
+    assert!(!is_firmware_file(dir.to_str().unwrap()));
+    assert!(!is_firmware_file(dir.join("absent.bin").to_str().unwrap()));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn update_pickers_list_only_valid_registered_suffixes() {
+    let all = update_file_extensions();
+    assert!(!all.is_empty());
+    assert!(all.iter().all(|e| FirmwarePickerFormats::valid_suffix(e)));
+    assert!(update_extensions(&[]).is_empty());
+    let formats: Vec<_> = registry::backends()
+        .flat_map(|b| b.descriptor().formats)
+        .copied()
+        .collect();
+    let listed = update_extensions(&formats);
+    assert!(!listed.is_empty());
+    assert!(listed.iter().all(|e| !e.is_empty()));
+}
