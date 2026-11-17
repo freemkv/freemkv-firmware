@@ -551,7 +551,7 @@ fn transfer_error_keeps_structured_boundary_and_sense_for_user_guidance() {
     assert_eq!((sense.sense_key, sense.asc, sense.ascq), (5, 0x26, 2));
 }
 
-fn descriptor(feature: u16, ascii: &[u8]) -> Vec<u8> {
+fn ascii_descriptor(feature: u16, ascii: &[u8]) -> Vec<u8> {
     let mut data = vec![0u8; 12];
     data[8..10].copy_from_slice(&feature.to_be_bytes());
     data[11] = ascii.len() as u8;
@@ -562,20 +562,20 @@ fn descriptor(feature: u16, ascii: &[u8]) -> Vec<u8> {
 #[test]
 fn field_descriptor_bounds_are_exact() {
     assert!(parse_field_descriptor(&[0u8; 11]).is_none());
-    let empty = parse_field_descriptor(&descriptor(0x0108, b"")).unwrap();
+    let empty = parse_field_descriptor(&ascii_descriptor(0x0108, b"")).unwrap();
     assert_eq!(
         (empty.feature, empty.add_len, empty.ascii.as_str()),
         (0x0108, 0, "")
     );
-    let exact = parse_field_descriptor(&descriptor(0x0109, b" 24/05/17\0\0")).unwrap();
+    let exact = parse_field_descriptor(&ascii_descriptor(0x0109, b" 24/05/17\0\0")).unwrap();
     assert_eq!(exact.ascii, "24/05/17");
     assert_eq!(exact.add_len, 11);
-    let mut truncated = descriptor(0x0109, b"abcd");
+    let mut truncated = ascii_descriptor(0x0109, b"abcd");
     truncated.pop();
     assert!(parse_field_descriptor(&truncated).is_none());
 
     let mut dump = sample_dump(0, 0);
-    dump.fd_fwdate = descriptor(0x0109, b"24/05/17   ");
+    dump.fd_fwdate = ascii_descriptor(0x0109, b"24/05/17   ");
     assert_eq!(dump.fw_date().as_deref(), Some("24/05/17"));
     dump.fd_fwdate = vec![0; 4];
     assert_eq!(dump.fw_date(), None);

@@ -153,8 +153,8 @@ fn only_strict_transports_record_write_attempts() {
     let shared = SharedDevice::new(&mut dev);
 
     let mut lenient = ScsiTransport::reads(&shared);
-    lenient.exec(&[0x3b], Data::Out(&[])).unwrap();
-    lenient.exec(&[0x3b], Data::Out(&[1])).unwrap();
+    Transport::exec(&mut lenient, &[0x3b], Data::Out(&[])).unwrap();
+    Transport::exec(&mut lenient, &[0x3b], Data::Out(&[1])).unwrap();
     MtkTransport::exec(&mut lenient, &[0x3b], MtkData::Out(&[])).unwrap();
     MtkTransport::exec(&mut lenient, &[0x3b], MtkData::Out(&[1])).unwrap();
     assert!(!lenient.empty_write_attempted());
@@ -167,8 +167,8 @@ fn only_strict_transports_record_write_attempts() {
             MtkTransport::exec(&mut payload, &[0x3b], MtkData::Out(&[1])).unwrap();
             MtkTransport::exec(&mut empty, &[0x3b], MtkData::Out(&[])).unwrap();
         } else {
-            payload.exec(&[0x3b], Data::Out(&[1])).unwrap();
-            empty.exec(&[0x3b], Data::Out(&[])).unwrap();
+            Transport::exec(&mut payload, &[0x3b], Data::Out(&[1])).unwrap();
+            Transport::exec(&mut empty, &[0x3b], Data::Out(&[])).unwrap();
         }
         assert!(payload.payload_write_attempted(), "mtk={mtk}");
         assert!(!payload.empty_write_attempted(), "mtk={mtk}");
@@ -187,9 +187,9 @@ fn transports_keep_the_sense_of_the_last_failed_command() {
     let shared = SharedDevice::new(&mut dev);
     let mut transport = ScsiTransport::reads(&shared);
     let mut buffer = [0u8; 4];
-    assert!(transport.exec(&[0x3c], Data::In(&mut buffer)).is_err());
+    assert!(Transport::exec(&mut transport, &[0x3c], Data::In(&mut buffer)).is_err());
     assert_eq!(Transport::sense(&transport), Some((5, 0x24, 0)));
-    transport.exec(&[0x12], Data::In(&mut buffer)).unwrap();
+    Transport::exec(&mut transport, &[0x12], Data::In(&mut buffer)).unwrap();
     assert_eq!(Transport::sense(&transport), None);
     assert!(MtkTransport::exec(&mut transport, &[0x3c], MtkData::In(&mut buffer)).is_err());
     assert_eq!(MtkTransport::sense(&transport), Some((5, 0x24, 0)));
