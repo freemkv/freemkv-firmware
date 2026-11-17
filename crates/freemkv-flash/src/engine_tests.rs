@@ -1694,3 +1694,93 @@ fn encoding_override_cannot_contradict_live_receiver() {
     assert!(dev.writes.is_empty());
     assert!(!req.predump_out.unwrap().exists());
 }
+
+#[test]
+fn plan_lines_render_as_the_terminal_shows_them() {
+    let render = |line: &PlanLine| render_plan_line(line, "saved.tar");
+    assert_eq!(render(&PlanLine::Text("plain".into())), "plain");
+    assert_eq!(render(&PlanLine::Block("a\nb\n".into())), "a\nb\n");
+    assert_eq!(
+        render(&PlanLine::Header("Plan".into())),
+        style::header("Plan")
+    );
+    assert_eq!(
+        render(&PlanLine::Field("model", "BU40N".into())),
+        style::kv("model", "BU40N")
+    );
+    assert_eq!(render(&PlanLine::Backup), style::kv("backup", "saved.tar"));
+    assert_eq!(
+        render(&PlanLine::Warning("careful".into())),
+        style::amber("careful")
+    );
+    assert_eq!(
+        render(&PlanLine::Ok("checks", "passed".into())),
+        style::status_line("checks", "passed", style::Status::Ok)
+    );
+    let spaced = PlanLine::Spaced(Box::new(PlanLine::Text("later".into())));
+    assert_eq!(render(&spaced), "\nlater");
+    let detail = PlanLine::Detail(Box::new(PlanLine::Text("detail".into())));
+    assert_eq!(render(&detail), "detail");
+}
+
+#[test]
+fn emitted_plans_reach_the_front_end_as_messages_in_order() {
+    let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let sink = seen.clone();
+    crate::output::capture_events(
+        move |event| {
+            if let crate::output::Event::Message(text) = event {
+                sink.borrow_mut().push(text);
+            }
+        },
+        || {
+            emit_plan(
+                &[
+                    PlanLine::Text("first".into()),
+                    PlanLine::Block("block\n".into()),
+                    PlanLine::Detail(Box::new(PlanLine::Text("third".into()))),
+                    PlanLine::Backup,
+                ],
+                "saved.tar",
+            )
+        },
+    );
+    let seen = seen.borrow();
+    assert_eq!(seen[0], "first");
+    assert!(seen.iter().any(|line| line == "block"));
+    assert!(seen.iter().any(|line| line == "third"));
+    assert!(seen.last().unwrap().contains("saved.tar"));
+}
+
+#[test]
+fn a_backend_without_flash_or_backup_support_is_refused_with_its_id() {
+    struct Bare;
+    static DESCRIPTOR: crate::backend::Descriptor = crate::backend::Descriptor {
+        id: crate::backend::BackendId("engine-bare"),
+        display_name: "Bare",
+        flash_summary: None,
+        formats: &[],
+    };
+    impl Backend for Bare {
+        fn descriptor(&self) -> &'static crate::backend::Descriptor {
+            &DESCRIPTOR
+        }
+        fn probe(
+            &self,
+            _: &mut ReadDevice<'_>,
+            _: &crate::backend::Identity,
+        ) -> Result<Option<crate::backend::Match>> {
+            Ok(None)
+        }
+    }
+    let error = flash_facet(&Bare).err().unwrap();
+    assert!(format!("{error:#}").contains("engine-bare"));
+    let out = std::env::temp_dir().join("freemkv-engine-bare-never-created.bin");
+    let mut dev = MockScsiDevice::new();
+    for dump in [false, true] {
+        let error = backup_with_replace(&mut dev, &Bare, &out, dump, false).unwrap_err();
+        assert!(format!("{error:#}").contains("engine-bare"), "{error:#}");
+    }
+    assert!(!out.exists());
+    assert!(dev.writes.is_empty());
+}
