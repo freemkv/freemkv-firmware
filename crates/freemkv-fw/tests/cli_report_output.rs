@@ -400,3 +400,24 @@ fn legacy_modified_image_requires_original_oem_and_writes_nothing() {
     )));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn capabilities_prints_one_json_object_for_the_exact_image() {
+    let dir = scratch_dir("capabilities");
+    let input = dir.join("BU40N.bin");
+    std::fs::write(&input, fixture()).unwrap();
+    let out = run(&["capabilities", &path_str(&input)]);
+    let stdout = stdout_of(&out);
+    assert!(out.status.success(), "{stdout}");
+    let report: serde_json::Value = serde_json::from_str(stdout.trim()).expect("JSON report");
+    assert!(report.is_object(), "{stdout}");
+    assert!(stdout.contains("BU40N"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn info_on_a_missing_device_exits_non_zero() {
+    let out = run(&["info", "/dev/freemkv-fw-no-such-device"]);
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty() || !stdout_of(&out).contains("DETECTED on"));
+}

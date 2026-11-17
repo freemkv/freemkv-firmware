@@ -1180,7 +1180,7 @@ fn dump_of_an_all_failed_read_writes_no_file_and_fails() {
     let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
     let read = mem_read(&mut dev, 0x1000, 0x100, false);
     let nothing = read.captured_nothing();
-    let code = write_dump(Some(&out), 0x1000, 0x100, &read.data, nothing).unwrap();
+    let code = write_dump(Some(out.as_path()), 0x1000, 0x100, &read.data, nothing).unwrap();
     assert!(!out.exists(), "an all-zero dump must not be published");
     assert_eq!(code, ExitCode::FAILURE);
 }
@@ -1206,4 +1206,133 @@ fn full_capture_with_an_unreadable_region_fails() {
     let mut dev = mem_mock(|| Err(anyhow::anyhow!("no verb")));
     assert_eq!(capture_full(&mut dev, &prefix).unwrap(), ExitCode::FAILURE);
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn write_dump_writes_prints_or_withholds_the_capture() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("dump.bin");
+    let data = [0xA5u8; 20];
+    let code = write_dump(Some(out.as_path()), 0x1000, 20, &data, false).unwrap();
+    assert_eq!(exit_dbg(code), exit_dbg(ExitCode::SUCCESS));
+    assert_eq!(std::fs::read(&out).unwrap(), data);
+    let code = write_dump(None, 0x1000, 20, &data, false).unwrap();
+    assert_eq!(exit_dbg(code), exit_dbg(ExitCode::SUCCESS));
+    let skipped = dir.path().join("skipped.bin");
+    let code = write_dump(Some(skipped.as_path()), 0, 20, &data, true).unwrap();
+    assert_eq!(exit_dbg(code), exit_dbg(ExitCode::FAILURE));
+    assert!(!skipped.exists());
+}
+
+#[test]
+fn write_region_keeps_an_earlier_file_when_nothing_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let stale = dir.path().join("stale.bin");
+    std::fs::write(&stale, b"old").unwrap();
+    let read = MemRead {
+        data: vec![0; abi::MEMREAD_LEN],
+        good: 0,
+        failed: 1,
+        short: 0,
+    };
+    assert!(!write_region(&stale, 0, &read).unwrap());
+    assert_eq!(std::fs::read(&stale).unwrap(), b"old");
+}
+
+/// Maps 0x100 bytes at the start of each `--full` region.
+struct Banks;
+
+impl platform::ScsiDevice for Banks {
+    fn command_in(&mut self, cdb: &[u8], _alloc_len: usize) -> Result<Vec<u8>> {
+        let addr = u32::from_be_bytes([cdb[5], cdb[6], cdb[7], cdb[8]]);
+        if addr < 0x100 || (0x01c0_0000..0x01c0_0100).contains(&addr) {
+            return Ok(WindowMem::window(addr));
+        }
+        bail!("mock: address 0x{addr:08x} is not mapped")
+    }
+
+    fn command_out(&mut self, _cdb: &[u8], _data: &[u8]) -> Result<()> {
+        unreachable!("capture is read-only")
+    }
+
+    fn describe(&self) -> String {
+        "mock://banks".into()
+    }
+}
+
+#[test]
+fn capture_full_writes_every_readable_region_and_succeeds() {
+    let dir = tempfile::tempdir().unwrap();
+    let prefix = dir.path().join("drive");
+    let code = capture_full(&mut Banks, &prefix).unwrap();
+    assert_eq!(exit_dbg(code), exit_dbg(ExitCode::SUCCESS));
+    let windows = 0x100 / abi::MEMREAD_LEN;
+    assert_eq!(
+        std::fs::read(dir.path().join("drive-00000000.bin")).unwrap(),
+        WindowMem::expected(0, windows)
+    );
+    assert_eq!(
+        std::fs::read(dir.path().join("drive-01c00000.bin")).unwrap(),
+        WindowMem::expected(0x01c0_0000, windows)
+    );
+}
+
+#[test]
+fn cmd_info_surfaces_unopenable_devices_for_every_mode() {
+    let dev = Path::new("/dev/freemkv-fw-no-such-device");
+    let dir = tempfile::tempdir().unwrap();
+    let prefix = dir.path().join("drive");
+    assert!(cmd_info(dev, None, None, true, Some(prefix.as_path())).is_err());
+    assert!(cmd_info(dev, Some("0xffffff00"), Some("0x200"), false, None).is_err());
+    assert!(cmd_info(dev, None, None, false, None).is_err());
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn modify_report_lists_reasons_and_hardware_validation() {
+    use engine::lever::{LeverId, LeverReport};
+    let mut report = lever_report(vec![
+        LeverReport::applied(LeverId::Speed, vec![("gate", 0x1234)]),
+        LeverReport::not_applicable(LeverId::RegionFree, "DVD-only part"),
+        LeverReport::missed(LeverId::RawRead, "gate not found"),
+    ]);
+    report.validation = engine::lever::Validation::HardwareConfirmed;
+    print_modify_report(&report, Some(Path::new("out.bin")), 3);
+    let note = partial_note(&report).unwrap();
+    assert!(note.starts_with("Applied 1 of 3 changes"), "{note}");
+    assert!(note.contains("Region Free (DVD-only part)"), "{note}");
+    assert!(note.contains("Raw read (gate not found)"), "{note}");
+}
+
+#[test]
+fn base_report_without_chip_identity_uses_the_engine_and_flags_missing_gates() {
+    let mut outcome = api::create(&bu40n_fixture()).unwrap();
+    outcome.chip = None;
+    outcome.report.speed_stub_va = 0;
+    let json = base_report_json(&outcome);
+    assert!(
+        json.contains("\"family\":\"MT1959\",\"vendor\":\"\",\"model\":\"\",\"rev\":\"\","),
+        "{json}"
+    );
+    assert!(json.contains("\"media\":\"\","), "{json}");
+    assert!(json.contains("{\"name\":\"Speed\",\"ok\":false}"), "{json}");
+    assert!(json.contains("{\"name\":\"Region\",\"ok\":true}"), "{json}");
+    print_base_report(&outcome, Path::new("base.bin"));
+}
+
+#[test]
+fn in_place_dry_runs_never_touch_the_input() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("input.bin");
+    std::fs::write(&input, bu40n_fixture()).unwrap();
+    let dry = CreateSettings {
+        defaults: BootSettings::standard(),
+        dry_run: true,
+    };
+    for base in [false, true] {
+        let code = cmd_create_configured(&input, None, true, false, base, false, &dry).unwrap();
+        assert_eq!(exit_dbg(code), exit_dbg(ExitCode::SUCCESS));
+    }
+    assert_eq!(std::fs::read(&input).unwrap(), bu40n_fixture());
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
 }
