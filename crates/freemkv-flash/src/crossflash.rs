@@ -846,3 +846,83 @@ mod cli_tests {
         assert_ne!(crate::crc32(b"a"), crate::crc32(b"b"));
     }
 }
+
+#[cfg(test)]
+mod decision_tests {
+    use super::*;
+
+    fn route(status: RouteStatus) -> Route {
+        Route {
+            status,
+            requirements: Vec::new(),
+        }
+    }
+    fn evaluation(statuses: &[RouteStatus], reason: Option<&str>) -> Result<Evaluation> {
+        Ok(Evaluation {
+            routes: statuses.iter().copied().map(route).collect(),
+            reason: reason.map(str::to_owned),
+        })
+    }
+
+    #[test]
+    fn route_statuses_pick_the_strongest_verdict_and_its_reason() {
+        use RouteStatus::*;
+        let yes = decide_from(evaluation(&[Future, Allowed, Conditional], Some("why")));
+        assert_eq!(yes.status, CompatibilityStatus::Yes);
+        assert_eq!(yes.reason, None);
+        let conditional = decide_from(evaluation(&[Future, Conditional], Some("why")));
+        assert_eq!(conditional.status, CompatibilityStatus::Conditional);
+        assert_eq!(
+            conditional.reason.as_deref(),
+            Some("Read-only live correction prerequisites must hold before firmware transfer")
+        );
+        let soft = decide_from(evaluation(&[Future], Some("not yet")));
+        assert_eq!(soft.status, CompatibilityStatus::SoftNo);
+        assert_eq!(soft.reason.as_deref(), Some("not yet"));
+        let none = decide_from(evaluation(&[], Some("nothing")));
+        assert_eq!(none.status, CompatibilityStatus::SoftNo);
+        assert_eq!(none.reason.as_deref(), Some("nothing"));
+    }
+
+    #[test]
+    fn duplicate_routes_collapse_and_sort() {
+        use RouteStatus::*;
+        let decision = decide_from(evaluation(&[Future, Allowed, Future, Allowed], None));
+        assert_eq!(
+            decision.routes,
+            vec![route(Allowed), route(Future)],
+            "sorted and deduplicated"
+        );
+    }
+
+    #[test]
+    fn typed_refusals_keep_their_status_and_text() {
+        let refusal = RouteRefusal {
+            status: CompatibilityStatus::SoftNo,
+            reason: "adapter pending".into(),
+        };
+        assert_eq!(refusal.to_string(), "adapter pending");
+        let decision = decide_from(Err(anyhow::Error::new(refusal)));
+        assert_eq!(decision.status, CompatibilityStatus::SoftNo);
+        assert_eq!(decision.reason.as_deref(), Some("adapter pending"));
+        assert_eq!(decision.routes, vec![route(RouteStatus::Future)]);
+        let hard = decide_from(Err(anyhow::anyhow!("unknown evidence")));
+        assert_eq!(hard.status, CompatibilityStatus::HardNo);
+        assert!(hard.routes.is_empty());
+    }
+
+    #[test]
+    fn platforms_are_found_compared_and_printed_by_namespace() {
+        let all: Vec<_> = Platform::all().collect();
+        assert!(!all.is_empty());
+        for platform in &all {
+            let found = Platform::by_id(platform.id()).unwrap();
+            assert!(found == *platform);
+            assert_eq!(format!("{platform:?}"), platform.id());
+        }
+        if all.len() > 1 {
+            assert!(all[0] != all[1]);
+        }
+        assert!(Platform::by_id("no-such-platform").is_none());
+    }
+}
