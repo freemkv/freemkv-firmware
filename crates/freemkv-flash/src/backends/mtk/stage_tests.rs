@@ -1382,3 +1382,36 @@ fn mediatek_helpers_report_banner_text_and_flash_acceptance() {
     assert_eq!(text(&short), short.to_string());
     assert!(!text(&short).is_empty());
 }
+
+#[test]
+fn recovery_transfer_failure_classifies_attempted_versus_accepted_payload() {
+    use crate::backend::UpdateProgress;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let current = image(b"1.00", 1);
+    let target = image(b"1.01", 3);
+    let is_transfer = |c: &[u8]| c.len() > 1 && c[0] == 0x3b && c[1] == 0x06;
+    let mut clean = MockScsiDevice::echoing().with_firmware_image(current.clone());
+    crate::engine::recover(&mut clean, &Mtk, None, &target, true, true).unwrap();
+    let total = clean.writes.iter().filter(|(c, _)| is_transfer(c)).count();
+    for (fail_at, progress) in [
+        (1, UpdateProgress::PayloadAttempted),
+        (total, UpdateProgress::PayloadAccepted),
+    ] {
+        let seen = Arc::new(AtomicUsize::new(0));
+        let counter = seen.clone();
+        let mut dev = MockScsiDevice::echoing()
+            .with_firmware_image(current.clone())
+            .on_fail(
+                move |c| is_transfer(c) && counter.fetch_add(1, Ordering::SeqCst) + 1 == fail_at,
+                "transfer rejected",
+            );
+        let error = crate::engine::recover(&mut dev, &Mtk, None, &target, true, true).unwrap_err();
+        let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+        assert_eq!(failure.progress, progress, "chunk {fail_at}");
+        assert_eq!(failure.phase, "firmware transfer");
+        assert!(failure.write_started);
+    }
+}
