@@ -140,3 +140,7 @@ fn find(
     }
     Ok((out, true))
 }
+
+#[cfg(test)]
+#[path = "alignment_tests.rs"]
+mod tests;
