@@ -158,7 +158,7 @@ fn recovery_current_source_follows_the_explicit_option() {
     use freemkv_flash::workflow::CurrentFirmware;
     assert!(matches!(
         current_firmware(Some("c.tar".into()), false),
-        CurrentFirmware::File(path) if path == PathBuf::from("c.tar")
+        CurrentFirmware::File(path) if path.as_path() == std::path::Path::new("c.tar")
     ));
     assert!(matches!(
         current_firmware(None, true),
