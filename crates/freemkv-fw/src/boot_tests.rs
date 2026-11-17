@@ -525,3 +525,113 @@ fn older_conversion_normal_apis_clear_private_identity_before_native_boot() {
         assert_eq!(&bytes[restore - 2..restore], &0x46a4u16.to_le_bytes());
     }
 }
+
+#[test]
+fn support_facts_map_to_the_features_they_implement() {
+    for bits in 0u8..64 {
+        let on = |k: u8| bits & (1 << k) != 0;
+        let fact = |key: &str| -> u32 {
+            let k = match key {
+                "uhd_stub_va" => 0,
+                "bd_stub_va" => 1,
+                "auth_cell_refusal" => 2,
+                "auth_cell_stub_va" => 3,
+                "uhd_conversion_count" => 4,
+                "hrl_stub_va" => 5,
+                _ => return 0,
+            };
+            u32::from(on(k))
+        };
+        let support = BootSupport::from_facts(true, fact);
+        let refusal = (on(0) && on(1)) || on(2);
+        let widening = on(3) || on(4);
+        assert_eq!(
+            support.supports(BootFeature::Unrestricted),
+            refusal || widening
+        );
+        assert_eq!(
+            support.supports_value(BootFeature::Unrestricted, 0),
+            refusal
+        );
+        assert_eq!(
+            support.supports_value(BootFeature::Unrestricted, 1),
+            refusal || widening
+        );
+        assert_eq!(support.supports(BootFeature::Hrl), on(5));
+        assert!(!support.supports(BootFeature::Encryption));
+        assert!(!support.supports(BootFeature::Speed));
+        assert!(!support.supports(BootFeature::Region));
+    }
+    assert!(!BootSupport::from_facts(false, |_| 1).has_boot());
+    assert!(!BootSupport::from_facts(false, |_| 1).supports(BootFeature::Speed));
+    assert!(BootSupport::from_facts(true, |_| 0).has_boot());
+}
+
+#[test]
+fn created_reports_feed_the_same_support_mapping() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+    let mut seen = 0;
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("bin") {
+            continue;
+        }
+        let image = std::fs::read(&path).unwrap();
+        let Ok(outcome) = api::create_with_defaults(&image, &BootSettings::standard()) else {
+            continue;
+        };
+        let r = &outcome.report;
+        let support = BootSupport::from_create(r);
+        let refusal = (r.uhd_stub_va != 0 && r.bd_stub_va != 0) || r.auth_cell_refusal;
+        let widening = r.auth_cell_stub_va != 0 || r.uhd_conversion_count != 0;
+        assert_eq!(support.has_boot(), r.boot_stub_va != 0, "{path:?}");
+        assert_eq!(
+            support.supports(BootFeature::Unrestricted),
+            refusal || widening,
+            "{path:?}"
+        );
+        assert_eq!(
+            support.supports(BootFeature::Hrl),
+            r.hrl_stub_va != 0,
+            "{path:?}"
+        );
+        assert_eq!(
+            support.supports(BootFeature::Encryption),
+            r.ake_stub_va != 0,
+            "{path:?}"
+        );
+        assert_eq!(
+            support.supports(BootFeature::Speed),
+            r.speed_stub_va != 0,
+            "{path:?}"
+        );
+        assert_eq!(
+            support.supports(BootFeature::Region),
+            r.region_stub_va != 0,
+            "{path:?}"
+        );
+        seen += 1;
+    }
+    assert!(seen > 0);
+}
+
+#[test]
+fn labels_and_explicit_choices_are_kept_when_a_feature_is_unsupported() {
+    assert_eq!(BootFeature::Unrestricted.label(), "Unrestricted access");
+    assert_eq!(BootFeature::Hrl.label(), "HRL checking");
+    assert_eq!(BootFeature::Encryption.label(), "Encryption");
+    assert_eq!(BootFeature::Speed.label(), "Read speed");
+    assert_eq!(BootFeature::Region.label(), "Region");
+    let chosen = settings(&["hrl=off"]);
+    assert_eq!(chosen.label(BootFeature::Hrl), "Off — skip");
+    let nothing = BootSupport::default();
+    let applied = chosen.applicable(&nothing);
+    assert_eq!(applied.value(BootFeature::Hrl), "off", "explicit stays");
+    assert_eq!(
+        applied.value(BootFeature::Speed),
+        "oem",
+        "default falls back"
+    );
+    assert_eq!(applied.value(BootFeature::Region), "oem");
+    assert_eq!(applied.value(BootFeature::Unrestricted), "oem");
+}
