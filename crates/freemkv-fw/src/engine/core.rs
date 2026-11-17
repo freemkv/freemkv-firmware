@@ -3515,3 +3515,7 @@ pub(crate) fn classic_boot_init_caller(image: &[u8], site: usize) -> Option<(usi
 #[cfg(test)]
 #[path = "mt1959_kat_tests.rs"]
 mod kat_tests;
+
+#[cfg(test)]
+#[path = "core_tests.rs"]
+mod core_tests;
