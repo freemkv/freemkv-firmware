@@ -441,3 +441,64 @@ fn empty_or_relative_xdg_directories_fall_through() {
         Some(PathBuf::from("/state/freemkv/logs"))
     );
 }
+
+fn temp_log(tag: &str) -> (PathBuf, PathBuf, Log) {
+    let directory = std::env::temp_dir().join(format!("freemkv-{tag}-{}", new_operation_id()));
+    let (path, log) = create_log(&directory, "freemkv-flash").unwrap();
+    (directory, path, log)
+}
+
+#[test]
+fn log_limits_keep_their_documented_sizes() {
+    assert_eq!(MAX_LOG, 8 * 1024 * 1024);
+    assert_eq!(MAX_LOG, 8_388_608);
+    assert_eq!(KEEP_START, 65_536);
+    assert_eq!(MAX_EVENT, 32_768);
+}
+
+#[test]
+fn event_is_truncated_only_beyond_the_event_limit() {
+    let (directory, path, mut log) = temp_log("event-limit");
+    log.write(&"x".repeat(MAX_EVENT)).unwrap();
+    log.write(&"y".repeat(MAX_EVENT + 1)).unwrap();
+    drop(log);
+    let text = std::fs::read_to_string(&path).unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0].matches('x').count(), MAX_EVENT);
+    assert!(!lines[0].contains("[event truncated]"));
+    assert_eq!(lines[1].matches('y').count(), MAX_EVENT);
+    assert!(lines[1].ends_with(" [event truncated]"));
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn log_rolls_exactly_when_the_next_line_would_exceed_the_limit() {
+    let (directory, path, mut log) = temp_log("roll-edge");
+    log.write("first").unwrap();
+    let line_length = format!("[{:>10.3}s] abc\n", 0.0).len();
+    log.bytes = MAX_LOG - line_length;
+    log.write("abc").unwrap();
+    assert!(!log.rolled);
+    assert_eq!(log.bytes, MAX_LOG);
+    log.write("abc").unwrap();
+    assert!(log.rolled);
+    drop(log);
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("first"));
+    assert!(text.contains("older intervening events omitted"));
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn rolled_byte_count_matches_the_file_that_remains() {
+    let (directory, path, mut log) = temp_log("roll-count");
+    log.write("first").unwrap();
+    log.bytes = MAX_LOG;
+    log.write("second").unwrap();
+    assert!(log.rolled);
+    log.file.flush().unwrap();
+    assert_eq!(log.bytes as u64, std::fs::metadata(&path).unwrap().len());
+    assert!(log.bytes < 1024);
+    drop(log);
+    std::fs::remove_dir_all(directory).unwrap();
+}
