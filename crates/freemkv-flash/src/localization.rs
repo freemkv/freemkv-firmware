@@ -599,3 +599,7 @@ mod tests {
         assert_ne!(render(Language::En, &known), known);
     }
 }
+
+#[cfg(test)]
+#[path = "localization_tests.rs"]
+mod coverage_tests;
