@@ -1566,3 +1566,7 @@ pub enum CompletionRole {
     /// Native boundary reflection on read completion.
     ReadCompletionBoundary,
 }
+
+#[cfg(test)]
+#[path = "mt1939_uhd_mutation_tests.rs"]
+mod mutation_tests;

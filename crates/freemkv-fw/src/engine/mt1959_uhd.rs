@@ -875,3 +875,7 @@ mod tests {
         assert!(plan.identity_reset().is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "mt1959_uhd_mutation_tests.rs"]
+mod mutation_tests;
