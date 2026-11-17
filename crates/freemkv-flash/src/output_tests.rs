@@ -139,3 +139,82 @@ fn encoded_ui_messages_have_english_diagnostic_events_without_changing_the_event
     };
     assert_eq!(report.gui_fields()[0].1, value);
 }
+
+#[test]
+fn captured_is_true_only_inside_a_capture_scope() {
+    assert!(!captured());
+    assert!(capture_events(|_| {}, captured));
+    assert!(!captured());
+}
+
+#[test]
+fn terminal_phase_buckets_progress_by_five_percent() {
+    let state = || TERMINAL_PHASE.with(|s| s.borrow().clone());
+    terminal_phase("preparing", "filter.firmware", Some(50), Some(100));
+    assert_eq!(
+        state(),
+        Some(("preparing:filter.firmware".to_string(), Some(10)))
+    );
+    terminal_phase("preparing", "filter.firmware", Some(100), Some(100));
+    assert_eq!(state().unwrap().1, Some(20));
+    terminal_phase("preparing", "filter.firmware", Some(7), Some(0));
+    assert_eq!(state().unwrap().1, None);
+    terminal_phase("preparing", "filter.firmware", None, None);
+    assert_eq!(state().unwrap().1, None);
+}
+
+#[test]
+fn show_flushes_gui_rows_before_each_cli_line() {
+    use crate::report::{Report, Row};
+    let report = Report {
+        rows: vec![
+            Row::gui("a", "A", "1".into()),
+            Row::cli("b", "B", "2".into()),
+            Row::gui("c", "C", "3".into()),
+        ],
+    };
+    let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let sink = seen.clone();
+    capture_events(
+        move |event| {
+            sink.borrow_mut().push(match event {
+                Event::Report(report) => format!("report:{}", report.rows.len()),
+                Event::Message(_) => "message".to_string(),
+                _ => "other".to_string(),
+            })
+        },
+        || show(&report),
+    );
+    assert_eq!(*seen.borrow(), ["report:1", "message", "report:1"]);
+    let only_cli = Report {
+        rows: vec![Row::cli("b", "B", "2".into())],
+    };
+    let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let sink = seen.clone();
+    capture_events(
+        move |event| {
+            sink.borrow_mut().push(match event {
+                Event::Report(_) => "report",
+                _ => "other",
+            })
+        },
+        || show(&only_cli),
+    );
+    assert_eq!(*seen.borrow(), ["other"]);
+}
+
+#[test]
+fn terminal_backup_prompt_never_proceeds_without_an_interactive_answer() {
+    use crate::backend::Confirm;
+    use std::io::IsTerminal;
+    if std::io::stdin().is_terminal() {
+        return;
+    }
+    let error = TerminalConfirm
+        .proceed_without_backup("no backup could be saved")
+        .unwrap_err();
+    assert_eq!(
+        crate::workflow::user_error(&error).id,
+        "errors.backup_confirmation_required"
+    );
+}

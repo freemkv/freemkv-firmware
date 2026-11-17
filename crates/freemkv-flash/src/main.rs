@@ -186,6 +186,18 @@ fn report_update(
     Ok(())
 }
 
+fn current_firmware(
+    current: Option<PathBuf>,
+    read_from_drive: bool,
+) -> freemkv_flash::workflow::CurrentFirmware {
+    use freemkv_flash::workflow::CurrentFirmware;
+    match current {
+        Some(path) => CurrentFirmware::File(path),
+        None if read_from_drive => CurrentFirmware::ReadFromDrive,
+        None => CurrentFirmware::NotRequired,
+    }
+}
+
 fn main() -> ExitCode {
     let cli = match freemkv_flash::cli::parse::<Cli>() {
         Ok(cli) => cli,
@@ -207,13 +219,7 @@ fn main() -> ExitCode {
                 input: args.input,
                 member: args.member,
                 current_member: args.current_member,
-                current: match args.current {
-                    Some(path) => freemkv_flash::workflow::CurrentFirmware::File(path),
-                    None if args.read_from_drive => {
-                        freemkv_flash::workflow::CurrentFirmware::ReadFromDrive
-                    }
-                    None => freemkv_flash::workflow::CurrentFirmware::NotRequired,
-                },
+                current: current_firmware(args.current, args.read_from_drive),
                 execute: args.execute,
                 acknowledged_risk: args.i_understand_risk,
                 bypass_family_check: args.bypass_family_check,

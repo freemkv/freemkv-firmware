@@ -152,3 +152,40 @@ fn flash_no_backup_is_opt_in_and_excludes_an_explicit_backup_path() {
     }
     assert!(parse(&["--no-backup", "--backup", "b.bin"]).is_err());
 }
+
+#[test]
+fn recovery_current_source_follows_the_explicit_option() {
+    use freemkv_flash::workflow::CurrentFirmware;
+    assert!(matches!(
+        current_firmware(Some("c.tar".into()), false),
+        CurrentFirmware::File(path) if path == PathBuf::from("c.tar")
+    ));
+    assert!(matches!(
+        current_firmware(None, true),
+        CurrentFirmware::ReadFromDrive
+    ));
+    assert!(matches!(
+        current_firmware(None, false),
+        CurrentFirmware::NotRequired
+    ));
+}
+
+#[test]
+fn only_completed_unconfirmed_outcomes_are_reported_as_errors() {
+    use freemkv_flash::workflow::{UpdateEvidence, UpdateOutcome};
+    let evidence = |started: bool, identity: &str, temporary: bool| {
+        UpdateOutcome::Completed(UpdateEvidence {
+            target_started: started,
+            target_identity: identity.into(),
+            verified_regions: Vec::new(),
+            unverified_regions: Vec::new(),
+            completed_stages: Vec::new(),
+            temporary_firmware: temporary,
+        })
+    };
+    assert!(report_update("Flash", UpdateOutcome::Planned).is_ok());
+    assert!(report_update("Flash", evidence(true, "BU40N", false)).is_ok());
+    assert!(report_update("Flash", evidence(false, "BU40N", false)).is_err());
+    assert!(report_update("Flash", evidence(true, "", false)).is_err());
+    assert!(report_update("Flash", evidence(true, "BU40N", true)).is_err());
+}
