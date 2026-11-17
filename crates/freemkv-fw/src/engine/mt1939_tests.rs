@@ -704,3 +704,13 @@ fn de_only_fallback_reports_the_base_build_error_not_a_canned_classic_note() {
         }
     }
 }
+
+#[test]
+fn jb8_lineage_reports_under_the_mt1939_engine() {
+    let image = include_bytes!("../../tests/fixtures/WH14NS40_OEM_1.05.bin");
+    assert!(!is_classic(image));
+    let report = Mt1939Engine.modify(image).unwrap();
+    assert_eq!(report.engine, "MT1939");
+    assert!(report.any_effective());
+    assert_ne!(report.image, image.to_vec());
+}
