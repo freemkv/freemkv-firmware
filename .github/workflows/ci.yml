@@ -260,7 +260,7 @@ jobs:
   coverage:
     # Keep coverage on release candidates; avoid a second instrumented test
     # suite on every dev push and on promotion PRs.
-    if: github.event_name == 'workflow_dispatch' && inputs.coverage_only
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.coverage_only
     needs: resolve-msrv
     runs-on: ubuntu-latest
     steps:
@@ -278,9 +278,13 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       # Cover the library crates only. The egui/wgpu GUI bins carry no meaningful
       # unit coverage and building them under instrumentation is slow and brittle.
-      - run: cargo llvm-cov --workspace --exclude freemkv-flash-gui --exclude freemkv-fw-gui --ignore-run-fail --lcov --output-path lcov.info
+      - run: cargo llvm-cov --workspace --exclude freemkv-flash-gui --exclude freemkv-fw-gui --lcov --output-path lcov.info
         working-directory: freemkv-firmware
-      - uses: codecov/codecov-action@v5
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-lcov
+          path: freemkv-firmware/lcov.info
+      - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: freemkv-firmware/lcov.info
