@@ -1176,3 +1176,7 @@ impl Mt1959Engine {
 #[cfg(test)]
 #[path = "mt1939_classic_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "mt1939_classic_mutation_tests.rs"]
+mod mutation_tests;
