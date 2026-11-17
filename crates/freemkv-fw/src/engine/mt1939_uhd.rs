@@ -1290,8 +1290,10 @@ mod tests {
     fn di_recognition_gates_uhd_formats_and_preserves_the_callers_registers() {
         let bytes = emit_di_recognition(0x0200_f000).unwrap();
         let words: Vec<_> = bytes
-            .chunks_exact(2)
-            .map(|w| u16::from_le_bytes([w[0], w[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|w| u16::from_le_bytes(*w))
             .collect();
         // push/pop r1-r3 and return through LR; the result alone occupies r0.
         assert_eq!(words[0], 0xb40e);
