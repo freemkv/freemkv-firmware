@@ -373,3 +373,18 @@ fn probe_transport_failure_is_not_called_stock_firmware() {
     assert!(!outcome.detected);
     assert!(outcome.detail.contains("stock/OEM"), "{}", outcome.detail);
 }
+
+#[test]
+fn boot_options_read_installed_settings_or_preview_the_standard_defaults() {
+    use crate::boot::{BootFeature, BootSettings};
+    let source = bu40n_fixture();
+    let (defaults, support) = boot_options(&source).unwrap();
+    assert_eq!(defaults.flags(), BootSettings::standard().flags());
+    assert!(support.supports(BootFeature::Hrl));
+    let custom = BootSettings::parse(&["hrl=off".into()]).unwrap();
+    let (built, _) = modify_with_defaults(&source, &custom).unwrap();
+    let (read, installed) = boot_options(&built.image).unwrap();
+    assert_eq!(read.flags(), custom.flags());
+    assert!(installed.supports(BootFeature::Hrl));
+    assert!(boot_options(&[0u8; 64]).is_err());
+}

@@ -1275,3 +1275,40 @@ fn ake_audit_refuses_an_alternative_branch_encoding_with_the_same_target() {
     );
     assert!(!check.ok, "B.W is not the current source-qualified BL plan");
 }
+
+#[test]
+fn applied_levers_without_detour_facts_fail_their_presence_checks() {
+    let (original, mut report) = fully_landed();
+    report.levers = vec![
+        applied(LeverId::Identity, vec![]),
+        applied(LeverId::Speed, vec![]),
+        applied(LeverId::RegionFree, vec![]),
+        applied(LeverId::DowngradeEnable, vec![]),
+    ];
+    let a = audit_image(&original, &report);
+    assert!(!a.ok());
+    let identity = find(&a, "Identity", "handler facts present");
+    assert!(!identity.ok && identity.detail.contains("handler_va"));
+    for (lever, detail) in [
+        ("Speed", "missing speed_gate/speed_stub_va"),
+        ("Region Free", "missing region_emitter/region_stub_va"),
+        ("Downgrade (DE)", "missing de_off"),
+    ] {
+        let check = find(&a, lever, "detour facts present");
+        assert!(!check.ok);
+        assert_eq!(check.detail, detail);
+    }
+}
+
+#[test]
+fn an_unreachable_detour_target_is_reported_out_of_range() {
+    let (original, mut report) = fully_landed();
+    report.levers = vec![applied(
+        LeverId::Speed,
+        vec![("speed_gate", 0), ("speed_stub_va", 0x0400_0000)],
+    )];
+    let a = audit_image(&original, &report);
+    let check = find(&a, "Speed", "speed detour bl");
+    assert!(!check.ok);
+    assert!(check.detail.contains("out of range"), "{}", check.detail);
+}
