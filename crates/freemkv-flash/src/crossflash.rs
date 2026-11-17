@@ -473,7 +473,6 @@ pub const CLI_USAGE: &str = "Usage: freemkv-crossflash <package directory>\n    
 /// Run the offline evaluator for command-line `args` (without the program name).
 /// The result is the standard-output text.
 pub fn cli(args: &[String]) -> Result<String> {
-    use anyhow::Context;
     if args == ["--help"] || args == ["-h"] {
         return Ok(CLI_USAGE.into());
     }
