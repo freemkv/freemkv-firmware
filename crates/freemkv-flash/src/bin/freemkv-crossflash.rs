@@ -9,10 +9,7 @@
 //! `freemkv-crossflash --why <installed> <target>` prints the flasher's verdict
 //! for one pair (refusal reason, or "admitted").
 
-use anyhow::{Context, Result};
-use freemkv_flash::crossflash::{classified_routes, decide, CompatibilityStatus, Platform, Route};
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use anyhow::Result;
 
 // The catalogue scan allocates and frees image-sized buffers on every worker;
 // the macOS system allocator serializes on them, and musl maps and unmaps
@@ -36,116 +33,6 @@ fn main() -> std::process::ExitCode {
 
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.as_slice() == ["--help"] || args.as_slice() == ["-h"] {
-        println!("Usage: freemkv-crossflash <package directory>\n       freemkv-crossflash --why [--json] <installed> <target>");
-        return Ok(());
-    }
-    if let [flag, json, installed, target] = args.as_slice() {
-        if flag == "--why" && json == "--json" {
-            let read = |p: &str| std::fs::read(p).with_context(|| format!("reading {p}"));
-            let installed = read(installed)?;
-            let target = read(target)?;
-            let platform = platform(&target);
-            println!(
-                "{}",
-                serde_json::to_string(&decide(platform, &installed, &target))?
-            );
-            return Ok(());
-        }
-    }
-    if let [flag, installed, target] = args.as_slice() {
-        if flag == "--why" {
-            return why(Path::new(installed), Path::new(target));
-        }
-    }
-    let [root] = args.as_slice() else {
-        return Err(anyhow::anyhow!(
-            "usage: freemkv-crossflash <package directory> or --why [--json] <installed> <target>"
-        )
-        .context(freemkv_flash::user_error::IssueCode::CommandOptions));
-    };
-    let mut groups: BTreeMap<(String, Route), Vec<String>> = BTreeMap::new();
-    let mut evaluated_packages = Vec::new();
-    for platform in Platform::all() {
-        let dir = platform.id();
-        let (ids, bytes) = read_packages(&Path::new(root).join(dir), "tar")?;
-        let refs: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
-        let found = classified_routes(platform, &refs);
-        eprintln!(
-            "{dir}: {} packages, {} route alternatives",
-            ids.len(),
-            found.len()
-        );
-        evaluated_packages.extend(ids.iter().cloned());
-        for (i, j, route) in found {
-            groups
-                .entry((ids[i].clone(), route))
-                .or_default()
-                .push(ids[j].clone());
-        }
-    }
-    evaluated_packages.sort();
-    evaluated_packages.dedup();
-    let groups: Vec<_> = groups
-        .into_iter()
-        .map(|((source, route), mut targets)| {
-            targets.sort();
-            targets.dedup();
-            serde_json::json!({"source": source, "status": route.status, "requirements": route.requirements, "targets": targets})
-        })
-        .collect();
-    let doc = serde_json::json!({
-        "format": "freemkv-crossflash-routes",
-        "version": 3,
-        "freemkv_flash": env!("CARGO_PKG_VERSION"),
-        "evaluated_packages": evaluated_packages,
-        "groups": groups,
-    });
-    println!("{}", serde_json::to_string_pretty(&doc)?);
+    println!("{}", freemkv_flash::crossflash::cli(&args)?);
     Ok(())
-}
-
-/// Print the flasher's verdict for one installed/target pair.
-fn why(installed: &Path, target: &Path) -> Result<()> {
-    let read = |p: &Path| std::fs::read(p).with_context(|| format!("reading {}", p.display()));
-    let installed = read(installed)?;
-    let target = read(target)?;
-    let platform = platform(&target);
-    let decision = decide(platform, &installed, &target);
-    match decision.status {
-        CompatibilityStatus::Yes => println!("admitted"),
-        CompatibilityStatus::Conditional => {
-            println!("conditional: {}", serde_json::to_string(&decision.routes)?)
-        }
-        _ => println!(
-            "refused: {}",
-            decision.reason.as_deref().unwrap_or("no supported route")
-        ),
-    }
-    Ok(())
-}
-
-fn platform(target: &[u8]) -> Platform {
-    Platform::of_input(target)
-}
-
-/// Every `<sha256>.<ext>` in `dir`, sorted by name: (ids, bytes).
-fn read_packages(dir: &Path, ext: &str) -> Result<(Vec<String>, Vec<Vec<u8>>)> {
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
-        .with_context(|| format!("reading {}", dir.display()))?
-        .map(|e| e.map(|e| e.path()))
-        .collect::<std::io::Result<_>>()?;
-    paths.retain(|p| p.extension().is_some_and(|e| e == ext));
-    paths.sort();
-    let mut ids = Vec::with_capacity(paths.len());
-    let mut bytes = Vec::with_capacity(paths.len());
-    for path in paths {
-        let id = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .with_context(|| format!("bad package name {}", path.display()))?;
-        ids.push(id.to_string());
-        bytes.push(std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?);
-    }
-    Ok((ids, bytes))
 }

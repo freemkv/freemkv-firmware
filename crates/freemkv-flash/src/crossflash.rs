@@ -5,6 +5,8 @@
 //! than re-implement the rule.
 
 use anyhow::Result;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 /// Offline compatibility result. Conditional routes need live preflight checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -465,6 +467,123 @@ impl Prefilter {
     }
 }
 
+/// Usage text shown by `--help`.
+pub const CLI_USAGE: &str = "Usage: freemkv-crossflash <package directory>\n       freemkv-crossflash --why [--json] <installed> <target>";
+
+/// Run the offline evaluator for command-line `args` (without the program name).
+/// The result is the standard-output text.
+pub fn cli(args: &[String]) -> Result<String> {
+    use anyhow::Context;
+    if args == ["--help"] || args == ["-h"] {
+        return Ok(CLI_USAGE.into());
+    }
+    if let [flag, json, installed, target] = args {
+        if flag == "--why" && json == "--json" {
+            let (installed, target) = read_pair(Path::new(installed), Path::new(target))?;
+            let decision = decide(Platform::of_input(&target), &installed, &target);
+            return Ok(serde_json::to_string(&decision)?);
+        }
+    }
+    if let [flag, installed, target] = args {
+        if flag == "--why" {
+            return why(Path::new(installed), Path::new(target));
+        }
+    }
+    let [root] = args else {
+        return Err(anyhow::anyhow!(
+            "usage: freemkv-crossflash <package directory> or --why [--json] <installed> <target>"
+        )
+        .context(crate::user_error::IssueCode::CommandOptions));
+    };
+    let mut groups: BTreeMap<(String, Route), Vec<String>> = BTreeMap::new();
+    let mut evaluated_packages = Vec::new();
+    for platform in Platform::all() {
+        let dir = platform.id();
+        let (ids, bytes) = read_packages(&Path::new(root).join(dir), "tar")?;
+        let refs: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
+        let found = classified_routes(platform, &refs);
+        eprintln!(
+            "{dir}: {} packages, {} route alternatives",
+            ids.len(),
+            found.len()
+        );
+        evaluated_packages.extend(ids.iter().cloned());
+        for (i, j, route) in found {
+            groups
+                .entry((ids[i].clone(), route))
+                .or_default()
+                .push(ids[j].clone());
+        }
+    }
+    evaluated_packages.sort();
+    evaluated_packages.dedup();
+    let groups: Vec<_> = groups
+        .into_iter()
+        .map(|((source, route), mut targets)| {
+            targets.sort();
+            targets.dedup();
+            serde_json::json!({"source": source, "status": route.status, "requirements": route.requirements, "targets": targets})
+        })
+        .collect();
+    let doc = serde_json::json!({
+        "format": "freemkv-crossflash-routes",
+        "version": 3,
+        "freemkv_flash": env!("CARGO_PKG_VERSION"),
+        "evaluated_packages": evaluated_packages,
+        "groups": groups,
+    });
+    Ok(serde_json::to_string_pretty(&doc)?)
+}
+
+fn read_pair(installed: &Path, target: &Path) -> Result<(Vec<u8>, Vec<u8>)> {
+    use anyhow::Context;
+    let read = |p: &Path| std::fs::read(p).with_context(|| format!("reading {}", p.display()));
+    Ok((read(installed)?, read(target)?))
+}
+
+/// The flasher's verdict for one installed/target pair.
+fn why(installed: &Path, target: &Path) -> Result<String> {
+    let (installed, target) = read_pair(installed, target)?;
+    let decision = decide(Platform::of_input(&target), &installed, &target);
+    verdict(&decision)
+}
+
+/// One-line verdict text: admitted, the conditional routes, or the refusal reason.
+pub fn verdict(decision: &Decision) -> Result<String> {
+    Ok(match decision.status {
+        CompatibilityStatus::Yes => "admitted".into(),
+        CompatibilityStatus::Conditional => {
+            format!("conditional: {}", serde_json::to_string(&decision.routes)?)
+        }
+        _ => format!(
+            "refused: {}",
+            decision.reason.as_deref().unwrap_or("no supported route")
+        ),
+    })
+}
+
+/// Every `<sha256>.<ext>` in `dir`, sorted by name: (ids, bytes).
+pub fn read_packages(dir: &Path, ext: &str) -> Result<(Vec<String>, Vec<Vec<u8>>)> {
+    use anyhow::Context;
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+        .with_context(|| format!("reading {}", dir.display()))?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<std::io::Result<_>>()?;
+    paths.retain(|p| p.extension().is_some_and(|e| e == ext));
+    paths.sort();
+    let mut ids = Vec::with_capacity(paths.len());
+    let mut bytes = Vec::with_capacity(paths.len());
+    for path in paths {
+        let id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .with_context(|| format!("bad package name {}", path.display()))?;
+        ids.push(id.to_string());
+        bytes.push(std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?);
+    }
+    Ok((ids, bytes))
+}
+
 #[cfg(test)]
 mod route_tests {
     use super::*;
@@ -589,5 +708,142 @@ mod platform_tests {
         let mut tar = vec![0u8; 512];
         tar[257..262].copy_from_slice(b"ustar");
         assert_eq!(Platform::of_input(&tar).id(), "pioneer");
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+    fn scratch() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "freemkv-crossflash-{}",
+            crate::diagnostics::new_operation_id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+    fn decision(status: CompatibilityStatus, reason: Option<&str>) -> Decision {
+        Decision {
+            status,
+            reason: reason.map(str::to_owned),
+            routes: vec![Route {
+                status: RouteStatus::Conditional,
+                requirements: Vec::new(),
+            }],
+        }
+    }
+
+    #[test]
+    fn help_flags_print_only_the_usage() {
+        for flag in ["--help", "-h"] {
+            assert_eq!(cli(&args(&[flag])).unwrap(), CLI_USAGE);
+        }
+        assert!(cli(&args(&["--help", "extra"])).is_err());
+    }
+
+    #[test]
+    fn malformed_argument_lists_are_usage_errors() {
+        for list in [
+            args(&[]),
+            args(&["a", "b"]),
+            args(&["--bogus", "--json", "a", "b"]),
+            args(&["--why", "-x", "a", "b"]),
+            args(&["a", "b", "c", "d", "e"]),
+        ] {
+            let error = cli(&list).unwrap_err();
+            assert!(
+                format!("{error:#}").contains("usage"),
+                "{list:?}: {error:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn why_reports_refusals_and_unreadable_files() {
+        let dir = scratch();
+        let (a, b) = (dir.join("a.bin"), dir.join("b.bin"));
+        std::fs::write(&a, b"not firmware").unwrap();
+        std::fs::write(&b, b"also not firmware").unwrap();
+        let (a, b) = (a.to_str().unwrap(), b.to_str().unwrap());
+        let text = cli(&args(&["--why", a, b])).unwrap();
+        assert!(text.starts_with("refused: "), "{text}");
+        let json = cli(&args(&["--why", "--json", a, b])).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["status"], "hard_no");
+        assert!(value["routes"].as_array().unwrap().is_empty());
+        let missing = dir.join("missing.bin");
+        let error = cli(&args(&["--why", a, missing.to_str().unwrap()])).unwrap_err();
+        assert!(format!("{error:#}").contains("reading"), "{error:#}");
+        let error = cli(&args(&["--why", "--json", missing.to_str().unwrap(), a])).unwrap_err();
+        assert!(format!("{error:#}").contains("reading"), "{error:#}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn verdict_distinguishes_every_status() {
+        assert_eq!(
+            verdict(&decision(CompatibilityStatus::Yes, None)).unwrap(),
+            "admitted"
+        );
+        let conditional = verdict(&decision(CompatibilityStatus::Conditional, Some("x"))).unwrap();
+        assert!(conditional.starts_with("conditional: [{"), "{conditional}");
+        assert!(conditional.contains("\"conditional\""), "{conditional}");
+        assert_eq!(
+            verdict(&decision(CompatibilityStatus::SoftNo, Some("later"))).unwrap(),
+            "refused: later"
+        );
+        assert_eq!(
+            verdict(&decision(CompatibilityStatus::HardNo, None)).unwrap(),
+            "refused: no supported route"
+        );
+    }
+
+    #[test]
+    fn read_packages_returns_sorted_matching_files_with_their_bytes() {
+        let dir = scratch();
+        std::fs::write(dir.join("b.tar"), [2u8, 2]).unwrap();
+        std::fs::write(dir.join("a.tar"), [1u8]).unwrap();
+        std::fs::write(dir.join("c.txt"), [3u8]).unwrap();
+        std::fs::write(dir.join("noext"), [4u8]).unwrap();
+        let (ids, bytes) = read_packages(&dir, "tar").unwrap();
+        assert_eq!(ids, ["a", "b"]);
+        assert_eq!(bytes, [vec![1u8], vec![2u8, 2]]);
+        let (ids, bytes) = read_packages(&dir, "txt").unwrap();
+        assert_eq!((ids, bytes), (vec!["c".to_string()], vec![vec![3u8]]));
+        let error = read_packages(&dir.join("absent"), "tar").unwrap_err();
+        assert!(format!("{error:#}").contains("reading"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn scan_lists_every_evaluated_package_sorted_across_platforms() {
+        let dir = scratch();
+        let ids: Vec<&str> = Platform::all().map(Platform::id).collect();
+        for (n, id) in ids.iter().enumerate() {
+            let sub = dir.join(id);
+            std::fs::create_dir_all(&sub).unwrap();
+            std::fs::write(sub.join(format!("pkg{}.tar", ids.len() - n)), b"junk").unwrap();
+            std::fs::write(sub.join("ignored.txt"), b"junk").unwrap();
+        }
+        let json = cli(&args(&[dir.to_str().unwrap()])).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["format"], "freemkv-crossflash-routes");
+        assert_eq!(value["version"], 3);
+        let evaluated: Vec<String> = (1..=ids.len()).map(|n| format!("pkg{n}")).collect();
+        assert_eq!(value["evaluated_packages"], serde_json::json!(evaluated));
+        assert!(value["groups"].as_array().unwrap().is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(cli(&args(&[dir.to_str().unwrap()])).is_err());
+    }
+
+    #[test]
+    fn crc32_matches_the_ieee_check_value() {
+        assert_eq!(crate::crc32(b"123456789"), 0xCBF4_3926);
+        assert_eq!(crate::crc32(b""), 0);
+        assert_ne!(crate::crc32(b"a"), crate::crc32(b"b"));
     }
 }
