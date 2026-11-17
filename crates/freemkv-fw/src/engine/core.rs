@@ -3519,3 +3519,7 @@ mod kat_tests;
 #[cfg(test)]
 #[path = "core_tests.rs"]
 mod core_tests;
+
+#[cfg(test)]
+#[path = "core_mutation_tests.rs"]
+mod core_mutation_tests;
