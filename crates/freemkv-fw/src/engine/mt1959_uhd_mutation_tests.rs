@@ -18,7 +18,9 @@ fn count_seq(hay: &[u8], needle: &[u8]) -> usize {
 fn enc(f: impl FnOnce(&mut Asm)) -> Vec<u8> {
     let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
     f(&mut a);
-    a.finish().unwrap()
+    let mut bytes = a.finish().unwrap();
+    bytes.truncate(2);
+    bytes
 }
 
 fn raw_t1(halfword: u16) -> Result<Vec<u8>> {

@@ -163,7 +163,7 @@ fn format_one_detection_drops_the_format_five_check() {
     let probe = {
         let mut a = Asm::with_target(thumb_asm::isa::Target::Thumb1);
         a.ldrb_imm(0, 3, 19);
-        a.finish().unwrap()
+        a.finish().unwrap()[..2].to_vec()
     };
     assert!(count_seq(&base.bytes, &probe) > count_seq(&detection.bytes, &probe));
 }
