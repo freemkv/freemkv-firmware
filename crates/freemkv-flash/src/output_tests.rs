@@ -218,3 +218,21 @@ fn terminal_backup_prompt_never_proceeds_without_an_interactive_answer() {
         "errors.backup_confirmation_required"
     );
 }
+
+#[test]
+fn localized_yes_and_no_are_single_distinct_words() {
+    for language in crate::localization::Language::ALL {
+        let yes = crate::localization::get(language, "action.yes");
+        let no = crate::localization::get(language, "action.no");
+        for word in [yes, no] {
+            assert!(!word.is_empty(), "{language:?}");
+            assert!(
+                !word.chars().any(char::is_whitespace),
+                "{language:?}: {word:?}"
+            );
+        }
+        assert_ne!(yes.to_lowercase(), no.to_lowercase(), "{language:?}");
+    }
+    let mut ja: &[u8] = b"Ja\n";
+    assert!(read_consent(&mut ja, crate::localization::Language::De).unwrap());
+}

@@ -93,7 +93,7 @@
     "backup.unavailable": "Backup inaccessible",
     "backup.proceed": "Continuer sans sauvegarde ?",
     "action.yes": "Oui",
-    "action.no": "pas",
+    "action.no": "Non",
     "action.save_log": "Réserver le log",
     "errors.hardware_mismatch": "Le micrologiciel installé et celui sélectionné sont destinés à des matériels différents. Installé : {installed}. Sélectionné : {selected}. Choisissez un micrologiciel compatible avec ce lecteur.",
     "errors.current_required": "Choisissez le firmware actuellement installé sur ce lecteur optique en tant que firmware actuel, puis essayez à nouveau.",

@@ -92,7 +92,7 @@
     "current.choose_installed": "Pilih firmware yang saat ini terpasang pada drive ini.",
     "backup.unavailable": "Backup tidak tersedia",
     "backup.proceed": "Lanjutkan tanpa cadangan?",
-    "action.yes": "Ya Ya",
+    "action.yes": "Ya",
     "action.no": "Tidak",
     "action.save_log": "Menyelamatkan Log",
     "errors.hardware_mismatch": "Firmware yang terpasang dan dipilih ditujukan untuk perangkat keras yang berbeda. Terpasang: {installed}. Dipilih: {selected}. Pilih firmware yang kompatibel dengan drive ini.",

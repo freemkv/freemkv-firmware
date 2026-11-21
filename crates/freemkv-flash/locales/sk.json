@@ -93,7 +93,7 @@
     "backup.unavailable": "Zálohovanie nedostupné",
     "backup.proceed": "Pokračovať bez zálohy?",
     "action.yes": "Áno",
-    "action.no": "No nie",
+    "action.no": "Nie",
     "action.save_log": "Zachráňte log",
     "errors.hardware_mismatch": "Nainštalovaný a vybraný firmvér sú určené pre odlišný hardvér. Nainštalovaný: {installed}. Vybraný: {selected}. Vyberte firmvér kompatibilný s touto jednotkou.",
     "errors.current_required": "Vyberte firmvér, ktorý je v súčasnosti nainštalovaný v tomto optickom disku ako aktuálny firmvér, potom skúste znova.",

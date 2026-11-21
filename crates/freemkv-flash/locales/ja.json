@@ -93,7 +93,7 @@
     "backup.unavailable": "バックアップ不利用",
     "backup.proceed": "バックアップなしで続行しますか？",
     "action.yes": "はい",
-    "action.no": "ノー",
+    "action.no": "いいえ",
     "action.save_log": "保存ログ",
     "errors.hardware_mismatch": "インストール済みと選択したファームウェアは異なるハードウェア向けです。インストール済み: {installed}。選択中: {selected}。このドライブに対応するファームウェアを選択してください。",
     "errors.current_required": "現在この光学ドライブにインストールされているファームウェアを選択して、現在のファームウェアとして再度試してみてください。",

@@ -93,7 +93,7 @@
     "backup.unavailable": "备份不可用",
     "backup.proceed": "是否在没有备份的情况下继续？",
     "action.yes": "是的",
-    "action.no": "不",
+    "action.no": "否",
     "action.save_log": "保存日志",
     "errors.hardware_mismatch": "已安装和选定的固件适用于不同硬件。已安装：{installed}。已选定：{selected}。请选择与此驱动器兼容的固件。",
     "errors.current_required": "选择目前安装在此光学驱动器中的固件作为当前固件,然后再次尝试。",

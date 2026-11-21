@@ -93,7 +93,7 @@
     "backup.unavailable": "備份不可用",
     "backup.proceed": "要在沒有備份的情況下繼續嗎？",
     "action.yes": "是的",
-    "action.no": "不",
+    "action.no": "否",
     "action.save_log": "儲存日誌",
     "errors.hardware_mismatch": "已安裝與選取的韌體適用於不同硬體。已安裝：{installed}。已選取：{selected}。請選擇與此光碟機相容的韌體。",
     "errors.current_required": "選擇目前安裝在此光學驅動器中的韌體作為當前韌體,然後再次嘗試。",
