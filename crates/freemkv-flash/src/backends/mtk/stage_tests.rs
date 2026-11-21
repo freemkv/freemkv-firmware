@@ -588,19 +588,30 @@ fn standalone_bin_plans_only_the_requested_image() {
 }
 
 #[test]
-fn no_backup_crossflash_cannot_waive_installed_family_or_rollback() {
+fn no_backup_crossflash_is_gated_like_same_model_on_live_evidence() {
+    // Hardware family, not model name, decides: a consented no-backup
+    // crossflash gets the same live gates as a same-model flash.
     let current = image(b"1.00", 1);
     let target = image(b"1.05", 2);
-    let error = authorize_bytes(
+    let authorized = authorize_bytes(
         &fixture::identity(&current),
         "BD-RE BU40N",
         Verdict::Crossflash,
         &target,
         None,
     )
-    .err()
-    .expect("missing crossflash evidence must refuse");
-    assert!(error.to_string().contains("does not waive compatibility"));
+    .unwrap();
+    assert_eq!(authorized.prepared.image(), target);
+    let mut corrupt = target;
+    corrupt[0x11000] ^= 1;
+    assert!(authorize_bytes(
+        &fixture::identity(&current),
+        "BD-RE BU40N",
+        Verdict::Crossflash,
+        &corrupt,
+        None
+    )
+    .is_err());
 }
 
 #[test]

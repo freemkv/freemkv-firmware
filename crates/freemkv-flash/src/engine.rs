@@ -493,7 +493,7 @@ static SKIP_PREFLASH_BACKUP: std::sync::atomic::AtomicBool =
 ///
 /// On MediaTek the capture is a full 2 MiB read through the 64-byte `DumpAll`
 /// peek (32768 serial SCSI round-trips). Skipping it also skips the rollback
-/// evidence, so gates that need an installed-firmware backup (crossflash) refuse.
+/// evidence: installed-family and rollback checks cannot run; live gates remain.
 pub fn set_skip_preflash_backup(skip: bool) {
     SKIP_PREFLASH_BACKUP.store(skip, std::sync::atomic::Ordering::Relaxed);
 }

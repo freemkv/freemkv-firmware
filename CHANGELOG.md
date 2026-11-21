@@ -9,6 +9,7 @@ version numbers without a recorded build are not invented to fill numeric gaps.
 
 ### freemkv Flash
 
+- MediaTek compatibility is decided by hardware family, not model name, as on Pioneer. A rebadged drive (for example an ASUS SBW-06D2X-U on BU50N hardware) can now be flashed to another model of its family when the drive refuses a full backup: after you confirm proceeding without a backup, the same live chip, platform and boot-banner checks as a same-model update apply. The plan still states the identity change. With a readable backup, installed-family and rollback checks run as before.
 - Pioneer cross-flashes no longer stop when the drive's persistent startup word is unset or differs. Flash now sets the word the incoming firmware checks for, in the same settings step that already corrected differing words. The drive's current word is read only to restore it if the update fails before firmware is written. Routes that previously needed a "read-only drive check" are now offered without one. Example: BDR-212U on BDR-L13SH 1.08 to BDX-PR1MA 1.03.
 - Flashing back from firmware that checks the startup word to firmware that never reads it resets the word to its unset state, so the drive ends as it shipped. Recovery skips this reset; it never writes the word.
 - `freemkv-crossflash --why` and the website can explain which hardware contracts keep two firmwares apart.

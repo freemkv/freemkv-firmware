@@ -486,8 +486,9 @@ fn crossflash_lines(live: &Identity, image: &[u8]) -> Result<Vec<PlanLine>> {
         .unwrap_or_else(|| "unknown".into());
     Ok(vec![
         PlanLine::Warning(format!(
-            "CROSSFLASH: {} \u{2192} {} (same hardware family {family}; installed-family and rollback \
-             checks require a readable backup)",
+            "CROSSFLASH: {} \u{2192} {} (same hardware family {family}; a readable backup \
+             verifies the installed family and rollback, without one only the drive's platform \
+             and boot banner are checked)",
             from.label(),
             to.label(),
         )),
@@ -504,6 +505,13 @@ fn crossflash_lines(live: &Identity, image: &[u8]) -> Result<Vec<PlanLine>> {
 
 /// `authorize` on bytes: the backup as the installed firmware (chip and family
 /// gates), then a crossflash re-decided on the backup.
+///
+/// The hardware family, not the model name, decides compatibility (as on
+/// Pioneer): a rebadged drive of the same family is a model/identity change,
+/// not different hardware. Without a backup, a crossflash therefore gets the
+/// same live-evidence gates as a same-model flash — chip from the boot banner,
+/// plus the plan's descriptor platform and boot-banner match — and the operator
+/// has already consented to losing the installed-family and rollback checks.
 pub(super) fn authorize_bytes(
     live: &Identity,
     drive_product: &str,
@@ -511,9 +519,6 @@ pub(super) fn authorize_bytes(
     image: &[u8],
     backup: Option<&[u8]>,
 ) -> Result<Authorized> {
-    if backup.is_none() && verdict == Verdict::Crossflash {
-        bail!("crossflash requires installed firmware evidence to verify hardware-family equality and rollback; consent to proceed without a backup does not waive compatibility checks");
-    }
     let installed = backup
         .map(|bytes| InstalledFirmware::new(live.clone(), bytes))
         .transpose()

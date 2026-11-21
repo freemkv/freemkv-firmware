@@ -133,7 +133,7 @@ struct FlashArgs {
     i_understand_risk: bool,
     /// FAST dev loop: skip the pre-flash backup (a full 2 MiB read at 64 bytes
     /// per round-trip on MediaTek, minutes). No rollback file is saved and
-    /// gates that need installed-firmware evidence (crossflash) refuse.
+    /// installed-family and rollback checks are skipped; live hardware checks remain.
     #[arg(long, alias = "fast", conflicts_with = "backup")]
     no_backup: bool,
     /// RECOVERY override: treat a falsely-reported loaded disc as an empty tray.
