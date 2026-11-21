@@ -60,6 +60,19 @@ const DESCR_OFF: u32 = freemkv_chipset::DESCRIPTOR_OFFSET as u32;
 /// Candidate chunk sizes to probe, largest-first (bytes).
 const CHUNK_LADDER: &[usize] = &[0x10000, 0x8000, 0x4000, 0x1000, 0x400, 0x40];
 
+/// `(offset, len)` windows a restricted MT19xx drive's READ BUFFER mode6/buf0
+/// handler serves, refusing any read that straddles a window's end. Their odd
+/// sizes and alignment make the fixed-granularity sweep straddle them, so it
+/// records them as gaps; [`read_full_image_with_restriction`] re-reads each at
+/// its exact bounds to recover every byte the drive is willing to return.
+/// `0x1F0000` is listed for completeness; the 4 KiB sweep already covers it.
+const RESTRICTED_READ_WINDOWS: &[(u32, u32)] = &[
+    (0x3000, 0x20),
+    (0x1E84E4, 0x100),
+    (0x1EC000, 0x100),
+    (0x1F0000, 0x10000),
+];
+
 fn read_at(dev: &mut dyn ScsiDevice, ch: &Channel, off: u32, len: u32) -> Result<Vec<u8>> {
     let cdb = cdb::read_buffer(ch.mode, ch.buffer_id, off, len);
     dev.command_in(&cdb, len as usize)
@@ -165,6 +178,32 @@ pub(crate) fn read_full_image_with_restriction(
             done: Some(off),
             total: Some(IMAGE_SIZE),
         });
+    }
+    // `take` holds the only mutable borrow of `readable`/`gaps`; release it
+    // before the exact-window recovery below mutates them directly.
+    drop(take);
+    // Exact-window recovery: a restricted drive serves the small fixed windows
+    // only when a read fits entirely inside one, which the fixed-step sweep
+    // above straddles and records as gaps. Re-read any still-unread window at
+    // its exact bounds so `dump` keeps everything the drive will return.
+    for &(base, size) in RESTRICTED_READ_WINDOWS {
+        let (b, e) = (base as usize, base as usize + size as usize);
+        let Some(slot) = gaps.iter().position(|&(gs, ge)| gs <= b && e <= ge) else {
+            continue; // already read by the sweep (not in a gap)
+        };
+        if let Some(data) = read_exact(dev, b, size as usize) {
+            image[b..e].copy_from_slice(&data);
+            readable += size as usize;
+            let (gs, ge) = gaps[slot];
+            let mut replacement = Vec::new();
+            if gs < b {
+                replacement.push((gs, b));
+            }
+            if e < ge {
+                replacement.push((e, ge));
+            }
+            gaps.splice(slot..=slot, replacement);
+        }
     }
     Ok(((image, readable, gaps), rejected && !other_failure))
 }

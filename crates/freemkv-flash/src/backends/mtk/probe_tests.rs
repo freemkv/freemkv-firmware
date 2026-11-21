@@ -83,6 +83,64 @@ fn raw_dump_preserves_readable_bytes_and_fills_only_reported_gaps() {
     assert_ne!(std::fs::read(path).unwrap()[0x1000], 0xff);
 }
 
+/// A drive whose READ BUFFER serves mode6/buf0 only when the read fits
+/// entirely inside one of the fixed allow-list windows (the real MT19xx guard),
+/// refusing anything else with ILLEGAL REQUEST / INVALID FIELD IN CDB.
+#[derive(Default)]
+struct Windowed;
+impl ScsiDevice for Windowed {
+    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
+        assert_eq!(cdb[0], 0x3c);
+        if cdb[1] != 6 || cdb[2] != 0 {
+            anyhow::bail!("unsupported channel");
+        }
+        let off = u32::from_be_bytes([0, cdb[3], cdb[4], cdb[5]]);
+        let end = off + len as u32;
+        let served = super::RESTRICTED_READ_WINDOWS
+            .iter()
+            .any(|&(b, s)| off >= b && end <= b + s);
+        if !served {
+            return Err(crate::platform::ScsiSenseError::new(5, 0x24, 0, "outside window").into());
+        }
+        let mut bytes = vec![(off >> 8) as u8 ^ 0x5a; len];
+        if off == BANNER_OFF && len >= 4 {
+            bytes[..4].copy_from_slice(FLASH_SIG);
+        }
+        Ok(bytes)
+    }
+    fn command_out(&mut self, _: &[u8], _: &[u8]) -> Result<()> {
+        panic!("read-only")
+    }
+    fn describe(&self) -> String {
+        "windowed restricted drive".into()
+    }
+}
+
+#[test]
+fn restricted_dump_recovers_every_exact_allow_list_window() {
+    let ((image, readable, gaps), rejected) =
+        read_full_image_with_restriction(&mut Windowed).unwrap();
+    assert_eq!(image.len(), IMAGE_SIZE);
+    assert!(rejected, "all failures were explicit CDB rejections");
+    for &(base, size) in super::RESTRICTED_READ_WINDOWS {
+        let (b, e) = (base as usize, base as usize + size as usize);
+        assert!(
+            gaps.iter().all(|&(gs, ge)| e <= gs || ge <= b),
+            "window {base:#x} still recorded as a gap"
+        );
+        assert_ne!(image[b], 0xff, "window {base:#x} left unread");
+        let expected = (base >> 8) as u8 ^ 0x5a;
+        let skip = if base == BANNER_OFF { 4 } else { 0 };
+        assert!(
+            image[b + skip..e].iter().all(|&x| x == expected),
+            "window {base:#x} not recovered byte-for-byte"
+        );
+    }
+    assert!(readable >= 0x20 + 0x100 + 0x100 + 0x10000);
+    // The surrounding code region stays an acknowledged gap.
+    assert!(gaps.iter().any(|&(gs, ge)| gs <= 0x98000 && 0x98000 < ge));
+}
+
 #[test]
 fn probe_requires_a_flash_signature_and_stops_at_blocked_or_short_reads() {
     let directory = Scratch::new();
