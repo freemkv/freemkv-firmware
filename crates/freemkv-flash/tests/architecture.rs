@@ -1714,7 +1714,7 @@ fn vendor_scan_skips_comments_and_tests() {
 fn optical_dependencies_stay_content_pinned() {
     let manifest = fs::read_to_string(root().join("Cargo.toml")).unwrap();
     let lock = fs::read_to_string(root().join("../../Cargo.lock")).unwrap();
-    for (name, version) in [("pioneer-optical", "3.0.3"), ("mediatek-optical", "3.0.1")] {
+    for (name, version) in [("pioneer-optical", "3.0.3"), ("mediatek-optical", "3.0.2")] {
         // The first declaration is the production [dependencies] entry; the
         // unstable `internals` surface is for tests only ([dev-dependencies]).
         let line = manifest
@@ -1969,6 +1969,30 @@ const DEVICE_TYPE_MENTIONS: &[(&str, &str, &str, usize)] = &[
     ("src/backends/mtk/recovery.rs", "use", "FlashTransport", 1),
     ("src/backends/mtk/flash.rs", "use", "ScsiTransport", 1),
     ("src/backends/mtk/flash.rs", "use", "SharedDevice", 1),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn execute_forced_stage",
+        "FlashTransport",
+        1,
+    ),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn execute_forced_stage",
+        "ScsiTransport",
+        3,
+    ),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn execute_forced_stage",
+        "SharedDevice",
+        1,
+    ),
+    (
+        "src/backends/mtk/flash.rs",
+        "fn forced_failure",
+        "ScsiTransport",
+        1,
+    ),
     (
         "src/backends/pioneer/dump.rs",
         "fn enable_logging",
