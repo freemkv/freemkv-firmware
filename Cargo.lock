@@ -1419,7 +1419,7 @@ name = "freemkv-chipset"
 version = "0.18.1"
 dependencies = [
  "anyhow",
- "mediatek-optical",
+ "mediatek-optical 3.0.1",
 ]
 
 [[package]]
@@ -1437,7 +1437,7 @@ dependencies = [
  "getrandom 0.3.4",
  "libc",
  "libfreemkv",
- "mediatek-optical",
+ "mediatek-optical 3.0.2",
  "mimalloc",
  "pioneer-optical",
  "serde",
@@ -1485,7 +1485,7 @@ dependencies = [
  "clap",
  "freemkv-chipset",
  "freemkv-flash",
- "mediatek-optical",
+ "mediatek-optical 3.0.1",
  "memchr",
  "mimalloc",
  "serde_json",
@@ -2551,6 +2551,17 @@ dependencies = [
  "thumb-asm",
  "yaxpeax-arch",
  "yaxpeax-arm",
+]
+
+[[package]]
+name = "mediatek-optical"
+version = "3.0.2"
+source = "git+https://github.com/MattJackson/mediatek-optical?branch=feat%2Fprobe-encoding#b613fdf371950187886280b624c41965e1730c85"
+dependencies = [
+ "aes",
+ "cmac",
+ "sha2",
+ "thumb-asm",
 ]
 
 [[package]]

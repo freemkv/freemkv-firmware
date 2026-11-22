@@ -194,7 +194,7 @@ fn legacy_backups_accept_the_old_tag_label_as_an_alias() {
     let img = cmac::resign(&img).unwrap();
     assert_eq!(
         freemkv_chipset::detect_chip(&img).unwrap().family,
-        Chip::Mt1959,
+        freemkv_chipset::ChipFamily::Mt1959,
         "the banner decides: MT1959"
     );
     assert_eq!(

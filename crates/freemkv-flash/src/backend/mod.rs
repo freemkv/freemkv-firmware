@@ -951,6 +951,13 @@ pub trait FlashFacet {
     fn accepts_current(&self) -> bool {
         false
     }
+    /// Whether a pre-flash backup must be captured before writing. Backends that
+    /// cannot produce a usable full-image rollback (MediaTek) return `false`:
+    /// the engine then captures no backup and never gates on one. Pioneer keeps
+    /// the default and always backs up first.
+    fn requires_preflash_backup(&self) -> bool {
+        true
+    }
     /// Read-only and pre-backup: validate the input against the drive and
     /// describe the plan. Must not need the backup.
     fn plan(&self, dev: &mut ReadDevice<'_>, req: &FlashRequest) -> Result<FlashPlan>;
