@@ -102,7 +102,14 @@ impl ScsiDevice for Windowed {
         if !served {
             return Err(crate::platform::ScsiSenseError::new(5, 0x24, 0, "outside window").into());
         }
-        let mut bytes = vec![(off >> 8) as u8 ^ 0x5a; len];
+        // Fill uniformly by window BASE, not per-chunk offset: the 64 KiB
+        // 0x1F0000 window is read by the sweep in 4 KiB pieces, so a per-offset
+        // fill would vary across it and the byte-for-byte check would fail.
+        let base = super::RESTRICTED_READ_WINDOWS
+            .iter()
+            .find(|&&(b, s)| off >= b && end <= b + s)
+            .map_or(off, |&(b, _)| b);
+        let mut bytes = vec![(base >> 8) as u8 ^ 0x5a; len];
         if off == BANNER_OFF && len >= 4 {
             bytes[..4].copy_from_slice(FLASH_SIG);
         }

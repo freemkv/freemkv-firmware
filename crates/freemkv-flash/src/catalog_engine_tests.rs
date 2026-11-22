@@ -21,6 +21,8 @@ fn every_catalog_build_reflashes_verbatim_in_the_oem_session() {
     for (i, (build, image)) in stand_ins().iter().enumerate() {
         let mut req = mtk_request(image.clone(), true, Some(dir.join(format!("{i}.bin"))));
         req.drive_model = build.model.clone();
+        // Reference path so the OEM session is streamed verbatim (no probe chunk).
+        req.current = Some(image.clone());
         let mut dev = Rec::new(
             MockScsiDevice::echoing()
                 .with_firmware_image(drive_read(image))
@@ -181,6 +183,9 @@ fn flash_onto(
 ) -> (Outcome, Rec<MockScsiDevice>) {
     let mut req = mtk_request(image.to_vec(), backup.is_some(), backup);
     req.drive_model = product.into();
+    // Reference path (installed firmware as Current) so the OEM session is
+    // streamed verbatim without the current-free probe's staging chunk.
+    req.current = Some(drive.to_vec());
     let mut dev = drive_running(drive, product);
     let outcome = run(|| engine_flash(&mut dev, &Mtk, &req));
     (outcome, dev)

@@ -86,7 +86,7 @@ const REQUIRED: &[(&str, &str)] = &[
     ),
     (
         "R5 lost behaviours",
-        "mtk_execute_prints_plan_after_backup_summary",
+        "mtk_execute_prints_the_plan_with_a_no_backup_note",
     ),
     ("R5 lost behaviours", "read_surface_map_is_gone"),
     (
@@ -129,11 +129,11 @@ const REQUIRED: &[(&str, &str)] = &[
     ("R13 consistency", "settings_are_read_only"),
     (
         "R14 MediaTek family gate",
-        "cross_line_image_is_refused_after_the_backup_before_any_write",
+        "every_cross_family_pair_of_catalog_builds_is_refused",
     ),
     (
         "R14 MediaTek family gate",
-        "unknown_families_are_refused_before_any_write",
+        "a_target_image_without_a_hardware_record_is_refused_before_any_write",
     ),
     (
         "R14 MediaTek family gate",

@@ -533,7 +533,8 @@ pub fn flash(
 ) -> Result<crate::backend::UpdateOutcome> {
     let facet = flash_facet(drive)
         .map_err(|error| crate::backend::UpdateFailure::before_write("capability checks", error))?;
-    if req.execute && !skip_preflash_backup() {
+    let wants_backup = facet.requires_preflash_backup() && !skip_preflash_backup();
+    if req.execute && wants_backup {
         required_backup_path(req).map_err(|error| {
             crate::backend::UpdateFailure::before_write("backup destination", error)
         })?;
@@ -556,7 +557,12 @@ pub fn flash(
                 explain(error, IssueCode::Connection),
             )
         })?;
-    let saved = if skip_preflash_backup() {
+    let saved = if !facet.requires_preflash_backup() {
+        crate::diagnostics::record(
+            "MediaTek flash: no pre-flash backup (a full-image rollback is not supported by the drive)",
+        );
+        None
+    } else if skip_preflash_backup() {
         crate::diagnostics::record(
             "pre-flash backup skipped at the operator's request (--no-backup)",
         );
@@ -571,6 +577,9 @@ pub fn flash(
     };
     let backup_line = match &saved {
         Some(s) => s.summary().to_string(),
+        None if !facet.requires_preflash_backup() => {
+            "no pre-flash backup (MediaTek backup is not supported by the drive)".to_string()
+        }
         None => crate::localization::english("confirm.no_backup"),
     };
     emit_plan(&plan.after_backup, &backup_line);

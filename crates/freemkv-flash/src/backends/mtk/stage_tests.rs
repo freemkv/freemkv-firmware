@@ -102,6 +102,78 @@ fn image(revision: &[u8; 4], code: u8) -> Vec<u8> {
     mediatek_optical::envelope::cmac::resign(&bytes).unwrap()
 }
 
+/// A drive that models the pre-erase encoding probe over `ScsiDevice`:
+/// REQUEST SENSE reports the last transfer's sense, a WRITE BUFFER stream is
+/// accepted only when it carries the plaintext the drive expects (sense 0x00)
+/// and otherwise rejected with the wrong-encoding `0xBD`, and COMMIT (finish)
+/// is never required to answer the probe. A plaintext (PP) drive accepts the
+/// first probe candidate; `rejects_all` models a drive that refuses every one.
+struct ProbeDrive {
+    inner: MockScsiDevice,
+    plain: Vec<u8>,
+    rejects_all: bool,
+    last_sense: (u8, u8, u8),
+    finishes: usize,
+}
+
+impl ProbeDrive {
+    fn plaintext(image: &[u8]) -> Self {
+        Self {
+            inner: MockScsiDevice::echoing().with_firmware_image(image.to_vec()),
+            plain: image.to_vec(),
+            rejects_all: false,
+            last_sense: (0, 0, 0),
+            finishes: 0,
+        }
+    }
+    fn rejecting(image: &[u8]) -> Self {
+        Self {
+            rejects_all: true,
+            ..Self::plaintext(image)
+        }
+    }
+}
+
+impl ScsiDevice for ProbeDrive {
+    fn command_in(&mut self, cdb: &[u8], n: usize) -> Result<Vec<u8>> {
+        // REQUEST SENSE: a fixed-format reply from the last transfer, exactly as
+        // many bytes as the transport requested.
+        if cdb.first() == Some(&0x03) {
+            let mut sense = vec![0u8; n];
+            if n >= 14 {
+                sense[0] = 0x70;
+                sense[2] = self.last_sense.0;
+                sense[7] = 10;
+                sense[12] = self.last_sense.1;
+                sense[13] = self.last_sense.2;
+            }
+            return Ok(sense);
+        }
+        self.inner.command_in(cdb, n)
+    }
+    fn command_out(&mut self, cdb: &[u8], data: &[u8]) -> Result<()> {
+        // WRITE BUFFER stream (mode 6): judge the chunk's encoding.
+        if cdb.first() == Some(&0x3b) && cdb.get(1) == Some(&6) && !data.is_empty() {
+            let off = ((cdb[3] as usize) << 16) | ((cdb[4] as usize) << 8) | cdb[5] as usize;
+            let expected = self.plain.get(off..off + data.len());
+            let accepted = !self.rejects_all && expected == Some(data);
+            if accepted {
+                self.last_sense = (0, 0, 0);
+            } else {
+                self.last_sense = (5, 0xBD, 0);
+                anyhow::bail!("wrong-encoding reject (sense 05/BD/00)");
+            }
+        }
+        if cdb == cdb::finish() {
+            self.finishes += 1;
+        }
+        self.inner.command_out(cdb, data)
+    }
+    fn describe(&self) -> String {
+        "probe fixture".into()
+    }
+}
+
 #[test]
 fn recovery_selects_standalone_mediatek_bin_and_rejects_invalid_input() {
     let bytes = image(b"1.V9", 3);
@@ -114,15 +186,32 @@ fn recovery_selects_standalone_mediatek_bin_and_rejects_invalid_input() {
     // Payload integrity remains the backend preparation gate, as in Flash.
 }
 
+/// Flash a single image through the proven `--current` reference path, so the
+/// shared executor's exact command sequence and progress accounting are tested
+/// without the probe prefix. (The probe path is covered by its own tests.)
 fn flash_single_image(
     dev: &mut MockScsiDevice,
     current: &[u8],
     target: &[u8],
 ) -> Result<UpdateOutcome> {
+    let mut req = request(target.to_vec(), &super::super::IMAGE);
+    req.current = Some(current.to_vec());
+    let plan = Mtk.plan(&mut ReadDevice::without_unlocks(dev), &req)?;
+    let authorized = Mtk.authorize(&mut ReadDevice::without_unlocks(dev), plan, None)?;
+    Mtk.execute(
+        &mut crate::engine::gates::ungated_for_tests(dev),
+        &authorized,
+    )
+}
+
+/// Flash a single image through the current-free probe path.
+fn flash_single_image_probed(
+    dev: &mut dyn crate::platform::ScsiDevice,
+    target: &[u8],
+) -> Result<UpdateOutcome> {
     let req = request(target.to_vec(), &super::super::IMAGE);
     let plan = Mtk.plan(&mut ReadDevice::without_unlocks(dev), &req)?;
-    let backup = crate::engine::gates::saved_for_tests(current.to_vec());
-    let authorized = Mtk.authorize(&mut ReadDevice::without_unlocks(dev), plan, Some(&backup))?;
+    let authorized = Mtk.authorize(&mut ReadDevice::without_unlocks(dev), plan, None)?;
     Mtk.execute(
         &mut crate::engine::gates::ungated_for_tests(dev),
         &authorized,
@@ -297,13 +386,15 @@ fn run_with_restricted_receiver(
     };
     let plan = FlashPlan::new(Plan {
         image: intermediate.clone(),
-        following: vec![final_prepared],
         live,
-        receiver,
         drive_product: "BD-RE BU40N".into(),
         verdict: Verdict::SameModel,
+        mode: PlanMode::Reference {
+            receiver,
+            following: vec![final_prepared],
+        },
     });
-    let authorized = AuthorizedPlan::new(plan, prepared);
+    let authorized = AuthorizedPlan::new(plan, Authorized::Reference(prepared));
     let result = Mtk.execute(
         &mut crate::engine::gates::ungated_for_tests(&mut dev),
         &authorized,
@@ -360,8 +451,13 @@ fn unsupported_final_receiver_contract_is_rejected_before_intermediate_write() {
     let mut intermediate = image(b"INTM", 2);
     encrypted_receiver(&mut intermediate);
     let target = image(b"1.05", 3);
-    let mut dev = MockScsiDevice::new().with_firmware_image(current);
-    let req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    let mut dev = MockScsiDevice::new().with_firmware_image(current.clone());
+    // The final-stage receiver contract is validated before the intermediate
+    // write only on the reference path, which pre-binds the next stage; the
+    // current-free probe path validates the final encoding on the drive after
+    // the intermediate boots.
+    let mut req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    req.current = Some(current);
     assert!(Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .is_err());
@@ -580,8 +676,8 @@ fn standalone_bin_plans_only_the_requested_image() {
         let state: &Plan = plan.state().unwrap();
         assert_eq!(state.image, target);
         assert!(
-            state.following.is_empty(),
-            "a standalone BIN must not infer another stage"
+            matches!(&state.mode, PlanMode::Probe { final_image: None }),
+            "a standalone BIN with no Current must probe a single stage"
         );
         assert!(dev.writes.is_empty());
     }
@@ -740,32 +836,49 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     let target = image(b"1.V9", 3);
     let mut dev = restricted_current_drive(&current);
     let mut req = request(target.clone(), &super::super::IMAGE);
-    let error = Mtk
+    // Without --current, a restricted drive no longer demands a Current file:
+    // the plan is a probe-mode plan (the wire encoding is probed at write time),
+    // and it never reads live receiver code.
+    let plan = Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
-        .err()
         .unwrap();
-    assert!(error.is::<crate::backend::CurrentFirmwareRequired>());
-    assert!(crate::workflow::error_message(&error)
-        .contains("Select a file matching the firmware currently installed"));
-    assert!(!crate::workflow::error_message(&error).contains("0x98000"));
-    assert!(format!("{error:#}").contains("restricted live code read 0x98000"));
+    let state = plan.state::<Plan>().unwrap();
+    assert!(matches!(&state.mode, PlanMode::Probe { final_image: None }));
+    assert!(plan
+        .dry_run
+        .iter()
+        .flat_map(|line| match line {
+            PlanLine::Detail(inner) => Some(inner.as_ref().clone()),
+            other => Some(other.clone()),
+        })
+        .any(|line| matches!(line, PlanLine::Field("encoding", _))));
+    assert!(dev.inner.writes.is_empty());
+
+    // With --current, the proven reference path binds the encrypted receiver.
     req.current = Some(current.clone());
     let plan = Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .unwrap();
     let state = plan.state::<Plan>().unwrap();
     assert_eq!(state.image, target);
+    let PlanMode::Reference { receiver, .. } = &state.mode else {
+        panic!("--current must select the reference path");
+    };
     assert_eq!(
-        state.receiver.encoding(),
+        receiver.encoding(),
         mediatek_optical::prepare::Encoding::Encrypted
     );
     assert_eq!(
-        state.receiver.provenance(),
+        receiver.provenance(),
         mediatek_optical::prepare::Provenance::UserSuppliedReference
     );
     assert!(plan
         .dry_run
         .iter()
+        .flat_map(|line| match line {
+            PlanLine::Detail(inner) => Some(inner.as_ref().clone()),
+            other => Some(other.clone()),
+        })
         .any(|line| matches!(line, PlanLine::Field("receiver code source", _))));
     let authorized = Mtk
         .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
@@ -779,7 +892,9 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
         .technical_details
         .iter()
         .any(|s| s.contains("Its match to the installed firmware has not been verified.")));
-    let executable = authorized.state::<Executable>().unwrap();
+    let Authorized::Reference(executable) = authorized.state::<Authorized>().unwrap() else {
+        panic!("reference authorization expected");
+    };
     assert_eq!(
         executable.prepared.plan().encoding().body,
         mediatek_optical::prepare::Encoding::Encrypted
@@ -800,37 +915,68 @@ fn flash_current_reference_binds_restricted_v9_without_using_target_receiver_cod
     assert!(dev.inner.writes.is_empty());
 }
 
-#[test]
-fn flash_current_accepts_different_build_metadata_but_never_substitutes_for_backup() {
-    struct Refuse;
-    impl crate::backend::Confirm for Refuse {
-        fn confirm(&mut self, _: &AuthorizedPlan) -> Result<bool> {
-            panic!("no write confirmation before a usable backup")
-        }
+/// A confirm that fails loudly if the engine ever asks about a missing backup:
+/// MediaTek must flash with no backup attempt and no backup confirmation.
+struct NeverBackup;
+impl crate::backend::Confirm for NeverBackup {
+    fn confirm(&mut self, _: &AuthorizedPlan) -> Result<bool> {
+        Ok(true)
     }
-    let current = image(b"1.V9", 1);
-    let mut dev = restricted_current_drive(&current);
-    let mut req = request(image(b"1.V9", 3), &super::super::IMAGE);
-    let mut stale = current.clone();
-    stale[0x1ec040] ^= 1;
-    req.current = Some(crate::cmac::resign(&stale).unwrap());
-    Mtk.plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
-        .unwrap();
-    assert!(dev.inner.writes.is_empty());
-    req.current = Some(current);
-    let path = std::env::temp_dir().join(format!(
-        "freemkv-current-not-backup-{}.bin",
-        std::process::id()
-    ));
-    req.predump_out = Some(path.clone());
-    let error = crate::engine::flash(&mut dev, &Mtk, &req, &mut Refuse).unwrap_err();
+    fn proceed_without_backup(&mut self, _reason: &str) -> Result<bool> {
+        panic!("MediaTek must not gate on a pre-flash backup")
+    }
+}
+
+#[test]
+fn mediatek_flash_needs_no_current_and_no_backup() {
+    // No --current, no --backup: the probe path flashes directly. The engine
+    // never asks to proceed without a backup, and writes no backup file.
+    let img = image(b"1.V9", 1);
+    let mut dev = ProbeDrive::plaintext(&img);
+    let path =
+        std::env::temp_dir().join(format!("freemkv-mtk-nobackup-{}.bin", std::process::id()));
+    let req = FlashRequest {
+        current: None,
+        input: img.clone(),
+        input_format: &super::super::IMAGE,
+        mode: crate::manifest::FlashMode::Full,
+        execute: true,
+        acknowledged_risk: true,
+        enc_override: None,
+        drive_model: "BD-RE BU40N".into(),
+        verbose: false,
+        // Even if a default path is offered, MediaTek must not write a backup.
+        predump_out: Some(path.clone()),
+    };
+    let outcome = crate::engine::flash(&mut dev, &Mtk, &req, &mut NeverBackup).unwrap();
+    assert!(matches!(outcome, UpdateOutcome::Completed(_)));
+    assert!(!path.exists(), "no pre-flash backup file must be written");
+    // The drive saw a safe probe (PREPARE + one chunk + sense, no premature
+    // COMMIT) followed by the real flash that ends in COMMIT.
+    assert!(dev.finishes >= 1, "the real flash must COMMIT");
+}
+
+#[test]
+fn probe_path_reports_the_plaintext_wire_encoding() {
+    let img = image(b"1.00", 1);
+    let mut dev = ProbeDrive::plaintext(&img);
+    flash_single_image_probed(&mut dev, &img).unwrap();
+    assert!(dev.finishes >= 1);
+}
+
+#[test]
+fn probe_none_accepted_is_surfaced_cleanly() {
+    let img = image(b"1.00", 1);
+    let mut dev = ProbeDrive::rejecting(&img);
+    let error = flash_single_image_probed(&mut dev, &img).unwrap_err();
     assert!(
-        format!("{error:#}")
-            .contains("pre-flash backup failed and flashing without one was declined"),
+        format!("{error:#}").contains("encoding probe failed"),
         "{error:#}"
     );
-    assert!(!path.exists());
-    assert!(dev.inner.writes.is_empty());
+    let failure = error.downcast_ref::<UpdateFailure>().unwrap();
+    assert!(!failure.write_started);
+    assert_eq!(failure.phase, "wire-encoding probe");
+    assert_eq!(dev.finishes, 0, "a failed probe must never COMMIT");
 }
 
 #[test]
@@ -849,11 +995,15 @@ fn exact_v9_current_reference_prepares_normal_flash_with_restricted_reads() {
     let mut dev = restricted_current_drive(current);
     let mut req = request(target.clone(), &super::super::IMAGE);
     req.drive_model = Build::of_image(current).unwrap().product;
-    assert!(Mtk
-        .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
-        .err()
-        .unwrap()
-        .is::<crate::backend::CurrentFirmwareRequired>());
+    // Without --current the restricted drive now plans a probe-mode flash.
+    assert!(matches!(
+        Mtk.plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
+            .unwrap()
+            .state::<Plan>()
+            .unwrap()
+            .mode,
+        PlanMode::Probe { .. }
+    ));
     req.current = Some(current.to_vec());
     let plan = Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
@@ -861,7 +1011,10 @@ fn exact_v9_current_reference_prepares_normal_flash_with_restricted_reads() {
     let authorized = Mtk
         .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
         .unwrap();
-    let prepared = &authorized.state::<Executable>().unwrap().prepared;
+    let Authorized::Reference(executable) = authorized.state::<Authorized>().unwrap() else {
+        panic!("reference authorization expected");
+    };
+    let prepared = &executable.prepared;
     assert_eq!(
         prepared.plan().prepare_command().command(),
         cdb::enter_update()
@@ -980,44 +1133,43 @@ fn prepare_entry_failure_conservatively_records_possible_command_mutation() {
 }
 
 #[test]
-fn planning_captures_code_once_and_execution_revalidates_once_before_writing() {
+fn probe_plan_reads_no_live_receiver_code_before_the_write_phase() {
+    // Current-free planning never reads live receiver code: the wire encoding is
+    // discovered by a safe probe in the write phase, not detected at plan time.
     let target = image(b"1.00", 1);
-    let mut dev = MockScsiDevice::echoing().with_firmware_image(target.clone());
-    let request = request(target, &super::super::IMAGE);
-    let plan = Mtk
-        .plan(&mut ReadDevice::without_unlocks(&mut dev), &request)
-        .unwrap();
+    let mut dev = ProbeDrive::plaintext(&target);
+    let request = request(target.clone(), &super::super::IMAGE);
     let code_block = cdb::read_memory(0x98000, 1024);
-    let captures = |dev: &MockScsiDevice| {
-        dev.reads
+    let captures = |dev: &ProbeDrive| {
+        dev.inner
+            .reads
             .iter()
             .filter(|command| command.as_slice() == code_block)
             .count()
     };
+    let plan = Mtk
+        .plan(&mut ReadDevice::without_unlocks(&mut dev), &request)
+        .unwrap();
     assert_eq!(
         captures(&dev),
-        1,
-        "planning must capture each full receiver code block only once"
+        0,
+        "probe-mode planning must read no live receiver code"
     );
-    let before_authorize = dev.reads.len();
     let authorized = Mtk
         .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
         .unwrap();
     assert_eq!(
-        dev.reads.len(),
-        before_authorize,
-        "authorization must reuse its loaded receiver facts"
+        captures(&dev),
+        0,
+        "authorization must read no live receiver code either"
     );
+    assert!(dev.inner.writes.is_empty(), "no writes before execute");
     Mtk.execute(
         &mut crate::engine::gates::ungated_for_tests(&mut dev),
         &authorized,
     )
     .unwrap();
-    assert_eq!(
-        captures(&dev),
-        2,
-        "the mandatory prewrite gate must revalidate the cached code exactly once"
-    );
+    assert!(dev.finishes >= 1, "the write phase probes then flashes");
 }
 
 #[test]
@@ -1025,18 +1177,16 @@ fn confirmation_cleanup_real_two_stage_plan_keeps_startup_requirement_visible() 
     let current = image(b"1.00", 1);
     let intermediate = image(b"INTM", 2);
     let target = image(b"1.05", 3);
-    let mut dev = MockScsiDevice::new().with_firmware_image(current.clone());
-    let req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(current.clone());
+    // The two-stage reference path (with --current) still shows the receiver
+    // signature as a technical detail, while probe-mode flashes show none.
+    let mut req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    req.current = Some(current.clone());
     let plan = Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .unwrap();
-    let backup = crate::engine::gates::saved_for_tests(current);
     let authorized = Mtk
-        .authorize(
-            &mut ReadDevice::without_unlocks(&mut dev),
-            plan,
-            Some(&backup),
-        )
+        .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
         .unwrap();
     let sheet = crate::workflow::FlashSheet::of(&authorized);
     assert!(sheet.notices.iter().any(
@@ -1225,17 +1375,16 @@ fn injected_flash_failure(
             move |c| gate.load(Ordering::SeqCst) && fail(c),
             "injected failure",
         );
-    let req = request(target.to_vec(), &super::super::IMAGE);
+    // Reference path (installed firmware as Current), so the injected failures
+    // exercise the shared executor's own PROBE/entry/transfer phases, not the
+    // current-free probe prefix.
+    let mut req = request(target.to_vec(), &super::super::IMAGE);
+    req.current = Some(current.to_vec());
     let plan = Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .unwrap();
-    let backup = crate::engine::gates::saved_for_tests(current.to_vec());
     let authorized = Mtk
-        .authorize(
-            &mut ReadDevice::without_unlocks(&mut dev),
-            plan,
-            Some(&backup),
-        )
+        .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
         .unwrap();
     armed.store(true, Ordering::SeqCst);
     Mtk.execute(

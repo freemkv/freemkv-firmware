@@ -106,38 +106,6 @@ fn flash(dev: &mut dyn ScsiDevice, drive: &dyn Backend, req: &FlashRequest) -> R
     super::flash(dev, drive, req, &mut crate::workflow::Preconfirmed).map(drop)
 }
 
-/// Observe the very first data-out command and prove the rollback file is
-/// already present, readable, and accepted by the same backend's flash path.
-struct BackupBeforeWriteDevice {
-    inner: MockScsiDevice,
-    backup_path: std::path::PathBuf,
-    checked: bool,
-}
-
-impl ScsiDevice for BackupBeforeWriteDevice {
-    fn command_in(&mut self, cdb: &[u8], len: usize) -> Result<Vec<u8>> {
-        self.inner.command_in(cdb, len)
-    }
-
-    fn command_out(&mut self, cdb: &[u8], bytes: &[u8]) -> Result<()> {
-        if !self.checked {
-            let archive = std::fs::read(&self.backup_path)
-                .context("first write preceded the durable rollback file")?;
-            BackupFacet::validate(&Mtk, &archive, "BD-RE BU40N")?;
-            self.checked = true;
-        }
-        self.inner.command_out(cdb, bytes)
-    }
-
-    fn describe(&self) -> String {
-        self.inner.describe()
-    }
-
-    fn medium_status(&mut self) -> Result<MediumStatus> {
-        self.inner.medium_status()
-    }
-}
-
 /// A non-zero, byte-position-dependent pattern (distinguishable from an
 /// all-zero or all-constant image, and from its own AES-encrypted form).
 fn patterned_image(len: usize) -> Vec<u8> {
@@ -454,7 +422,10 @@ fn flash_execute_streams_verbatim_and_verifies() {
     // read-back matches inside the CMAC-protected range (also zero).
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
     let image = make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N");
-    let req = bin_req(image.clone(), true);
+    // Exercise the exact OEM streaming sequence via the reference path, so the
+    // current-free probe's PREPARE+chunk prefix is not part of this count.
+    let mut req = bin_req(image.clone(), true);
+    req.current = Some(backup_firmware());
     flash(&mut dev, &Mtk, &req).unwrap();
     // 1 PREPARE + 128 STREAM + 1 COMMIT, all WRITE_BUFFER (0x3B).
     assert_eq!(dev.writes.len(), 1 + IMAGE_SIZE / CHUNK + 1);
@@ -470,19 +441,20 @@ fn flash_execute_streams_verbatim_and_verifies() {
 }
 
 #[test]
-fn validated_rollback_file_exists_before_first_device_write() {
+fn mediatek_flash_captures_no_preflash_backup() {
+    // MediaTek flashes with no pre-flash backup: a full-image rollback is
+    // provably impossible on these drives. No backup file is written even when a
+    // destination is offered, and the firmware write still proceeds.
     let mut req = bin_req(backup_firmware(), true);
     let backup_path = fresh_backup_path();
     req.predump_out = Some(backup_path.clone());
-    let mut dev = BackupBeforeWriteDevice {
-        inner: MockScsiDevice::echoing().with_firmware_image(backup_firmware()),
-        backup_path: backup_path.clone(),
-        checked: false,
-    };
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     flash(&mut dev, &Mtk, &req).unwrap();
-    assert!(dev.checked);
-    assert!(!dev.inner.writes.is_empty());
-    std::fs::remove_file(backup_path).unwrap();
+    assert!(
+        !backup_path.exists(),
+        "MediaTek creates no pre-flash backup file"
+    );
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
 }
 
 #[test]
@@ -494,7 +466,8 @@ fn failed_middle_stream_chunk_never_sends_commit_or_reports_success() {
             move |cdb| is_stream_write(cdb) && cdb.get(3..6) == Some(&failing_offset[..]),
             "injected stream failure",
         );
-    let req = bin_req(backup_firmware(), true);
+    let mut req = bin_req(backup_firmware(), true);
+    req.current = Some(backup_firmware());
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(format!("{err:#}").contains("injected stream failure"));
     let stream_count = dev
@@ -511,14 +484,15 @@ fn failed_middle_stream_chunk_never_sends_commit_or_reports_success() {
 }
 
 #[test]
-fn failed_backup_persistence_prevents_first_device_write() {
+fn mediatek_flash_ignores_an_unwritable_backup_path() {
+    // MediaTek never captures a backup, so an unwritable backup destination no
+    // longer blocks the flash.
     let mut req = bin_req(backup_firmware(), true);
     let nonexistent_parent = fresh_backup_path();
     req.predump_out = Some(nonexistent_parent.join("rollback.tar"));
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
-    assert!(format!("{err:#}").contains("creating temporary backup"));
-    assert!(dev.writes.is_empty());
+    flash(&mut dev, &Mtk, &req).unwrap();
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
     assert!(!nonexistent_parent.exists());
 }
 
@@ -549,7 +523,8 @@ fn flash_execute_streams_patterned_image_verbatim() {
     // mock happens to read back."
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let image = make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N");
-    let req = bin_req(image.clone(), true);
+    let mut req = bin_req(image.clone(), true);
+    req.current = Some(backup_firmware());
     flash(&mut dev, &Mtk, &req).unwrap();
 
     let streamed: Vec<u8> = dev
@@ -611,7 +586,8 @@ fn flash_execute_requires_target_startup_when_protected_readback_is_unavailable(
             move |cdb| is_mode6_read(cdb) && cdb.get(3..6) == Some(&want[..]),
             "simulated read-back transport error",
         );
-    let req = bin_req(image, true);
+    let mut req = bin_req(image, true);
+    req.current = Some(backup_firmware());
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
         matches!(
@@ -676,7 +652,11 @@ fn flash_execute_streams_enc_payload_not_plaintext() {
     crate::backends::mtk::bulk_receiver_fixture::stamp(&mut image);
     // The device exposes decoded firmware, not the encrypted wire envelope.
     let mut dev = MockScsiDevice::new().with_firmware_image(image.clone());
-    let req = bin_req(image.clone(), true);
+    // Use the installed image as the reference so the encrypted wire encoding is
+    // selected (the generic mock cannot answer the destructive-free probe for
+    // anything but plaintext).
+    let mut req = bin_req(image.clone(), true);
+    req.current = Some(image.clone());
     flash(&mut dev, &Mtk, &req).unwrap();
 
     let mut transferred: Vec<u8> = dev
@@ -711,6 +691,7 @@ fn flash_restore_tar_reflashes_complete_firmware_only() {
     req.input = tar;
     req.input_format = &LEGACY_TAR;
     req.drive_model = "BD-RE BU40N".into();
+    req.current = Some(backup_firmware());
     flash(&mut dev, &Mtk, &req).unwrap();
 
     let streamed: Vec<u8> = dev
@@ -749,10 +730,13 @@ fn flash_close_tolerates_benign_unit_attention() {
     let mut dev = MockScsiDevice::echoing()
         .with_firmware_image(backup_firmware())
         .on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x06));
-    let req = bin_req(
+    // Reference path, so the injected close sense is read by the executor's
+    // post-commit REQUEST SENSE rather than the current-free probe.
+    let mut req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
     );
+    req.current = Some(backup_firmware());
     flash(&mut dev, &Mtk, &req).expect("benign UNIT ATTENTION must not fail the flash");
 }
 
@@ -763,10 +747,11 @@ fn flash_close_tolerates_benign_not_ready() {
     let mut dev = MockScsiDevice::echoing()
         .with_firmware_image(backup_firmware())
         .on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x02));
-    let req = bin_req(
+    let mut req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
     );
+    req.current = Some(backup_firmware());
     flash(&mut dev, &Mtk, &req).expect("benign NOT READY must not fail the flash");
 }
 
@@ -851,10 +836,11 @@ fn flash_close_fails_on_hardware_error_sense() {
     let mut dev = MockScsiDevice::echoing()
         .with_firmware_image(backup_firmware())
         .on(|cdb| cdb.first() == Some(&0x03), fixed_sense(0x04));
-    let req = bin_req(
+    let mut req = bin_req(
         make_flashable(patterned_image(IMAGE_SIZE), "BD-RE BU40N"),
         true,
     );
+    req.current = Some(backup_firmware());
     let err = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(
         matches!(err.downcast_ref::<mediatek_optical::drive::FlashError<anyhow::Error>>(), Some(mediatek_optical::drive::FlashError::Fault { sense, .. }) if sense.0 == 4),
@@ -961,28 +947,20 @@ fn flash_execute_refuses_an_unsigned_image_with_no_write() {
 }
 
 #[test]
-fn flash_aborts_on_a_failed_backup_without_rescue_flag() {
-    // A failed pre-flash per-unit backup must abort the flash. A signed,
-    // model-matching input ensures this test reaches the backup gate.
+fn mediatek_flashes_without_backup_even_when_readback_is_restricted() {
+    // MediaTek needs no backup, so a drive that refuses the firmware readback
+    // reads still flashes: the write proceeds (best-effort verification reports
+    // the unreadable regions as unverified) rather than aborting for a backup.
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(backup_firmware())
         .on_fail(
             |cdb: &[u8]| is_mode6_read(cdb) && !is_identity_read(cdb) && !is_receiver_read(cdb),
-            "dump read refused",
+            "readback refused",
         );
     let req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
-    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
-    // Every flash read fails, including the boot banner. The operation retains
-    // typed pre-write backup failure evidence without exposing internal causes.
-    let failure = err
-        .downcast_ref::<crate::backend::UpdateFailure>()
-        .expect("failed backup retains update failure evidence");
-    assert_eq!(failure.phase, "backup");
-    assert!(!failure.write_started);
-    assert!(
-        !dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)),
-        "no firmware bytes may be streamed after a failed backup"
-    );
+    flash(&mut dev, &Mtk, &req)
+        .expect("MediaTek flashes without a backup even when readback is restricted");
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
 }
 
 #[test]
@@ -1014,35 +992,18 @@ fn mtk_dump_labels_its_digest_as_a_dump_not_a_backup() {
 }
 
 #[test]
-fn execute_refuses_unsaved_or_existing_backup_before_write() {
+fn mediatek_flash_needs_no_backup_destination_but_backup_command_still_refuses_existing() {
+    // MediaTek flash no longer requires a pre-flash backup destination, and
+    // flashes without one.
     let mut req = bin_req(backup_firmware(), true);
     req.predump_out = None;
     let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
-    assert!(crate::workflow::error_message(&error)
-        .contains("Choose a destination for the pre-flash backup"));
-    let evidence = error
-        .downcast_ref::<crate::backend::UpdateFailure>()
-        .unwrap();
-    assert_eq!(evidence.phase, "backup destination");
-    assert!(!evidence.write_started);
-    assert!(dev.writes.is_empty());
+    flash(&mut dev, &Mtk, &req).unwrap();
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
 
+    // The `backup` command (not flash) still never overwrites an existing file.
     let out = fresh_backup_path();
     std::fs::write(&out, b"existing backup").unwrap();
-    req.predump_out = Some(out.clone());
-    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
-    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
-    let issue = crate::workflow::user_error(&error);
-    assert_eq!(issue.id, "errors.file_exists");
-    assert_eq!(issue.consequence, Some("errors.update_blocked"));
-    assert!(format!("{error:#}").contains("existing backups are never overwritten"));
-    assert!(
-        dev.reads.is_empty(),
-        "refuse before slow capture or planning"
-    );
-    assert!(dev.writes.is_empty());
-    assert_eq!(std::fs::read(&out).unwrap(), b"existing backup");
     let mut dev = MockScsiDevice::new();
     let error = crate::user_error::read_only(backup(&mut dev, &Mtk, &out, false)).unwrap_err();
     let issue = crate::workflow::user_error(&error);
@@ -1167,26 +1128,21 @@ fn classify_file_rejects_unrecognizable_bytes() {
 }
 
 #[test]
-fn existing_preflash_destination_fails_before_capturing_the_drive() {
-    let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+fn mediatek_flash_ignores_an_existing_backup_destination() {
+    // MediaTek captures no backup, so an existing backup destination is left
+    // untouched and does not block the flash.
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let req = bin_req(backup_firmware(), true);
-    let path = req.predump_out.as_ref().unwrap();
-    std::fs::write(path, b"keep this rollback").unwrap();
-    let result = flash(&mut dev, &Mtk, &req);
-    assert_eq!(std::fs::read(path).unwrap(), b"keep this rollback");
-    std::fs::remove_file(path).unwrap();
-    assert!(result.is_err());
-    // Only the chip-gate identity reads (banner + descriptor) precede the
-    // collision check; never the multi-minute firmware read.
-    assert!(
-        dev.reads
-            .iter()
-            .all(|c| is_identity_read(c) || is_receiver_read(c) || c.first() == Some(&0x12)),
-        "do not spend minutes reading before finding a path collision"
+    let path = req.predump_out.as_ref().unwrap().clone();
+    std::fs::write(&path, b"keep this rollback").unwrap();
+    flash(&mut dev, &Mtk, &req).unwrap();
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        b"keep this rollback",
+        "the existing file is untouched"
     );
-    // Two identity windows, each read at most twice (one retry).
-    assert!(dev.reads.iter().filter(|c| is_identity_read(c)).count() <= 4);
-    assert!(dev.writes.is_empty());
+    std::fs::remove_file(&path).unwrap();
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
 }
 
 #[test]
@@ -1653,26 +1609,11 @@ fn is_receiver_read(cdb: &[u8]) -> bool {
         || ((0x140000..0x1b0000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1024))
 }
 
-#[test]
-fn unknown_receiver_refuses_before_backup_or_write() {
-    let mut installed = backup_firmware();
-    installed[0x9a300..0x9a340].fill(0);
-    let mut dev = MockScsiDevice::new().with_firmware_image(installed);
-    let req = bin_req(backup_firmware(), true);
-    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
-    let evidence = error
-        .downcast_ref::<crate::backend::UpdateFailure>()
-        .unwrap();
-    assert_eq!(evidence.phase, "package and receiver checks");
-    assert!(!evidence.write_started);
-    assert!(!evidence.temporary_firmware);
-    assert!(
-        format!("{error:#}").contains("receiver signature"),
-        "{error:#}"
-    );
-    assert!(dev.writes.is_empty());
-    assert!(!req.predump_out.unwrap().exists());
-}
+// A live receiver that rejects every candidate wire encoding is surfaced by the
+// safe probe as a clean `ProbeError::NoneAccepted`; that is exercised against a
+// rejecting drive in `backends::mtk::flash::stage_tests::probe_none_accepted_is_surfaced_cleanly`.
+// (A generic echoing mock accepts the probe chunk and so cannot model a drive
+// whose receiver rejects it.)
 
 #[test]
 fn mediatek_preview_keeps_installed_backup_checks_pending_without_writes() {
@@ -1687,7 +1628,10 @@ fn mediatek_preview_keeps_installed_backup_checks_pending_without_writes() {
 #[test]
 fn encoding_override_cannot_contradict_live_receiver() {
     let mut dev = MockScsiDevice::new().with_firmware_image(backup_firmware());
+    // The encoding override is only meaningful against a detected receiver, so
+    // it is checked on the reference path.
     let mut req = bin_req(backup_firmware(), true);
+    req.current = Some(backup_firmware());
     req.enc_override = Some(true);
     let error = flash(&mut dev, &Mtk, &req).unwrap_err();
     assert!(format!("{error:#}").contains("contradicts"), "{error:#}");
