@@ -1482,18 +1482,20 @@ fn golden_flash_execute() {
     let dir = scratch("flash-execute");
     let mut g = Golden::default();
 
-    // MTK: full execute with the mandatory pre-flash backup.
+    // MTK: full execute, current-free. No pre-flash backup is captured (a
+    // full-image MediaTek rollback is impossible); the encoding is probed on the
+    // drive before the real transfer.
     let image = make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N");
     let rollback = dir.join("mtk_rollback.tar");
     let req = mtk_request(image.clone(), true, Some(rollback.clone()));
     let echoing = || MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let (outcome, transcript) = drive_run(echoing(), |d| engine_flash(d, &Mtk, &req));
     g.case(
-        "MTK execute: .bin with pre-flash backup",
+        "MTK execute: .bin, current-free (no pre-flash backup)",
         &outcome,
         Some(&transcript),
     );
-    g.file("saved pre-flash backup", &rollback);
+    g.file("pre-flash backup", &rollback);
     g.kv(
         "image chunks streamed",
         &format!("{} x {CHUNK} bytes", IMAGE_SIZE / CHUNK),
@@ -1508,10 +1510,11 @@ fn golden_flash_execute() {
         &outcome,
         Some(&transcript),
     );
-    g.file("saved pre-flash backup", &mismatch);
+    g.file("pre-flash backup", &mismatch);
 
-    // MTK: restore the archive that run just saved (rollback flow).
-    let saved = std::fs::read(&rollback).unwrap();
+    // MTK: restore a 0.10.x backup archive (rollback flow); a saved backup is no
+    // longer produced by flash, so this uses the committed legacy fixture.
+    let saved = legacy_mtk_tar();
     let second = dir.join("mtk_rollback_of_restore.tar");
     let mut restore = mtk_request(saved, true, Some(second.clone()));
     restore.input_format = &MTK_LEGACY_TAR;
@@ -1519,11 +1522,11 @@ fn golden_flash_execute() {
     let dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &restore));
     g.case(
-        "MTK execute: restore the saved .tar",
+        "MTK execute: restore a 0.10.x backup .tar",
         &outcome,
         Some(&transcript),
     );
-    g.file("saved pre-flash backup", &second);
+    g.file("pre-flash backup", &second);
 
     // MTK: refusals on the execute path.
     let mut no_ack = mtk_request(image.clone(), true, Some(dir.join("never.tar")));

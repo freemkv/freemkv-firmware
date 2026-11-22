@@ -56,15 +56,19 @@ fn text_index(outcome: &Outcome, needle: &str) -> usize {
 
 #[test]
 fn flash_plan_needs_no_backup() {
-    // MediaTek: an execute plan with no backup destination reads only the chip
-    // identity and receiver code, without capturing a full backup.
+    // MediaTek: a current-free execute plan reads only the chip identity (the
+    // descriptor and boot banner), without reading receiver code or capturing a
+    // full backup. The wire encoding is probed on the drive in the write phase.
     let image = make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N");
     let req = mtk_request(image.clone(), true, None);
     let mut dev = Rec::new(mtk_drive());
     let plan = Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .expect("plan without a backup");
-    assert!(plan.after_backup.contains(&PlanLine::Backup));
+    assert!(plan.after_backup.iter().any(|line| matches!(
+        line,
+        PlanLine::Field("backup", text) if text.contains("no pre-flash backup")
+    )));
     assert_eq!(
         dev.transcript()
             .into_iter()
@@ -72,8 +76,6 @@ fn flash_plan_needs_no_backup() {
             .collect::<Vec<_>>(),
         [
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
-            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
-            // The optical receiver profile independently binds its chip from the boot banner.
             "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
         ]
     );
@@ -101,8 +103,6 @@ fn flash_plan_needs_no_backup() {
         [
             "MEDIUM -> ClosedEmpty",
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
-            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
-            // The optical receiver profile independently binds its chip from the boot banner.
             "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
         ]
     );
@@ -268,7 +268,10 @@ fn post_flash_identity_check_fails_unconfirmed_flash() {
             |cdb| cdb.first() == Some(&0x12),
             "drive still re-enumerating",
         );
-    let req = mtk_request(image, true, Some(dir.join("rollback.bin")));
+    // Reference path so the only post-stream event is the real transfer's
+    // startup check (the current-free probe would stage a chunk first).
+    let mut req = mtk_request(image, true, Some(dir.join("rollback.bin")));
+    req.current = Some(backup_firmware());
     let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
     assert!(
         outcome.result.contains("target startup was not confirmed"),
@@ -412,8 +415,8 @@ fn dry_run_keeps_tray_warning_and_mtk_preflight() {
             "MEDIUM -> DiscPresent",
             "IN   cdb=3c06001ec00000010000 alloc=256 -> ok 256",
             "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
-            // The optical receiver profile independently binds its chip from the boot banner.
-            "IN   cdb=3c060000300000002000 alloc=32 -> ok 32",
+            // Current-free planning reads the descriptor and banner only; the
+            // wire encoding is probed on the drive in the write phase.
             "IN   cdb=3c06001ec000000100000000 alloc=256 -> ok 256",
             "IN   cdb=000000000000000000000000 alloc=0 -> ok 0",
         ]
