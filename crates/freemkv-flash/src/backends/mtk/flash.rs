@@ -50,6 +50,10 @@ struct Plan {
 }
 
 /// How this flash determines the wire encoding and reaches the drive.
+// The reference variant carries a whole receiver and prepared plan; the probe
+// variant is lightweight. A flash holds exactly one plan, so the size gap is
+// not worth a heap indirection.
+#[allow(clippy::large_enum_variant)]
 enum PlanMode {
     /// `--current` supplied: the proven receiver-reference flow derives the wire
     /// encoding from the installed-firmware reference and binds a prepared plan.
@@ -68,6 +72,9 @@ enum PlanMode {
 }
 
 /// What `authorize` decided, for `execute`.
+// One authorization is held per flash; the reference variant's prepared plan is
+// not worth boxing for the size gap with the unit probe variant.
+#[allow(clippy::large_enum_variant)]
 pub(super) enum Authorized {
     /// A receiver-bound prepared first stage (`--current` path).
     Reference(Executable),
@@ -483,9 +490,7 @@ fn forced_failure(
         // failure with conservative write evidence.
         other => ("firmware update", anyhow::anyhow!("{other}")),
     };
-    let progress = if operation_already_wrote {
-        crate::backend::UpdateProgress::UploadComplete
-    } else if runtime.upload_complete() {
+    let progress = if operation_already_wrote || runtime.upload_complete() {
         crate::backend::UpdateProgress::UploadComplete
     } else if runtime.payload_bytes_accepted() > 0 {
         crate::backend::UpdateProgress::PayloadAccepted

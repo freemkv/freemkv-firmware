@@ -114,7 +114,6 @@ struct ProbeDrive {
     rejects_all: bool,
     last_sense: (u8, u8, u8),
     finishes: usize,
-    sense_during_probe: Vec<(u8, u8, u8)>,
 }
 
 impl ProbeDrive {
@@ -125,7 +124,6 @@ impl ProbeDrive {
             rejects_all: false,
             last_sense: (0, 0, 0),
             finishes: 0,
-            sense_during_probe: Vec::new(),
         }
     }
     fn rejecting(image: &[u8]) -> Self {
@@ -163,7 +161,6 @@ impl ScsiDevice for ProbeDrive {
                 self.last_sense = (0, 0, 0);
             } else {
                 self.last_sense = (5, 0xBD, 0);
-                self.sense_during_probe.push(self.last_sense);
                 anyhow::bail!("wrong-encoding reject (sense 05/BD/00)");
             }
         }
