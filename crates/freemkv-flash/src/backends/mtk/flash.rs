@@ -479,6 +479,9 @@ fn forced_failure(
     let (phase, source) = match error {
         ForcedError::Identity(e) => ("live identity read", anyhow::anyhow!("{e}")),
         ForcedError::Flash(e) => (failure_phase(&e).0, flash_error(e)),
+        // `ForcedError` is non-exhaustive; a future variant is a firmware update
+        // failure with conservative write evidence.
+        other => ("firmware update", anyhow::anyhow!("{other}")),
     };
     let progress = if operation_already_wrote {
         crate::backend::UpdateProgress::UploadComplete
