@@ -1,0 +1,48 @@
+name: Bless MTK golden (temporary)
+
+# One-off helper: regenerate the MediaTek golden captures for the current-free
+# flash change (which cannot be rebuilt on the owner's Mac) and capture the
+# inline tripwire/catalog actuals. Remove this workflow once the branch is green.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/mtk-generic-flash
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Capture inline tripwire and catalog actuals (expected to fail)
+        run: |
+          cargo test --locked -p freemkv-flash -- --nocapture \
+            golden_tests::flash_tripwires golden_tests::catalog_engine 2>&1 \
+            | tee "$RUNNER_TEMP/inline.log" || true
+      - name: Regenerate the four MediaTek golden captures
+        env:
+          FREEMKV_BLESS: "1"
+        run: |
+          cargo test --locked -p freemkv-flash -- \
+            golden_tests::golden_flash_dry_run \
+            golden_tests::golden_flash_execute \
+            golden_tests::golden_mtk_family_gate \
+            golden_tests::golden_mtk_flash_input_refusals || true
+      - name: Show the regenerated golden diff
+        run: git --no-pager diff -- crates/freemkv-flash/tests/golden || true
+      - name: Commit and push the regenerated golden captures
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/freemkv-flash/tests/golden
+          if git diff --cached --quiet; then
+            echo "no golden changes"
+          else
+            git commit -m "Regenerate MediaTek golden captures for current-free flash"
+            git push origin HEAD:feat/mtk-generic-flash
+          fi
