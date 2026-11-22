@@ -705,26 +705,31 @@ fn cross_line_image_within_a_family_flashes_without_a_backup() {
 }
 
 #[test]
-fn unknown_families_are_refused_before_any_write() {
-    // An image (or drive) with no hardware configuration record cannot be
-    // profiled for a family, so compatibility cannot be confirmed: it is refused
-    // at the plan, before any write. MediaTek captures no pre-flash backup.
+fn a_target_image_without_a_hardware_record_is_refused_before_any_write() {
+    // A target image with no hardware configuration record cannot be profiled
+    // for a family, so compatibility cannot be confirmed: it is refused at the
+    // plan, before any write, and no pre-flash backup is captured.
     let model = "BD-RE  BH16NS40";
     let jb7 = fixture::image(&fixture::JB7, model, 3);
     let nameless = fixture::without_record(&jb7);
-    for (installed, target, which) in [(&jb7, &nameless, "target"), (&nameless, &jb7, "installed")]
-    {
-        let (outcome, transcript, backup) = family_flash(installed, target);
-        assert!(
-            outcome
-                .result
-                .contains(&format!("could not determine the {which} firmware family")),
-            "{}",
-            outcome.result
-        );
-        assert!(!transcript.iter().any(|l| l.starts_with("OUT")));
-        assert!(!backup.exists(), "MediaTek keeps no pre-flash backup");
-    }
+    let (outcome, transcript, backup) = family_flash(&jb7, &nameless);
+    assert!(
+        outcome
+            .result
+            .contains("could not determine the target firmware family"),
+        "{}",
+        outcome.result
+    );
+    assert!(!transcript.iter().any(|l| l.starts_with("OUT")));
+    assert!(!backup.exists(), "MediaTek keeps no pre-flash backup");
+
+    // The installed drive's family is still read from its chip (MediaTek reads no
+    // pre-flash backup to profile it), so flashing a known same-family target
+    // onto a drive whose image lacks only its unique record proceeds.
+    let (outcome, transcript, backup) = family_flash(&nameless, &jb7);
+    assert_eq!(outcome.result, "OK", "{:#?}", outcome.text);
+    assert!(!backup.exists(), "MediaTek keeps no pre-flash backup");
+    assert!(transcript.iter().any(|l| l.starts_with("OUT")));
 }
 
 // These additional read-only commands inspect the active receiver; golden
