@@ -427,7 +427,7 @@ fn golden_coverage_is_complete() {
             "flash execute",
             "flash_execute.txt",
             &[
-                "MTK execute: .bin with pre-flash backup",
+                "MTK execute: .bin, current-free (no pre-flash backup)",
                 "MTK execute: MT1939 image on an MT1959 drive",
                 "MTK execute: raw drive read as input",
             ],

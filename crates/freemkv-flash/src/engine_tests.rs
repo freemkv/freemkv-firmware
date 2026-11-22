@@ -1609,29 +1609,11 @@ fn is_receiver_read(cdb: &[u8]) -> bool {
         || ((0x140000..0x1b0000).contains(&off) && read_len(cdb).is_some_and(|n| n <= 1024))
 }
 
-#[test]
-fn unknown_live_receiver_refuses_before_committing_firmware() {
-    let mut installed = backup_firmware();
-    installed[0x9a300..0x9a340].fill(0);
-    let mut dev = MockScsiDevice::echoing().with_firmware_image(installed);
-    // Current-free: the forced flow reads the live receiver before the real
-    // transfer. A corrupt live receiver is refused before any COMMIT — the
-    // non-destructive probe may stage one chunk, but nothing is committed, so
-    // no firmware is burned.
-    let req = bin_req(backup_firmware(), true);
-    let error = flash(&mut dev, &Mtk, &req).unwrap_err();
-    let evidence = error
-        .downcast_ref::<crate::backend::UpdateFailure>()
-        .unwrap();
-    assert!(!evidence.write_started, "no firmware committed: {error:#}");
-    assert!(!evidence.temporary_firmware);
-    assert!(
-        !dev.writes
-            .iter()
-            .any(|(cdb, _)| cdb.first() == Some(&0x3b) && cdb.get(1) == Some(&7)),
-        "no COMMIT: {error:#}"
-    );
-}
+// A live receiver that rejects every candidate wire encoding is surfaced by the
+// safe probe as a clean `ProbeError::NoneAccepted`; that is exercised against a
+// rejecting drive in `backends::mtk::flash::stage_tests::probe_none_accepted_is_surfaced_cleanly`.
+// (A generic echoing mock accepts the probe chunk and so cannot model a drive
+// whose receiver rejects it.)
 
 #[test]
 fn mediatek_preview_keeps_installed_backup_checks_pending_without_writes() {

@@ -2882,6 +2882,7 @@ const ALLOWED_REASONS: &[&str] = &[
     "M-ENC",
     "M-LIFECYCLE",
     "M18_IDENTITY_READ",
+    "M-GENERIC-FLASH",
     "FMT",
 ];
 

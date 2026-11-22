@@ -713,7 +713,15 @@ fn image_missing_only_its_unique_record_still_flashes_by_chip_family() {
     let jb7 = fixture::image(&fixture::JB7, model, 3);
     let nameless = fixture::without_record(&jb7);
     for (installed, target) in [(&jb7, &nameless), (&nameless, &jb7)] {
-        let (outcome, transcript, backup) = family_flash(installed, target);
+        // Current-free (probe) path: the drive's chip identity is still readable,
+        // so no Current reference is needed and the flash proceeds.
+        let backup = scratch("mtk-nameless").join(format!("{}.bin", sha(target)));
+        let mut req = mtk_request(target.to_vec(), true, Some(backup.clone()));
+        req.drive_model = model.into();
+        let dev = MockScsiDevice::echoing()
+            .with_firmware_image(drive_read(installed))
+            .with_product(model);
+        let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
         assert_eq!(outcome.result, "OK", "{:#?}", outcome.text);
         assert!(!backup.exists(), "MediaTek keeps no pre-flash backup");
         assert!(transcript.iter().any(|l| l.starts_with("OUT")));
