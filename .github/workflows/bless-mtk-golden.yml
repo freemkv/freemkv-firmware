@@ -6,6 +6,9 @@ name: Bless MTK golden (temporary)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [feat/mtk-generic-flash]
+    paths: [.github/workflows/bless-mtk-golden.yml]
 
 permissions:
   contents: write
