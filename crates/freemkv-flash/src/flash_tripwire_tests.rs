@@ -179,27 +179,10 @@ fn pioneer_confirmation_text_is_returned_not_prompted() {
 
 #[test]
 fn flash_never_writes_without_saved_backup() {
-    // A failed backup read stops both backends before any data-out.
-    let image = make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N");
+    // A backend that REQUIRES a backup (Pioneer) stops before any data-out when
+    // the backup cannot be produced. MediaTek requires no backup and is covered
+    // by its own current-free tests.
     let dir = scratch("never-without-backup");
-    let unreadable = MockScsiDevice::echoing()
-        .with_firmware_image(backup_firmware())
-        .on_fail(
-            |cdb| cdb.first() == Some(&0x3c) && cdb.get(3..6) == Some(&[0x10, 0, 0][..]),
-            "unreadable main",
-        );
-    let req = mtk_request(image, true, Some(dir.join("mtk.bin")));
-    let (outcome, transcript) = drive_run(unreadable, |d| engine_flash(d, &Mtk, &req));
-    assert!(
-        outcome.result.contains("pre-flash backup failed"),
-        "{}",
-        outcome.result
-    );
-    assert!(
-        transcript.iter().all(|l| !l.starts_with("OUT")),
-        "{transcript:#?}"
-    );
-    assert!(!dir.join("mtk.bin").exists());
 
     let (_, target) = pioneer_update(false);
     let mut req = pioneer_request(target, &PIONEER_PACKAGE, true);
@@ -456,23 +439,23 @@ fn pioneer_preview_passes_only_package_checks_without_approving_drive_compatibil
 }
 
 #[test]
-fn mtk_execute_prints_plan_after_backup_summary() {
-    let dir = scratch("plan-after-backup");
+fn mtk_execute_prints_the_plan_with_a_no_backup_note() {
+    let dir = scratch("plan-no-backup");
     let out = dir.join("rollback.bin");
     let image = make_flashable(vec![0x11u8; IMAGE_SIZE], "BD-RE BU40N");
     let req = mtk_request(image, true, Some(out.clone()));
     let dev = MockScsiDevice::echoing().with_firmware_image(backup_firmware());
     let (outcome, _) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
     assert_eq!(outcome.result, "OK");
-    let last_backup_read = outcome
+    // MediaTek captures and reads no pre-flash backup; the plan says so.
+    assert!(!outcome
         .text
         .iter()
-        .rposition(|l| l.starts_with("reading drive memory"))
-        .expect("backup progress");
+        .any(|l| l.starts_with("reading drive memory")));
+    assert!(!out.exists(), "no backup file is written");
     let header = text_index(&outcome, "== flash plan ==");
-    let backup = text_index(&outcome, "backup: saved ");
-    assert!(last_backup_read < header && header < backup);
-    assert!(outcome.text[backup].contains(&out.display().to_string()));
+    let backup = text_index(&outcome, "backup: no pre-flash backup");
+    assert!(header < backup);
     assert!(backup < text_index(&outcome, "EXECUTING flash"));
 }
 
@@ -631,6 +614,10 @@ fn family_flash(installed: &[u8], target: &[u8]) -> (Outcome, Vec<String>, std::
     let backup = scratch("mtk-family-tripwire").join(format!("{}.bin", sha(target)));
     let mut req = mtk_request(target.to_vec(), true, Some(backup.clone()));
     req.drive_model = model.into();
+    // Reference path (installed firmware as Current) so the exact-OEM-session
+    // tripwire sees the clean session without the current-free probe's staging
+    // chunk; the family gate is identical on both paths.
+    req.current = Some(installed.to_vec());
     let dev = MockScsiDevice::echoing()
         .with_firmware_image(drive_read(installed))
         .with_product(model);
@@ -686,12 +673,13 @@ fn same_line_reflash_sends_exactly_the_oem_session() {
 }
 
 #[test]
-fn cross_line_image_is_refused_after_the_backup_before_any_write() {
+fn cross_line_image_within_a_family_flashes_without_a_backup() {
     let model = "BD-RE  BH16NS40";
     // Two board lines of the SAME chip (both MT1939, banner "MT1939 Boot Code")
-    // and model, differing only by platform → a family mismatch caught after the
-    // backup. (JB8 is now MT1959, so JB7-vs-JB8 would be a chip mismatch caught
-    // before the backup, a different path.)
+    // and model, differing only by platform. Compatibility is decided by the
+    // hardware family (the chip), so this is a same-family crossflash. The old
+    // refusal was the pre-flash-backup rollback check; MediaTek keeps no backup
+    // now (a full-image rollback is impossible), so the crossflash proceeds.
     let jb7 = fixture::image(&fixture::JB7, model, 3);
     let jb9 = fixture::image(
         &fixture::Board {
@@ -703,37 +691,32 @@ fn cross_line_image_is_refused_after_the_backup_before_any_write() {
     );
     for (installed, target) in [(&jb7, &jb9), (&jb9, &jb7)] {
         let (outcome, transcript, backup) = family_flash(installed, target);
-        assert!(
-            outcome.result.contains("family mismatch"),
-            "{}",
-            outcome.result
+        assert_eq!(
+            outcome.result, "OK",
+            "a same-family cross-line flash proceeds: {:#?}",
+            outcome.text
         );
-        assert!(backup.exists(), "the pre-flash backup is kept");
+        assert!(!backup.exists(), "MediaTek keeps no pre-flash backup");
         assert!(
-            !transcript.iter().any(|l| l.starts_with("OUT")),
-            "no write may reach the drive"
+            transcript.iter().any(|l| l.starts_with("OUT")),
+            "firmware is written"
         );
     }
 }
 
 #[test]
-fn unknown_families_are_refused_before_any_write() {
+fn image_missing_only_its_unique_record_still_flashes_by_chip_family() {
+    // `without_record` clears the per-unit UNIQUE record, not the chip: hardware
+    // compatibility is decided by the chip/family, so such an image still flashes
+    // (a same-family operation). No pre-flash backup is captured either way.
     let model = "BD-RE  BH16NS40";
     let jb7 = fixture::image(&fixture::JB7, model, 3);
     let nameless = fixture::without_record(&jb7);
-    for (installed, target, which) in [(&jb7, &nameless, "target"), (&nameless, &jb7, "installed")]
-    {
+    for (installed, target) in [(&jb7, &nameless), (&nameless, &jb7)] {
         let (outcome, transcript, backup) = family_flash(installed, target);
-        assert!(
-            outcome
-                .result
-                .contains(&format!("could not determine the {which} firmware family")),
-            "{}",
-            outcome.result
-        );
-        assert!(!transcript.iter().any(|l| l.starts_with("OUT")));
-        // An image without a family is refused at the plan, before the backup.
-        assert_eq!(backup.exists(), which == "installed", "{which}");
+        assert_eq!(outcome.result, "OK", "{:#?}", outcome.text);
+        assert!(!backup.exists(), "MediaTek keeps no pre-flash backup");
+        assert!(transcript.iter().any(|l| l.starts_with("OUT")));
     }
 }
 
