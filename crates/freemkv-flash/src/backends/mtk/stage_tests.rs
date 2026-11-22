@@ -451,8 +451,13 @@ fn unsupported_final_receiver_contract_is_rejected_before_intermediate_write() {
     let mut intermediate = image(b"INTM", 2);
     encrypted_receiver(&mut intermediate);
     let target = image(b"1.05", 3);
-    let mut dev = MockScsiDevice::new().with_firmware_image(current);
-    let req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    let mut dev = MockScsiDevice::new().with_firmware_image(current.clone());
+    // The final-stage receiver contract is validated before the intermediate
+    // write only on the reference path, which pre-binds the next stage; the
+    // current-free probe path validates the final encoding on the drive after
+    // the intermediate boots.
+    let mut req = request(package(&intermediate, &target), &super::super::PACKAGE);
+    req.current = Some(current);
     assert!(Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .is_err());
@@ -1370,17 +1375,16 @@ fn injected_flash_failure(
             move |c| gate.load(Ordering::SeqCst) && fail(c),
             "injected failure",
         );
-    let req = request(target.to_vec(), &super::super::IMAGE);
+    // Reference path (installed firmware as Current), so the injected failures
+    // exercise the shared executor's own PROBE/entry/transfer phases, not the
+    // current-free probe prefix.
+    let mut req = request(target.to_vec(), &super::super::IMAGE);
+    req.current = Some(current.to_vec());
     let plan = Mtk
         .plan(&mut ReadDevice::without_unlocks(&mut dev), &req)
         .unwrap();
-    let backup = crate::engine::gates::saved_for_tests(current.to_vec());
     let authorized = Mtk
-        .authorize(
-            &mut ReadDevice::without_unlocks(&mut dev),
-            plan,
-            Some(&backup),
-        )
+        .authorize(&mut ReadDevice::without_unlocks(&mut dev), plan, None)
         .unwrap();
     armed.store(true, Ordering::SeqCst);
     Mtk.execute(

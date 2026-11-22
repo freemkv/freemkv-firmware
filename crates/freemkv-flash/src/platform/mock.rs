@@ -280,12 +280,17 @@ impl ScsiDevice for MockScsiDevice {
                 return Ok(inquiry.clone());
             }
         }
-        // REQUEST SENSE on a firmware-image mock (the MediaTek flash surface):
-        // report NO SENSE so the current-free encoding probe reads the first
-        // (plaintext) candidate as accepted. A mock that never rejects a write
-        // is a plaintext (PP) drive. Explicit `.on`/`.on_sense` rules above
-        // still take precedence, so a test can inject a rejecting sense.
-        if self.firmware_image.is_some() && cdb.first() == Some(&0x03) {
+        // REQUEST SENSE *during a flash session* (after a WRITE BUFFER PREPARE)
+        // on a firmware-image mock (the MediaTek flash surface): report NO SENSE
+        // so the current-free encoding probe reads the first (plaintext)
+        // candidate as accepted. A mock that never rejects a write is a plaintext
+        // (PP) drive. Gating on a prior WRITE BUFFER keeps read-only flows (the
+        // dump's restricted-window recovery issues none) on the default zero
+        // fill. Explicit `.on`/`.on_sense` rules above still take precedence.
+        if self.firmware_image.is_some()
+            && cdb.first() == Some(&0x03)
+            && self.writes.iter().any(|(c, _)| c.first() == Some(&0x3B))
+        {
             let mut sense = vec![0u8; alloc_len];
             if alloc_len >= 14 {
                 sense[0] = 0x70;
