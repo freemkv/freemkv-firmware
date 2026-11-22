@@ -36,9 +36,17 @@ jobs:
             golden_tests::golden_flash_execute \
             golden_tests::golden_mtk_family_gate \
             golden_tests::golden_mtk_flash_input_refusals || true
+      - name: Regenerate the INTENDED_CHANGES.md parity skeleton
+        env:
+          FREEMKV_BLESS_INTENDED: "1"
+        run: cargo test --locked -p freemkv-flash -- golden_tests::golden_parity_with_0_11_2 || true
+      - name: Assign the M-GENERIC-FLASH reason to the newly-changed MediaTek entries
+        run: |
+          sed -i 's/^reason: UNCLASSIFIED$/reason: M-GENERIC-FLASH/' \
+            crates/freemkv-flash/tests/golden/INTENDED_CHANGES.md
       - name: Show the regenerated golden diff
         run: git --no-pager diff -- crates/freemkv-flash/tests/golden || true
-      - name: Commit and push the regenerated golden captures
+      - name: Commit and push the regenerated golden captures and parity notes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -46,7 +54,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "no golden changes"
           else
-            git commit -m "Regenerate MediaTek golden captures for current-free flash"
+            git commit -m "Regenerate MediaTek golden captures and parity notes for current-free flash"
             git push origin HEAD:feat/mtk-generic-flash
           fi
-# re-bless 1795311131
+# re-bless 1795311131 v2
