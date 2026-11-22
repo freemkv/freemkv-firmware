@@ -705,26 +705,25 @@ fn cross_line_image_within_a_family_flashes_without_a_backup() {
 }
 
 #[test]
-fn image_missing_only_its_unique_record_still_flashes_by_chip_family() {
-    // `without_record` clears the per-unit UNIQUE record, not the chip: hardware
-    // compatibility is decided by the chip/family, so such an image still flashes
-    // (a same-family operation). No pre-flash backup is captured either way.
+fn unknown_families_are_refused_before_any_write() {
+    // An image (or drive) with no hardware configuration record cannot be
+    // profiled for a family, so compatibility cannot be confirmed: it is refused
+    // at the plan, before any write. MediaTek captures no pre-flash backup.
     let model = "BD-RE  BH16NS40";
     let jb7 = fixture::image(&fixture::JB7, model, 3);
     let nameless = fixture::without_record(&jb7);
-    for (installed, target) in [(&jb7, &nameless), (&nameless, &jb7)] {
-        // Current-free (probe) path: the drive's chip identity is still readable,
-        // so no Current reference is needed and the flash proceeds.
-        let backup = scratch("mtk-nameless").join(format!("{}.bin", sha(target)));
-        let mut req = mtk_request(target.to_vec(), true, Some(backup.clone()));
-        req.drive_model = model.into();
-        let dev = MockScsiDevice::echoing()
-            .with_firmware_image(drive_read(installed))
-            .with_product(model);
-        let (outcome, transcript) = drive_run(dev, |d| engine_flash(d, &Mtk, &req));
-        assert_eq!(outcome.result, "OK", "{:#?}", outcome.text);
+    for (installed, target, which) in [(&jb7, &nameless, "target"), (&nameless, &jb7, "installed")]
+    {
+        let (outcome, transcript, backup) = family_flash(installed, target);
+        assert!(
+            outcome
+                .result
+                .contains(&format!("could not determine the {which} firmware family")),
+            "{}",
+            outcome.result
+        );
+        assert!(!transcript.iter().any(|l| l.starts_with("OUT")));
         assert!(!backup.exists(), "MediaTek keeps no pre-flash backup");
-        assert!(transcript.iter().any(|l| l.starts_with("OUT")));
     }
 }
 
