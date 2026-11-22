@@ -62,7 +62,10 @@ fn roundtrip(bytes: Vec<u8>) {
         assert_eq!(recognized.format.id, format);
         let backup = dir.path().join(format!("{name}.backup.tar"));
         let mut request = FlashRequest {
-            current: None,
+            // Reference path (installed firmware as Current) so the roundtrip
+            // asserts the exact OEM transfer without the current-free probe's
+            // staging chunk. MediaTek captures no pre-flash backup either way.
+            current: Some(current.clone()),
             input,
             input_format: recognized.format,
             mode: FlashMode::Full,
@@ -83,13 +86,7 @@ fn roundtrip(bytes: Vec<u8>) {
         request.execute = true;
         let outcome = engine::flash(&mut dev, &Mtk, &request, &mut Preconfirmed).unwrap();
         assert!(outcome.fully_verified(), "{outcome:#?}");
-        let saved = std::fs::read(&backup).unwrap();
-        let restored = Mtk
-            .backup()
-            .unwrap()
-            .validate(&saved, &request.drive_model)
-            .unwrap();
-        assert_eq!(&restored[0x10400..0x1e0000], &current[0x10400..0x1e0000]);
+        assert!(!backup.exists(), "MediaTek captures no pre-flash backup");
         let streamed: Vec<u8> = dev
             .writes
             .iter()
@@ -108,7 +105,7 @@ fn roundtrip(bytes: Vec<u8>) {
             dev.writes.last().unwrap().0,
             freemkv_flash::backends::mtk::cdb::finish()
         );
-        eprintln!("PASS {name}: Modify, CMAC, routing, preview, backup, transfer and readback");
+        eprintln!("PASS {name}: Modify, CMAC, routing, preview, transfer and readback");
     }
 }
 
