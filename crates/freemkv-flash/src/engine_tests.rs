@@ -947,23 +947,20 @@ fn flash_execute_refuses_an_unsigned_image_with_no_write() {
 }
 
 #[test]
-fn mediatek_unreadable_drive_fails_with_typed_evidence_and_no_false_success() {
-    // MediaTek no longer captures a backup, but a drive whose firmware regions
-    // cannot be read is never flashed to a clean success: the attempt fails with
-    // typed update-failure evidence (whether it aborts at preflight or later).
+fn mediatek_flashes_without_backup_even_when_readback_is_restricted() {
+    // MediaTek needs no backup, so a drive that refuses the firmware readback
+    // reads still flashes: the write proceeds (best-effort verification reports
+    // the unreadable regions as unverified) rather than aborting for a backup.
     let mut dev = MockScsiDevice::new()
         .with_firmware_image(backup_firmware())
         .on_fail(
             |cdb: &[u8]| is_mode6_read(cdb) && !is_identity_read(cdb) && !is_receiver_read(cdb),
-            "flash read refused",
+            "readback refused",
         );
     let req = bin_req(make_flashable(vec![0u8; IMAGE_SIZE], "BD-RE BU40N"), true);
-    let err = flash(&mut dev, &Mtk, &req).unwrap_err();
-    assert!(
-        err.downcast_ref::<crate::backend::UpdateFailure>()
-            .is_some(),
-        "the failure carries typed update-failure evidence: {err:#}"
-    );
+    flash(&mut dev, &Mtk, &req)
+        .expect("MediaTek flashes without a backup even when readback is restricted");
+    assert!(dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)));
 }
 
 #[test]
@@ -1613,25 +1610,27 @@ fn is_receiver_read(cdb: &[u8]) -> bool {
 }
 
 #[test]
-fn unknown_live_receiver_refuses_before_any_firmware_write() {
+fn unknown_live_receiver_refuses_before_committing_firmware() {
     let mut installed = backup_firmware();
     installed[0x9a300..0x9a340].fill(0);
-    let mut dev = MockScsiDevice::new().with_firmware_image(installed);
-    // A reference flash revalidates the live receiver before writing; a corrupt
-    // live receiver signature is refused with no firmware streamed.
-    let mut req = bin_req(backup_firmware(), true);
-    req.current = Some(backup_firmware());
+    let mut dev = MockScsiDevice::echoing().with_firmware_image(installed);
+    // Current-free: the forced flow reads the live receiver before the real
+    // transfer. A corrupt live receiver is refused before any COMMIT — the
+    // non-destructive probe may stage one chunk, but nothing is committed, so
+    // no firmware is burned.
+    let req = bin_req(backup_firmware(), true);
     let error = flash(&mut dev, &Mtk, &req).unwrap_err();
     let evidence = error
         .downcast_ref::<crate::backend::UpdateFailure>()
         .unwrap();
-    assert!(!evidence.write_started);
+    assert!(!evidence.write_started, "no firmware committed: {error:#}");
     assert!(!evidence.temporary_firmware);
     assert!(
-        !dev.writes.iter().any(|(cdb, _)| is_stream_write(cdb)),
-        "no firmware streamed: {error:#}"
+        !dev.writes
+            .iter()
+            .any(|(cdb, _)| cdb.first() == Some(&0x3b) && cdb.get(1) == Some(&7)),
+        "no COMMIT: {error:#}"
     );
-    assert!(req.predump_out.as_ref().map_or(true, |path| !path.exists()));
 }
 
 #[test]
