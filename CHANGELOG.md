@@ -5,13 +5,18 @@ Versions are independent of the freemkv ripping applications.
 Published release dates use UTC. Development-only versions are identified below;
 version numbers without a recorded build are not invented to fill numeric gaps.
 
-## [0.18.1] - unreleased
+## [0.18.2] - unreleased
 
 ### freemkv Flash
 
 - MediaTek now flashes with no Current firmware and no pre-flash backup. The drive's hardware family is confirmed from the drive itself, and the wire encoding is auto-probed safely on the drive (plaintext, whole-image AES, or header-only AES) instead of being derived from a required Current image. A wrong encoding guess cannot erase the drive: the probe enters the update session and streams only the first header chunk per candidate, reading the drive's response and aborting before the commit that would erase flash — proven by reading the drive's code and by static and emulation analysis across all three encodings. A full-image MediaTek backup is provably impossible, so requiring one only blocked legitimate flashes; it is no longer attempted or required. `--current` remains available as an optional manual override that uses the installed-firmware reference as before, and `dump` is unchanged. Honest note: the safe probe-session abort has been validated by analysis and emulation, not yet on hardware.
 - `dump` now recovers the small fixed windows a restricted MediaTek drive exposes (the boot header at 0x3000, the identity block at 0x1EC000, a 256-byte region at 0x1E84E4, and the 64 KiB vendor region at 0x1F0000) by re-reading each at its exact bounds. The fixed-step sweep straddles these oddly-sized windows and recorded them as unreadable gaps, so a dump of a lockdown drive previously dropped bytes the drive was willing to return.
-- MediaTek compatibility is decided by hardware family, not model name, as on Pioneer. A rebadged drive (for example an ASUS SBW-06D2X-U on BU50N hardware) can now be flashed to another model of its family when the drive refuses a full backup: after you confirm proceeding without a backup, the same live chip, platform and boot-banner checks as a same-model update apply. The plan still states the identity change. With a readable backup, installed-family and rollback checks run as before.
+- MediaTek compatibility is decided by hardware family, not model name, as on Pioneer. A rebadged drive (for example an ASUS SBW-06D2X-U on BU50N hardware) can be flashed to another model of its family: the same live chip, platform and boot-banner checks as a same-model update apply, and the plan states the identity change. An image or drive with no hardware-configuration record cannot be profiled for a family and is still refused before any write.
+
+## [0.18.1] - 2026-11-14
+
+### freemkv Flash
+
 - Pioneer cross-flashes no longer stop when the drive's persistent startup word is unset or differs. Flash now sets the word the incoming firmware checks for, in the same settings step that already corrected differing words. The drive's current word is read only to restore it if the update fails before firmware is written. Routes that previously needed a "read-only drive check" are now offered without one. Example: BDR-212U on BDR-L13SH 1.08 to BDX-PR1MA 1.03.
 - Flashing back from firmware that checks the startup word to firmware that never reads it resets the word to its unset state, so the drive ends as it shipped. Recovery skips this reset; it never writes the word.
 - `freemkv-crossflash --why` and the website can explain which hardware contracts keep two firmwares apart.
