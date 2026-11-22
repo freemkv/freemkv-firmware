@@ -451,13 +451,20 @@ fn encoding_label(encoding: TransferEncoding) -> String {
 fn probe_failure(error: ProbeError<anyhow::Error>, completed_stages: &[String]) -> anyhow::Error {
     let operation_already_wrote = !completed_stages.is_empty();
     let detail = error.to_string();
-    let source = match error {
-        ProbeError::Transport(e) => crate::transport::mtk_err(e),
-        other => anyhow::anyhow!("{other}"),
+    let (source, issue) = match error {
+        ProbeError::Transport(e) => (
+            crate::transport::mtk_err(e),
+            crate::user_error::IssueCode::Connection,
+        ),
+        other => (
+            anyhow::anyhow!("{other}"),
+            crate::user_error::IssueCode::UpdateUncertain,
+        ),
     };
     source
         .context(detail)
         .context("MediaTek encoding probe failed before any firmware write")
+        .context(issue)
         .context(UpdateFailure {
             phase: "wire-encoding probe".into(),
             write_started: operation_already_wrote,
@@ -483,12 +490,25 @@ fn forced_failure(
     let write_started = error.firmware_write_started();
     let firmware_payload_started = writes.payload_write_attempted();
     let operation_already_wrote = !completed_stages.is_empty();
-    let (phase, source) = match error {
-        ForcedError::Identity(e) => ("live identity read", anyhow::anyhow!("{e}")),
-        ForcedError::Flash(e) => (failure_phase(&e).0, flash_error(e)),
+    use crate::user_error::IssueCode;
+    let (phase, source, issue) = match error {
+        ForcedError::Identity(e) => (
+            "live identity read",
+            anyhow::anyhow!("{e}"),
+            IssueCode::Connection,
+        ),
+        ForcedError::Flash(e) => (
+            failure_phase(&e).0,
+            flash_error(e),
+            IssueCode::UpdateUncertain,
+        ),
         // `ForcedError` is non-exhaustive; a future variant is a firmware update
         // failure with conservative write evidence.
-        other => ("firmware update", anyhow::anyhow!("{other}")),
+        other => (
+            "firmware update",
+            anyhow::anyhow!("{other}"),
+            IssueCode::UpdateUncertain,
+        ),
     };
     let progress = if operation_already_wrote || runtime.upload_complete() {
         crate::backend::UpdateProgress::UploadComplete
@@ -503,6 +523,7 @@ fn forced_failure(
     };
     source
         .context("MediaTek update failed")
+        .context(issue)
         .context(UpdateFailure {
             phase: phase.into(),
             write_started: (write_started && progress != crate::backend::UpdateProgress::Preflight)
