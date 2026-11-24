@@ -41,7 +41,7 @@ fn flash_sequence_cdbs_are_twelve_bytes() {
         cdb::transfer(0x004000, 0x4000),
         [0x3B, 0x06, 0, 0x00, 0x40, 0x00, 0x00, 0x40, 0x00, 0, 0, 0]
     );
-    assert_eq!(&cdb::finish()[10..], &[0x1B, 0x12]);
+    assert_eq!(&cdb::finish()[10..], &[0x00, 0x00]);
     assert_eq!(cdb::request_sense()[0], 0x03);
 }
 

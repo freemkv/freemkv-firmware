@@ -191,12 +191,12 @@ const MT1959_STEPS: &[FlashStep] = &[
     },
     FlashStep {
         label: "COMMIT",
-        purpose: "WRITE BUFFER mode 7 — save microcode (magic 1B 12 in CDB[10..11])",
+        purpose: "WRITE BUFFER mode 7 — save microcode",
         dir: Dir::Out,
         gate: "GOOD",
         per_chunk: false,
         tmpl: Tmpl::Fixed(&[
-            0x3B, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1B, 0x12,
+            0x3B, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]),
     },
     FlashStep {
