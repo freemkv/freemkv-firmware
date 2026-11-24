@@ -55,7 +55,7 @@ raw SCSI sequence (134 steps):
   #04 STREAM  out  3B 06 00 00 00 00 00 40 00 00 00 00   data=16384 @0x000000
       ... 128 identical STREAM chunks collapsed (2 MiB total) ...
   #131 STREAM  out  3B 06 00 1F C0 00 00 40 00 00 00 00   data=16384 @0x1FC000
-  #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 00 00   data=0
+  #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 1B 12   data=0
   #133 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
   #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
   preflight ................ transport ready; backup capture is checked only on execute
@@ -80,7 +80,7 @@ MSG        #03 PREPARE out  3B 01 00 00 00 00 00 00 00 0B 00 00   data=0
 MSG        #04 STREAM  out  3B 06 00 00 00 00 00 40 00 00 00 00   data=16384 @0x000000
 MSG            ... 128 identical STREAM chunks collapsed (2 MiB total) ...
 MSG        #131 STREAM  out  3B 06 00 1F C0 00 00 40 00 00 00 00   data=16384 @0x1FC000
-MSG        #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 00 00   data=0
+MSG        #132 COMMIT  out  3B 07 00 00 00 00 00 00 00 00 1B 12   data=0
 MSG        #133 READY   ---  00 00 00 00 00 00 00 00 00 00 00 00
 MSG        #134 STATUS  in   03 00 00 10 80 00 00 00 00 00 00 00   alloc=16
 MSG        preflight ................ transport ready; backup capture is checked only on execute

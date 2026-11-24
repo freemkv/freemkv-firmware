@@ -53,6 +53,7 @@ differ only for the Pioneer reasons below; a MediaTek scenario only for its list
 | P18_MATRIX_FIXTURE | Synthetic Pioneer fixtures carry a complete SAT8 matrix identity and recorded deterministic signatures. Kernel-changing execution/recovery fixtures append 4 KiB of synthetic bank/host/copied-checksum/C-startup bodies to establish positive Startup preservation without live words; Normal reads/transfers grow from 8 to 12 KiB, with corresponding checksum/signature/package/transfer hashes and backup lengths. Command ordering and all no-parameter-access assertions remain unchanged. Generic file/backup fixtures keep their original 8 KiB data. |
 | M18_IDENTITY_READ | MediaTek 0.18.0 (mediatek-optical 1.3.0, which includes 1.2.0): receiver detection begins its encoding scan 32 bytes before the code window, reading that leading context separately (`3c06 0009 7fe0 ... alloc 32`, READ BUFFER at 0x97fe0, so a header-decrypt call at the window start keeps its setup), and `Receiver::revalidate` re-reads INQUIRY identity last, after the code/table snapshot (one extra `12 00 00 00 24 00` alloc 36). Both are read-only; the transcript count rises by two. No write is added or removed and no write payload, order or gate changes. |
 
+| M-COMMIT | 0.18.3 (mediatek-optical 3.0.3): bytes 10-11 of the COMMIT CDB are zeroed. WRITE BUFFER mode 7 is a 10-byte Group 1 command; the OEM-captured `1B 12` trailer violated the spec and caused ILLEGAL REQUEST on drives that validate trailing bytes. Only the COMMIT CDB changes; no other command, payload or gate is affected. |
 | M-ENC | Active MediaTek receiver detection adds INQUIRY and code reads during planning, a receiver/encoding plan field, and identity/code revalidation before writing. Executable authorization additionally reads the entry grammar and opcode/callback records after backup capture; the immutable library plan revalidates these before writing. Synthetic firmware contains plaintext receiver and positive entry/registration excerpts, changing fixture hashes; mock firmware identities correctly report optical peripheral type 5. The legacy receiver fixture retains every write CDB, direction, length and outcome. |
 
 The baseline set was produced by copying `src/golden_tests.rs` into a
@@ -3046,7 +3047,7 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, M-TABLE-FIXTURE, M
 ```
 
 ### MTK execute: .bin, current-free (no pre-flash backup)
-reason: M-GENERIC-FLASH
+reason: M-GENERIC-FLASH, M-COMMIT
 ```diff
 +result: OK
 +--- text (113) ---
@@ -3426,7 +3427,7 @@ reason: M-GENERIC-FLASH
 +OUTS cdb=3b06001f4000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 +OUTS cdb=3b06001f8000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
 +OUTS cdb=3b06001fc000004000000000 len=16384 sha256=dffb468c8b41f81358bbbf9d710036419a36818ac662481720a665ea5b410073 -> ok
-+OUTS cdb=3b0700000000000000001b12 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++OUTS cdb=3b0700000000000000000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 +IN   cdb=000000000000000000000000 alloc=0 -> ok 0
 +IN   cdb=030000001080000000000000 alloc=16 -> ok 16
 +IN   cdb=000000000000000000000000 alloc=0 -> ok 0
@@ -6072,7 +6073,7 @@ reason: R3, M-CHIP, PRECHECK
 ```
 
 ### MTK execute: read-back mismatch
-reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-FIXTURE, MTK_READ_GUIDANCE, M18_IDENTITY_READ
+reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-FIXTURE, MTK_READ_GUIDANCE, M18_IDENTITY_READ, M-COMMIT
 ```diff
 -result: ERR read-back verify FAILED at 0x011000: an integrity-protected byte differs (read 0x00, wrote 0x11) — the image did not program cleanly (61440 of 61440 protected bytes differ).
 ---- text (218) ---
@@ -6854,6 +6855,8 @@ reason: R2, R8, M-RS, M-CHIP, M-BAK, M-ENC, FMT, M-LIFECYCLE, PRECHECK, M-TABLE-
 +OUTS cdb=3b0600154000004000000000 len=16384 sha256=a5f458302805fec9c1431a3d5f54615237f32aff5a61e1bf7d9d68697e8890e1 -> ok
 -OUTS cdb=3b06001ec000004000000000 len=16384 sha256=58b65b0e2b6e1358a272cc43c82fc5552c0f6f43c9f546ff958d4d1e38eb3e9f -> ok
 +OUTS cdb=3b06001ec000004000000000 len=16384 sha256=6f5bea3d9d231c169049352eae19b1eb0566c308a28976ff80c232e18db76910 -> ok
+-OUTS cdb=3b0700000000000000001b12 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
++OUTS cdb=3b0700000000000000000000 len=0 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 -> ok
 -IN   cdb=030000108000000000000000 alloc=16 -> ok 16
 +IN   cdb=030000001080000000000000 alloc=16 -> ok 16
 -IN   cdb=030000108000000000000000 alloc=16 -> ok 16
