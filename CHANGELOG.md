@@ -2,7 +2,7 @@
 
 ## 0.18.4
 
-- Re-pin pioneer-optical 3.0.4: new SAT1 loading-input hardware filter refuses a
+- Re-pin pioneer-optical 3.0.5: new SAT1 loading-input hardware filter refuses a
   tray-incompatible SAT 1xxx crossflash (e.g. BDR-205 SAT 1014 <-> BDR-206 SAT
   1030) that was wrongly admitted, while keeping genuinely tray-identical SAT1
   routes. Website firmware and crossflash data are regenerated from 3.0.4.
